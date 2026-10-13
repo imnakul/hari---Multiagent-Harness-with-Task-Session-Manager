@@ -1,6 +1,6 @@
 # Local features — what this fork has that upstream MonoCode does not
 
-**Last updated: 2026-10-09 (upstream 0.10.0 follow-up; automated gates passed)**
+**Last updated: 2026-10-13 (L-80 all accounts usage; automated gates passed)**
 
 L-74–L-79 are part of the reviewed source merge based on published checkpoint
 `8ea88359`. The full automated gate and primary source review passed. Normal
@@ -142,6 +142,7 @@ recorded in the same spec; native desktop checks remain separate.
 | L-77 | Claude Remote Control displays activity on its actual external turn and known model/effort; imported native Claude history seeds only known composer metadata | Claude, sessions, provider history | No |
 | L-78 | Wrap tool output and code fences while preserving exact Copy/line behavior; show validated local-project Markdown images with existing preview/lightbox and safe fallback | sessions, files, Markdown | No |
 | L-79 | Second-opinion chats use the title `Second opinion — <source chat title>` | sessions, sidebar | No |
+| L-80 | Experimentation toggle "All accounts usage": one bottom-bar usage chip per configured account, extras in a "+N" chip | shell, settings | No |
 
 ## For agents — read this first
 
@@ -256,6 +257,7 @@ review a change (it must not remove one of these by accident).
 | L-77 | Claude RC activity is shown on its actual external turn, including phone work beside a queued local prompt. Model and validated effort are kept per external turn; native Claude history seeds known model/effort without replacing a user's newer composer choice or inventing historical effort. | `src/features/sessions/model/transcriptActivity.ts`; `src/features/provider-sessions/model/history.ts` → `seedClaudeComposerFromHistory`; `src/integrations/harness/providers/claude/claude.ts` and `src/integrations/harness/core/apply.ts` → external metadata | `AgentTranscript.test.ts` phone shimmer/model turn; `history.test.ts` trusted tool-only model and unsupported-catalog effort; `claudeControl.test.ts` replay/model metadata | `docs/specs/upstream-010-followups-and-session-polish-plan.md` | No | Implemented; focused and full gates passed; Claude RC/native checks remain manual |
 | L-78 | Tool output and fenced code wrap while preserving source Copy and logical line numbering. Markdown local images use the canonical, bounded, byte-sniffed project reader and existing lightbox. Invalid/unreadable paths inside the project retain alt text and Open file; blocked out-of-project paths show alt text only. Existing note images stay on their own resolver; remote Markdown images remain blocked. | `src/features/sessions/ui/AgentMarkdown.tsx` and `streamingMarkdown.ts`; `src-tauri/src/fs.rs` → project image containment/read | `AgentMarkdownFileLinks.test.ts` path/fence/note cases; `AgentTranscript.test.ts` exact tool output; `AgentMarkdown.test.ts` fallback/wrap | `docs/specs/upstream-010-followups-and-session-polish-plan.md` | No | Implemented; focused and full gates passed; Windows preview/lightbox check remains manual |
 | L-79 | A second-opinion chat title is `Second opinion — <source chat title>`. | `src/features/sessions/model/secondOpinion.ts` → title creation | `src/features/sessions/model/secondOpinion.test.ts` title cases | `docs/specs/upstream-010-followups-and-session-polish-plan.md` | No | Implemented; focused and full gates passed; visual title check remains manual |
+| L-80 | With "All accounts usage" on, the footer shows one labelled chip per claude/codex/devin account (shortest limit inline, rest in popover, overflow in "+N"); loads staggered through the existing cache. | `src/app/shell/UsageFooter.tsx`, `AccountUsageStrip.tsx`, `allAccountsUsage.ts`, `src/features/settings/model/settings.ts` | `allAccountsUsage.test.ts`, `UsageFooterAllAccounts.test.ts`, `UsageProviderChip.test.ts`, `settings.test.ts`, `Experimentation.test.ts` | `docs/specs/all-accounts-usage-plan.md` | No | Implemented on `feature/all-accounts-usage-monocode`; automated gates passed; desktop check manual |
 
 ## Recorded in our notes but not found on the branch
 

@@ -420,6 +420,7 @@ import {
   loadLiveAgentsEnabled,
   loadModelControls,
   loadNotesEnabled,
+  loadAllAccountsUsage,
   loadRemainingQuota,
   loadMonosEnabled,
   loadMonoMenuBarIcon,
@@ -447,6 +448,7 @@ import {
   saveLiveAgentsEnabled,
   saveModelControls,
   saveNotesEnabled,
+  saveAllAccountsUsage,
   saveRemainingQuota,
   saveMonosEnabled,
   subscribeMonosEnabled,
@@ -909,6 +911,9 @@ function SettingsSearch({
 function ExperimentationPage(): ReactElement {
   const [detailedContext, setDetailedContext] = useState(loadDetailedContext);
   const [remainingQuota, setRemainingQuota] = useState(loadRemainingQuota);
+  const [allAccountsUsage, setAllAccountsUsage] = useState(
+    loadAllAccountsUsage,
+  );
   const [compactModelLabels, setCompactModelLabels] = useState(
     loadCompactModelLabels,
   );
@@ -921,6 +926,11 @@ function ExperimentationPage(): ReactElement {
   const onRemainingQuota = (next: boolean): void => {
     saveRemainingQuota(next);
     setRemainingQuota(next);
+  };
+
+  const onAllAccountsUsage = (next: boolean): void => {
+    saveAllAccountsUsage(next);
+    setAllAccountsUsage(next);
   };
 
   const onCompactModelLabels = (next: boolean): void => {
@@ -948,6 +958,17 @@ function ExperimentationPage(): ReactElement {
           label="Remaining quota"
           on={remainingQuota}
           onChange={onRemainingQuota}
+        />
+      </Row>
+      <Row
+        id="all-accounts-usage"
+        label="All accounts usage"
+        description="Show usage for every configured provider account in the bottom bar at once, instead of only the selected account. Extra accounts collapse into a +N chip."
+      >
+        <Toggle
+          label="All accounts usage"
+          on={allAccountsUsage}
+          onChange={onAllAccountsUsage}
         />
       </Row>
       <Row

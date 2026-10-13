@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-13 — All accounts usage in the bottom bar (experiment)
+- What: Added an Experimentation toggle "All accounts usage" (off by default). When on, the bottom bar shows one usage chip per configured Claude, Codex and Devin account, labelled by account, with the 5-hour limit inline and the other limits in the chip popover. Accounts that do not fit fold into a "+N" chip. Accounts load one at a time so many accounts never fire requests in one burst. Off, the bar is unchanged.
+- Files: [allAccountsUsage.ts](../../src/app/shell/allAccountsUsage.ts); [AccountUsageStrip.tsx](../../src/app/shell/AccountUsageStrip.tsx); [UsageFooter.tsx](../../src/app/shell/UsageFooter.tsx); [UsageProviderChip.tsx](../../src/app/shell/UsageProviderChip.tsx); [settings.ts](../../src/features/settings/model/settings.ts); [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx); [spec](../specs/all-accounts-usage-plan.md).
+- Verified: tsc ✅ tests ✅ 6,764 / 608 files; lint not run (no eslint config); desktop checks manual.
+- Commit: on `feature/all-accounts-usage-monocode`, not pushed.
+
 ## 2026-10-09 — Merge pinned upstream follow-ups and polish sessions/tasks
 - What: Integrated pinned upstream `7d099eb8` (six commits after the prior `416396c1` sync) on published base `8ea8835`. The 83-path delta adds Devin CLI/ACP, selected-file Git context and commits, collapsed Mono pins, and Windows checkpoint/path/temp fixes; keep-both resolutions retain the fork's Windows process rules, Cline/Antigravity ACP+CLI, Mono-only Codex store, task/session controls and L-01–L-73. Added run-scoped project-chat card dismissal, task creation/shortcut flow, durable sidechats, Claude RC/native model metadata, wrapped Markdown/tool output, canonical project-local images, and second-opinion titles.
 - Files: source merge across upstream's 83 paths; [follow-up spec](../specs/upstream-010-followups-and-session-polish-plan.md); [feature register](../LOCAL-FEATURES.md); [spec index](../specs/SPECS.md); [conflict decisions](../notes/archive/upstream-merge-2026-10-09-010-followups.md).

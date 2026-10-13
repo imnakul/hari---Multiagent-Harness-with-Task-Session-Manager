@@ -34,6 +34,10 @@ import {
   loadLiveAgentsEnabled,
   loadNotesEnabled,
   loadRemainingQuota,
+  loadAllAccountsUsage,
+  ALL_ACCOUNTS_USAGE_DEFAULT,
+  saveAllAccountsUsage,
+  subscribeAllAccountsUsage,
   keybindingPressed,
   matchCustomKeybinding,
   loadQuickComposerShortcut,
@@ -89,6 +93,7 @@ const FOLLOW_UP_BEHAVIOR_KEY = "monocode.followUpBehavior";
 const DETAILED_CONTEXT_KEY = "monocode.detailedContext";
 const REMAINING_QUOTA_KEY = "monocode.remainingQuota";
 const COMPACT_MODEL_LABELS_KEY = "monocode.compactModelLabels";
+const ALL_ACCOUNTS_USAGE_KEY = "monocode.allAccountsUsage";
 const TAB_ANIMATIONS_KEY = "monocode.tabAnimationsEnabled";
 const COLLAPSED_PROJECT_RAIL_MODE_KEY = "monocode.collapsedProjectRailMode";
 const AI_HELPER_KEY = "monocode.aiHelper";
@@ -838,6 +843,78 @@ describe("remaining quota setting", () => {
     }
   });
 
+});
+
+describe("all accounts usage setting", () => {
+  beforeEach(mockLocalStorage);
+  afterEach(() => {
+    localStorage.removeItem(ALL_ACCOUNTS_USAGE_KEY);
+  });
+
+  it("defaults to off", () => {
+    expect(ALL_ACCOUNTS_USAGE_DEFAULT).toBe(false);
+    expect(loadAllAccountsUsage()).toBe(false);
+  });
+
+  it("persists on and off switches", () => {
+    saveAllAccountsUsage(true);
+    expect(localStorage.getItem(ALL_ACCOUNTS_USAGE_KEY)).toBe("1");
+    expect(loadAllAccountsUsage()).toBe(true);
+
+    saveAllAccountsUsage(false);
+    expect(localStorage.getItem(ALL_ACCOUNTS_USAGE_KEY)).toBe("0");
+    expect(loadAllAccountsUsage()).toBe(false);
+  });
+
+  it("is independent of the remaining quota setting", () => {
+    saveRemainingQuota(true);
+    expect(loadAllAccountsUsage()).toBe(false);
+    saveAllAccountsUsage(true);
+    saveRemainingQuota(false);
+    expect(loadAllAccountsUsage()).toBe(true);
+  });
+
+  it("safely falls back to false for invalid stored values", () => {
+    localStorage.setItem(ALL_ACCOUNTS_USAGE_KEY, "invalid");
+    expect(loadAllAccountsUsage()).toBe(false);
+  });
+
+  it("safely falls back to false when storage throws", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      value: {
+        getItem: () => {
+          throw new Error("storage access denied");
+        },
+        setItem: () => {
+          throw new Error("storage access denied");
+        },
+        removeItem: () => {},
+      },
+      configurable: true,
+    });
+    expect(loadAllAccountsUsage()).toBe(false);
+    expect(() => saveAllAccountsUsage(true)).not.toThrow();
+  });
+
+  it("notifies subscribers when the setting changes", () => {
+    const target = new EventTarget();
+    vi.stubGlobal("window", target);
+    try {
+      let callCount = 0;
+      const unsubscribe = subscribeAllAccountsUsage(() => {
+        callCount++;
+      });
+
+      saveAllAccountsUsage(true);
+      expect(callCount).toBe(1);
+
+      unsubscribe();
+      saveAllAccountsUsage(false);
+      expect(callCount).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("compact model labels setting", () => {

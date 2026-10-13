@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SettingsNav } from "../../../app/shell/SettingsRail";
 import { SettingsView } from "../../settings/ui/SettingsView";
 import {
+  ALL_ACCOUNTS_USAGE_DEFAULT,
+  saveAllAccountsUsage,
   COMPACT_MODEL_LABELS_DEFAULT,
   DETAILED_CONTEXT_DEFAULT,
   REMAINING_QUOTA_DEFAULT,
@@ -57,6 +59,7 @@ describe("SettingsView Experimentation Page", () => {
     localStorage.removeItem("monocode.detailedContext");
     localStorage.removeItem("monocode.remainingQuota");
     localStorage.removeItem("monocode.compactModelLabels");
+    localStorage.removeItem("monocode.allAccountsUsage");
   });
 
   it("renders section header and exact copy for the experimental toggles", () => {
@@ -120,6 +123,30 @@ describe("SettingsView Experimentation Page", () => {
     // All three are off by default: aria-checked should be "false".
     const checkedMatches = markup.match(/aria-checked="false"/g);
     expect(checkedMatches?.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("lists the All accounts usage switch, off by default", () => {
+    expect(ALL_ACCOUNTS_USAGE_DEFAULT).toBe(false);
+    const props = {
+      section: "experimentation" as const,
+      cwd: "E:/test",
+      sessions: [],
+      onClose: () => {},
+      onOpenSession: () => {},
+      onArchiveSession: () => {},
+      onDeleteSession: () => {},
+    };
+    const off = renderToStaticMarkup(createElement(SettingsView, props));
+    expect(off).toContain("All accounts usage");
+    expect(off).toMatch(
+      /aria-label="All accounts usage"[^>]*aria-checked="false"|aria-checked="false"[^>]*aria-label="All accounts usage"/,
+    );
+
+    saveAllAccountsUsage(true);
+    const on = renderToStaticMarkup(createElement(SettingsView, props));
+    expect(on).toMatch(
+      /aria-label="All accounts usage"[^>]*aria-checked="true"|aria-checked="true"[^>]*aria-label="All accounts usage"/,
+    );
   });
 
   it("reflects ON switch semantics when values are saved", () => {

@@ -90,8 +90,17 @@ export function UsageProviderChip({
   onReconnect,
   remainingQuota = false,
   presentation,
+  accountLabel,
+  inlineWindow = "all",
 }: {
   limits: ProviderRateLimits;
+  /**
+   * Names the account this chip reports on when several accounts are shown
+   * side by side. Leave unset for the footer's single selected-account chip.
+   */
+  accountLabel?: string;
+  /** "shortest" keeps only the shortest limit inline; the popover lists all. */
+  inlineWindow?: "all" | "shortest";
   now: number;
   remainingQuota?: boolean;
   presentation?: { harness: HarnessId; label: string; sourceLabel?: string };
@@ -124,12 +133,14 @@ export function UsageProviderChip({
       !limits.modelGroups?.length);
   const disconnected = limits.status === "unavailable";
   const windows = usageWindows(limits);
+  const inlineWindows =
+    inlineWindow === "shortest" ? shortestWindowEntries(windows) : windows;
   const loginView = Boolean(
     onReconnect &&
     windows.length === 0 &&
     (needsProviderLogin(limits) || reconnectState !== "idle"),
   );
-  const tightest = windows.reduce<RateLimitWindow | null>((best, entry) => {
+  const tightest = inlineWindows.reduce<RateLimitWindow | null>((best, entry) => {
     if (!best || entry.window.usedPercent > best.usedPercent) {
       return entry.window;
     }
@@ -139,6 +150,9 @@ export function UsageProviderChip({
     .map((entry) => rateLimitWindowTooltip(entry.window, now, remainingQuota))
     .join(" · ");
   const providerLabel = presentation?.label ?? HARNESS_TITLE[limits.provider];
+  const detailsLabel = accountLabel
+    ? `${providerLabel} ${accountLabel} usage details`
+    : `${providerLabel} usage details`;
   const iconHarness = presentation?.harness ?? limits.provider;
   const activeAccount = accounts.find((account) => account.id === accountId);
   const canManageAccounts = Boolean(onSelectAccount && onAddAccount);
@@ -240,7 +254,7 @@ export function UsageProviderChip({
         ref={trigger}
         type="button"
         className="-mx-1 inline-flex h-5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-1 text-content/55 transition-[background-color,color,transform] duration-150 ease-out hover:bg-content/10 hover:text-content focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97]"
-        aria-label={`${providerLabel} usage details`}
+        aria-label={detailsLabel}
         aria-expanded={open}
         aria-haspopup="dialog"
         title={
@@ -255,6 +269,11 @@ export function UsageProviderChip({
         onClick={() => setOpen((value) => !value)}
       >
         <HarnessIcon harness={iconHarness} className="size-3 shrink-0" />
+        {accountLabel ? (
+          <span className="max-w-24 truncate text-content/45">
+            {accountLabel}
+          </span>
+        ) : null}
         {loading ? (
           <span className="animate-pulse text-content/35">···</span>
         ) : disconnected ? (
@@ -270,7 +289,7 @@ export function UsageProviderChip({
             ) : null}
             {tightest ? <MiniBar usedPct={tightest.usedPercent} /> : null}
             <span className="flex min-w-0 items-center gap-1 tabular-nums">
-              {windows.map((entry, index) => (
+              {inlineWindows.map((entry, index) => (
                 <span
                   key={entry.key}
                   className="inline-flex items-center gap-1"
@@ -302,7 +321,7 @@ export function UsageProviderChip({
           autoFocus
           onDismiss={dismiss}
           role="dialog"
-          aria-label={`${providerLabel} usage details`}
+          aria-label={detailsLabel}
           tabIndex={-1}
           className={`overflow-y-auto text-content ${accountView === "usage" && loginView ? "" : "p-2.5"}`}
         >
@@ -364,6 +383,11 @@ export function UsageProviderChip({
                   <p className="mt-0.5 text-[10px] leading-4 text-content/40">
                     {updatedLabel(limits, now)}
                   </p>
+                  {accountLabel && !canManageAccounts ? (
+                    <p className="mt-0.5 truncate text-[10px] leading-4 text-content/55">
+                      {accountLabel}
+                    </p>
+                  ) : null}
                   {presentation?.sourceLabel ? (
                     <p className="mt-0.5 text-[10px] leading-4 text-content/55">
                       {presentation.sourceLabel}
@@ -795,6 +819,20 @@ function usageWindows(limits: ProviderRateLimits): UsageWindowEntry[] {
       ? ({ key: "monthly", window: limits.monthly } as const)
       : null,
   ].filter((entry): entry is UsageWindowEntry => entry != null);
+}
+
+/** The entry with the shortest window; empty when there are no windows. */
+function shortestWindowEntries(
+  entries: UsageWindowEntry[],
+): UsageWindowEntry[] {
+  const shortest = entries.reduce<UsageWindowEntry | null>(
+    (best, entry) =>
+      !best || entry.window.windowMinutes < best.window.windowMinutes
+        ? entry
+        : best,
+    null,
+  );
+  return shortest ? [shortest] : [];
 }
 
 function UsageWindowCard({
