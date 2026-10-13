@@ -320,7 +320,7 @@ function nativePreparationDispatch(
     const { current, sessionId, prepared, prepareNativeInput, providerAccountId,
       intent, operatorAccess, orchestrator, editedResend, acceptEditedResend,
       options, turnGen, gen, sendHarnessTurn, sessionWorkCwd, mono,
-      migrateMonoCodexSession } = bindings;
+      migrateMonoCodexSession, diagnosticSubmissionId = "test-submission", diagnosticPurpose = "chat" } = bindings;
     return (${expression})("Check once");
   `,
     {

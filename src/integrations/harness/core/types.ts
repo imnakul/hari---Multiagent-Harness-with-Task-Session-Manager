@@ -14,6 +14,9 @@ import type { McpFormField } from "../../../features/sessions/model/mcpForm";
 import { type ProcessedUsage } from "../../../features/sessions/model/tokenAccounting";
 
 export type HarnessEvent =
+  | { type: "diagnostic.measurement"; measurement: import("../../../features/debug-inspector/model/trace").UsageMeasurement; purpose?: string }
+  | { type: "diagnostic.tool"; callId: string; name: string }
+  | { type: "diagnostic.lifecycle"; operation: string; identity: string; state?: string }
   | { type: "externalTurn.started"; turnId: string; text?: string; nativeId?: string }
   | { type: "externalTurn.user"; turnId: string; text: string; nativeId?: string }
   | { type: "externalTurn.event"; turnId: string; event: HarnessEvent }
@@ -214,6 +217,8 @@ export type ApprovalScope = "once" | "session" | "server";
 export class TurnNotReadyError extends Error {}
 
 export type HarnessSessionInput = {
+  /** Diagnostic correlation only; never sent to a provider. */
+  diagnostic?: { submissionId?: string; turnId?: string; purpose?: string };
   fork?: NativeForkRequest;
   /** Resume this exact provider conversation; the adapter must fail closed. */
   nativeResume?: { providerSessionId: string };
@@ -273,6 +278,7 @@ export type SendTurnInput = HarnessSessionInput & {
 export type CompactContextInput = HarnessSessionInput;
 
 export type SteerTurnInput = {
+  diagnostic?: HarnessSessionInput["diagnostic"];
   sessionId: string;
   cwd: string;
   model: string;

@@ -13,6 +13,7 @@ import type { UserQuestionReply } from "../../../features/sessions/model/userQue
 import type { McpFormReply } from "../../../features/sessions/model/mcpForm";
 import type { NativeCommandProvider } from "./nativeCommands";
 import { HarnessRemoteControlError } from "./types";
+import { isDiagnosticEvent, knownSettings, metadataLabel, observeHarnessEvent, recordTrace, rememberTraceContext, sessionContext, traceContextFor, traceOperation } from "../../../features/debug-inspector/model/trace";
 import type {
   ApprovalDecision,
   ApprovalScope,
@@ -274,12 +275,19 @@ export function sendHarnessTurn(input: SendTurnInput & { harness: HarnessId }) {
       });
     activeTurnSessions.add(input.sessionId);
     try {
-      await adapter.sendTurn({
-        ...input,
-        onAccepted: () => {
-          input.onEvent({ type: "turn.ready" });
-          input.onAccepted?.();
-        },
+      const context = sessionContext(input, input.harness, input.diagnostic?.purpose ?? (input.humanAuthored ? "chat" : "automation"), input.diagnostic);
+      context.authorship = input.humanAuthored === undefined ? undefined : input.humanAuthored ? "user" : "automation";
+      await traceOperation(context, "dispatch", async (active) => {
+        if (input.nativeResume) recordTrace(active, "native-resume-request", active.attemptId ?? "resume", { source: "validated dispatch input", state: "requested" });
+        return adapter.sendTurn({
+          ...input,
+          onEvent: (event) => { observeHarnessEvent(active, event); if (!isDiagnosticEvent(event)) input.onEvent(event); },
+          onAccepted: () => {
+            recordTrace(active, "accepted", active.attemptId ?? "accepted", { source: "provider acceptance" });
+            input.onEvent({ type: "turn.ready" });
+            input.onAccepted?.();
+          },
+        });
       });
     } finally {
       activeTurnSessions.delete(input.sessionId);
@@ -308,7 +316,9 @@ export function compactHarnessContext(
     }
     cancelIdlePark(input.sessionId);
     try {
-      await adapter.compactContext(input);
+      await traceOperation(sessionContext(input, input.harness, "compaction"), "compaction", async (active) => adapter.compactContext?.({
+        ...input, onEvent: (event) => { observeHarnessEvent(active, event); if (!isDiagnosticEvent(event)) input.onEvent(event); },
+      }));
     } finally {
       scheduleIdlePark(input.harness, input.sessionId);
     }
@@ -374,7 +384,10 @@ export async function setHarnessRemoteControl(
     idleParkExempt.delete(input.sessionId);
   }
   try {
-    await adapter.setRemoteControl(input);
+    const observationContext = traceContextFor(input.sessionId) ?? sessionContext(input, input.harness, "remote-control");
+    await traceOperation(sessionContext(input, input.harness, "remote-control"), "remote-control-operation", () => adapter.setRemoteControl!({
+      ...input, onEvent: (event) => { observeHarnessEvent(observationContext, event); if (!isDiagnosticEvent(event)) input.onEvent(event); },
+    }));
   } catch (error) {
     if (
       input.enabled &&
@@ -431,7 +444,9 @@ export function steerHarnessTurn(
       throw new Error(`${input.harness} is not connected yet`);
     }
     cancelIdlePark(input.sessionId);
-    await adapter.steerTurn(input);
+    const context = traceContextFor(input.sessionId) ?? { provider: input.harness, sessionId: input.sessionId,
+      purpose: "steering", activity: "local" };
+    await traceOperation({ ...context, submissionId: input.diagnostic?.submissionId, purpose: input.diagnostic?.purpose ?? "steering" }, "steer-dispatch", () => adapter.steerTurn(input));
   });
 }
 
@@ -442,6 +457,8 @@ export async function cancelHarnessTurn(
   const adapter = getHarness(harness);
   if (!adapter?.live) return;
   cancelIdlePark(sessionId);
+  const context = traceContextFor(sessionId);
+  if (context) recordTrace(context, "cancellation", context.attemptId ?? "session", { source: "harness boundary", state: "requested" });
   await adapter.cancelTurn(sessionId);
   scheduleIdlePark(harness, sessionId);
 }
@@ -515,6 +532,11 @@ export function bindHarnessSession(
 ): void {
   const adapter = getHarness(harness);
   adapter?.bindSession(threadId, providerSessionId, cwd, providerAccountId);
+  if (adapter) {
+    const context = { provider: harness, sessionId: threadId, nativeId: providerSessionId, accountId: providerAccountId ?? "default", purpose: "native-binding", activity: "local" } as const;
+    rememberTraceContext(context);
+    recordTrace(context, "native-binding", providerSessionId, { source: "restored provider identity" });
+  }
   if (!blocks || !adapter?.restoreTaskLists) return;
   const lists = blocks.flatMap((block) =>
     block.role === "tasks" && block.taskList ? [block.taskList] : [],
@@ -555,7 +577,8 @@ export async function generateHarnessTitle(
 ): Promise<GeneratedSessionTitle | null> {
   const adapter = getHarness(harness);
   if (!adapter?.generateTitle) return null;
-  return adapter.generateTitle(input);
+  return traceOperation({ provider: harness, sessionId: input.sessionId, accountId: input.providerAccountId ?? "default",
+    purpose: "title-generation", activity: "local" }, "helper", () => adapter.generateTitle!(input));
 }
 
 export async function runHarnessHelperPrompt(
@@ -566,7 +589,8 @@ export async function runHarnessHelperPrompt(
   if (!adapter?.runHelperPrompt) {
     throw new Error(`${harness} does not support AI helper prompts`);
   }
-  return adapter.runHelperPrompt(input);
+  return traceOperation({ provider: harness, accountId: input.providerAccountId ?? "default", model: metadataLabel(input.model), purpose: "AI-helper", activity: "local" },
+    "helper", () => adapter.runHelperPrompt!(input));
 }
 
 export async function generateHarnessCommitMessage(
@@ -580,9 +604,9 @@ export async function generateHarnessCommitMessage(
     throw new Error(`${harness} does not support commit message generation`);
   }
   signal?.throwIfAborted();
-  return paths === undefined
-    ? adapter.generateCommitMessage(cwd, signal)
-    : adapter.generateCommitMessage(cwd, signal, paths);
+  return traceOperation({ provider: harness, purpose: "commit-message", activity: "local" }, "helper", () => paths === undefined
+    ? adapter.generateCommitMessage!(cwd, signal)
+    : adapter.generateCommitMessage!(cwd, signal, paths));
 }
 
 export async function generateHarnessPrContent(
@@ -591,7 +615,7 @@ export async function generateHarnessPrContent(
 ): Promise<(PrContent & { base: string; head: string }) | null> {
   const adapter = getHarness(harness);
   if (!adapter?.generatePrContent) return null;
-  return adapter.generatePrContent(cwd);
+  return traceOperation({ provider: harness, purpose: "PR-generation", activity: "local" }, "helper", () => adapter.generatePrContent!(cwd));
 }
 
 export async function generateHarnessBranchName(
@@ -601,7 +625,7 @@ export async function generateHarnessBranchName(
 ): Promise<string | null> {
   const adapter = getHarness(harness);
   if (!adapter?.generateBranchName) return null;
-  return adapter.generateBranchName(cwd, message);
+  return traceOperation({ provider: harness, purpose: "branch-name", activity: "local" }, "helper", () => adapter.generateBranchName!(cwd, message));
 }
 
 export async function warmupHarnessText(
@@ -675,7 +699,10 @@ export async function runHarnessTextPrompt(
   const owner = beginTextPrompt(adapter);
   let run: Promise<string>;
   try {
-    run = adapter.runTextPrompt(input);
+    run = traceOperation({ provider: input.harness, nativeId: input.threadId, accountId: input.providerAccountId ?? "default",
+      model: metadataLabel(input.model), effort: metadataLabel(input.modelSettings?.effort), settings: knownSettings(input.modelSettings), purpose: "isolated-text", activity: "local" }, "helper", (active) => adapter.runTextPrompt!({
+        ...input, onEvent: (event) => { observeHarnessEvent(active, event); if (!isDiagnosticEvent(event)) input.onEvent?.(event); },
+      }));
   } catch (error) {
     finishTextPrompt(adapter, owner, false);
     throw error;

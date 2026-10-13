@@ -38,6 +38,7 @@ const SECTION_ICONS: Record<SettingsSectionId, IconComponent> = {
   archive: Archive,
   migration: Inbox,
   experimentation: Wrench,
+  "debug-inspector": Wrench,
 };
 
 type Props = {

@@ -100,7 +100,11 @@ fn validate_key(key: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn root_for(app: &AppHandle, provider: &Provider, account: &str) -> Result<PathBuf, String> {
+pub(crate) fn root_for(
+    app: &AppHandle,
+    provider: &Provider,
+    account: &str,
+) -> Result<PathBuf, String> {
     if account != "default" {
         return crate::harness::provider_account_path(app, provider.name(), account);
     }

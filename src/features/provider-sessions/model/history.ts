@@ -5,7 +5,6 @@ import {
   resolveModel,
 } from "../../sessions/model/models";
 import type { NativeProvider } from "./providerSessions";
-import { PROVIDER_LABEL } from "./conversationSummary";
 
 /** One display-only item from a provider's own transcript. */
 export type HistoryItem = {
@@ -393,13 +392,8 @@ export function parseProviderHistory(
 }
 
 /** Transcript blocks for display only; never stored, sent or counted as turns. */
-export function historyBlocks(
-  items: readonly HistoryItem[],
-  provider: NativeProvider,
-  options: { hasEarlier: boolean; hiddenCount: number },
-): Block[] {
-  const label = PROVIDER_LABEL[provider];
-  const blocks: Block[] = items.map((item) =>
+export function historyBlocks(items: readonly HistoryItem[]): Block[] {
+  return items.map((item) =>
     item.role === "tool"
       ? {
           id: item.id,
@@ -416,16 +410,6 @@ export function historyBlocks(
           ...(item.at && item.role === "user" ? { startedAt: item.at } : {}),
         },
   );
-  blocks.push({
-    id: `${HISTORY_BLOCK_PREFIX}divider`,
-    role: "system",
-    text: `Earlier in ${label === "Claude" ? "Claude Code" : label}${
-      options.hasEarlier || options.hiddenCount > 0
-        ? " · older messages not shown yet"
-        : ""
-    }`,
-  });
-  return blocks;
 }
 
 /**
@@ -458,12 +442,10 @@ export function withHistory(history: Block[], blocks: Block[]): Block[] {
  */
 export function reconcileNativeHistory(
   items: readonly HistoryItem[],
-  provider: NativeProvider,
   local: Block[],
-  options: { hasEarlier: boolean; hiddenCount: number },
 ): Block[] {
   if (items.length === 0) return local;
-  if (local.length === 0) return historyBlocks(items, provider, options);
+  if (local.length === 0) return historyBlocks(items);
   const turns: Block[][] = [];
   const leading: Block[] = [];
   for (const block of local) {
@@ -549,18 +531,11 @@ export function reconcileNativeHistory(
   const shown: Block[] = [...leading];
   for (let index = 0; index < buckets.length; index++) {
     if (buckets[index].length) {
-      const imported = historyBlocks(buckets[index], provider, options);
-      // The divider applies to the whole native view, not each insertion.
-      shown.push(...imported.slice(0, -1));
+      shown.push(...historyBlocks(buckets[index]));
     }
     if (index < turns.length) shown.push(...turns[index]);
   }
   if (!shown.some(isHistoryBlock)) return local;
-  shown.push({
-    id: `${HISTORY_BLOCK_PREFIX}divider`,
-    role: "system",
-    text: `Native ${provider === "claude" ? "Claude Code" : "Codex"} history${options.hasEarlier || options.hiddenCount > 0 ? " · older messages not shown yet" : ""}`,
-  });
   return shown;
 }
 

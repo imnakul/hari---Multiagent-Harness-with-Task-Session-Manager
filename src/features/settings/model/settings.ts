@@ -26,6 +26,7 @@ export type SettingsSectionId =
   | "keybindings"
   | "chat"
   | "providers"
+  | "debug-inspector"
   | "mcp"
   | "skills"
   | "prompts"
@@ -104,6 +105,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       "Provider accounts, agent CLIs MonoCode can drive, and the model new sessions start with.",
     keywords:
       "account sign in login model harness claude codex gemini cli default hooks",
+  },
+  {
+    id: "debug-inspector",
+    group: "agents",
+    label: "Debug Inspector",
+    description: "Read-only execution metadata, local usage evidence and observed account quota.",
+    keywords: "debug trace tokens cache usage quota inspector diagnostics",
   },
   {
     id: "mcp",

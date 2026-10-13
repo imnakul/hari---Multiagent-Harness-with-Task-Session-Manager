@@ -10,7 +10,7 @@ import {
 } from "../model/history";
 
 export type NativeHistoryView = {
-  /** Display-only blocks (oldest first, ending with the divider); empty when none. */
+  /** Display-only conversation blocks (oldest first); empty when none. */
   blocks: Block[];
   transcriptBlocks: Block[];
   state: NativeHistoryState;
@@ -61,15 +61,7 @@ export function useNativeHistory(input: {
   const transcriptBlocks = useMemo(() => {
     if (state.status !== "ready") return localBlocks ?? [];
     if (localBlocks)
-      return reconcileNativeHistory(
-        state.items.slice(-state.visible),
-        state.provider,
-        localBlocks,
-        {
-          hasEarlier: state.hasEarlier,
-          hiddenCount: Math.max(0, state.items.length - state.visible),
-        },
-      );
+      return reconcileNativeHistory(state.items.slice(-state.visible), localBlocks);
     const earlier = trimHistoryBefore(
       state.items,
       cutoffMs,
@@ -77,10 +69,7 @@ export function useNativeHistory(input: {
     );
     const items = earlier.slice(-state.visible);
     if (items.length === 0) return [];
-    return historyBlocks(items, state.provider, {
-      hasEarlier: state.hasEarlier,
-      hiddenCount: Math.max(0, earlier.length - state.visible),
-    });
+    return historyBlocks(items);
   }, [state, cutoffMs, representedNativeIds, localBlocks]);
   const blocks = useMemo(
     () => transcriptBlocks.filter(isHistoryBlock),

@@ -8,6 +8,7 @@ import {
   stopStreaming,
 } from "../src/integrations/harness/core/apply";
 import { resolveModel } from "../src/features/sessions/model/models";
+import { isDiagnosticEvent } from "../src/features/debug-inspector/model/trace";
 import { isVisionImage } from "../src/features/sessions/model/attachments";
 import type {
   HarnessEvent,
@@ -862,6 +863,7 @@ export class HostEngine {
   }
 
   private event(id: string, runId: string, event: HarnessEvent): void {
+    if (isDiagnosticEvent(event)) return;
     const live = this.live.get(id);
     if (!live || live.value.runId !== runId || live.value.status !== "running")
       return;

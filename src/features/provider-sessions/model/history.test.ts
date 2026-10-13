@@ -122,10 +122,7 @@ describe("parseProviderHistory", () => {
       id: "claude-sonnet-4-5",
       settings: { effort: "high" },
     });
-    const blocks = historyBlocks(items, "claude", {
-      hasEarlier: false,
-      hiddenCount: 0,
-    });
+    const blocks = historyBlocks(items);
     expect(blocks[0]?.turnModel?.id).toBe("claude-sonnet-4-5");
     expect(items[2]?.turnModel).toMatchObject({
       harness: "claude",
@@ -525,8 +522,8 @@ describe("display blocks", () => {
       { id: "history:reply2", role: "assistant" as const, text: "Native duplicate two" },
       { id: "history:latest", role: "user" as const, text: "Latest external", at: base + 55_000 },
     ];
-    const shown = reconcileNativeHistory(items, "codex", local, { hasEarlier: false, hiddenCount: 0 });
-    expect(shown.slice(0, -1).map((block) => block.text)).toEqual([
+    const shown = reconcileNativeHistory(items, local);
+    expect(shown.map((block) => block.text)).toEqual([
       "Original", "Local one", "Rich local one", "Desktop follow-up", "Desktop answer", "Local two", "Rich local two", "Latest external",
     ]);
     expect(local).toHaveLength(4);
@@ -539,7 +536,7 @@ describe("display blocks", () => {
     const shown = reconcileNativeHistory([
       { id: "history:1", role: "user", text: "Different phone prompt", at: 102_000 },
       { id: "history:2", role: "user", text: "Continue", at: 200_000 },
-    ], "claude", local, { hasEarlier: false, hiddenCount: 0 });
+    ], local);
     expect(shown.filter((block) => block.role === "user").map((block) => block.text)).toEqual(["Continue", "Different phone prompt", "Continue"]);
   });
 
@@ -549,13 +546,13 @@ describe("display blocks", () => {
       { id: "history:1", role: "user", text: "Phone prompt", nativeId: "uuid" },
       { id: "history:2", role: "assistant", text: "Duplicate reply" },
       { id: "history:3", role: "user", text: "Later external prompt" },
-    ], "claude", local, { hasEarlier: false, hiddenCount: 0 });
-    expect(shown.slice(0, -1).map((block) => block.text)).toEqual(["Phone prompt", "Saved phone reply", "Later external prompt"]);
+    ], local);
+    expect(shown.map((block) => block.text)).toEqual(["Phone prompt", "Saved phone reply", "Later external prompt"]);
   });
 
   it("never matches an unsent draft to a native turn", () => {
     const local: Block[] = [{ id: "draft", role: "user", text: "Same text", startedAt: 1000, draft: true }];
-    const shown = reconcileNativeHistory([{ id: "history:1", role: "user", text: "Same text", at: 1000 }], "codex", local, { hasEarlier: false, hiddenCount: 0 });
+    const shown = reconcileNativeHistory([{ id: "history:1", role: "user", text: "Same text", at: 1000 }], local);
     expect(shown.filter((block) => block.role === "user")).toHaveLength(2);
   });
 
@@ -564,7 +561,7 @@ describe("display blocks", () => {
     const shown = reconcileNativeHistory([
       { id: "history:own", role: "user", text: "Continue", at: 1001 },
       { id: "history:second", role: "user", text: "Continue", at: 1500 },
-    ], "codex", local, { hasEarlier: false, hiddenCount: 0 });
+    ], local);
     expect(shown.filter((block) => block.role === "user").map((block) => block.id)).toEqual(["u", "history:second"]);
   });
 
@@ -577,24 +574,48 @@ describe("display blocks", () => {
       { id: "history:own", role: "user", text: "Check the task\n\n<monocode_app>\nOperator instructions\n</monocode_app>", at: 1100 },
       { id: "history:answer", role: "assistant", text: "Duplicate native answer" },
       { id: "history:other", role: "user", text: "Check another task", at: 2100 },
-    ], "claude", local, { hasEarlier: false, hiddenCount: 0 });
-    expect(shown.slice(0, -1).map((block) => block.text)).toEqual(["/operator Check the task", "Local answer", "Check another task"]);
+    ], local);
+    expect(shown.map((block) => block.text)).toEqual(["/operator Check the task", "Local answer", "Check another task"]);
   });
 
-  it("builds transcript blocks and a divider, tagged so they are never turns", () => {
+  it("builds every native content block without a manufactured history notice", () => {
     const items = parseProviderHistory("claude", claudeFixture, "0");
-    const blocks = historyBlocks(items, "claude", { hasEarlier: false, hiddenCount: 0 });
+    const blocks = historyBlocks(items);
     expect(blocks.every(isHistoryBlock)).toBe(true);
     expect(blocks.find((b) => b.role === "tool")?.tool?.status).toBe("completed");
-    const divider = blocks[blocks.length - 1];
-    expect(divider).toMatchObject({ role: "system", text: "Earlier in Claude Code" });
-    expect(historyBlocks(items, "codex", { hasEarlier: true, hiddenCount: 0 }).at(-1)?.text).toContain("older messages not shown yet");
+    expect(blocks.map((block) => block.text)).toEqual(items.map((item) => item.text));
+    expect(blocks.some((block) => block.role === "system")).toBe(false);
+    expect(historyBlocks([])).toEqual([]);
+  });
+
+  it("keeps each new local reply last when native history is reconciled again", () => {
+    const items: HistoryItem[] = [
+      { id: "history:old-user", role: "user", text: "Earlier question", at: 1000 },
+      { id: "history:old-answer", role: "assistant", text: "Earlier answer", at: 2000 },
+    ];
+    const local: Block[] = [
+      { id: "user", role: "user", text: "Continue", startedAt: 10000 },
+      { id: "answer", role: "assistant", text: "New reply" },
+    ];
+    expect(reconcileNativeHistory(items, [])).toEqual(historyBlocks(items));
+    expect(reconcileNativeHistory(items, local).at(-1)).toBe(local[1]);
+    const next: Block[] = [...local,
+      { id: "next-user", role: "user", text: "Continue again", startedAt: 20000 },
+      { id: "next-answer", role: "assistant", text: "Latest reply" },
+    ];
+    const shown = reconcileNativeHistory(items, next);
+    expect(shown.map((block) => block.text)).toEqual([
+      "Earlier question", "Earlier answer", "Continue", "New reply", "Continue again", "Latest reply",
+    ]);
+    expect(shown.at(-1)).toBe(next.at(-1));
+    expect(shown.some((block) => block.role === "system")).toBe(false);
+    expect(local).toHaveLength(2);
   });
 
   it("puts history above session blocks without mutating the session", () => {
     const session = newSession("claude", "/work", "m");
     session.blocks = [{ id: "real-1", role: "user", text: "new turn" }];
-    const history = historyBlocks(parseProviderHistory("claude", claudeFixture, "0"), "claude", { hasEarlier: false, hiddenCount: 0 });
+    const history = historyBlocks(parseProviderHistory("claude", claudeFixture, "0"));
     const shown = withHistory(history, session.blocks);
     expect(shown.at(-1)?.id).toBe("real-1");
     expect(session.blocks).toHaveLength(1);

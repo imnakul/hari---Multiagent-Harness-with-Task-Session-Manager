@@ -35,6 +35,7 @@ import {
 import type { TurnIntent } from "../../../../features/sessions/model/session";
 import type { HarnessEvent } from "../../core/types";
 import { mergeStream } from "../../core/streamText";
+import { claudeMeasurement, finiteCount, helperTraceContext, observeHarnessEvent } from "../../../../features/debug-inspector/model/trace";
 
 const TEXT_CHILD_ID = "monocode-claude-text";
 const INIT_TIMEOUT_MS = 8_000;
@@ -374,6 +375,18 @@ function handleLine(session: LiveText, line: string): void {
     session.readyDone = null;
   }
   if (!session.collecting) return;
+  if (type === "assistant" || type === "result") {
+  const diagnosticContext = helperTraceContext("claude") ?? { provider: "claude", sessionId: TEXT_CHILD_ID,
+    accountId: session.providerAccountId ?? "default", model: session.model, purpose: "unattributed-helper", activity: "unknown" };
+  if (type === "assistant") {
+    const message = asRecord(rec.message);
+    const identity = stringField(message, "id");
+    if (identity) observeHarnessEvent(diagnosticContext, { type: "diagnostic.measurement", measurement:
+      claudeMeasurement(asRecord(message?.usage), identity, "message", message?.model) });
+  }
+  if (type === "result") observeHarnessEvent(diagnosticContext, { type: "diagnostic.measurement", measurement:
+    { ...claudeMeasurement(asRecord(rec.usage), stringField(rec, "uuid") ?? "helper-result", "sdk-result"), costUsd: finiteCount(rec.total_cost_usd) } });
+  }
   if (type === "control_request" || type === "sdk_control_request") {
     const control = parseControlRequest(rec);
     if (control?.subtype === "can_use_tool") {

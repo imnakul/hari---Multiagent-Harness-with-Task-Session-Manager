@@ -36,6 +36,20 @@ describe("SessionProviderStrip", () => {
     expect(html).not.toContain("not shown here yet");
   });
 
+  it.each(["Claude Code", "Codex"] as const)("shows one %s source notice beside loading controls", (sourceLabel) => {
+    const full = render({ history: { ...history, sourceLabel, canShowEarlier: false } });
+    expect(full.split(`Native ${sourceLabel} history`)).toHaveLength(2);
+    expect(full).not.toContain("older messages not shown yet");
+    expect(full).not.toContain("Show earlier");
+    const partial = render({ history: { ...history, sourceLabel } });
+    expect(partial).toContain(`Native ${sourceLabel} history · older messages not shown yet`);
+    expect(partial).toContain("Show earlier");
+    expect(partial).toContain("data-session-provider-strip");
+    const loading = render({ history: { ...history, sourceLabel, loadingEarlier: true } });
+    expect(loading).toContain("Loading…");
+    expect(loading).toContain('disabled=""');
+  });
+
   it("reports a failed older chunk without hiding what loaded", () => {
     const html = render({ history: { ...history, message: "file moved" } });
     expect(html).toContain("Older messages could not be loaded: file moved");

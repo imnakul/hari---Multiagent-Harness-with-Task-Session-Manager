@@ -12,6 +12,7 @@ mod codex_mono_store;
 mod control;
 pub mod control_cli;
 mod cursor_store;
+mod debug_inspector;
 mod devin_config;
 mod devin_usage;
 mod external_editor;
@@ -612,6 +613,8 @@ pub fn run() {
             provider_sessions::provider_sessions_unbind,
             provider_sessions::provider_sessions_validate_source,
             provider_sessions::provider_sessions_history,
+            debug_inspector::debug_inspector_local_evidence,
+            debug_inspector::debug_inspector_session_identity,
             provider_sessions::provider_cloud_save,
             provider_sessions::provider_cloud_list,
             notes::notes_list,

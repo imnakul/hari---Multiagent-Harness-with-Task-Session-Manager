@@ -954,6 +954,7 @@ describe("settings navigation", () => {
       "experimentation",
       "chat",
       "providers",
+      "debug-inspector",
       "mcp",
       "skills",
       "prompts",

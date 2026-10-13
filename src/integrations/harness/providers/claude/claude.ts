@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { claudeMeasurement, finiteCount } from "../../../../features/debug-inspector/model/trace";
 import { parseClaudeContextUsage } from "./claudeProtocol";
 import type { NativeContextBreakdown } from "../../../../features/sessions/model/contextBreakdown";
 import { TurnNotReadyError } from "../../core/types";
@@ -1352,6 +1353,7 @@ function handleLine(sessionId: string, live: Live, line: string): void {
     if (text) {
       if ((stringField(rec, "subtype") ?? "").startsWith("compact")) {
         live.compactionConfirmed = true;
+        emitClaudeEvent(live, { type: "diagnostic.lifecycle", operation: "provider-compaction", identity: stringField(rec, "uuid") ?? "compaction", state: "observed" });
         emitClaudeEvent(live, { type: "context.stale" });
       }
       emitClaudeEvent(live, { type: "status", text });
@@ -1605,6 +1607,10 @@ function handleStreamEvent(live: Live, rec: Record<string, unknown>): void {
 }
 
 function handleAssistant(live: Live, rec: Record<string, unknown>): void {
+  const diagnosticMessage = asRecord(rec.message);
+  const diagnosticId = stringField(diagnosticMessage, "id");
+  if (diagnosticId) emitClaudeEvent(live, { type: "diagnostic.measurement", purpose: isSubagentMessage(rec) ? "subagent" : undefined, measurement:
+    claudeMeasurement(asRecord(diagnosticMessage?.usage), diagnosticId, "message", diagnosticMessage?.model) });
   if (isSubagentMessage(rec)) {
     noteSubagentNarration(live, rec);
     for (const use of assistantToolUses(rec)) {
@@ -1656,6 +1662,7 @@ function handleAssistant(live: Live, rec: Record<string, unknown>): void {
   }
 
   for (const use of assistantToolUses(rec)) {
+    emitClaudeEvent(live, { type: "diagnostic.tool", callId: use.id, name: use.name });
     const streamed = live.toolsById.get(use.id);
     if (streamed) {
       // content_block_start often has an empty input. The input JSON delta may
@@ -1791,6 +1798,8 @@ function settleInlineAgentTask(live: Live, toolUseId: string): void {
 
 function handleResult(live: Live, rec: Record<string, unknown>): void {
   if (isSubagentMessage(rec)) return;
+  emitClaudeEvent(live, { type: "diagnostic.measurement", measurement:
+    { ...claudeMeasurement(asRecord(rec.usage), stringField(rec, "uuid") ?? "sdk-result", "sdk-result"), costUsd: finiteCount(rec.total_cost_usd) } });
   if (live.forkPending) {
     live.forkPending = false;
     emitClaudeEvent(live, {

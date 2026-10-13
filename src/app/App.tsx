@@ -1,3 +1,4 @@
+import { nextSubmissionIdentity, recordTrace, sessionContext } from "../features/debug-inspector/model/trace";
 import {
   loadTasks,
   getTask,
@@ -8021,6 +8022,13 @@ function Workspace({
 
       const pendingSwitch = pendingComposerSwitch(current);
 
+      const diagnosticPurpose = mono ? "Mono" : current.sidechat ? "sidechat" : options?.managed ? "automation" : "chat";
+      const observeSubmission = (identity: string, state: string): void => {
+        recordTrace({ ...sessionContext({ ...current, sessionId, providerAccountId }, current.harness, diagnosticPurpose,
+          { submissionId: identity, turnId: identity }), authorship: options?.managed ? "automation" : "user" }, "submission", identity,
+          { source: "accepted MonoCode submission", state });
+      };
+
       // A Mono accepts consecutive messages before its provider is connected.
       // The pending head is delivered once ready; later messages cannot overtake it.
       if (
@@ -8028,6 +8036,7 @@ function Workspace({
         !options?.queuedMessageId &&
         (current.busy || current.queuedMessages?.length)
       ) {
+        const queuedSubmissionId = crypto.randomUUID();
         const next = sessionsRef.current.map((session) =>
           session.id === sessionId
             ? enqueueMonoMessage(
@@ -8038,7 +8047,7 @@ function Workspace({
                   handoffCard: rawCommand ? session.handoffCard : undefined,
                 },
                 {
-                  id: crypto.randomUUID(),
+                  id: queuedSubmissionId,
                   text,
                   attachments,
                   noteCard,
@@ -8051,6 +8060,7 @@ function Workspace({
         );
         sessionsRef.current = next;
         setSessions(next);
+        observeSubmission(queuedSubmissionId, "queued");
         dismissNoticesForContinuedSession(sessionId);
         return true;
       }
@@ -8105,6 +8115,7 @@ function Workspace({
                 prepared.text,
               ),
               attachments: prepared.attachments,
+              diagnostic: { submissionId: message.id, purpose: diagnosticPurpose },
             }),
           delivered: () => {
             change((session) =>
@@ -8164,6 +8175,7 @@ function Workspace({
                   : "queue"
                 : (options?.followUpBehavior ?? loadFollowUpBehavior());
         if (followUpBehavior === "queue") {
+          const queuedSubmissionId = crypto.randomUUID();
           setSessions((prev) =>
             prev.map((s) =>
               s.id === sessionId
@@ -8178,7 +8190,7 @@ function Workspace({
                       handoffCard: rawCommand ? s.handoffCard : undefined,
                     },
                     {
-                      id: crypto.randomUUID(),
+                      id: queuedSubmissionId,
                       text,
                       attachments,
                       noteCard,
@@ -8189,6 +8201,7 @@ function Workspace({
                 : s,
             ),
           );
+          observeSubmission(queuedSubmissionId, "queued");
           dismissNoticesForContinuedSession(sessionId);
           return true;
         }
@@ -8221,6 +8234,8 @@ function Workspace({
         });
         sessionsRef.current = nextSessions;
         setSessions(nextSessions);
+        const steeringSubmissionId = options?.queuedMessageId ?? nextSubmissionIdentity();
+        observeSubmission(steeringSubmissionId, "steering");
         void (async () => {
           try {
             const prepared = await prepareAttachments(attachments);
@@ -8240,6 +8255,7 @@ function Workspace({
                 prompt,
               ),
               attachments: prepared,
+              diagnostic: { submissionId: steeringSubmissionId, purpose: diagnosticPurpose },
             });
           } catch (error: unknown) {
             const message =
@@ -8331,6 +8347,8 @@ function Workspace({
 
       const gen = (turnGen.current.get(sessionId) ?? 0) + 1;
       turnGen.current.set(sessionId, gen);
+      const diagnosticSubmissionId = options?.queuedMessageId ?? nextSubmissionIdentity();
+      observeSubmission(diagnosticSubmissionId, "dispatching");
       const proposalId =
         intent === "orchestrate" ? crypto.randomUUID() : undefined;
       let proposalDraft: OrchestrationProposal | undefined = proposalId
@@ -8950,6 +8968,7 @@ function Workspace({
           ) => {
             const nativeInput: Parameters<typeof sendHarnessTurn>[0] =
               await prepareNativeInput(current.harness, {
+                diagnostic: { submissionId: diagnosticSubmissionId, turnId: diagnosticSubmissionId, purpose: diagnosticPurpose },
                 ...(fork ? { fork } : {}),
                 harness: current.harness,
                 sessionId,

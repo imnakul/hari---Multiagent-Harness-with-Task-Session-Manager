@@ -6,6 +6,7 @@ import {
   type ConfigurableBinaryProvider,
 } from "../../../features/providers/model/providerBinaryPaths";
 import { getCustomBinary } from "./customBinary";
+import { helperTraceContext, recordTrace, traceContextFor, type TraceContext } from "../../../features/debug-inspector/model/trace";
 
 /** Process I/O is supplied by the desktop or a headless host. Provider
  * protocols never need to know which process owns their children. */
@@ -117,6 +118,7 @@ const sseBuffer = new Map<string, string[]>();
 const ownedChildren = new Set<string>();
 const ownedSse = new Set<string>();
 const livePid = new Map<string, number>();
+const diagnosticProcesses = new Map<string, TraceContext>();
 const pendingExit = new Map<
   string,
   Array<{ code: number | null; pid: number }>
@@ -193,6 +195,9 @@ function ensureBridge() {
         if (!handler || pid == null || pid <= 0) return;
         const currentPid = livePid.get(sessionId);
         if (isCurrentChildExit(currentPid, pid)) {
+          const context = diagnosticProcesses.get(sessionId);
+          if (context) recordTrace(context, "process-exit", `${pid}`, { source: "child backend exit", code });
+          diagnosticProcesses.delete(sessionId);
           livePid.delete(sessionId);
           handler(code);
           return;
@@ -364,6 +369,20 @@ export async function spawnChild(
     ...(devinAskEdits ? { devinAskEdits } : {}),
   });
   if (typeof pid !== "number" || pid <= 0) return;
+  const knownContext = traceContextFor(sessionId) ?? (binaryProvider && sessionId.startsWith("monocode-") ? helperTraceContext(binaryProvider) : undefined);
+  const provider = knownContext?.provider ?? binaryProvider ?? account?.provider;
+  if (provider) {
+    if (knownContext) knownContext.processId = `${sessionId}:${pid}`;
+    const context: TraceContext = { ...knownContext, provider, sessionId: knownContext?.sessionId ?? sessionId,
+      accountId: knownContext?.accountId ?? account?.id ?? "default", processId: `${sessionId}:${pid}`,
+      purpose: knownContext?.purpose ?? "unattributed-process", activity: knownContext?.activity ?? "unknown" };
+    diagnosticProcesses.set(sessionId, context);
+    if (diagnosticProcesses.size > 256) diagnosticProcesses.delete(diagnosticProcesses.keys().next().value ?? "");
+    recordTrace(context, "process-launch", `${pid}`, { source: "child backend PID", state: "started" });
+    const resumeIndex = args.findIndex((argument) => argument === "--resume" || argument === "-r");
+    if (knownContext?.nativeId && resumeIndex >= 0 && args[resumeIndex + 1] === knownContext.nativeId) recordTrace(context, "native-resume", `${pid}`,
+      { source: "resume argument matched native binding (success unknown)", state: "requested" });
+  }
   livePid.set(sessionId, pid);
   const exits = pendingExit.get(sessionId);
   pendingExit.delete(sessionId);
@@ -371,6 +390,9 @@ export async function spawnChild(
   if (!exited) return;
   livePid.delete(sessionId);
   exitHandlers.get(sessionId)?.(exited.code);
+  const diagnosticContext = diagnosticProcesses.get(sessionId);
+  if (diagnosticContext) recordTrace(diagnosticContext, "process-exit", `${pid}`, { source: "buffered child backend exit", code: exited.code });
+  diagnosticProcesses.delete(sessionId);
 }
 
 export function writeChild(sessionId: string, line: string): Promise<void> {
@@ -378,6 +400,9 @@ export function writeChild(sessionId: string, line: string): Promise<void> {
 }
 
 export function killChild(sessionId: string): Promise<void> {
+  const context = diagnosticProcesses.get(sessionId);
+  if (context) recordTrace(context, "process-stop", context.processId ?? sessionId, { source: "child backend", state: "requested" });
+  diagnosticProcesses.delete(sessionId);
   livePid.delete(sessionId);
   pendingExit.delete(sessionId);
   unwatchChild(sessionId);
@@ -385,6 +410,8 @@ export function killChild(sessionId: string): Promise<void> {
 }
 
 export function killAllChildren(): Promise<void> {
+  for (const context of diagnosticProcesses.values()) recordTrace(context, "process-stop", context.processId ?? "process", { source: "child backend", state: "requested" });
+  diagnosticProcesses.clear();
   lineHandlers.clear();
   exitHandlers.clear();
   lineBuffer.clear();

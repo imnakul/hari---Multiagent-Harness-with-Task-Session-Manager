@@ -61,6 +61,18 @@ function setup(harness: "codex" | "claude" = "codex") {
 }
 
 describe("headless session ownership", () => {
+  it("keeps diagnostic-only metadata out of remote session state and persistence", async () => {
+    const { engine, store, turns, id } = setup("claude");
+    engine.command({ type: "send", commandId: "diagnostic-boundary", sessionId: id, text: "Work" });
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    const before = JSON.stringify(store.session(id));
+    const save = vi.spyOn(store, "save");
+    turns[0].input.onEvent({ type: "diagnostic.measurement", measurement: { identity: "diagnostic-response", scope: "message", output: 10 } });
+    turns[0].input.onEvent({ type: "externalTurn.event", turnId: "diagnostic-phone", event: { type: "diagnostic.lifecycle", operation: "response", identity: "diagnostic-item" } });
+    expect(JSON.stringify(store.session(id))).toBe(before);
+    expect(save).not.toHaveBeenCalled();
+    turns[0].finish();
+  });
   it.each(["send", "compact"] as const)("clears the old draft when a normal %s starts", async (type) => {
     const { engine, store, turns, provider, id } = setup();
     provider.compact = (input) => provider.send({ ...input, text: "/compact" });

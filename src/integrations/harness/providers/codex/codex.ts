@@ -1,4 +1,5 @@
 import { TurnNotReadyError } from "../../core/types";
+import { finiteCount, type UsageMeasurement, type UsageScope } from "../../../../features/debug-inspector/model/trace";
 import { nativeModelId } from "../../../../features/sessions/model/models";
 import { sameProviderAccountId } from "../../../../features/providers/model/providerAccounts";
 import {
@@ -1122,6 +1123,16 @@ function handleNotification(
   if (threadId && threadId !== live.threadId) {
     return handleSubagentNotification(live, threadId, method, params);
   }
+  if (method === "thread/tokenUsage/updated") {
+    const rawUsage = asRecord(rec?.tokenUsage);
+    const total = asRecord(rawUsage?.total);
+    if (total) live.onEvent({ type: "diagnostic.measurement", measurement: codexDiagnosticUsage(total, live.threadId, "session-cumulative") });
+  }
+  if (method === "item/completed") {
+    const item = asRecord(rec?.item);
+    const identity = stringField(item, "id");
+    if (identity && stringField(item, "type") === "agentMessage") live.onEvent({ type: "diagnostic.lifecycle", operation: "response", identity, state: "completed" });
+  }
   if (method === "item/started" || method === "item/completed") {
     const item = asRecord(rec?.item);
     const itemId = stringField(item, "id");
@@ -1129,6 +1140,7 @@ function handleNotification(
       if (method === "item/started") {
         const server = stringField(item, "server");
         const tool = stringField(item, "tool");
+        if (tool) live.onEvent({ type: "diagnostic.tool", callId: itemId, name: tool });
         if (server && tool)
           live.inProgressMcpTools.set(itemId, { server, tool });
       } else {
@@ -2145,4 +2157,12 @@ export function __codexTestReset(): void {
 
 export function __codexTestResumeMap(): Map<string, Resume> {
   return resumeByThread;
+}
+
+function codexDiagnosticUsage(raw: Record<string, unknown>, identity: string, scope: UsageScope): UsageMeasurement {
+  const input = finiteCount(raw.inputTokens);
+  const cacheRead = finiteCount(raw.cachedInputTokens);
+  return { identity, scope, input, cacheRead, output: finiteCount(raw.outputTokens), cacheWrite: finiteCount(raw.cacheWriteInputTokens),
+    reasoning: finiteCount(raw.reasoningOutputTokens),
+    ...(input !== undefined && cacheRead !== undefined && cacheRead <= input ? { uncachedInput: input - cacheRead } : {}) };
 }

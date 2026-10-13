@@ -49,6 +49,7 @@ import {
 import { JiraSettings } from "./JiraSettings";
 import { GradientBlurBackground } from "./GradientBlurBackground";
 import { McpSettings } from "./McpSettings";
+import { DebugInspector } from "../../debug-inspector/ui/DebugInspector";
 import { SettingsToggle as Toggle } from "./SettingsToggle";
 import { InboxProviderMark } from "../../inbox/ui/InboxProviderMark";
 import { RemoveProjectDialog } from "../../projects/ui/RemoveProjectDialog";
@@ -735,6 +736,7 @@ export function SettingsView({
                 <AppearancePage appearance={appearance} />
               ) : null}
               {section === "chat" ? <ChatPage /> : null}
+              {section === "debug-inspector" ? <Group title="Read-only diagnostics" description="Observe existing activity. Inspector controls affect only the diagnostic buffer."><DebugInspector sessions={sessions} /></Group> : null}
               {section === "keybindings" ? <KeybindingsPage /> : null}
               {section === "monos" ? <MonosPage /> : null}
               {section === "mcp" ? (

@@ -1,5 +1,6 @@
 import { fetchAntigravityCliRateLimits } from "./antigravityCliUsage";
 import { useSyncExternalStore } from "react";
+import { observeQuota } from "../../debug-inspector/model/trace";
 import {
   errorRateLimits,
   fetchingRateLimits,
@@ -25,6 +26,7 @@ function keyFor(provider: RateLimitProvider, accountId: string): string {
 }
 
 function publish(key: string, value: ProviderRateLimits): void {
+  observeQuota(value.provider, key.slice(value.provider.length + 1), value);
   snapshots.set(key, value);
   allSnapshots = { ...allSnapshots, [key]: value };
   for (const listener of listeners) listener();

@@ -1035,6 +1035,13 @@ const LocalSessionPane = memo(function LocalSessionPane({
                 historyNotice
                   ? {
                       status: historyNotice.status,
+                      sourceLabel:
+                        historyNotice.status === "ready" &&
+                        history.blocks.length > 0
+                          ? historyNotice.provider === "claude"
+                            ? "Claude Code"
+                            : "Codex"
+                          : undefined,
                       message:
                         historyNotice.status === "error"
                           ? historyNotice.message
