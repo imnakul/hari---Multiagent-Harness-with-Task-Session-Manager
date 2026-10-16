@@ -15,6 +15,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Composer } from "./Composer";
+import { ClaudeInteractiveTerminal } from "./ClaudeInteractiveTerminal";
 import type { Worktree } from "../../source-control/model/worktrees";
 import {
   orchestrationCheckoutCwd,
@@ -475,6 +476,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
     !remote &&
     !!onRemoteControlChange &&
     session.harness === "claude" &&
+    session.modelSettings?.claudeExecution !== "interactive" &&
     !session.inboxAsk &&
     !session.worktreeRemoved &&
     canHarnessRemoteControl("claude");
@@ -1373,6 +1375,9 @@ const LocalSessionPane = memo(function LocalSessionPane({
               inert={btw.open}
               className="mx-auto w-full max-w-4xl shrink-0"
             >
+              {!remote && session.harness === "claude" && session.modelSettings?.claudeExecution === "interactive" ? (
+                <ClaudeInteractiveTerminal sessionId={session.id} />
+              ) : null}
               {agent ? (
                 <>
                   <MessageQueue

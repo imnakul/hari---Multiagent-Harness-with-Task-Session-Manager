@@ -8554,6 +8554,8 @@ function Workspace({
 
       const launchTitleGeneration = (workCwd: string) => {
         if (
+          (current.harness === "claude" &&
+            current.modelSettings?.claudeExecution === "interactive") ||
           !live ||
           !shouldGenerateSessionTitle(
             isFirstTurn,
@@ -8686,11 +8688,14 @@ function Workspace({
 
           const branchMessage =
             harnessText || attachments.map((file) => file.name).join(", ");
-          void generateHarnessBranchName(
+          const branchName = current.harness === "claude" && current.modelSettings?.claudeExecution === "interactive"
+            ? Promise.resolve(null)
+            : generateHarnessBranchName(
             pickTextHarness(current.harness),
             workCwd,
             branchMessage,
-          )
+          );
+          void branchName
             .then(async (fragment) => {
               const branch = fragment ? namedWorktreeBranch(fragment) : null;
               if (!branch) return;
@@ -9030,6 +9035,7 @@ function Workspace({
             // before its first send; resumed/discovered chats keep their intent.
             if (
               current.harness === "claude" &&
+              current.modelSettings?.claudeExecution !== "interactive" &&
               !resumedInput.nativeResume &&
               !current.providerSessionId &&
               !remoteControlInitialized.current.has(sessionId)

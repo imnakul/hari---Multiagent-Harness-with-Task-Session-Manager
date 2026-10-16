@@ -337,7 +337,7 @@ fn discover_at(
 
 /// Match the frontend's project identity without changing launch/display paths.
 /// Windows drive/UNC paths accept either slash and case; Unix stays case-sensitive.
-fn cwd_key(cwd: &str) -> String {
+pub(crate) fn cwd_key(cwd: &str) -> String {
     let bytes = cwd.as_bytes();
     let windows = (bytes.len() >= 3
         && bytes[0].is_ascii_alphabetic()
@@ -824,7 +824,12 @@ pub struct HistoryChunk {
     pub has_earlier: bool,
 }
 
-fn find_transcript(provider: &Provider, dir: &Path, id: &str, depth: u8) -> Option<PathBuf> {
+pub(crate) fn find_transcript(
+    provider: &Provider,
+    dir: &Path,
+    id: &str,
+    depth: u8,
+) -> Option<PathBuf> {
     if depth > 6 {
         return None;
     }

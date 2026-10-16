@@ -568,6 +568,8 @@ export function mergeModelSettings(
   if (modelsFor(model.harness).length === 0) return { ...current };
   const next = defaultModelSettings(model);
   if (!current) return next;
+  if (model.harness === "claude" && (current.claudeExecution === "interactive" || current.claudeExecution === "structured"))
+    next.claudeExecution = current.claudeExecution;
   if (model.harness === "antigravity-cli" && current.antigravityAgent !== undefined)
     next.antigravityAgent = current.antigravityAgent;
   for (const setting of model.settings ?? []) {

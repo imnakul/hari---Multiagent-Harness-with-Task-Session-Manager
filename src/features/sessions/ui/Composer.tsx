@@ -1388,7 +1388,9 @@ export function Composer({
     loadFollowUpBehavior,
     () => FOLLOW_UP_BEHAVIOR_DEFAULT,
   );
-  const effectiveCanSteer = canSteer ?? canSteerHarness(harness);
+  const effectiveCanSteer =
+    !(harness === "claude" && modelSettings.claudeExecution === "interactive") &&
+    (canSteer ?? canSteerHarness(harness));
 
   const actionContext: ActionResolutionContext = useMemo(
     () => ({
@@ -2642,6 +2644,19 @@ export function Composer({
               }}
             >
               <div className="flex shrink-0 items-center gap-1">
+                {harness === "claude" && !remoteSession ? (
+                  <select
+                    aria-label="Claude Code execution"
+                    title="Interactive uses the native terminal and local transcripts. Automatic AI titles are off. Model, effort and Fast apply on the next turn."
+                    disabled={busy}
+                    value={modelSettings.claudeExecution ?? "structured"}
+                    onChange={(event) => onModelSettingsChange?.({ ...modelSettings, claudeExecution: event.target.value })}
+                    className="max-w-52 rounded-md border border-border bg-background-base px-2 py-1 text-[11px] text-content disabled:opacity-50"
+                  >
+                    <option value="structured">Claude Code — Structured</option>
+                    <option value="interactive">Claude Code — Interactive</option>
+                  </select>
+                ) : null}
                 <ModelPicker
                   harness={harness}
                   model={model}

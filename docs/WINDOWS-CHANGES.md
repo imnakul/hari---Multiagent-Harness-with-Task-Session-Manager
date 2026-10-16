@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 16 Oct 2026 | Claude Interactive launches the native executable in ConPTY | Claude, terminal, accounts |
 | 7 Oct 2026 | MCP test fixtures use discovery paths and repository boundaries | Windows tests, MCP |
 | 6 Oct 2026 | Native session identity preserves Windows project paths | provider resume, drive/UNC paths |
 | 3 Oct 2026 | MCP config toggles preserve Windows line endings | MCP, config, CRLF |
@@ -50,6 +51,18 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 16 Oct 2026 — Claude Interactive launches the native executable in ConPTY
+
+Interactive mode uses the existing supervised ConPTY spawn path with executable,
+argv and scoped environment overrides. It requires the native `claude.exe` and
+rejects `.cmd`/`.bat` shims with a Settings instruction; the structured launcher
+continues to support shims. No shell command string is constructed. Named profiles
+set both Claude config/secure-storage directories and remove inherited auth token
+overrides. The conversation and terminal share one process, and transport changes
+wait for process-tree termination. Linux source/automated checks passed; actual
+Windows ConPTY/account/settings verification remains the separate checklist in
+`docs/specs/claude-interactive-plan.md`.
 
 ## 7 Oct 2026 - MCP test fixtures use discovery paths and repository boundaries
 

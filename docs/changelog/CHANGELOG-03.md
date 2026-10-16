@@ -1,5 +1,18 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-16 — Separate local development profile
+- What: `npm run tauri:dev-profile` runs MonoCode Dev with app identifier `com.monocode.desktop.dev`, separating its app data and webview storage from the installed app. Default provider-owned Claude/Codex accounts and transcripts remain shared.
+- Files: `package.json`; `src-tauri/tauri.dev-profile.conf.json`; L-82 register and interactive-mode handoff.
+- Verified: JSON parsed; script/config identifier checked against the production config. Full pre-commit web/TypeScript check recorded in the interactive handoff. Native desktop verification remains manual.
+- Commit: included with the user-authorized 0.10.0 publication.
+
+## 2026-10-16 — Claude Code Interactive alongside Structured (L-82)
+- What: Added a persisted Claude execution selector, native CLI PTY owner, transcript-backed chat, scoped hook approvals/questions and one shared terminal. Native resume retains context without a summary; model/effort/Fast changes resume between turns. Delivery requires the empty native prompt and hook acceptance, with no automatic resend after uncertainty. Stop fences pending discovery/spawn. Automatic title and worktree branch AI helpers are off for interactive chats.
+- Files: `src-tauri/src/claude_interactive.rs`, `pty.rs`, `harness.rs`, `provider_sessions.rs`, `lib.rs`; Claude adapter/interactive protocol/terminal modules and tests; composer/session UI; model settings; App helper guards; [spec](../specs/claude-interactive-plan.md); L-82 register.
+- Verified: final pre-commit full web suite 6,788 passed / 614 files; final targeted suites 194 passed / 6 files (24 new interactive cases plus existing Claude/composer/models), TypeScript and production web/host builds passed; full Rust suite 749 passed / 2 ignored, workspace check and production-target Clippy passed in a Debian container. Whole-tree rustfmt and all-target Clippy expose unchanged Debug Inspector formatting / `needless_borrow` at `debug_inspector/tests.rs:161`; changed Rust files pass rustfmt. CLI 2.1.301 help/version probes passed without a model request.
+- Manual: signed-in Windows/PTY controls, applied model/effort/Fast, attachments in native terminal, cold resume and quota comparison remain in the spec. Structured remains default; remote hosts, Operator/orchestration and isolated helpers require Structured. Native `claude.exe` is required for Windows interactive launch.
+- Commit: user-authorized publication on `nakul/windows-support-upstream-0.10.0` from `6307cf4`; commit SHA is reported in the delivery message. Version and installer unchanged.
+
 ## 2026-10-13 09:08 IST — Move native history notice out of replies (L-81)
 - Type: fix
 - What: Claude/Codex imported-history source and coverage now appear above the conversation beside Show earlier. The notice no longer moves underneath every latest reply.

@@ -8,6 +8,7 @@ mod automations;
 mod azure_devops;
 mod chat_background;
 mod checkpoint;
+mod claude_interactive;
 mod codex_mono_store;
 mod control;
 pub mod control_cli;
@@ -311,6 +312,7 @@ pub fn run() {
         )
         .manage(harness::HarnessHost::new())
         .manage(pty::PtyHost::new())
+        .manage(claude_interactive::InteractiveHost::default())
         .manage(remote::RemoteConnections::default())
         .manage(window_transfer::WindowTransferState::new())
         .setup(|app| {
@@ -574,6 +576,13 @@ pub fn run() {
             rate_limits::fetch_opencode_go_usage,
             devin_usage::fetch_devin_usage,
             pty::pty_spawn,
+            claude_interactive::claude_interactive_start,
+            harness::harness_stop_confirmed,
+            claude_interactive::claude_interactive_poll,
+            claude_interactive::claude_interactive_send,
+            claude_interactive::claude_interactive_reply,
+            claude_interactive::claude_interactive_terminal,
+            claude_interactive::claude_interactive_stop,
             pty::pty_replay,
             pty::pty_write,
             pty::pty_resize,

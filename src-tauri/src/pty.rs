@@ -193,6 +193,26 @@ pub fn pty_spawn(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    spawn_with_program(app, host, id, cwd, cols, rows, None)
+}
+
+/// Internal only: providers pass an executable and argv, never shell text.
+pub(crate) struct PtyProgram {
+    pub binary: String,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+    pub remove_env: Vec<String>,
+}
+
+pub(crate) fn spawn_with_program(
+    app: AppHandle,
+    host: State<PtyHost>,
+    id: String,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+    program: Option<PtyProgram>,
+) -> Result<(), String> {
     let workdir = working_dir(&cwd);
     let _reservation = crate::worktree_lifecycle::reserve_spawn(&workdir)?;
     if let Some(prev) = host.remove(&id) {
@@ -205,7 +225,7 @@ pub fn pty_spawn(
 
     #[cfg(unix)]
     {
-        spawn_unix(app, host, id, workdir, cols.max(2), rows.max(2))
+        spawn_unix(app, host, id, workdir, cols.max(2), rows.max(2), program)
     }
 
     #[cfg(windows)]
@@ -217,6 +237,7 @@ pub fn pty_spawn(
             workdir.to_string_lossy().into_owned(),
             cols.max(2),
             rows.max(2),
+            program,
         )
     }
 
@@ -225,6 +246,25 @@ pub fn pty_spawn(
         let _ = (app, cwd, cols, rows);
         Err("Terminals are not supported on this platform.".into())
     }
+}
+
+/// Transport changes wait for the previous process tree before starting an owner.
+pub(crate) fn stop_program(host: &PtyHost, id: &str) -> Result<(), String> {
+    if let Some(live) = host.get(id) {
+        crate::harness::terminate_all(&[live.pid]);
+        if crate::harness::tree_alive(live.pid) {
+            return Err(
+                "Previous terminal process has not exited; a replacement was not started".into(),
+            );
+        }
+        if let Some(live) = host.remove_if_pid(id, live.pid) {
+            #[cfg(windows)]
+            windows_pty_teardown(&live);
+            #[cfg(unix)]
+            close_fd(live.master_fd);
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -397,13 +437,25 @@ fn spawn_windows(
     cwd: String,
     cols: u16,
     rows: u16,
+    program: Option<PtyProgram>,
 ) -> Result<(), String> {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
     use std::io::Read;
 
     let workdir = working_dir(&cwd);
-    let (shell, args) = resolve_windows_shell()
-        .ok_or_else(|| "No Windows shell found (looked for pwsh, powershell, cmd)".to_string())?;
+    let (shell, args, extra_env, remove_env) = if let Some(program) = program {
+        (
+            program.binary,
+            program.args,
+            program.env,
+            program.remove_env,
+        )
+    } else {
+        let (shell, args) = resolve_windows_shell().ok_or_else(|| {
+            "No Windows shell found (looked for pwsh, powershell, cmd)".to_string()
+        })?;
+        (shell, args, Vec::new(), Vec::new())
+    };
     let size = PtySize {
         rows: rows.max(2),
         cols: cols.max(2),
@@ -425,6 +477,12 @@ fn spawn_windows(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", "MonoCode");
+    for (key, value) in extra_env {
+        cmd.env(key, value);
+    }
+    for key in remove_env {
+        cmd.env_remove(key);
+    }
 
     let mut child = crate::windows::spawn_pty(pair.slave.as_ref(), cmd)
         .map_err(|e| format!("Failed to start {shell}: {e:#}"))?;
@@ -667,13 +725,24 @@ fn spawn_unix(
     workdir: std::path::PathBuf,
     cols: u16,
     rows: u16,
+    program: Option<PtyProgram>,
 ) -> Result<(), String> {
     use std::fs::File;
     use std::os::unix::io::FromRawFd;
     use std::os::unix::process::CommandExt;
     use std::process::Command;
 
-    let (shell, args) = default_shell();
+    let (shell, args, extra_env, remove_env) = if let Some(program) = program {
+        (
+            program.binary,
+            program.args,
+            program.env,
+            program.remove_env,
+        )
+    } else {
+        let (shell, args) = default_shell();
+        (shell, args, Vec::new(), Vec::new())
+    };
     let (master, slave) = open_pty(cols, rows)?;
 
     let mut cmd = Command::new(&shell);
@@ -691,6 +760,10 @@ fn spawn_unix(
         cmd.env("HOME", &home);
     }
     cmd.env("PWD", &workdir);
+    cmd.envs(extra_env);
+    for key in remove_env {
+        cmd.env_remove(key);
+    }
 
     // setsid() already creates a new session and process group. Calling
     // process_group(0) first makes the child a group leader, so setsid()

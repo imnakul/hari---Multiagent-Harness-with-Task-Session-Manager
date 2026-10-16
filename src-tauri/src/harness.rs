@@ -1330,6 +1330,25 @@ pub fn harness_kill(host: State<'_, HarnessHost>, session_id: String) -> Result<
     Ok(())
 }
 
+/// Used when a conversation changes transport; the previous owner must exit first.
+#[tauri::command(async)]
+pub fn harness_stop_confirmed(
+    host: State<'_, HarnessHost>,
+    session_id: String,
+) -> Result<(), String> {
+    host.stop_sse(&session_id);
+    if let Some(live) = host.kill_session(&session_id) {
+        terminate_all(&[live.pid]);
+        if tree_alive(live.pid) {
+            host.lock_inner().children.entry(session_id).or_insert(live);
+            return Err(
+                "Previous Claude process has not exited; transport change was stopped".into(),
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Off the main thread: `kill_all` waits for the children to die before it
 /// returns, and a window close calls this while the app keeps running.
 #[tauri::command(async)]
@@ -2581,7 +2600,7 @@ fn windows_process_alive(pid: u32) -> bool {
 }
 
 #[allow(dead_code)]
-fn tree_alive(pid: u32) -> bool {
+pub(crate) fn tree_alive(pid: u32) -> bool {
     #[cfg(unix)]
     {
         let ipid = pid as i32;
