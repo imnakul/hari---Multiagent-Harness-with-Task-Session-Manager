@@ -1,3 +1,4 @@
+import { Modal } from "../../../shared/ui/Modal";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import {
@@ -11,18 +12,19 @@ import {
 } from "../../../integrations/harness/providers/claude/claudeInteractive";
 import "@xterm/xterm/css/xterm.css";
 
-/** Attaches a view to the adapter's terminal. It never spawns or kills a process. */
+/** Mounting/closing this view never spawns or kills the adapter's process. */
 export function ClaudeInteractiveTerminal({
   sessionId,
+  onClose,
 }: {
   sessionId: string;
+  onClose: () => void;
 }): React.JSX.Element {
   useSyncExternalStore(
     subscribeInteractiveTerminals,
     interactiveTerminalRevision,
   );
   const terminal = interactiveTerminalFor(sessionId);
-  const [open, setOpen] = useState(true);
   const [error, setError] = useState("");
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,7 +35,7 @@ export function ClaudeInteractiveTerminal({
     const fit = new FitAddon();
     terminal.term.loadAddon(fit);
     const observer = new ResizeObserver(() => {
-      if (!open || element.clientWidth < 100) return;
+      if (element.clientWidth < 100) return;
       const dimensions = fit.proposeDimensions();
       if (!dimensions) return;
       void terminal
@@ -46,25 +48,21 @@ export function ClaudeInteractiveTerminal({
       fit.dispose();
       terminal.term.element?.remove();
     };
-  }, [terminal, open]);
+  }, [terminal]);
   return (
-    <div className="mx-auto w-full max-w-4xl shrink-0 rounded-md border border-border bg-background-base text-content">
+    <Modal
+      title="Claude native terminal"
+      onClose={onClose}
+      closeOnEscape={false}
+      fitViewport
+    >
       <div className="flex items-center gap-3 px-3 py-2 text-[11px]">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className="font-medium hover:text-accent"
-        >
-          {open ? "Hide" : "Show"} Claude native terminal
-        </button>
         {terminal ? (
           <>
             <button
               type="button"
               className="hover:text-accent"
               onClick={() => {
-                setOpen(true);
                 void releaseInteractiveApprovals(sessionId).catch(
                   (reason: unknown) => setError(String(reason)),
                 );
@@ -79,7 +77,10 @@ export function ClaudeInteractiveTerminal({
               onClick={() => {
                 void terminal
                   .reclaim()
-                  .then(() => setError(""))
+                  .then(() => {
+                    setError("");
+                    onClose();
+                  })
                   .catch((reason: unknown) => setError(String(reason)));
               }}
             >
@@ -97,7 +98,11 @@ export function ClaudeInteractiveTerminal({
               Stop Claude
             </button>
             <span className="ml-auto text-content/50">
-              {terminal.owner ? "Terminal has input" : "Chat has input"}
+              {terminal.stopped
+                ? "Process exited"
+                : terminal.owner
+                  ? "Terminal has input"
+                  : "Chat has input"}
             </span>
           </>
         ) : null}
@@ -114,10 +119,8 @@ export function ClaudeInteractiveTerminal({
       ) : null}
       <div
         ref={host}
-        className={
-          open && terminal ? "h-64 overflow-hidden px-2 pb-2" : "hidden"
-        }
+        className={terminal ? "h-80 overflow-hidden px-2 pb-2" : "hidden"}
       />
-    </div>
+    </Modal>
   );
 }

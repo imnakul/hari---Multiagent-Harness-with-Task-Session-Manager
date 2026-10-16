@@ -1,3 +1,4 @@
+import fixture from "./fixtures/interactive-cli-2.1.301.json";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInteractiveTerminal } from "./claudeInteractiveTerminal";
 
@@ -5,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   data: undefined as ((data: Uint8Array, start: number) => void) | undefined,
   invoke: vi.fn(async () => undefined),
   write: vi.fn(async () => undefined),
+  resize: vi.fn(async () => undefined),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("../../../../platform/tauri/pty", () => ({
@@ -17,7 +19,7 @@ vi.mock("../../../../platform/tauri/pty", () => ({
   },
   ptyReplayFrom: async () => ({ start: 0, data: new Uint8Array(), total: 0 }),
   writePty: mocks.write,
-  resizePty: async () => undefined,
+  resizePty: mocks.resize,
 }));
 let cleanup: (() => void) | undefined;
 afterEach(() => {
@@ -28,6 +30,30 @@ afterEach(() => {
 });
 
 describe("real VT parser input gate", () => {
+  it("defers view resizing until the native process acknowledges startup", async () => {
+    const terminal = await createInteractiveTerminal("resize-start", vi.fn());
+    cleanup = terminal.dispose;
+    await terminal.resize(80, 24);
+    expect(mocks.resize).not.toHaveBeenCalled();
+    await terminal.started();
+    expect(mocks.resize).toHaveBeenCalledWith(
+      "claude-interactive:resize-start",
+      80,
+      24,
+    );
+  });
+  it.each(["startup", "completed"] as const)(
+    "accepts the actual CLI 2.1.301 %s prompt with an undimmed stock placeholder",
+    async (stage) => {
+      const terminal = await createInteractiveTerminal("captured-vt", vi.fn());
+      cleanup = terminal.dispose;
+      mocks.data?.(new TextEncoder().encode(fixture[stage]), 0);
+      await new Promise<void>((resolve) => terminal.term.write("", resolve));
+      vi.useFakeTimers();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(terminal.ready()).toBe(true);
+    },
+  );
   it("recognizes a native prompt, rejects dialogs and does not replay duplicate bytes", async () => {
     const terminal = await createInteractiveTerminal("vt-test", vi.fn());
     cleanup = terminal.dispose;

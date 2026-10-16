@@ -1,0 +1,93 @@
+{
+  "version": "2.1.301",
+  "cols": 120,
+  "rows": 40,
+  "startup": "\u001b7\u001b[r\u001b8\u001b[?25h\u001b[?2004h\u001b[?2031h\u001b[?1004h\u001b]0;✳ Claude Code\u0007\u001b[?1049h\u001b[2J\u001b[H\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1006h\u001b[?25l\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B▐▛███▛█\u001b[12GClaude\u001b[19GCode\u001b[24Gv2.1.301\r\u001b[1B▝▜██████▀\u001b[12GSonnet\u001b[19G5.5\u001b[23Gwith\u001b[28Gmedium\u001b[35Geffort\u001b[42G·\u001b[44GAPI\u001b[48GUsage\u001b[54GBilling\r\u001b[1C\u001b[1B▝▝\u001b[7G▝▝\u001b[12G/tmp/mono-cli-roundtrip-0blcbcrl/project\r\u001b[100C\u001b[32B◐\u001b[103Gmedium\u001b[110G·\u001b[112G/effort\r\u001b[1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[1B❯ Try\u001b[7G\"fix\u001b[12Gtypecheck\u001b[22Gerrors\"\r\u001b[1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[2C\u001b[1B⏸\u001b[5Gmanual\u001b[12Gmode\u001b[17Gon\u001b[20G·\u001b[22G?\u001b[24Gfor\u001b[28Gshortcuts\u001b[38G·\u001b[40G←\u001b[42Gfor\u001b[46Gagents\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[>0q\u001b[?u\u001b]7501;?\u0007\u001b[c\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B       \r\u001b[1B ▐▛\u001b[7G▛\u001b[9G \r\u001b[1B▝▜██████▀\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B▗▟▛███▛█▄\r\u001b[1C\u001b[1B▜█\u001b[7G█\u001b[9G▘\r\u001b[1B ▝▝▁▁▁▝▝ \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B  ▐\u001b[5G▛\u001b[7G▜  \r\u001b[1C\u001b[1B ▐\u001b[8G  \r\u001b[1C\u001b[1B \u001b[4G▝\u001b[6G▝\u001b[8G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B ▐█\u001b[7G \r\u001b[2C\u001b[1B ▐\u001b[7G \r\u001b[2C\u001b[1B \u001b[7G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B▐█\u001b[7G█\r\u001b[2C\u001b[1B▐█\u001b[7G█\r\u001b[2C\u001b[1B▝\u001b[7G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B▐█\u001b[8G█\r\u001b[1B▝▜█\u001b[8G█▀\r\u001b[1C\u001b[1B▝\u001b[4G \u001b[6G \u001b[8G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B ▐\u001b[8G \r\u001b[1B  ▐\u001b[8G  \r\u001b[1C\u001b[1B \u001b[4G▝\u001b[6G▝\u001b[8G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B ▐\u001b[7G \r\u001b[2C\u001b[1B ▐\u001b[7G \r\u001b[2C\u001b[1B \u001b[7G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B▐▜▛\u001b[7G█\r\u001b[2C\u001b[1B▐█\u001b[7G█\r\u001b[2C\u001b[1B▝\u001b[7G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B▗▟▛██\u001b[7G▛█▄\r\u001b[1C\u001b[1B▜█\u001b[8G█▘\r\u001b[1C\u001b[1B▝\u001b[4G▁\u001b[6G▁\u001b[8G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B         \r\u001b[1C\u001b[1B▐▛\u001b[7G▛\u001b[9G \r\u001b[1B·▜██████·\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[3B~\u001b[9G~\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B▐▛███▛█\r\u001b[1B▝▜█\u001b[7G█\u001b[9G▀\r\u001b[1B ▝▝   ▝▝ \u001b[40;1H\u001b[38;3H\u001b[?25h",
+  "completed": "\u001b7\u001b[r\u001b8\u001b[?25h\u001b[?2004h\u001b[?2031h\u001b[?1004h\u001b]0;✳ Claude Code\u0007\u001b[?1049h\u001b[2J\u001b[H\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1006h\u001b[?25l\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B▐▛███▛█\u001b[12GClaude\u001b[19GCode\u001b[24Gv2.1.301\r\u001b[1B▝▜██████▀\u001b[12GSonnet\u001b[19G5.5\u001b[23Gwith\u001b[28Gmedium\u001b[35Geffort\u001b[42G·\u001b[44GAPI\u001b[48GUsage\u001b[54GBilling\r\u001b[1C\u001b[1B▝▝\u001b[7G▝▝\u001b[12G/tmp/mono-cli-roundtrip-0blcbcrl/project\r\u001b[100C\u001b[32B◐\u001b[103Gmedium\u001b[110G·\u001b[112G/effort\r\u001b[1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[1B❯ Try\u001b[7G\"fix\u001b[12Gtypecheck\u001b[22Gerrors\"\r\u001b[1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[2C\u001b[1B⏸\u001b[5Gmanual\u001b[12Gmode\u001b[17Gon\u001b[20G·\u001b[22G?\u001b[24Gfor\u001b[28Gshortcuts\u001b[38G·\u001b[40G←\u001b[42Gfor\u001b[46Gagents\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[>0q\u001b[?u\u001b]7501;?\u0007\u001b[c\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B       \r\u001b[1B ▐▛\u001b[7G▛\u001b[9G \r\u001b[1B▝▜██████▀\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B▗▟▛███▛█▄\r\u001b[1C\u001b[1B▜█\u001b[7G█\u001b[9G▘\r\u001b[1B ▝▝▁▁▁▝▝ \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B  ▐\u001b[5G▛\u001b[7G▜  \r\u001b[1C\u001b[1B ▐\u001b[8G  \r\u001b[1C\u001b[1B \u001b[4G▝\u001b[6G▝\u001b[8G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B ▐█\u001b[7G \r\u001b[2C\u001b[1B ▐\u001b[7G \r\u001b[2C\u001b[1B \u001b[7G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B▐█\u001b[7G█\r\u001b[2C\u001b[1B▐█\u001b[7G█\r\u001b[2C\u001b[1B▝\u001b[7G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B▐█\u001b[8G█\r\u001b[1B▝▜█\u001b[8G█▀\r\u001b[1C\u001b[1B▝\u001b[4G \u001b[6G \u001b[8G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B ▐\u001b[8G \r\u001b[1B  ▐\u001b[8G  \r\u001b[1C\u001b[1B \u001b[4G▝\u001b[6G▝\u001b[8G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B ▐\u001b[7G \r\u001b[2C\u001b[1B ▐\u001b[7G \r\u001b[2C\u001b[1B \u001b[7G \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[2C\u001b[1B▐▜▛\u001b[7G█\r\u001b[2C\u001b[1B▐█\u001b[7G█\r\u001b[2C\u001b[1B▝\u001b[7G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B▗▟▛██\u001b[7G▛█▄\r\u001b[1C\u001b[1B▜█\u001b[8G█▘\r\u001b[1C\u001b[1B▝\u001b[4G▁\u001b[6G▁\u001b[8G▝\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1B         \r\u001b[1C\u001b[1B▐▛\u001b[7G▛\u001b[9G \r\u001b[1B·▜██████·\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[3B~\u001b[9G~\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[1C\u001b[1B▐▛███▛█\r\u001b[1B▝▜█\u001b[7G█\u001b[9G▀\r\u001b[1B ▝▝   ▝▝ \u001b[40;1H\u001b[38;3H\u001b[?25h\u001b(B\u000f\u001b[?2004h\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1006h\u001b[?25l\u001b[H\r\u001b[97C\u001b[34Bctrl+g\u001b[105Gto\u001b[108Gedit\u001b[113Gin\u001b[116GVim\r\u001b[1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[1B❯ First fixture line\u001b[K\r\u001b[1B  Second fixture line\u001b[K\r\u001b[19C\u001b[2B\u001b[K\u001b[40;1H\u001b[38;22H\u001b[?25h\u001b]0;◐ Claude Code\u0007\u001b[?25l\u001b[H\r\u001b[6B❯\u001b[3GFirst\u001b[9Gfixture\u001b[17Gline\r\u001b[2C\u001b[1BSecond\u001b[10Gfixture\u001b[18Gline\r\u001b[27B✶\u001b[3GStewing…\u001b[12G(running\u001b[21GUserPromptSubmit\u001b[38Ghook\u001b[43G·\u001b[45G0s)\u001b[98G\u001b[K\r\u001b[1B                                                                                                    ◐ medium · /effort\u001b[K\r\u001b[1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[1B❯ \u001b[K\r\u001b[19C\u001b[2B·\u001b[22Gesc\u001b[26Gto\u001b[29Ginterrupt\u001b[39G·\u001b[41G←\u001b[43Gfor\u001b[47Gagents\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[9B●\u001b[3GLocal\u001b[9Gfixture\u001b[17Greply.\u001b[24GNo\u001b[27Gexternal\u001b[36Gmodel\u001b[42Gwas\u001b[46Gcontacted.\r\u001b[2C\u001b[25BCanoodling… (ru\u001b[19Gning Stop hook · 0s)\u001b[K\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[34B*\u001b[38G ·\u001b[41G↓\u001b[43G2\u001b[45Gtokens)\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b]0;✳ Claude Code\u0007\u001b[?25l\u001b[H\r\u001b[11B✻\u001b[3GWorked\u001b[10Gfor\u001b[14G0s\u001b[17G·\u001b[19Gdone\u001b[24G7:22\u001b[29GPM\r\u001b[23B\u001b[K\r\u001b[21C\u001b[5B? for shortcuts · ← for agents\u001b[K\u001b[40;1H\u001b[38;3H\u001b[?25h\u001b[?25l\u001b[H\r\u001b[100C\u001b[35B\u001b[K\u001b[40;1H\u001b[38;3H\u001b[?25h",
+  "transcript": [
+    {
+      "parentUuid": null,
+      "isSidechain": false,
+      "promptId": "e409ac27-f60f-48a1-a4c6-673c32cd8126",
+      "type": "user",
+      "message": {
+        "role": "user",
+        "content": "First fixture line\nSecond fixture line"
+      },
+      "uuid": "0373e118-da76-4338-97fc-cec033d14962",
+      "timestamp": "2026-10-16T19:22:12.695Z",
+      "permissionMode": "default",
+      "origin": {
+        "kind": "human"
+      },
+      "promptSource": "typed",
+      "turnOrigin": "human",
+      "turnPosition": {
+        "promptIndex": 1,
+        "turnIndex": 1
+      },
+      "userType": "external",
+      "entrypoint": "cli",
+      "cwd": "/tmp/mono-cli-roundtrip-0blcbcrl/project",
+      "sessionId": "e2aec97b-9cfa-4426-aa50-71c01f248a3f",
+      "version": "2.1.301",
+      "gitBranch": "HEAD"
+    },
+    {
+      "parentUuid": "e3dcf1d0-4c87-43a5-89be-44476f605710",
+      "isSidechain": false,
+      "message": {
+        "id": "msg_local_fixture_2",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-sonnet-5-5",
+        "content": [
+          {
+            "type": "text",
+            "text": "Local fixture reply. No external model was contacted."
+          }
+        ],
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 12,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 9,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard",
+          "fallback_credit": null
+        },
+        "stop_details": null
+      },
+      "apiBlockIndex": 0,
+      "requestRef": "4ec2e12f-50a7-4be1-98f9-6f6d192a76fc",
+      "requestedModel": "claude-sonnet-5-5",
+      "type": "assistant",
+      "uuid": "16d9a602-ce0f-465a-93fc-f8bd32121ed8",
+      "timestamp": "2026-10-16T19:22:12.864Z",
+      "effort": "medium",
+      "perTurnEffort": "medium",
+      "session_id": "e2aec97b-9cfa-4426-aa50-71c01f248a3f",
+      "userType": "external",
+      "entrypoint": "cli",
+      "cwd": "/tmp/mono-cli-roundtrip-0blcbcrl/project",
+      "sessionId": "e2aec97b-9cfa-4426-aa50-71c01f248a3f",
+      "version": "2.1.301",
+      "gitBranch": "HEAD"
+    }
+  ]
+}

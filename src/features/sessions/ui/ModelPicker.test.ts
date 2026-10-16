@@ -129,6 +129,29 @@ function inputText(input: HTMLInputElement, value: string) {
 }
 
 describe("model picker", () => {
+  it.each([true, false])("offers Claude execution inside the existing picker (beside=%s)", (hideSettings) => {
+    const onSettingsChange = vi.fn();
+    const onOpenTerminal = vi.fn();
+    act(() => root.render(createElement(ModelPicker, {
+      harness: "claude", model: "claude:sonnet-5", values: { claudeExecution: "interactive", effort: "high" },
+      hideSettings, onChange: vi.fn(), onSettingsChange,
+      claudeExecution: { disabled: false, onOpenTerminal },
+    })));
+    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector('[aria-label="Claude Code execution"]')).toBeNull();
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+    const group = container.querySelector('[aria-label="Claude Code execution"]')!;
+    expect(group).not.toBeNull();
+    const buttons = group.querySelectorAll<HTMLButtonElement>("button");
+    expect(buttons[1].getAttribute("aria-pressed")).toBe("true");
+    act(() => buttons[0].click());
+    expect(onSettingsChange).toHaveBeenCalledWith({ claudeExecution: "structured", effort: "high" });
+    expect(onOpenTerminal).not.toHaveBeenCalled();
+    const openTerminal = [...container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Open native terminal")!;
+    act(() => openTerminal.click());
+    expect(onOpenTerminal).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the model name and effort in the combined picker", () => {
     const onChange = vi.fn();
     const onSettingsChange = vi.fn();

@@ -1,3 +1,4 @@
+import { HarnessNeedsAttentionError } from "../integrations/harness/core/types";
 import { nextSubmissionIdentity, recordTrace, sessionContext } from "../features/debug-inspector/model/trace";
 import {
   loadTasks,
@@ -8874,6 +8875,7 @@ function Workspace({
           return;
         }
         let buildSucceeded = false;
+        let preserveProviderForAttention = false;
         try {
           const prepared = await prepareAttachments(attachments);
           const prompt =
@@ -9222,6 +9224,7 @@ function Workspace({
           }
           buildSucceeded = true;
         } catch (error: unknown) {
+          preserveProviderForAttention = error instanceof HarnessNeedsAttentionError;
           recoverEditedResend();
           if (turnGen.current.get(sessionId) !== gen) return;
           if (wrap) revealHandoff(wrap.text);
@@ -9239,8 +9242,12 @@ function Workspace({
           providerFailureSeen = true;
         } finally {
           // A failed provider can leave its process writing after the event
-          // stream ends. Stop it before recording the final workspace state.
-          if (providerFailureSeen && turnGen.current.get(sessionId) === gen) {
+          // stream ends. Keep a live setup/menu owner available for recovery.
+          if (
+            providerFailureSeen &&
+            !preserveProviderForAttention &&
+            turnGen.current.get(sessionId) === gen
+          ) {
             await stopHarnessSession(current.harness, sessionId).catch(
               () => undefined,
             );
@@ -9262,9 +9269,11 @@ function Workspace({
             syncDockBadge,
             flushCheckpoint: flushSessionCheckpoint,
             beforeFailureCheckpoint: () =>
-              stopHarnessSession(current.harness, sessionId).catch(
-                () => undefined,
-              ),
+              preserveProviderForAttention
+                ? Promise.resolve()
+                : stopHarnessSession(current.harness, sessionId).catch(
+                    () => undefined,
+                  ),
             providerFailureSeen,
             intent,
             approvedPlanId: approvedPlan?.id,

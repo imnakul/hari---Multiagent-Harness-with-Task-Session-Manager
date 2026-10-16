@@ -20,6 +20,8 @@ const TOP: Record<ModalSize, string> = {
 
 type Props = {
   onClose: () => void;
+  /** Embedded terminals need Escape for native menus. The close button remains available. */
+  closeOnEscape?: boolean;
   title: string;
   description?: string;
   size?: ModalSize;
@@ -34,6 +36,7 @@ type Props = {
 
 export function ModalPanel({
   onClose,
+  closeOnEscape = true,
   title,
   description,
   size = "md",
@@ -56,6 +59,7 @@ export function ModalPanel({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (
+        !closeOnEscape ||
         event.key !== "Escape" ||
         event.defaultPrevented ||
         (event.target instanceof Element &&
@@ -68,7 +72,7 @@ export function ModalPanel({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, closeOnEscape]);
 
   return (
     <div

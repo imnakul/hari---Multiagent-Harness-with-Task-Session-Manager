@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-16 — Repair Claude Interactive startup and reuse the existing picker (L-82)
+- What: Removed the native execution select and composer terminal panel. The existing model picker now contains Structured/Interactive and an explicit terminal dialog. Fixed the undimmed stock-placeholder rejection and the startup gate's dependency on an absent HTTP SessionStart hook. Setup attention retains its native owner; early exits report promptly, and terminal resizing waits for spawn.
+- Files: Claude interactive adapter/protocol/terminal and captured CLI fixture; Rust bridge; App cleanup; ModelPicker/Composer/SessionPane/terminal modal; shared Modal Escape option; tests and L-82/spec records.
+- Verified: full web suite 6,797 passed / 615 files and strict TypeScript passed; Rust workspace check, production Clippy and 749 tests passed / 2 ignored. Existing Debug Inspector whole-tree fmt / all-target Clippy exceptions remain. Production web/host builds passed. Actual CLI 2.1.301 loopback trial accepted one multiline prompt, emitted Stop, and wrote a native assistant reply; no external model was contacted. Signed-in Windows/Tauri and quota checks remain manual.
+- Commit: included in the repair publication on `nakul/windows-support-upstream-0.10.0`; SHA reported in the delivery message.
+
 ## 2026-10-16 — Separate local development profile
 - What: `npm run tauri:dev-profile` runs MonoCode Dev with app identifier `com.monocode.desktop.dev`, separating its app data and webview storage from the installed app. Default provider-owned Claude/Codex accounts and transcripts remain shared.
 - Files: `package.json`; `src-tauri/tauri.dev-profile.conf.json`; L-82 register and interactive-mode handoff.

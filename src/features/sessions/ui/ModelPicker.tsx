@@ -77,6 +77,8 @@ type Props = {
   onChange: (harness: HarnessId, model: string) => void;
   onSettingsChange: (settings: Record<string, string>) => void;
   onClose?: () => void;
+  /** Local chat only: execution choices belong inside this existing picker. */
+  claudeExecution?: { disabled: boolean; onOpenTerminal: () => void };
 };
 
 type MenuEntry = { kind: "setting"; setting: ModelSetting } | { kind: "model" };
@@ -289,6 +291,7 @@ export function ModelPicker({
   side = "top",
   variant = "pill",
   triggerLabel,
+  claudeExecution,
   onChange,
   onSettingsChange,
   onClose,
@@ -702,6 +705,49 @@ export function ModelPicker({
     activeRow != null &&
     activeRow.dataset.modelControlIndex === String(active);
 
+  const executionControls =
+    claudeExecution && harness === "claude" ? (
+      <div
+        className="shrink-0 border-b border-stroke p-2"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") event.stopPropagation();
+        }}
+      >
+        <div
+          role="group"
+          aria-label="Claude Code execution"
+          className="flex gap-1"
+        >
+          {(["structured", "interactive"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              disabled={claudeExecution.disabled}
+              aria-pressed={(values.claudeExecution ?? "structured") === mode}
+              onClick={() =>
+                onSettingsChange({ ...values, claudeExecution: mode })
+              }
+              className={`flex-1 rounded-md px-2 py-1.5 text-[12px] disabled:opacity-50 ${(values.claudeExecution ?? "structured") === mode ? "bg-selection text-content" : "text-content/60 hover:bg-content/5"}`}
+            >
+              {mode === "interactive" ? "Interactive" : "Structured"}
+            </button>
+          ))}
+        </div>
+        {values.claudeExecution === "interactive" ? (
+          <button
+            type="button"
+            className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-[12px] text-content/70 hover:bg-content/5"
+            onClick={() => {
+              dismiss(false);
+              claudeExecution.onOpenTerminal();
+            }}
+          >
+            Open native terminal
+          </button>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <>
       <button
@@ -750,6 +796,11 @@ export function ModelPicker({
           className={`whitespace-nowrap ${variant === "plain" ? "" : "text-[11px]"}`}
         >
           {triggerLabel ?? current.name}
+          {claudeExecution &&
+          harness === "claude" &&
+          values.claudeExecution === "interactive"
+            ? " · Interactive"
+            : ""}
         </span>
         {!triggerLabel && triggerEffortLabel ? (
           <span
@@ -769,6 +820,7 @@ export function ModelPicker({
           anchor={button}
           side={side}
           autoFocusSearch
+          executionControls={executionControls}
           onDismiss={(reason) => dismiss(reason === "escape")}
           harnesses={pickerHarnesses}
           tab={visibleTab}
@@ -803,6 +855,7 @@ export function ModelPicker({
             data-model-picker
             className="p-1 font-sans"
           >
+            {executionControls}
             {entries.map((entry, index) => {
               const highlighted = index === active;
               if (entry.kind === "model") {
@@ -1493,6 +1546,7 @@ function SelectPill({
 }
 
 function ModelFlyout({
+  executionControls,
   anchor,
   side = "right",
   autoFocusSearch = false,
@@ -1511,6 +1565,7 @@ function ModelFlyout({
   onPick,
   onToggleFavorite,
 }: {
+  executionControls?: ReactNode;
   anchor: HTMLButtonElement | { current: HTMLButtonElement | null };
   side?: "right" | "top" | "bottom";
   autoFocusSearch?: boolean;
@@ -1661,6 +1716,7 @@ function ModelFlyout({
       </nav>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {executionControls}
         <label className="flex shrink-0 items-center gap-2 border-b border-stroke px-3 py-2.5 text-content/50">
           <Search className="size-3.5 shrink-0" strokeWidth={1.75} />
           <input

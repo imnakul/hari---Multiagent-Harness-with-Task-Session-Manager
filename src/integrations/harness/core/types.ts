@@ -216,6 +216,9 @@ export type ApprovalScope = "once" | "session" | "server";
 /** The turn is connecting or has just ended; retain the follow-up for later. */
 export class TurnNotReadyError extends Error {}
 
+/** A live provider needs user attention; failure cleanup must retain its owner. */
+export class HarnessNeedsAttentionError extends Error {}
+
 export type HarnessSessionInput = {
   /** Diagnostic correlation only; never sent to a provider. */
   diagnostic?: { submissionId?: string; turnId?: string; purpose?: string };

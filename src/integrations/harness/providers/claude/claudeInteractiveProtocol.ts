@@ -42,7 +42,9 @@ export type PromptScreen = {
 export function isEmptyInteractivePrompt(screen: PromptScreen): boolean {
   return (
     /^\s*❯\s*$/.test(screen.before) &&
-    (!screen.after.trim() || screen.afterIsDim) &&
+    (!screen.after.trim() ||
+      screen.afterIsDim ||
+      /^Try\s+["“][^\r\n]*["”]\s*$/.test(screen.after.trim())) &&
     /[─━]{8}/.test(screen.above) &&
     /[─━]{8}/.test(screen.below) &&
     !/enter to (?:confirm|select)|esc to (?:cancel|close|interrupt)|select (?:a |the )?model|do you (?:want|trust)|trust this|type to search/i.test(

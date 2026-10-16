@@ -1,3 +1,4 @@
+import fixture from "./fixtures/interactive-cli-2.1.301.json";
 import { describe, expect, it } from "vitest";
 import {
   interactiveTranscriptEvents,
@@ -71,6 +72,18 @@ describe("interactive input safety", () => {
 });
 
 describe("native JSONL rendering", () => {
+  it("renders the reply captured from a real interactive CLI turn", () => {
+    const state = newTranscriptState();
+    const events = fixture.transcript.flatMap((row) =>
+      interactiveTranscriptEvents(JSON.stringify(row), state),
+    );
+    expect(events.filter((event) => event.type === "message.delta")).toEqual([
+      {
+        type: "message.delta",
+        text: "Local fixture reply. No external model was contacted.",
+      },
+    ]);
+  });
   it("deduplicates snapshots, tools, tool results and request-level usage", () => {
     const state = newTranscriptState();
     const row = {

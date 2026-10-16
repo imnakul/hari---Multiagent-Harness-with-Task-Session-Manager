@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { hasHeadlessChildBackend, resolveClaudeBinary } from "../../core/child";
 import {
+  HarnessNeedsAttentionError,
   NativeForkError,
   NativeResumeError,
   TurnNotReadyError,
@@ -104,12 +105,18 @@ function emit(live: Live, event: HarnessEvent): void {
       : event,
   );
 }
+function faultError(live: Live): Error {
+  const message = live.fault ?? "Interactive Claude needs attention.";
+  return live.terminal.stopped
+    ? new Error(message)
+    : new HarnessNeedsAttentionError(message);
+}
 function fail(live: Live, message: string): void {
   live.fault = message;
   live.terminal.owner = true;
   clearTimeout(live.pending?.timer);
   const hadPending = !!live.pending;
-  live.pending?.reject(new Error(message));
+  live.pending?.reject(faultError(live));
   live.pending = undefined;
   if (!hadPending) emit(live, { type: "session.error", message });
 }
@@ -136,21 +143,15 @@ function complete(live: Live): void {
 function hookEvent(live: Live, row: Record<string, unknown>): void {
   const event = row.hook_event_name;
   if (row.agent_id && event !== "PermissionRequest") return;
-  if (event === "SessionStart") {
-    bindings.set(live.id, live.binding);
-    emit(live, { type: "session.started" });
-    emit(live, {
-      type: "diagnostic.lifecycle",
-      operation: "transport",
-      identity: live.binding.nativeId,
-      state: "interactive-pty-cli",
-    });
-    emit(live, {
-      type: "session.providerBound",
-      providerSessionId: live.binding.nativeId,
-    });
-  }
   if (event === "UserPromptSubmit") {
+    // Native acceptance, rather than process creation, establishes resumable history.
+    if (!bindings.has(live.id)) {
+      bindings.set(live.id, live.binding);
+      emit(live, {
+        type: "session.providerBound",
+        providerSessionId: live.binding.nativeId,
+      });
+    }
     live.stopping = 0;
     live.transcript = newTranscriptState();
     if (live.pending && row.prompt === live.pending.text) {
@@ -368,12 +369,12 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
   };
   const { path: binary } = await resolveClaudeBinary();
   checkEpoch(input.sessionId, epoch);
-  const terminal = await createInteractiveTerminal(input.sessionId, () => {
+  const terminal = await createInteractiveTerminal(input.sessionId, (code) => {
     const current = lives.get(input.sessionId);
     if (current && !current.stopped) {
       fail(
         current,
-        "Claude's native terminal exited. Review delivery before starting another turn.",
+        `Claude's native terminal exited${code == null ? "" : ` (code ${code})`}. Check the Claude installation and sign-in before starting another turn.`,
       );
       clearTimeout(current.timer);
     }
@@ -430,6 +431,15 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
       },
     });
     checkEpoch(input.sessionId, epoch);
+    await terminal.started();
+    checkEpoch(input.sessionId, epoch);
+    emit(live, { type: "session.started" });
+    emit(live, {
+      type: "diagnostic.lifecycle",
+      operation: "transport",
+      identity: nativeId,
+      state: "interactive-pty-cli",
+    });
     void poll(live);
     return live;
   } catch (error) {
@@ -467,14 +477,22 @@ export async function sendInteractiveClaude(
   }
   const live = await ensureLive(input, epoch);
   checkEpoch(input.sessionId, epoch);
-  if (live.fault) throw new Error(live.fault);
+  if (live.fault) throw faultError(live);
   const deadline = Date.now() + 20000;
-  while (!live.stopped && live.phase === "starting" && Date.now() < deadline) {
+  while (
+    !live.stopped &&
+    !live.fault &&
+    !live.terminal.stopped &&
+    live.phase === "starting" &&
+    Date.now() < deadline
+  ) {
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }
   // SessionStart alone is insufficient: trust/model dialogs can still own input.
   while (
     !live.stopped &&
+    !live.fault &&
+    !live.terminal.stopped &&
     live.phase === "ready" &&
     !live.terminal.ready() &&
     !live.terminal.owner &&
@@ -482,6 +500,8 @@ export async function sendInteractiveClaude(
   ) {
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }
+  if (live.fault) throw faultError(live);
+  checkEpoch(input.sessionId, epoch);
   if (
     live.pending ||
     live.external ||
@@ -490,8 +510,8 @@ export async function sendInteractiveClaude(
     live.terminal.owner ||
     !live.terminal.ready()
   ) {
-    throw new Error(
-      "Claude is not at an empty chat prompt. Open its native terminal, finish setup or close the menu, then Return to chat. No prompt was sent.",
+    throw new HarnessNeedsAttentionError(
+      "Claude needs attention before chat can send. Open the model picker → Open native terminal, finish setup or close the menu, then Return to chat. No prompt was sent.",
     );
   }
   live.terminal.writing = true;

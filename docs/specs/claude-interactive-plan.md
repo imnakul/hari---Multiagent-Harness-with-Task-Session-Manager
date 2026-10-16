@@ -45,6 +45,30 @@ existing chat UI. Claude owns native context; no summary transfer.
 
 ## Issues and fixes
 
+Repair after the first Windows trial (2026-10-16): user reported a readiness
+timeout, a dead terminal panel attached to the composer, and a native black
+execution select. Real CLI 2.1.301 startup captured with an isolated local fixture
+reproduces an undimmed `Try "…"` placeholder. The old gate rejected that valid
+prompt; App failure cleanup then killed the owner and disposed its output.
+The loopback CLI trial also emitted UserPromptSubmit and Stop but **no HTTP
+SessionStart**. The old backend remained in `starting` forever. Startup now uses
+successful PTY creation plus the framed empty-prompt check, and native acceptance
+establishes the resumable binding. Setup/menu attention uses a typed error so App
+failure cleanup retains the owner, including uncertain-delivery faults that need terminal review before Stop/resume. Early exits surface their exit code promptly.
+Resizing waits for spawn acknowledgement. AskUserQuestion HTTP hooks now allow the same human-response window as approvals (600s, exceeding the server's 590s wait). The existing model picker contains the
+execution choices in both layouts; native terminal access is an explicit modal
+action, with Escape available to native menus. No terminal mounts by default.
+
+Actual CLI 2.1.301 ran in a Linux PTY with a temporary trusted project/config,
+a fake local-only key, the production hook/launch arguments, and an Anthropic
+response fixture served on loopback. One bracket-pasted multiline prompt produced
+exactly one UserPromptSubmit, a Stop hook, and one native assistant transcript
+reply. Two local API calls occurred (including CLI startup activity); no external
+model was contacted. Captured raw VT startup/completed output and native message
+rows are committed as a regression fixture. This validates CLI/protocol behavior;
+it does not replace signed-in Windows/Tauri or subscription-meter verification.
+Repair automated gates and publication are recorded below.
+
 The cloud environment initially lacked Rust and Linux desktop libraries. Installed
 Rust 1.99.1 and used an isolated Debian container with GTK/WebKit and Git. The first
 Rust test run lacked Git (30 unrelated fixture failures); installing Git resolved
@@ -113,7 +137,7 @@ Automated evidence:
   `--permission-mode default --version` succeeds. No signed-in model turn was run.
 
 Separate human desktop/provider checklist (`npm run tauri dev`):
-1. Choose Claude Code — Interactive. Complete CLI setup/trust in the shared terminal
+1. Open the existing model picker and choose Interactive. If needed, choose Open native terminal there to complete CLI setup/trust
    if needed. Send multiline messages and confirm exactly one accepted prompt each.
 2. Approve/deny a real tool, answer a question, and transfer an interaction to the
    terminal. Close menus/clear drafts and Return to chat. GUI sends must not enter menus.
@@ -126,3 +150,22 @@ Separate human desktop/provider checklist (`npm run tauri dev`):
 6. Repeat the measured terminal workload with no other model activity; record quota
    before/after, route, requests, model/effort, duration and API-priced usage. Compare
    with the supplied Orca evidence. Automated tests do not establish quota equivalence.
+
+
+### Repair verification (2026-10-16)
+
+- Captured CLI startup/completed screens pass the real xterm gate; transcript
+  fixture renders the native reply. Delivery tests omit HTTP SessionStart,
+  retain setup owners for retry, and surface early exits without a 20s delay.
+- Both picker layouts expose styled execution choices; composer mounts no native
+  select or terminal by default. Terminal modal lets Escape reach native menus.
+- Final `npm run check:web`: **6,797 tests / 615 files passed**, strict TypeScript
+  passed. Production web and host builds passed.
+- Final Rust workspace check and production-target Clippy passed; full workspace
+  tests **749 passed / 2 ignored**. Changed Rust file passes rustfmt. Whole-tree
+  fmt and all-target Clippy still report only the unchanged Debug Inspector
+  formatting / needless borrow described above.
+- Rust's unchanged `kill_all_reaps_term_ignoring_children_before_return` failed
+  once in the first parallel full run, then passed alone and in the full rerun.
+- Manual: first/second signed-in Windows chat turns, setup/menu recovery, native
+  resume, approvals/questions and applied controls; quota comparison as above.

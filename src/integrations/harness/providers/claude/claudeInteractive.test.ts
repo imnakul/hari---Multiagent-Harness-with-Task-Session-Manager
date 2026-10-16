@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendTurnInput, HarnessEvent } from "../../core/types";
+import {
+  HarnessNeedsAttentionError,
+  type SendTurnInput,
+  type HarnessEvent,
+} from "../../core/types";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -13,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   sends: [] as string[],
   sendError: false,
   seq: 0,
+  exit: undefined as ((code: number | null) => void) | undefined,
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke,
@@ -23,18 +28,25 @@ vi.mock("../../core/child", () => ({
   resolveClaudeBinary: mocks.resolve,
 }));
 vi.mock("./claudeInteractiveTerminal", () => ({
-  createInteractiveTerminal: async () => ({
-    get owner(): boolean {
-      return mocks.owner;
-    },
-    set owner(value: boolean) {
-      mocks.owner = value;
-    },
-    ready: mocks.ready,
-    dispose: vi.fn(),
-    writing: false,
-    stopped: false,
-  }),
+  createInteractiveTerminal: async (
+    _id: string,
+    onExit: (code: number | null) => void,
+  ) => {
+    mocks.exit = onExit;
+    return {
+      get owner(): boolean {
+        return mocks.owner;
+      },
+      set owner(value: boolean) {
+        mocks.owner = value;
+      },
+      ready: mocks.ready,
+      dispose: vi.fn(),
+      writing: false,
+      stopped: false,
+      started: vi.fn(),
+    };
+  },
 }));
 const {
   sendInteractiveClaude,
@@ -42,6 +54,7 @@ const {
   forgetInteractiveClaude,
   bindInteractiveClaude,
   replyInteractiveClaude,
+  hasInteractiveClaude,
 } = await import("./claudeInteractive");
 
 let events: HarnessEvent[];
@@ -97,7 +110,7 @@ beforeEach(() => {
     async (command: string, args: Record<string, unknown>) => {
       if (command === "claude_interactive_start") {
         mocks.starts.push(args.input as Record<string, unknown>);
-        hook("SessionStart");
+        // Real CLI 2.1.301 does not emit an HTTP SessionStart hook.
       }
       if (command === "claude_interactive_poll") {
         const rows = mocks.hooks.splice(0);
@@ -197,6 +210,8 @@ describe("interactive turn delivery", () => {
     );
     await waitFor(() => mocks.sends.length === 1);
     expect(String(await turn)).toContain("unconfirmed");
+    expect(await turn).toBeInstanceOf(HarnessNeedsAttentionError);
+    expect(hasInteractiveClaude("interactive-test")).toBe(true);
     await expect(sendInteractiveClaude(input())).rejects.toThrow("unconfirmed");
     expect(mocks.sends).toHaveLength(1);
     expect(onAccepted).not.toHaveBeenCalled();
@@ -208,6 +223,33 @@ describe("interactive turn delivery", () => {
     );
     await vi.advanceTimersByTimeAsync(21000);
     expect(String(await turn)).toContain("No prompt was sent");
+    expect(mocks.sends).toHaveLength(0);
+    expect(await turn).toBeInstanceOf(HarnessNeedsAttentionError);
+    expect(hasInteractiveClaude("interactive-test")).toBe(true);
+    expect(
+      mocks.invoke.mock.calls.some(
+        ([command]) => command === "claude_interactive_stop",
+      ),
+    ).toBe(false);
+    // After setup is completed, retry reuses the existing process once.
+    mocks.ready.mockReturnValue(true);
+    const retry = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await retry;
+    expect(mocks.starts).toHaveLength(1);
+    expect(mocks.sends).toHaveLength(1);
+  });
+  it("reports native exit immediately instead of masking it with a readiness timeout", async () => {
+    mocks.ready.mockReturnValue(false);
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => mocks.starts.length === 1);
+    mocks.exit?.(7);
+    await settle();
+    expect(String(await turn)).toContain("exited (code 7)");
     expect(mocks.sends).toHaveLength(0);
   });
   it("requires explicit Return to chat after terminal ownership", async () => {

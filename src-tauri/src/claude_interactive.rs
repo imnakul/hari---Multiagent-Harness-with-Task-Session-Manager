@@ -143,7 +143,7 @@ fn hook_settings(url: &str, fast: bool) -> Value {
         "PermissionRequest",
     ] {
         hooks.insert(event.into(), json!([{"matcher":"*", "hooks":[{
-            "type":"http", "url":url, "timeout": if event == "PermissionRequest" { 600 } else { 10 }
+            "type":"http", "url":url, "timeout": if matches!(event, "PermissionRequest" | "PreToolUse") { 600 } else { 10 }
         }]}]));
     }
     json!({"hooks":hooks, "fastMode":fast})
@@ -293,6 +293,10 @@ pub fn claude_interactive_start(
             .remove(&input.session_id);
         return Err(error);
     }
+    // HTTP SessionStart is not emitted by all supported CLI versions. Process
+    // launch authorizes the backend gate; the frontend must additionally verify
+    // the framed, empty native prompt before sending any input.
+    live.state.lock().unwrap_or_else(|e| e.into_inner()).phase = "ready".into();
     thread::spawn(move || {
         while live.running.load(Ordering::Acquire) {
             if let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(100)) {
@@ -654,6 +658,13 @@ mod tests {
         assert_eq!(
             settings["hooks"]["PermissionRequest"][0]["hooks"][0]["type"],
             "http"
+        );
+        // AskUserQuestion uses PreToolUse and can wait up to 590s for a human.
+        assert!(
+            settings["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"]
+                .as_u64()
+                .unwrap()
+                > 590
         );
         assert_eq!(settings["fastMode"], false);
         assert!(settings.get("permissionMode").is_none());

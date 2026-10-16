@@ -16,6 +16,7 @@ export type InteractiveTerminal = {
   owner: boolean;
   writing: boolean;
   stopped: boolean;
+  started: () => Promise<void>;
   ready: () => boolean;
   reclaim: () => Promise<void>;
   resize: (cols: number, rows: number) => Promise<void>;
@@ -47,7 +48,7 @@ function changed(): void {
 
 export async function createInteractiveTerminal(
   id: string,
-  onExit: () => void,
+  onExit: (code: number | null) => void,
 ): Promise<InteractiveTerminal> {
   const { Terminal } = await import("@xterm/xterm");
   const term = new Terminal({
@@ -61,6 +62,7 @@ export async function createInteractiveTerminal(
   let offset = 0;
   let lastWrite = Date.now();
   let owner = false;
+  let started = false;
   const accept = (data: Uint8Array, start: number): void => {
     if (start > offset) return; // Replay fills gaps; never parse a broken VT stream.
     const skip = Math.max(0, offset - start);
@@ -69,9 +71,9 @@ export async function createInteractiveTerminal(
     lastWrite = Date.now();
     term.write(data.subarray(skip));
   };
-  const unsubscribe = subscribePty(ptyId, accept, () => {
+  const unsubscribe = subscribePty(ptyId, accept, (code) => {
     terminal.stopped = true;
-    onExit();
+    onExit(code);
     changed();
   });
   const input = term.onData((data) => {
@@ -95,7 +97,7 @@ export async function createInteractiveTerminal(
         if (replay.start > offset) {
           terminal.owner = true;
           terminal.stopped = true;
-          onExit();
+          onExit(null);
           changed();
           return;
         }
@@ -116,6 +118,14 @@ export async function createInteractiveTerminal(
     },
     writing: false,
     stopped: false,
+    started: async (): Promise<void> => {
+      started = true;
+      // A recovery view can open while spawn is in flight. Apply its dimensions
+      // only after the backend owns the PTY, keeping both VT screens in sync.
+      if (!terminal.stopped && (term.cols !== 120 || term.rows !== 40))
+        await resizePty(ptyId, term.cols, term.rows);
+      changed();
+    },
     ready: (): boolean => {
       if (terminal.stopped || terminal.writing || Date.now() - lastWrite < 180)
         return false;
@@ -153,7 +163,7 @@ export async function createInteractiveTerminal(
     },
     resize: async (cols: number, rows: number): Promise<void> => {
       term.resize(cols, rows);
-      await resizePty(ptyId, cols, rows);
+      if (started && !terminal.stopped) await resizePty(ptyId, cols, rows);
     },
     dispose: (): void => {
       clearInterval(timer);

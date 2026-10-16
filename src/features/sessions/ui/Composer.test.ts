@@ -207,6 +207,19 @@ describe("Composer question focus", () => {
     );
   }
 
+  it("keeps interactive chat free of a terminal panel and a native execution select", async () => {
+    await act(async () => root.render(createElement(Composer, {
+      harness: "claude", model: "claude:sonnet-5", modelSettings: { claudeExecution: "interactive" },
+      runtimeMode: "supervised", cwd: "/repo", executionCwd: "/repo", sessionId: "interactive-ui",
+      hideProjectPicker: true, hideBranchPicker: true,
+      onFocus: vi.fn(), onCwdChange: vi.fn(), onModelChange: vi.fn(), onRuntimeModeChange: vi.fn(), onSubmit: vi.fn(),
+    })));
+    expect(container.querySelector('select[aria-label="Claude Code execution"]')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.textContent).not.toContain("Claude native terminal");
+    expect(container.textContent).toContain("Interactive");
+  });
+
   it("keeps every + menu row on the gliding hover; Cloud moved to Work in", async () => {
     const setActive = vi.fn();
     await act(async () =>
