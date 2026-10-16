@@ -129,6 +129,15 @@ function inputText(input: HTMLInputElement, value: string) {
 }
 
 describe("model picker", () => {
+  it("does not offer an empty terminal before an interactive process exists", () => {
+    act(() => root.render(createElement(ModelPicker, {
+      harness: "claude", model: "claude:sonnet-5", values: { claudeExecution: "interactive" },
+      hideSettings: true, onChange: vi.fn(), onSettingsChange: vi.fn(), claudeExecution: { disabled: false },
+    })));
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+    expect(container.querySelector('[aria-label="Claude Code execution"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Open native terminal");
+  });
   it.each([true, false])("offers Claude execution inside the existing picker (beside=%s)", (hideSettings) => {
     const onSettingsChange = vi.fn();
     const onOpenTerminal = vi.fn();

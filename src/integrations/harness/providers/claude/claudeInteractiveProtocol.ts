@@ -22,13 +22,6 @@ export function isClaudeInteractive(
   return settings?.[CLAUDE_EXECUTION_SETTING] === "interactive";
 }
 
-export function isInteractiveTerminalReply(data: string): boolean {
-  return (
-    /^\x1b\[[?>]?[\d;]*[cnRt]$/.test(data) ||
-    /^\x1b\](?:10|11|12);rgb:[a-f\d/]+(?:\x07|\x1b\\)$/i.test(data)
-  );
-}
-
 export type PromptScreen = {
   before: string;
   after: string;

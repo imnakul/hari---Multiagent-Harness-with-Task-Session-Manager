@@ -6,10 +6,7 @@ import {
   subscribePty,
   writePty,
 } from "../../../../platform/tauri/pty";
-import {
-  isEmptyInteractivePrompt,
-  isInteractiveTerminalReply,
-} from "./claudeInteractiveProtocol";
+import { isEmptyInteractivePrompt } from "./claudeInteractiveProtocol";
 
 export type InteractiveTerminal = {
   term: Terminal;
@@ -58,6 +55,27 @@ export async function createInteractiveTerminal(
     allowProposedApi: true,
     fontSize: 12,
   });
+  // Public onData merges typing with parser replies. Orca uses this same core
+  // signal; keep its contract covered against the installed real xterm build.
+  const core = (
+    term as unknown as {
+      _core?: {
+        coreService?: {
+          onUserInput?: (listener: () => void) => { dispose: () => void };
+        };
+      };
+    }
+  )._core?.coreService;
+  if (typeof core?.onUserInput !== "function") {
+    term.dispose();
+    throw new Error(
+      "The terminal parser cannot distinguish typing from automatic replies. Update MonoCode before using Claude Interactive.",
+    );
+  }
+  let pendingUserInput = false;
+  const userInput = core.onUserInput(() => {
+    pendingUserInput = true;
+  });
   const ptyId = `claude-interactive:${id}`;
   let offset = 0;
   let lastWrite = Date.now();
@@ -71,15 +89,22 @@ export async function createInteractiveTerminal(
     lastWrite = Date.now();
     term.write(data.subarray(skip));
   };
-  const unsubscribe = subscribePty(ptyId, accept, (code) => {
-    terminal.stopped = true;
-    onExit(code);
-    changed();
-  });
+  const unsubscribe = subscribePty(
+    ptyId,
+    accept,
+    (code) => {
+      terminal.stopped = true;
+      onExit(code);
+      changed();
+    },
+    { fresh: true },
+  );
   const input = term.onData((data) => {
+    const wasUserInput = pendingUserInput;
+    pendingUserInput = false;
     if (terminal.stopped) return;
-    // Terminal query responses are not human input and cannot submit a prompt.
-    if (isInteractiveTerminalReply(data)) {
+    // Focus reports and all parser replies keep the CLI alive without taking chat input.
+    if (!wasUserInput) {
       void writePty(ptyId, data).catch(() => undefined);
       return;
     }
@@ -169,6 +194,7 @@ export async function createInteractiveTerminal(
       clearInterval(timer);
       unsubscribe();
       input.dispose();
+      userInput.dispose();
       term.dispose();
       terminals.delete(id);
       changed();

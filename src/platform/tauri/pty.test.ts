@@ -73,6 +73,18 @@ describe("PTY output offsets and lazy replay", () => {
     expect(live).toEqual([0]);
     expect(replay).toEqual([2]);
     stopReplay();
+    emit?.({ payload: { id, data: "bGF0ZQ==" } }); // Late bytes from the stopped owner.
+    const restarted: number[] = [];
+    const stopFresh = subscribePty(
+      id,
+      (_chunk, start) => restarted.push(start),
+      () => undefined,
+      { fresh: true },
+    );
+    expect(restarted).toEqual([]); // Never replay the previous process into its replacement.
+    emit?.({ payload: { id, data: "bmV3" } });
+    expect(restarted).toEqual([0]);
+    stopFresh();
     await killPty(id);
   });
 });

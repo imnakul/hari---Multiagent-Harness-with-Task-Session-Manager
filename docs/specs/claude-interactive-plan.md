@@ -69,6 +69,28 @@ rows are committed as a regression fixture. This validates CLI/protocol behavior
 it does not replace signed-in Windows/Tauri or subscription-meter verification.
 Repair automated gates and publication are recorded below.
 
+Second Windows trial repair (2026-10-16, after `5e7056a`): the captured CLI
+startup itself enables focus reports (`CSI ? 1004 h`). Real xterm immediately
+emits `CSI O`; the old public-onData classifier mislabeled it as human typing,
+set terminal ownership and refused the first GUI send within a second. The prior
+fixture tests asserted screen readiness but never input ownership; the adapter
+unit tests mocked xterm out, so neither caught their interaction.
+
+Orca comparison rechecked against fork GitHub main `1855ba4`: its terminal path
+uses xterm's onUserInput provenance, keeps passive focus/query replies separate
+from driving input, and covers the terminal with the chat surface. Repair:
+use the same provenance distinction with a checked xterm contract; exercise the
+production adapter plus actual xterm and PTY event routing; hide terminal access
+until a process exists, with no empty prelaunch dialog. Combined tests caught stale byte counters across fresh process starts using the
+same PTY ID. A fresh-stream subscription now resets only replacement owners;
+ordinary view reattachment retains buffered output. Two turns plus a third after
+Stop/native resume passed through the production frontend adapter/xterm/PTY
+subscription path against real CLI 2.1.301 in both supervised and Full access.
+The real CLI tests replace desktop IPC with a thin Unix PTY test host and use a
+loopback API, temporary fake account, and pre-accepted fixture setup/trust. They
+do not validate the Rust/ConPTY boundary or signed-in Windows/Tauri GUI. No native
+UI automation was used. Full web/build gates are recorded in the changelog.
+
 The cloud environment initially lacked Rust and Linux desktop libraries. Installed
 Rust 1.99.1 and used an isolated Debian container with GTK/WebKit and Git. The first
 Rust test run lacked Git (30 unrelated fixture failures); installing Git resolved
@@ -169,3 +191,19 @@ Separate human desktop/provider checklist (`npm run tauri dev`):
   once in the first parallel full run, then passed alone and in the full rerun.
 - Manual: first/second signed-in Windows chat turns, setup/menu recovery, native
   resume, approvals/questions and applied controls; quota comparison as above.
+
+
+### Second repair verification (2026-10-16)
+
+- Final full web check **6,803 passed / 617 files**, including both opt-in real
+  CLI cases; strict TypeScript and production web/host builds passed. Existing
+  CSS optimizer/bundle-size warnings are unchanged. No Rust source changed.
+- The test IPC host initially read the announced transcript before creation,
+  causing an ENOENT in one full-suite CLI case. It now waits for initial creation,
+  matching the native backend's existing safe-transcript behavior; the final
+  complete run passed. This was a test-host defect, not a production-code change.
+- Orca fork GitHub main verified at `1855ba49ba1c8c4eb314ba02dbc920acb1094b31`;
+  source inspection only, with no changes to that repository.
+- Native human follow-up: a fresh Windows interactive chat, two GUI messages and
+  Stop/resume. No terminal action should be needed for an already configured CLI.
+  Login/trust prompts, if present, remain explicit setup; tests used fixture setup.

@@ -90,9 +90,9 @@ export function ClaudeInteractiveTerminal({
               type="button"
               className="hover:text-accent"
               onClick={() => {
-                void stopInteractiveClaude(sessionId).catch((reason: unknown) =>
-                  setError(String(reason)),
-                );
+                void stopInteractiveClaude(sessionId)
+                  .then(onClose)
+                  .catch((reason: unknown) => setError(String(reason)));
               }}
             >
               Stop Claude
@@ -108,9 +108,8 @@ export function ClaudeInteractiveTerminal({
         ) : null}
       </div>
       <p className="px-3 pb-2 text-[11px] text-content/60">
-        {terminal
-          ? "Same Claude process as this chat. Close menus and clear terminal drafts before returning to chat. Model, effort and Fast selections apply on the next turn; the native terminal shows their applied state."
-          : "The native CLI starts with your first message. Automatic AI titles are off. Use its terminal for setup, slash commands and attachments."}
+        Same conversation as chat. Use this for Claude setup or native commands.
+        Close menus and clear terminal drafts, then Return to chat.
       </p>
       {error ? (
         <p role="alert" className="px-3 pb-2 text-[11px] text-amber-400">

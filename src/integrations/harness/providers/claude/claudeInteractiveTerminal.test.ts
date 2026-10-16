@@ -30,6 +30,20 @@ afterEach(() => {
 });
 
 describe("real VT parser input gate", () => {
+  it("preserves real input provenance even when typed data resembles a parser reply", async () => {
+    const terminal = await createInteractiveTerminal("input-source", vi.fn());
+    cleanup = terminal.dispose;
+    terminal.term.input("\x1b[I\x1b[?1;2c", false);
+    terminal.term.input("\x1b[?997;1n", false);
+    expect(terminal.owner).toBe(false);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    terminal.term.input("\x1b[1;2R", true);
+    expect(terminal.owner).toBe(true);
+    expect(mocks.invoke).toHaveBeenCalledWith("claude_interactive_terminal", {
+      sessionId: "input-source",
+      data: "\x1b[1;2R",
+    });
+  });
   it("defers view resizing until the native process acknowledges startup", async () => {
     const terminal = await createInteractiveTerminal("resize-start", vi.fn());
     cleanup = terminal.dispose;
@@ -52,6 +66,13 @@ describe("real VT parser input gate", () => {
       vi.useFakeTimers();
       await vi.advanceTimersByTimeAsync(200);
       expect(terminal.ready()).toBe(true);
+      // The real startup enables focus reporting and emits CSI O through onData.
+      expect(terminal.owner).toBe(false);
+      expect(mocks.write).toHaveBeenCalledWith(
+        "claude-interactive:captured-vt",
+        "\x1b[O",
+      );
+      expect(mocks.invoke).not.toHaveBeenCalled();
     },
   );
   it("recognizes a native prompt, rejects dialogs and does not replay duplicate bytes", async () => {

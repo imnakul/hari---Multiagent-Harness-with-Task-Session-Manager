@@ -1,3 +1,8 @@
+import {
+  interactiveTerminalFor,
+  interactiveTerminalRevision,
+  subscribeInteractiveTerminals,
+} from "../../../integrations/harness/providers/claude/claudeInteractiveTerminal";
 import { ClaudeInteractiveTerminal } from "./ClaudeInteractiveTerminal";
 import { useAntigravityCliAgents } from "../../providers/model/antigravityCliAgents";
 import { ModelSettings } from "./ModelSettings";
@@ -529,6 +534,9 @@ export function Composer({
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
   const [interactiveTerminalOpen, setInteractiveTerminalOpen] = useState(false);
+  useSyncExternalStore(subscribeInteractiveTerminals, interactiveTerminalRevision);
+  const liveInteractiveTerminal = sessionId ? interactiveTerminalFor(sessionId) : undefined;
+  useEffect(() => { if (!liveInteractiveTerminal) setInteractiveTerminalOpen(false); }, [liveInteractiveTerminal]);
   const [planSelected, setPlanSelected] = useState(false);
   const [operatorSelected, setOperatorSelected] = useState(false);
   const [orchestrationSelected, setOrchestrationSelected] = useState(false);
@@ -2646,14 +2654,14 @@ export function Composer({
               }}
             >
               <div className="flex shrink-0 items-center gap-1">
-                {interactiveTerminalOpen && sessionId && harness === "claude" && !remoteSession ? (
+                {interactiveTerminalOpen && liveInteractiveTerminal && sessionId && harness === "claude" && !remoteSession ? (
                   <ClaudeInteractiveTerminal sessionId={sessionId} onClose={() => setInteractiveTerminalOpen(false)} />
                 ) : null}
                 <ModelPicker
                   harness={harness}
                   model={model}
                   values={modelSettings}
-                  claudeExecution={harness === "claude" && !remoteSession && sessionId ? { disabled: busy, onOpenTerminal: () => setInteractiveTerminalOpen(true) } : undefined}
+                  claudeExecution={harness === "claude" && !remoteSession && sessionId ? { disabled: busy, onOpenTerminal: liveInteractiveTerminal && !liveInteractiveTerminal.stopped ? () => setInteractiveTerminalOpen(true) : undefined } : undefined}
                   allowedHarnesses={allowedModelHarnesses}
                   project={cwd}
                   hideSettings={controlsBeside}

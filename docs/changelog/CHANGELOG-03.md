@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-16 — Keep Claude terminal focus replies out of chat ownership (L-82)
+- What: Matched Orca's xterm input-provenance approach: parser-generated focus/query replies no longer claim human input ownership and block the first send. Fresh CLI owners reset PTY offsets on Stop/resume; ordinary terminal view reattachment retains its offsets. New chats have no empty terminal action/dialog; optional terminal access requires a live process and never opens automatically.
+- Files: Claude interactive terminal/protocol; composer/model picker/terminal dialog; PTY subscription lifecycle; combined adapter/real-xterm tests and opt-in real CLI PTY host; L-82 and spec records.
+- Verified: production adapter/xterm/PTY regression tests passed; real CLI 2.1.301 accepted two GUI turns plus a third after Stop/native resume in both supervised and Full access modes, with no terminal view or driving-input misclassification. Temporary fake accounts and a loopback API supplied replies; desktop IPC was a test host, so signed-in Windows/Tauri remains manual. Final full web suite 6,803 passed / 617 files (including both real CLI cases); TypeScript and production web/host builds passed. Existing CSS/bundle warnings remain. No Rust source changed.
+- Commit: included in the second repair publication on `nakul/windows-support-upstream-0.10.0`; SHA reported in the delivery message.
+
 ## 2026-10-16 — Repair Claude Interactive startup and reuse the existing picker (L-82)
 - What: Removed the native execution select and composer terminal panel. The existing model picker now contains Structured/Interactive and an explicit terminal dialog. Fixed the undimmed stock-placeholder rejection and the startup gate's dependency on an absent HTTP SessionStart hook. Setup attention retains its native owner; early exits report promptly, and terminal resizing waits for spawn.
 - Files: Claude interactive adapter/protocol/terminal and captured CLI fixture; Rust bridge; App cleanup; ModelPicker/Composer/SessionPane/terminal modal; shared Modal Escape option; tests and L-82/spec records.

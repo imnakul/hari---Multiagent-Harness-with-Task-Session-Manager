@@ -4,7 +4,6 @@ import {
   interactiveTranscriptEvents,
   isClaudeInteractive,
   isEmptyInteractivePrompt,
-  isInteractiveTerminalReply,
   newTranscriptState,
   type PromptScreen,
 } from "./claudeInteractiveProtocol";
@@ -23,14 +22,6 @@ const screen: PromptScreen = {
 };
 
 describe("interactive input safety", () => {
-  it("recognizes only terminal query replies without treating them as human input", () => {
-    expect(isInteractiveTerminalReply("\x1b[?1;2c")).toBe(true);
-    expect(isInteractiveTerminalReply("\x1b]10;rgb:ffff/ffff/ffff\x1b\\")).toBe(
-      true,
-    );
-    expect(isInteractiveTerminalReply("hello\r")).toBe(false);
-    expect(isInteractiveTerminalReply("\x1b[200~hello\x1b[201~\r")).toBe(false);
-  });
   it("requires a framed, empty native input at the cursor", () => {
     expect(isEmptyInteractivePrompt(screen)).toBe(true);
     expect(

@@ -242,7 +242,13 @@ export function subscribePty(
   id: string,
   onData: DataHandler,
   onExit: ExitHandler,
+  options?: { fresh?: boolean },
 ): () => void {
+  // Only fresh process owners reset offsets. Reattaching a view must retain them.
+  if (options?.fresh) {
+    bytesSeen.delete(id);
+    clearBuffered(id);
+  }
   retain();
   openedPtys.add(id);
   dataHandlers.set(id, onData);
