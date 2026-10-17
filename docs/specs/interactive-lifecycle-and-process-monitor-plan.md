@@ -148,6 +148,10 @@ FilePaneNavigation blur case (selection 24 versus 1) under concurrent native/
 build load. Its files are unchanged and the isolated nine-case rerun passes;
 the full rerun without other heavy local work passes all 6,843 tests. No editor changes.
 
+39028767023 proves the width-only repaint reproduces the omitted input. The
+opt-in Windows fixture now records five safe geometry/screen probes on failure
+and rethrows. Use their results to choose a recovery; do not weaken readiness.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable

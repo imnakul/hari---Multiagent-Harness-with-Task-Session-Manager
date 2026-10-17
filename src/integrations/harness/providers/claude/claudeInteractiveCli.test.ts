@@ -344,6 +344,7 @@ it
     const sends: string[] = [];
     const nativeInput: string[] = [];
     const passiveReplies: string[] = [];
+    const repaintProbes: unknown[] = [];
     ipc.invoke
       .mockReset()
       .mockImplementation(
@@ -684,6 +685,35 @@ it
       expect(
         events.filter((event) => event.type === "externalTurn.finished").length,
       ).toBeGreaterThan(externalBefore);
+    } catch (error) {
+      if (process.platform === "win32") {
+        const terminal = interactiveTerminalFor(id);
+        if (terminal && !terminal.stopped) {
+          for (const [cols, rows] of [
+            [82, 22],
+            [120, 39],
+            [80, 24],
+            [160, 50],
+            [120, 40],
+          ]) {
+            await terminal.resize(cols, rows);
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            const buffer = terminal.term.buffer.active;
+            repaintProbes.push({
+              cols,
+              rows,
+              readiness: terminal.inspect(),
+              screen: Array.from(
+                { length: rows },
+                (_, y) =>
+                  buffer.getLine(buffer.baseY + y)?.translateToString(true) ??
+                  "",
+              ),
+            });
+          }
+        }
+      }
+      throw error;
     } finally {
       const capture = process.env.MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR;
       if (capture) {
@@ -710,6 +740,7 @@ it
                 requestPrefixes,
                 apiRequests: requests.length,
                 primaryRequests: requestPrefixes.length,
+                repaintProbes,
               },
               null,
               2,
