@@ -2119,6 +2119,21 @@ header[data-tauri-drag-region] button {
     stroke-dashoffset 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Wrap toggle sits left of Copy, and left of "Add Draft to Sessions" when shown. */
+.agent-markdown .markdown-code-wrap {
+  right: 40px;
+}
+
+.agent-markdown
+  .markdown-code-shell:has([aria-label="Add Draft to Sessions"])
+  .markdown-code-wrap {
+  right: 72px;
+}
+
+.agent-markdown .markdown-code-wrap.is-on {
+  color: color-mix(in srgb, var(--color-content) 80%, transparent);
+}
+
 .agent-markdown .markdown-code-icon {
   position: absolute;
   z-index: 1;
@@ -2148,7 +2163,13 @@ header[data-tauri-drag-region] button {
 .agent-markdown
   .markdown-code-shell:has(.markdown-code-copy)
   .markdown-code-path {
-  right: 42px;
+  right: 74px;
+}
+
+.agent-markdown
+  .markdown-code-shell:has([aria-label="Add Draft to Sessions"])
+  .markdown-code-path {
+  right: 106px;
 }
 
 .agent-markdown .markdown-code-path-link {

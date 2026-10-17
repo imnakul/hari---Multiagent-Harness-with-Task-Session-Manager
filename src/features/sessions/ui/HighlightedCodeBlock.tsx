@@ -13,18 +13,23 @@ import { boundedCode } from "../../files/editor/codeHighlightPlugin";
 
 type Tokens = HighlightResult["tokens"][number];
 
+// Important beats the vendor `white-space: pre` rules; without it the body scrolls.
+const WRAP = "!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere]";
+
 // Complete lines keep their token arrays while a fence grows. Memoizing here
 // avoids recreating thousands of token elements on every reveal frame.
 const HighlightedLine = memo(function HighlightedLine({
   tokens,
   numbered,
+  wrap,
 }: {
   tokens: Tokens;
   numbered: boolean;
+  wrap: boolean;
 }) {
   return (
     <span
-      className={`!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere] ${
+      className={`${wrap ? WRAP : ""} ${
         numbered ? "markdown-code-numbered-line" : ""
       }`}
     >
@@ -61,35 +66,56 @@ const HighlightedBody = memo(function HighlightedBody({
   result,
   lineNumbers,
   startLine,
+  wrap,
 }: {
   result: HighlightResult;
   lineNumbers: boolean;
   startLine?: number;
+  wrap: boolean;
 }) {
   const cachedLines = useMemo(
     () =>
       new WeakMap<
         Tokens,
-        { index: number; numbered: boolean; element: ReactElement }
+        {
+          index: number;
+          numbered: boolean;
+          wrap: boolean;
+          element: ReactElement;
+        }
       >(),
     [],
   );
   const lines = useMemo(() => {
     return result.tokens.map((tokens, index) => {
       const cached = cachedLines.get(tokens);
-      if (cached?.index === index && cached.numbered === lineNumbers)
+      if (
+        cached?.index === index &&
+        cached.numbered === lineNumbers &&
+        cached.wrap === wrap
+      )
         return cached.element;
       const element = (
-        <HighlightedLine key={index} tokens={tokens} numbered={lineNumbers} />
+        <HighlightedLine
+          key={index}
+          tokens={tokens}
+          numbered={lineNumbers}
+          wrap={wrap}
+        />
       );
-      cachedLines.set(tokens, { index, numbered: lineNumbers, element });
+      cachedLines.set(tokens, {
+        index,
+        numbered: lineNumbers,
+        wrap,
+        element,
+      });
       return element;
     });
-  }, [result, lineNumbers, cachedLines]);
+  }, [result, lineNumbers, wrap, cachedLines]);
   return (
-    <pre className="!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere]">
+    <pre className={wrap ? WRAP : undefined}>
       <code
-        className="!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere]"
+        className={wrap ? WRAP : undefined}
         style={
           lineNumbers
             ? { counterReset: `line ${(startLine ?? 1) - 1}` }
@@ -108,12 +134,15 @@ export function HighlightedCodeBlock({
   isIncomplete,
   lineNumbers,
   startLine,
+  wrap = true,
 }: {
   code: string;
   language: string;
   isIncomplete: boolean;
   lineNumbers: boolean;
   startLine?: number;
+  /** Soft-wrap long lines (default). False keeps lines whole and scrolls sideways. */
+  wrap?: boolean;
 }) {
   const source = code.replace(/\n+$/, "");
   const [highlighted, setHighlighted] = useState<{
@@ -149,11 +178,12 @@ export function HighlightedCodeBlock({
             result={result}
             lineNumbers={lineNumbers}
             startLine={startLine}
+            wrap={wrap}
           />
         ) : (
-          <pre className="!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere]">
+          <pre className={wrap ? WRAP : undefined}>
             <code
-              className="!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere]"
+              className={wrap ? WRAP : undefined}
               style={
                 lineNumbers
                   ? { counterReset: `line ${(startLine ?? 1) - 1}` }
@@ -163,7 +193,7 @@ export function HighlightedCodeBlock({
               {source.split("\n").map((line, index) => (
                 <span
                   key={index}
-                  className={`!w-full !min-w-0 !whitespace-pre-wrap ![overflow-wrap:anywhere] ${
+                  className={`${wrap ? WRAP : ""} ${
                     lineNumbers ? "markdown-code-numbered-line" : ""
                   }`}
                 >

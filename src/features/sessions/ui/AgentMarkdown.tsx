@@ -60,6 +60,7 @@ import { isNoteImagePath } from "../../notes";
 import { IS_MAC, IS_WIN } from "../../../platform/tauri/platform";
 import { InboxMedia } from "../../inbox/ui/InboxMedia";
 import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
+import { TextWrap } from "../../../shared/ui/icons";
 import { loadProjectImagePreviewUrl } from "../model/attachments";
 import { rehypeHardBreaks } from "./hardBreaks";
 import { rehypeWordFade, usePacedText, useWordFading } from "./wordFade";
@@ -321,6 +322,8 @@ function MarkdownCode({
   ...props
 }: MarkdownCodeProps) {
   const incomplete = useIsCodeFenceIncomplete();
+  // Before the inline/mermaid returns so hook order never changes.
+  const [wrap, setWrap] = useState(true);
   const block = Object.prototype.hasOwnProperty.call(props, "data-block");
   if (!block) {
     const text = textContent(children);
@@ -400,6 +403,16 @@ function MarkdownCode({
         <span className="markdown-code-fallback-label">{fence.language}</span>
       ) : null}
       <CodeCopyButton code={code} />
+      <button
+        type="button"
+        title={wrap ? "Don't wrap lines" : "Wrap lines"}
+        aria-label="Wrap lines"
+        aria-pressed={wrap}
+        className={`markdown-code-copy markdown-code-wrap ${wrap ? "is-on" : ""}`}
+        onClick={() => setWrap((on) => !on)}
+      >
+        <TextWrap aria-hidden className="size-3.5" strokeWidth={1.75} />
+      </button>
       <AddToSessionManagerButton
         text={code.replace(/\r?\n$/, "")}
         code
@@ -411,6 +424,7 @@ function MarkdownCode({
         language={highlightLanguageFor(fence.language)}
         lineNumbers={lineNumbers}
         startLine={fence.startLine}
+        wrap={wrap}
       />
     </div>
   );
