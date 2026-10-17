@@ -1,4 +1,5 @@
 import fixture from "./fixtures/interactive-cli-2.1.301.json";
+import conpty from "./fixtures/interactive-conpty-2.1.302.json";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInteractiveTerminal } from "./claudeInteractiveTerminal";
 
@@ -7,6 +8,12 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(async () => undefined),
   write: vi.fn(async () => undefined),
   resize: vi.fn(async () => undefined),
+  windows: false,
+}));
+vi.mock("../../../../platform/tauri/platform", () => ({
+  get IS_WIN(): boolean {
+    return mocks.windows;
+  },
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("../../../../platform/tauri/pty", () => ({
@@ -27,9 +34,80 @@ afterEach(() => {
   cleanup = undefined;
   vi.useRealTimers();
   vi.clearAllMocks();
+  mocks.windows = false;
 });
 
 describe("real VT parser input gate", () => {
+  it.each([false, true])(
+    "fails closed on a parked cursor without one unique Windows frame (Windows %s)",
+    async (windows) => {
+      mocks.windows = windows;
+      const terminal = await createInteractiveTerminal(
+        "frame-identity",
+        vi.fn(),
+      );
+      cleanup = terminal.dispose;
+      // On Unix the physical cursor stays authoritative. On Windows, add a second
+      // framed prompt and park the cursor in it: ambiguity must still block sends.
+      const extra = windows
+        ? "\x1b[34;1H────────────────────\x1b[35;1H❯ \x1b[36;1H────────────────────\x1b[35;3H"
+        : "";
+      mocks.data?.(new TextEncoder().encode(conpty.empty + extra), 0);
+      await new Promise<void>((resolve) => terminal.term.write("", resolve));
+      vi.useFakeTimers();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(terminal.ready()).toBe(false);
+    },
+  );
+  it.each(["default", "empty"] as const)(
+    "checks the complete captured ConPTY %s input while its output cursor is elsewhere",
+    async (stage) => {
+      mocks.windows = true;
+      const terminal = await createInteractiveTerminal(
+        "conpty-screen",
+        vi.fn(),
+      );
+      cleanup = terminal.dispose;
+      mocks.data?.(new TextEncoder().encode(conpty[stage]), 0);
+      await new Promise<void>((resolve) => terminal.term.write("", resolve));
+      vi.useFakeTimers();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(terminal.inspect()).toMatchObject({
+        promptSource: "conpty-frame",
+        cursorX: 119,
+        checks: { cursorAtPrompt: true, emptyDraft: stage === "empty" },
+      });
+      expect(terminal.ready()).toBe(stage === "empty");
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    ["unfinished", "? for shortcuts"],
+    ["\x1b[2munfinished\x1b[22m", "? for shortcuts"],
+    ["", "Enter to select · Esc to cancel"],
+    ["", "esc to interrupt"],
+  ])(
+    "rejects a ConPTY draft/menu even with a parked output cursor (%s / %s)",
+    async (draft, footer) => {
+      mocks.windows = true;
+      const terminal = await createInteractiveTerminal("conpty-guard", vi.fn());
+      cleanup = terminal.dispose;
+      mocks.data?.(
+        new TextEncoder().encode(
+          conpty.empty +
+            `\x1b[38;1H\x1b[2K❯ ${draft}\x1b[40;1H\x1b[2K${footer}\x1b[40;120H`,
+        ),
+        0,
+      );
+      await new Promise<void>((resolve) => terminal.term.write("", resolve));
+      vi.useFakeTimers();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(terminal.inspect().promptSource).toBe("conpty-frame");
+      expect(terminal.ready()).toBe(false);
+      await expect(terminal.reclaim()).rejects.toThrow("empty Claude prompt");
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    },
+  );
   it("distinguishes missing output from an incomplete prompt without exporting terminal text", async () => {
     const terminal = await createInteractiveTerminal(
       "diagnostic-test",

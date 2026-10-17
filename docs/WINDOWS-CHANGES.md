@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | ConPTY paint cursor is separate from Claude's input row | terminal, Claude Interactive |
 | 17 Oct 2026 | ConPTY small output must flush while its reader is blocked | terminal, Claude Interactive |
 | 16 Oct 2026 | Claude Interactive launches the native executable in ConPTY | Claude, terminal, accounts |
 | 7 Oct 2026 | MCP test fixtures use discovery paths and repository boundaries | Windows tests, MCP |
@@ -52,6 +53,23 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 — ConPTY paint cursor is separate from Claude's input row
+
+Native CLI 2.1.302 runner captures show a hidden VT output cursor at column 119
+on a status row, while the bottom framed input is elsewhere. Claude paints its
+own caret, and ConPTY repaint operations move the output cursor. The physical
+cursor check rejects even the captured empty input. Windows now finds one
+framed input in the bottom six rows and checks its complete contents; drafts,
+ambiguous frames, busy footers and native menus remain blocked. It does not
+clear input or resend. Unix retains the physical-cursor check.
+
+The same run (`38995820658`) captures unsolicited `C` with default input. Only
+DSR/focus replies reach the frontend, so DA1 rewriting did not explain this
+runner's injection. The backend prewrites a cursor-position handshake and
+xterm replies again to its query; reply-ownership comparisons remain open.
+Committed captures use isolated fake accounts; never capture real-account VT
+as part of this fixture.
 
 ## 17 Oct 2026 — ConPTY small output must flush while its reader is blocked
 

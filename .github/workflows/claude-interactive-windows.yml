@@ -45,7 +45,7 @@ jobs:
           "MONOCODE_INTERACTIVE_TEST_CLI=$cli" >> $env:GITHUB_ENV
           "MONOCODE_INTERACTIVE_TEST_PTY_HOST=$env:GITHUB_WORKSPACE\scripts\interactive-pty-host\target\debug\interactive-pty-host.exe" >> $env:GITHUB_ENV
           "MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR=$env:RUNNER_TEMP\interactive-capture" >> $env:GITHUB_ENV
-      - name: Reproduce and isolate primary attribute replies
+      - name: Compare startup reply ownership
         shell: pwsh
         run: |
           $captureRoot = $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR
@@ -54,11 +54,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
           $env:TMP = $env:TEMP
           $failed = $false
-          foreach ($mode in @('default', 'omit', 'conpty', 'encoded', 'encoded-all')) {
-            $env:MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT = $mode
+          foreach ($mode in @('default', 'omit-dsr', 'omit-focus', 'omit-passive', 'encoded-replies')) {
+            $env:MONOCODE_INTERACTIVE_TEST_INPUT_EXPERIMENT = $mode
             $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $captureRoot $mode
-            Write-Output "Primary attribute experiment: $mode"
-            npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
+            Write-Output "Startup reply experiment: $mode"
+            npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts -t supervised
             if ($LASTEXITCODE -ne 0) { $failed = $true }
           }
           if ($failed) { exit 1 }

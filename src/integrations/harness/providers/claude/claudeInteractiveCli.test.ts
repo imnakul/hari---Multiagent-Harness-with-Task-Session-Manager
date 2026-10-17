@@ -25,6 +25,9 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: ipc.invoke,
   isTauri: () => true,
 }));
+vi.mock("../../../../platform/tauri/platform", () => ({
+  IS_WIN: process.platform === "win32",
+}));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async (
     name: string,

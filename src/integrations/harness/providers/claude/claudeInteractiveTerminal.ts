@@ -1,5 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
+import { IS_WIN } from "../../../../platform/tauri/platform";
 import {
   ptyReplayFrom,
   resizePty,
@@ -29,6 +30,7 @@ export type InteractiveReadiness = {
   rows: number;
   cursorX: number;
   cursorY: number;
+  promptSource: "cursor" | "conpty-frame";
   checks: ReturnType<typeof interactivePromptChecks>;
 };
 
@@ -186,11 +188,41 @@ export async function createInteractiveTerminal(
     ready: (): boolean => terminal.inspect().reason === "ready",
     inspect: (): InteractiveReadiness => {
       const buffer = term.buffer.active;
-      const row = buffer.baseY + buffer.cursorY;
+      let row = buffer.baseY + buffer.cursorY;
+      let column = buffer.cursorX;
+      let promptSource: InteractiveReadiness["promptSource"] = "cursor";
+      let ambiguousFrame = false;
+      if (IS_WIN) {
+        // ConPTY paints Claude's software caret, then parks the VT output cursor
+        // on a status row. Inspect the entire unique bottom input line instead.
+        // A draft (including text before that painted caret) must remain blocked.
+        const candidates: { row: number; column: number }[] = [];
+        for (let y = Math.max(1, term.rows - 6); y < term.rows - 1; y++) {
+          const absolute = buffer.baseY + y;
+          const line = buffer.getLine(absolute)?.translateToString(true) ?? "";
+          const prefix = /^\s*❯\s*/.exec(line);
+          if (
+            prefix &&
+            /[─━]{8}/.test(
+              buffer.getLine(absolute - 1)?.translateToString(true) ?? "",
+            ) &&
+            /[─━]{8}/.test(
+              buffer.getLine(absolute + 1)?.translateToString(true) ?? "",
+            )
+          )
+            candidates.push({ row: absolute, column: prefix[0].length });
+        }
+        if (candidates.length === 1) {
+          row = candidates[0].row;
+          column = candidates[0].column;
+          promptSource = "conpty-frame";
+        }
+        ambiguousFrame = candidates.length > 1;
+      }
       const current = buffer.getLine(row);
-      const after = current?.translateToString(true, buffer.cursorX) ?? "";
+      const after = current?.translateToString(true, column) ?? "";
       let afterIsDim = true;
-      for (let x = buffer.cursorX; x < term.cols; x++) {
+      for (let x = column; x < term.cols; x++) {
         const cell = current?.getCell(x);
         if (cell?.getChars().trim() && !cell.isDim()) afterIsDim = false;
       }
@@ -199,13 +231,14 @@ export async function createInteractiveTerminal(
         (_, i) => buffer.getLine(row + i)?.translateToString(true) ?? "",
       ).join("\n");
       const checks = interactivePromptChecks({
-        before: current?.translateToString(false, 0, buffer.cursorX) ?? "",
+        before: current?.translateToString(false, 0, column) ?? "",
         after,
-        afterIsDim,
+        afterIsDim: promptSource === "cursor" && afterIsDim,
         above: buffer.getLine(row - 1)?.translateToString(true) ?? "",
         below: buffer.getLine(row + 1)?.translateToString(true) ?? "",
         screen,
       });
+      if (ambiguousFrame) checks.cursorAtPrompt = false;
       const age = offset ? Math.max(0, Date.now() - lastWrite) : null;
       const reason = terminal.stopped
         ? "stopped"
@@ -237,6 +270,7 @@ export async function createInteractiveTerminal(
         rows: term.rows,
         cursorX: buffer.cursorX,
         cursorY: buffer.cursorY,
+        promptSource,
         checks,
       };
     },

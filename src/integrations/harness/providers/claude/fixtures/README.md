@@ -58,13 +58,19 @@ If the native CLI still asks for trust, test setup approves only the exact
 temporary fixture folder in the recognized trust menu, after checking its selected
 option. This is not application trust automation or a real-account test.
 
-The temporary fork Windows workflow compares default DA1 replies, omitted DA1
-replies, basic-conformance replies, Win32-encoded DA1 replies and Win32-encoded
-runtime input on Windows 2022/2025. Those transformations
-exist only in the opt-in Rust host (`MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT`),
-not in MonoCode. They are causal probes, not proposed product behavior. A failed
-default run stays a failure; artifacts retain each case for diagnosis. The
-workflow pins the user's CLI 2.1.302 and exercises two messages plus native resume
-in both permission modes. It does not qualify a signed-in Tauri/WebView workflow
-or subscription consumption. Once the defect is reproduced, remove experimental
-variants and keep the production regression.
+`interactive-conpty-2.1.302.json` contains real native Windows 2022 captures from
+run `38995820658`. Default input has an unsolicited `C`; the empty screen came
+from an experimental Win32-encoded runtime-input case. Both park the hidden VT
+output cursor outside the input row. They test the framed-row guard, not a fixed
+send: the experimental live run still failed, including a truncated prompt.
+
+The temporary Windows workflow now compares unchanged startup replies, omitted
+extra DSR, omitted focus, omission of both and Win32-encoded replies. The earlier
+DA1 variants had no effect: no DA1 reply reached xterm on either runner. New
+transformations exist only in the opt-in Rust host
+(`MONOCODE_INTERACTIVE_TEST_INPUT_EXPERIMENT`), not MonoCode. Causal probes run
+supervised mode only for speed; the permanent production regression must cover
+both permission modes, two messages and native resume. A failed default stays a
+failure, and artifacts retain its evidence. These checks do not qualify the
+signed-in Tauri/WebView workflow or subscription consumption. Remove experimental
+variants after diagnosis and keep the production regression.

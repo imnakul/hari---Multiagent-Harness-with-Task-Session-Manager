@@ -45,6 +45,21 @@ existing chat UI. Claude owns native context; no summary transfer.
 
 ## Issues and fixes
 
+Native run `38995820658` reached CLI 2.1.302 on both Windows runners. The
+default screen contains `❯ C` while ConPTY parks its hidden output cursor at
+column 119 on a status row. Only DSR and focus replies reach the frontend; no
+DA1 reply was sent, so all DA1 variants had no effect. Full Win32 input encoding
+sometimes removes that character, but still fails prompt location; one accepted
+hook contains a truncated prompt, so that variant is not a product repair.
+The empty framed capture also fails the physical-cursor guard. Windows now
+reads the entire unique framed input near the bottom, retaining strict text,
+border and busy/menu checks; Unix uses the existing cursor path. Captured real
+screens test both an empty row and unsolicited input. Next causal probes compare
+the second DSR reply (the backend already sends the initial handshake), focus
+reply, omission of both and Win32 encoding of replies only. These probes use
+supervised mode for speed; final native regression must cover both permissions
+and resume. No automatic clearing or unconfirmed resubmission is allowed.
+
 Fifth report (2026-10-17, after `08f4180`): the saved pre-open state is ready,
 has no pending/external turn, has chat ownership, no parser/reply errors and a
 settled framed input. Only cursorAtPrompt fails; cursorX is 3 rather than 2.

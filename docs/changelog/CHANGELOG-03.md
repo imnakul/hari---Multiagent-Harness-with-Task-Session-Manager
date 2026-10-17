@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-17 — Read Claude's framed input separately from ConPTY's paint cursor (L-82)
+- What: Actual Windows runner captures show ConPTY parking the hidden VT output cursor on a status row while Claude's input remains elsewhere. Windows now checks the complete unique bottom input line between its borders; text anywhere in that line, busy footers and menus still block sending. Unix keeps its existing cursor path. Diagnostics identify which path was used.
+- Evidence: Run `38995820658` reached native CLI 2.1.302 on both Windows runners. Default captures contain unsolicited `C`; no DA1 reply reached the frontend, and changing DA1 had no effect. An empty captured input also failed the old physical-cursor guard. Committed fake-account VT captures and real-parser regressions cover both states plus drafts, dim text and native dialogs.
+- Verified: full web gate passed (6,817 tests / 618 files); latest real-parser tests passed (14), including additional ambiguous-frame and Unix-path checks. Strict TypeScript and Windows-target fixture Clippy/format passed. This repairs prompt location; the unsolicited-input source remains under investigation. New temporary native probes compare the extra frontend DSR response and focus response separately; neither real drafts nor approval choices are automatically cleared.
+- Commit: next user-authorized publication on the existing 0.10.0 branch; no installer/version change.
+
 ## 2026-10-17 — Correct native Windows test account setup
 - What: The first Windows run built and launched the real CLI on both runners, but all reply experiments stopped at the fixture folder's trust dialog. Canonicalize fixture paths, avoid the runner's short TEMP alias, and explicitly approve only the recognized temporary fake-account folder in test setup. Add a full Win32-input encoding probe alongside the DA1 variants.
 - Files: native CLI test, Windows workflow and isolated PTY test host; fixture README and interactive spec.
