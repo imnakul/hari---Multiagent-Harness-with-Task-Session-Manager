@@ -53,6 +53,7 @@ import {
 import { SkillPromptField } from "../../skills/ui/SkillPromptField";
 import { OverlayNav } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
+import { useDragResize } from "../../../shared/hooks/useDragResize";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import { useTabGroupLogos } from "../../projects/hooks/useTabGroupLogos";
 import {
@@ -139,7 +140,12 @@ const ACTION =
 const ACTION_FILLED = `${ACTION} h-6.5 bg-content font-medium text-background-base hover:bg-content/80`;
 const ACTION_OUTLINE = `${ACTION} h-7 border border-content/15 text-content/80 hover:border-content/30 hover:bg-content/10 hover:text-content`;
 
+const MIN_LIST_WIDTH = 240;
+const MAX_LIST_WIDTH = 420;
+const DEFAULT_LIST_WIDTH = 280;
+
 let rememberedAutomationId: string | null = null;
+let rememberedListWidth = DEFAULT_LIST_WIDTH;
 
 export function AutomationsView({
   besideRail = false,
@@ -358,10 +364,22 @@ function AutomationsContent({
     ? null
     : (draft ?? (selected ? draftFromAutomation(selected) : null));
   const listLock = useLockOverscroll<HTMLDivElement>();
+  const resize = useDragResize({
+    min: MIN_LIST_WIDTH,
+    max: () => Math.min(MAX_LIST_WIDTH, Math.round(window.innerWidth * 0.5)),
+    defaultWidth: DEFAULT_LIST_WIDTH,
+    initial: rememberedListWidth,
+    onCommit: (width) => {
+      rememberedListWidth = width;
+    },
+  });
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 text-content">
-      <aside className="flex w-[280px] shrink-0 flex-col border-r border-stroke">
+      <aside
+        ref={resize.setPaneRef}
+        className="relative flex shrink-0 flex-col border-r border-stroke"
+      >
         <div className="flex h-9 shrink-0 items-center gap-1 border-b border-stroke px-2">
           <label className="relative flex h-7 min-w-0 flex-1 items-center">
             <Search className="pointer-events-none absolute left-2 size-3 shrink-0 text-content/40" />
@@ -426,6 +444,16 @@ function AutomationsContent({
             </p>
           )}
         </div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize automations list"
+          className={`absolute inset-y-0 -right-px z-10 w-1.5 cursor-col-resize touch-none ${
+            resize.dragging ? "bg-content/15" : "hover:bg-content/10"
+          }`}
+          onPointerDown={resize.onPointerDown}
+          onDoubleClick={resize.onDoubleClick}
+        />
       </aside>
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">

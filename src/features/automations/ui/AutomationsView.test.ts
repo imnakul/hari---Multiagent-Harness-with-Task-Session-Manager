@@ -192,3 +192,47 @@ it("adds Advanced custom from the Scheduled trigger selector", async () => {
   expect(container.querySelector<HTMLInputElement>('[aria-label="Cron expression"]')!.value).toBe("0 21 * * *");
   expect(container.querySelector('[aria-label="Advanced custom schedule"]')!.getAttribute("aria-checked")).toBe("true");
 });
+
+it("resizes the automations list by dragging, remembers the width, and resets on double-click", async () => {
+  invoke.mockResolvedValue([]);
+  const props = {
+    cwd: "/work/project",
+    recents: [],
+    onClose: vi.fn(),
+    onLaunch: vi.fn(),
+    onOpenSession: vi.fn(),
+  };
+  await act(async () => root.render(createElement(AutomationsView, props)));
+  const handle = (): HTMLElement =>
+    container.querySelector<HTMLElement>(
+      '[role="separator"][aria-label="Resize automations list"]',
+    )!;
+  const list = (): HTMLElement => handle().parentElement!;
+  expect(list().tagName).toBe("ASIDE");
+  expect(list().style.width).toBe("280px");
+  handle().setPointerCapture = vi.fn();
+  handle().releasePointerCapture = vi.fn();
+  const pointer = (type: string, clientX: number): PointerEvent =>
+    new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX });
+  await act(async () => {
+    handle().dispatchEvent(pointer("pointerdown", 100));
+    window.dispatchEvent(pointer("pointermove", 160));
+    window.dispatchEvent(pointer("pointerup", 160));
+  });
+  expect(list().style.width).toBe("340px");
+  // Clamped to the 420px maximum.
+  await act(async () => {
+    handle().dispatchEvent(pointer("pointerdown", 0));
+    window.dispatchEvent(pointer("pointermove", 900));
+    window.dispatchEvent(pointer("pointerup", 900));
+  });
+  expect(list().style.width).toBe("420px");
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(createElement(AutomationsView, props)));
+  expect(list().style.width).toBe("420px");
+  await act(async () =>
+    handle().dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+  expect(list().style.width).toBe("280px");
+});

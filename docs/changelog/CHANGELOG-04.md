@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 19:56 IST — Resizable Automations list (L-86)
+- Type: feature
+- What: The Automations list on the left can now be dragged wider or narrower from its right edge, like the Notes list. Double-click the edge to reset it.
+- Why: The Automations sidebar was fixed at 280px while Notes could be resized.
+- Files: `src/features/automations/ui/AutomationsView.tsx` (`useDragResize` on the list aside, separator handle); `AutomationsView.test.ts` (drag, clamp, remembered width, double-click reset)
+- Commit: this commit
+- Verified: tsc ✅ tests ✅ (6,883 passed, 2 opt-in skips); lint not run (no eslint config); desktop check manual.
+
 ## 2026-10-17 19:47 IST — Merge all accounts usage into the fork branch (L-85)
 - Type: chore
 - What: Brought in `feature/all-accounts-usage-monocode`: an Experimentation toggle "All accounts usage" (off by default) that shows one bottom-bar usage chip per configured Claude, Codex and Devin account.
@@ -18,13 +26,13 @@
 - What: The monitor counted only chats and terminals, so with nothing running it read `CPU 0.0% · 0 MiB`. It now adds a non-stoppable "MonoCode app" row (host plus web view processes, minus chat/terminal trees, from one shared snapshot) and includes it in the chip total. Unreadable helper processes are counted and reported instead of blanking the total. Command renamed `owned_process_stats` → `process_monitor_stats` (returns `{ app, owned }`).
 - Files: `src-tauri/src/process_stats.rs` (app usage + tests); `src-tauri/src/lib.rs` (command name); `src/app/shell/processMonitorModel.ts` (types, `processTotals`); `src/app/shell/ProcessMonitor.tsx` (app row, totals, empty copy); `ProcessMonitor.test.ts`; spec `docs/specs/process-monitor-app-row.md`.
 - Verified: tsc ✅ tests ✅ (6,845 passed, 2 opt-in skips) Rust process tests ✅ (6) Clippy (changed files) ✅ rustfmt ✅ | manual: app row with nothing running; terminal row not double-counted.
-- Commit: uncommitted
+- Commit: this commit
 
 ## 2026-10-17 — Fix blank window at boot from case-only file name clash
 - What: `src/app/shell` held both `ProcessMonitor.tsx` and `processMonitor.ts`. On Windows' case-insensitive file system, `./ProcessMonitor` in `UsageFooter.tsx` resolved to the `.ts` helper, so the missing `ProcessMonitor` export failed the App module load and the boot splash never cleared. Renamed the helper to `processMonitorModel.ts`.
 - Files: `src/app/shell/processMonitorModel.ts` (renamed from `processMonitor.ts`); `src/app/shell/ProcessMonitor.tsx` (line 29) and `ProcessMonitor.test.ts` (line 12) imports.
 - Verified: tsc ✅ tests ✅ (6,843 passed, 2 opt-in skips) | manual: relaunch `npm run tauri:dev-profile` and confirm the workspace appears.
-- Commit: uncommitted
+- Commit: this commit
 
 ## 2026-10-17 — Match the reference's actual cursor default and typed request
 - What: Bundled node-pty restored the long fork and passed full-access end to end in 39030559003. Supervised capture retained `R[Pasted text…]`, so the literal lead was present but insufficient. Probe a bounded full first-line lead. Also correct the earlier flag assumption: node-pty defaults cursor inheritance to false and Orca does not enable it. Compare flags=0 with normal query replies, plus the bundled runtime with that same default.
