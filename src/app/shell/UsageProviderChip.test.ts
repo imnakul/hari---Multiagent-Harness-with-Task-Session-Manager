@@ -538,3 +538,85 @@ describe("UsageProviderChip", () => {
     expect(useButtons).toHaveLength(2);
   });
 });
+
+describe("UsageProviderChip in all-accounts mode", () => {
+  it("names the account and keeps only the shortest limit inline", async () => {
+    act(() =>
+      root.render(
+        createElement(UsageProviderChip, {
+          limits: codexLimits(),
+          now,
+          accountLabel: "Work",
+          inlineWindow: "shortest",
+        }),
+      ),
+    );
+
+    const trigger = button("Codex Work usage details");
+    expect(trigger.textContent).toBe("Work42% used 2h");
+    // The tooltip still carries every limit.
+    expect(trigger.title).toContain("81% used");
+
+    await act(async () => trigger.click());
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute("aria-label")).toBe("Codex Work usage details");
+    expect(dialog?.textContent).toContain("5-hour limit");
+    expect(dialog?.textContent).toContain("Weekly limit");
+    expect(dialog?.textContent).toContain("Work");
+  });
+
+  it("honours the remaining quota setting", () => {
+    act(() =>
+      root.render(
+        createElement(UsageProviderChip, {
+          limits: codexLimits(),
+          now,
+          accountLabel: "Work",
+          inlineWindow: "shortest",
+          remainingQuota: true,
+        }),
+      ),
+    );
+    expect(button("Codex Work usage details").textContent).toBe(
+      "Work58% left 2h",
+    );
+  });
+
+  it("keeps the account label visible while loading and when signed out", () => {
+    const idle: ProviderRateLimits = {
+      ...codexLimits(),
+      session: null,
+      weekly: null,
+      resetCredits: null,
+      updatedAt: 0,
+      status: "idle",
+    };
+    act(() =>
+      root.render(
+        createElement(UsageProviderChip, {
+          limits: idle,
+          now,
+          accountLabel: "Personal",
+          inlineWindow: "shortest",
+        }),
+      ),
+    );
+    expect(button("Codex Personal usage details").textContent).toBe(
+      "Personal···",
+    );
+
+    act(() =>
+      root.render(
+        createElement(UsageProviderChip, {
+          limits: { ...idle, status: "unavailable", error: "Not signed in" },
+          now,
+          accountLabel: "Personal",
+          inlineWindow: "shortest",
+        }),
+      ),
+    );
+    expect(button("Codex Personal usage details").textContent).toBe(
+      "Personalnot connected",
+    );
+  });
+});

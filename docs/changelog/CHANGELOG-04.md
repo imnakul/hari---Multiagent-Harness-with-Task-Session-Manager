@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 19:47 IST — Merge all accounts usage into the fork branch (L-85)
+- Type: chore
+- What: Brought in `feature/all-accounts-usage-monocode`: an Experimentation toggle "All accounts usage" (off by default) that shows one bottom-bar usage chip per configured Claude, Codex and Devin account.
+- Why: User chose the monocode variant of the three all-accounts usage branches.
+- Files: `src/app/shell/allAccountsUsage.ts`, `AccountUsageStrip.tsx`, `UsageFooter.tsx`, `UsageProviderChip.tsx`; `src/features/settings/model/settings.ts` (merged experiment list); docs records. The branch feature ID was renumbered L-80 → L-85 (L-80 is Debug Inspector).
+- Commit: merge of 4ae846c4
+- Verified: tsc ✅ tests ✅ (6,882 passed, 2 opt-in skips); lint not run (no eslint config); desktop checks manual.
+
 ## 2026-10-17 19:30 IST — Expandable process lists in the process monitor (L-84)
 - What: Every monitor row (MonoCode app, chats, terminals) now has a disclosure arrow that lists the processes inside it in tree order: name, PID, CPU and memory. View only, no per-process Stop. WebView2 processes read "Web view (main)" or "Web view helper". Lists stay open across refreshes; exited rows show none.
 - Files: `src-tauri/src/process_metrics.rs` (process names in all three OS snapshots); `src-tauri/src/process_stats.rs` (`ProcessDetail`, depth-first `details`, `children` on rows + test); `src/app/shell/processMonitorModel.ts` (types, `processLabel`); `src/app/shell/ProcessMonitor.tsx` (`DisclosureButton`, `ProcessList`); `ProcessMonitor.test.ts`; spec follow-up in `docs/specs/process-monitor-app-row.md`.
 - Verified: tsc ✅ tests ✅ (6,846 passed, 2 opt-in skips) Rust process tests ✅ (7) Clippy (changed files) ✅ rustfmt ✅ | manual: expand app and terminal rows in the desktop app.
-- Commit: uncommitted
+- Commit: cd933ed8
 
 ## 2026-10-17 — Process monitor shows MonoCode's own usage (L-84)
 - What: The monitor counted only chats and terminals, so with nothing running it read `CPU 0.0% · 0 MiB`. It now adds a non-stoppable "MonoCode app" row (host plus web view processes, minus chat/terminal trees, from one shared snapshot) and includes it in the chip total. Unreadable helper processes are counted and reported instead of blanking the total. Command renamed `owned_process_stats` → `process_monitor_stats` (returns `{ app, owned }`).

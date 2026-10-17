@@ -599,6 +599,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "Claude terminal parking resume minutes",
   },
   {
+    id: "all-accounts-usage",
+    section: "experimentation",
+    label: "All accounts usage",
+    keywords: "bottom bar footer usage limits every provider account claude codex quota",
+  },
+  {
     id: "compact-model-labels",
     section: "experimentation",
     label: "Compact model labels",
@@ -1499,6 +1505,47 @@ export function subscribeRemainingQuota(onStoreChange: () => void): () => void {
   window.addEventListener(REMAINING_QUOTA_CHANGE_EVENT, onStoreChange);
   return () =>
     window.removeEventListener(REMAINING_QUOTA_CHANGE_EVENT, onStoreChange);
+}
+
+const ALL_ACCOUNTS_USAGE_KEY = "monocode.allAccountsUsage";
+
+export const ALL_ACCOUNTS_USAGE_DEFAULT = false;
+
+/** Fired on `window` when the all-accounts usage footer setting flips. */
+export const ALL_ACCOUNTS_USAGE_CHANGE_EVENT =
+  "monocode:all-accounts-usage-change";
+
+export function loadAllAccountsUsage(): boolean {
+  try {
+    const raw = localStorage.getItem(ALL_ACCOUNTS_USAGE_KEY);
+    if (raw == null) return ALL_ACCOUNTS_USAGE_DEFAULT;
+    return raw === "1" || raw === "true";
+  } catch {
+    return ALL_ACCOUNTS_USAGE_DEFAULT;
+  }
+}
+
+export function saveAllAccountsUsage(value: boolean): void {
+  try {
+    localStorage.setItem(ALL_ACCOUNTS_USAGE_KEY, value ? "1" : "0");
+  } catch {
+    // private mode / quota
+  }
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<boolean>(ALL_ACCOUNTS_USAGE_CHANGE_EVENT, {
+      detail: value,
+    }),
+  );
+}
+
+export function subscribeAllAccountsUsage(
+  onStoreChange: () => void,
+): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(ALL_ACCOUNTS_USAGE_CHANGE_EVENT, onStoreChange);
+  return () =>
+    window.removeEventListener(ALL_ACCOUNTS_USAGE_CHANGE_EVENT, onStoreChange);
 }
 
 const COMPACT_MODEL_LABELS_KEY = "monocode.compactModelLabels";

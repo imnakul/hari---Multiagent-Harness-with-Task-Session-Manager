@@ -7,6 +7,7 @@ import { RefreshCw, Terminal } from "../../shared/ui/icons";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -22,9 +23,11 @@ import {
   RATE_LIMIT_MIN_REFETCH_MS,
 } from "../../features/providers/model/rateLimits";
 import {
+  getAllRateLimits,
   getCachedRateLimits,
   loadRateLimits,
   setCachedRateLimits,
+  subscribeRateLimits,
   useCachedRateLimits,
 } from "../../features/providers/model/rateLimitsCache";
 import {
@@ -42,6 +45,23 @@ import {
 } from "../../features/terminal/model/terminalTab";
 import { MOD } from "../../platform/tauri/platform";
 import { UsageProviderChip } from "./UsageProviderChip";
+import { AccountUsageStrip } from "./AccountUsageStrip";
+import {
+  buildAccountChipEntries,
+  isFreshRateLimit,
+  loadAccountsInSequence,
+} from "./allAccountsUsage";
+import {
+  getHarnessAvailabilitySnapshot,
+  hasProbedHarnessAvailability,
+  isHarnessAvailable,
+  subscribeHarnessAvailability,
+} from "../../integrations/harness/core/availabilityState";
+import {
+  getPickerVisibilitySnapshot,
+  showProviderInModelPicker,
+  subscribePickerVisibility,
+} from "../../features/sessions/model/models";
 import { PiUsage } from "./PiUsage";
 import {
   ProviderSignInPanel,
@@ -49,6 +69,7 @@ import {
 } from "../../features/sessions/ui/ProviderSignInPanel";
 import {
   newProviderAccount,
+  PROVIDER_ACCOUNT_PROVIDERS,
   providerAccountExists,
   providerAccounts,
   saveProviderAccount,
@@ -58,11 +79,40 @@ import {
   type ProviderAccountProvider,
 } from "../../features/providers/model/providerAccounts";
 import {
+  loadAllAccountsUsage,
   loadRemainingQuota,
+  subscribeAllAccountsUsage,
   subscribeRemainingQuota,
 } from "../../features/settings/model/settings";
 
 const CLOCK_MS = 30_000;
+
+/** Account providers the model picker would show: installed and not hidden. */
+function useEnabledAccountProviders(): ProviderAccountProvider[] {
+  const availability = useSyncExternalStore(
+    subscribeHarnessAvailability,
+    getHarnessAvailabilitySnapshot,
+    getHarnessAvailabilitySnapshot,
+  );
+  const visibility = useSyncExternalStore(
+    subscribePickerVisibility,
+    getPickerVisibilitySnapshot,
+    getPickerVisibilitySnapshot,
+  );
+  return useMemo(
+    () =>
+      PROVIDER_ACCOUNT_PROVIDERS.filter((provider) =>
+        showProviderInModelPicker(
+          provider,
+          isHarnessAvailable(provider),
+          hasProbedHarnessAvailability(),
+        ),
+      ),
+    // The snapshots are version counters that invalidate the module-level reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [availability, visibility],
+  );
+}
 
 export type UsageFooterSession = {
   id?: string;
@@ -106,17 +156,18 @@ export function UsageFooter({
   ) => void;
   onManageAccounts?: (provider: ProviderAccountProvider) => void;
 }) {
-  const wantClaude = providers.includes("claude");
-  const wantCodex = providers.includes("codex");
+  const requestedClaude = providers.includes("claude");
+  const requestedCodex = providers.includes("codex");
   const wantOpencode = providers.includes("opencode");
   const wantCli = providers.includes("antigravity-cli");
   const cliAccountKey = runtimeProviderBinaryPath("antigravity-cli") ?? getCustomBinary("antigravity-cli") ?? "default";
   const cliLimits = antigravityCliLimitsForModel(useCachedRateLimits("antigravity-cli", cliAccountKey), session?.model);
-  const wantDevin = providers.includes("devin");
+  const requestedDevin = providers.includes("devin");
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
-  const [, setAccountsVersion] = useState(0);
+  const [accountsVersion, setAccountsVersion] = useState(0);
   const inflight = useRef<Promise<void> | null>(null);
+  const disposed = useRef(false);
   const claudeAccountId =
     session?.harness === "claude" && session.providerAccountId
       ? session.providerAccountId
@@ -125,6 +176,44 @@ export function UsageFooter({
     session?.harness === "codex" && session.providerAccountId
       ? session.providerAccountId
       : selectedProviderAccountId("codex", project);
+  const allAccountsUsage = useSyncExternalStore(
+    subscribeAllAccountsUsage,
+    loadAllAccountsUsage,
+    () => false,
+  );
+  const enabledAccountProviders = useEnabledAccountProviders();
+  const allUsage = useSyncExternalStore(
+    subscribeRateLimits,
+    getAllRateLimits,
+    getAllRateLimits,
+  );
+  const accountEntries = useMemo(
+    () =>
+      allAccountsUsage
+        ? buildAccountChipEntries(enabledAccountProviders, providerAccounts, [
+            // The accounts in use stay visible first when the bar collapses.
+            ...(requestedClaude ? [`claude:${claudeAccountId}`] : []),
+            ...(requestedCodex ? [`codex:${codexAccountId}`] : []),
+          ])
+        : [],
+    // accountsVersion changes whenever accounts are added, renamed or removed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      allAccountsUsage,
+      enabledAccountProviders,
+      accountsVersion,
+      requestedClaude,
+      requestedCodex,
+      claudeAccountId,
+      codexAccountId,
+    ],
+  );
+  // With every account on show, the per-provider chips for claude, codex and
+  // devin are replaced, and they stop loading on their own.
+  const accountMode = accountEntries.length > 0;
+  const wantClaude = requestedClaude && !accountMode;
+  const wantCodex = requestedCodex && !accountMode;
+  const wantDevin = requestedDevin && !accountMode;
   const claudeAccounts = providerAccounts("claude");
   const codexAccounts = providerAccounts("codex");
   const claudeAccountAvailable = providerAccountExists(
@@ -178,10 +267,49 @@ export function UsageFooter({
     wantDevin,
   ]);
 
+  useEffect(() => {
+    disposed.current = false;
+    return () => {
+      disposed.current = true;
+    };
+  }, []);
+
+  // Accounts without a snapshot load one at a time, in chip order, so many
+  // accounts never fire their provider requests in one burst.
+  useEffect(() => {
+    if (!accountMode) return;
+    let cancelled = false;
+    const cached = getAllRateLimits();
+    void loadAccountsInSequence(
+      accountEntries.filter((entry) => cached[entry.key] === undefined),
+      (entry) => loadRateLimits(entry.provider, entry.account.id),
+      () => cancelled || disposed.current,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [accountEntries, accountMode]);
+
   const refresh = useCallback(() => {
     if (inflight.current) return inflight.current;
     setRefreshing(true);
     const jobs: Promise<unknown>[] = [];
+    if (accountMode) {
+      const stale = accountEntries.filter(
+        (entry) =>
+          !isFreshRateLimit(
+            getCachedRateLimits(entry.provider, entry.account.id),
+            Date.now(),
+          ),
+      );
+      jobs.push(
+        loadAccountsInSequence(
+          stale,
+          (entry) => loadRateLimits(entry.provider, entry.account.id, true),
+          () => disposed.current,
+        ),
+      );
+    }
     if (wantClaude && claudeAccountAvailable)
       jobs.push(loadRateLimits("claude", claudeAccountId, true));
     if (wantCodex && codexAccountAvailable)
@@ -198,6 +326,8 @@ export function UsageFooter({
     inflight.current = run;
     return run;
   }, [
+    accountEntries,
+    accountMode,
     claudeAccountAvailable,
     claudeAccountId,
     codexAccountAvailable,
@@ -232,8 +362,8 @@ export function UsageFooter({
     return () => window.clearInterval(timer);
   }, []);
 
-  const consumeCodexReset = useCallback(
-    async (creditId?: string) => {
+  const consumeCodexResetFor = useCallback(
+    async (accountId: string, creditId?: string) => {
       while (inflight.current) await inflight.current;
       setRefreshing(true);
       let outcome: Awaited<ReturnType<typeof consumeCodexRateLimitResetCredit>>;
@@ -241,9 +371,9 @@ export function UsageFooter({
         try {
           outcome = await consumeCodexRateLimitResetCredit(
             creditId,
-            codexAccountId,
+            accountId,
           );
-          await loadRateLimits("codex", codexAccountId, true);
+          await loadRateLimits("codex", accountId, true);
         } catch (error) {
           const message =
             error instanceof Error
@@ -251,11 +381,11 @@ export function UsageFooter({
               : "Could not use Codex reset";
           setCachedRateLimits(
             "codex",
-            codexAccountId,
+            accountId,
             errorRateLimits(
               "codex",
               message,
-              getCachedRateLimits("codex", codexAccountId),
+              getCachedRateLimits("codex", accountId),
             ),
           );
           throw error;
@@ -269,7 +399,12 @@ export function UsageFooter({
       await tracked;
       return outcome!;
     },
-    [codexAccountId],
+    [],
+  );
+
+  const consumeCodexReset = useCallback(
+    (creditId?: string) => consumeCodexResetFor(codexAccountId, creditId),
+    [codexAccountId, consumeCodexResetFor],
   );
 
   const reconnectProvider = useCallback(
@@ -356,7 +491,9 @@ export function UsageFooter({
   );
 
   const showOpencodeChip = wantOpencode && opencode.status !== "unavailable";
-  const showUsage = wantClaude || wantCodex || showOpencodeChip || wantCli || wantDevin;
+  const showUsage =
+    accountMode || wantClaude || wantCodex || showOpencodeChip || wantCli || wantDevin;
+  const noAccounts = allAccountsUsage && !accountMode;
   const showTerminals = terminals.length > 0;
   const showTerminalButton = Boolean(onNewTerminal || onShowTerminal);
   const terminalLabel = projectTerminalActive
@@ -373,6 +510,23 @@ export function UsageFooter({
         : session
           ? "Session"
           : undefined;
+
+  const refreshButton = (
+    <button
+      type="button"
+      className="grid size-4.5 shrink-0 place-items-center rounded text-content/40 hover:bg-content/10 hover:text-content disabled:opacity-50"
+      aria-label="Refresh usage"
+      title="Refresh usage"
+      disabled={refreshing}
+      onClick={() => void refresh()}
+    >
+      <RefreshCw
+        className={`size-2.5 ${refreshing ? "animate-spin" : ""}`}
+        strokeWidth={1.75}
+        aria-hidden
+      />
+    </button>
+  );
 
   return (
     <footer
@@ -447,23 +601,27 @@ export function UsageFooter({
               onReconnect={reconnectDevin}
             />
           ) : null}
-          <button
-            type="button"
-            className="grid size-4.5 shrink-0 place-items-center rounded text-content/40 hover:bg-content/10 hover:text-content disabled:opacity-50"
-            aria-label="Refresh usage"
-            title="Refresh usage"
-            disabled={refreshing}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw
-              className={`size-2.5 ${refreshing ? "animate-spin" : ""}`}
-              strokeWidth={1.75}
-              aria-hidden
-            />
-          </button>
+          {accountMode ? (
+            <AccountUsageStrip
+              entries={accountEntries}
+              usage={allUsage}
+              now={now}
+              remainingQuota={remainingQuota}
+              onReconnect={reconnectProvider}
+              onConsumeReset={consumeCodexResetFor}
+            >
+              {refreshButton}
+            </AccountUsageStrip>
+          ) : (
+            refreshButton
+          )}
         </>
       ) : session ? (
         <SessionChip key={session.id ?? session.harness} session={session} />
+      ) : noAccounts ? (
+        <span role="status" className="text-content/35">
+          No provider accounts to show
+        </span>
       ) : null}
       {showTerminals || showTerminalButton ? (
         <div className="ml-auto flex shrink-0 items-center gap-2">

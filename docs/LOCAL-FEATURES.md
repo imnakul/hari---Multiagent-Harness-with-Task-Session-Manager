@@ -1,6 +1,6 @@
 # Local features — what this fork has that upstream MonoCode does not
 
-**Last updated: 2026-10-17 (L-82 lifecycle/actions; L-84 owned-process monitor)**
+**Last updated: 2026-10-17 (L-82 lifecycle/actions; L-84 owned-process monitor; L-85 all accounts usage merged)**
 
 L-82 native Windows comparison isolated a duplicate startup cursor reply and a
 separate paint-cursor assumption. Source `8b15166` passed native CLI 2.1.302 run
@@ -155,6 +155,7 @@ recorded in the same spec; native desktop checks remain separate.
 | L-84 | Opt-in bottom-bar CPU/memory monitor for MonoCode itself and its owned process trees, grouped by project, with Stop controls and expandable per-process lists | resources, settings | No |
 | L-82 | Claude Code Interactive in the existing model picker: native PTY, transcript chat, native resume, explicit session lifetime and retained recovery diagnostics | Claude, sessions, terminal | No |
 | L-83 | Separate local dev profile: `npm run tauri:dev-profile` uses MonoCode Dev app data and webview storage | development | No |
+| L-85 | Experimentation toggle "All accounts usage": one bottom-bar usage chip per configured account, extras in a "+N" chip | shell, settings | No |
 
 ## For agents — read this first
 
@@ -275,6 +276,7 @@ review a change (it must not remove one of these by accident).
 | L-80 | Settings has a separate read-only Debug Inspector with Overview, filtered Timeline/correlation, Local evidence and Quota views. Capture observes accepted/queued/steered submissions, dispatch attempts, native binding/resume intention, process lifecycle, title/AI/Git helpers, tools, raw Claude/Codex metadata and identified Claude RC turns. It ignores streaming text and private payloads, keeps overlapping usage scopes separate, preserves unknowns and bounds rows/identities/notifications. A metadata-only saved-identity query avoids transcript repair/migration; explicit account-scoped JSONL reads validate native headers and containment, fail closed on inconclusive scans/links, label malformed/partial/oversized/changing coverage and replace repeated snapshots. Existing quota readings compare only matching windows/accounts, with timestamped local evidence separate from live totals. Pause/clear affect diagnostics only; reports alias identifiers/models/tools and exclude prompts/paths/credentials. | `src/features/debug-inspector/model/` and `ui/`; App submission; harness registry/child and Claude/Codex metadata; rateLimitsCache publication; Settings model/rail/view; `src-tauri/src/debug_inspector.rs` | 33 inspector tests across five files; existing submission/registry/provider/child regression suites; twelve platform-applicable Rust file/metadata reader tests written (unrun) | `docs/specs/debug-inspector-plan.md` | No | Source implemented, uncommitted on `nakul/windows-support-upstream-0.10.0` from `79cb6f4d`; 6,761 web tests / 611 files, TypeScript and production/host builds pass. Host parity failure unchanged (local-only Antigravity CLI). Rust check/format/Clippy/tests cannot launch under Windows Application Control (4551); native reader and desktop/provider runtime verification remain pending. |
 
 | L-81 | Imported Claude/Codex history source and incomplete-coverage status are shown once in the existing strip above the conversation, beside Show earlier. History reconciliation no longer manufactures a system footer after the latest response. Imported content, local/external ordering, replay deduplication, paging/loading/retry and RC controls remain intact. | `src/features/provider-sessions/model/history.ts`; `ui/useNativeHistory.ts`; `ui/SessionProviderStrip.tsx`; `src/features/sessions/ui/SessionPane.tsx` | History and strip suites: 44 passed; regressions preserve all imported items and keep each new local reply last, and cover Claude/Codex full/partial/loading strip status | `docs/specs/native-history-status-plan.md` | No | Implemented uncommitted on 0.10 branch; TypeScript, 6,764 web tests / 611 files and production build passed; installed 0.8 unchanged and human desktop check pending |
+| L-85 | With "All accounts usage" on, the footer shows one labelled chip per claude/codex/devin account (shortest limit inline, rest in popover, overflow in "+N"); loads staggered through the existing cache. | `src/app/shell/UsageFooter.tsx`, `AccountUsageStrip.tsx`, `allAccountsUsage.ts`, `src/features/settings/model/settings.ts` | `allAccountsUsage.test.ts`, `UsageFooterAllAccounts.test.ts`, `UsageProviderChip.test.ts`, `settings.test.ts`, `Experimentation.test.ts` | `docs/specs/all-accounts-usage-plan.md` | No | Implemented on `feature/all-accounts-usage-monocode`; automated gates passed; desktop check manual |
 
 ## Recorded in our notes but not found on the branch
 
