@@ -37,7 +37,8 @@ version bump. Human desktop check remains separate.
 - [x] Capture the long native prompt and reproduce duplicate/timing behavior.
 - [x] Implement strict equivalent-prompt acceptance and lifecycle regressions.
 - [x] Complete local gates and document limitations.
-- [ ] Separate Windows regression and human desktop verification after publication.
+- [x] Targeted native Windows regression after publication (2022/2025, both permissions).
+- [ ] Separate human desktop verification.
 
 ## Evidence and limits
 
@@ -71,3 +72,13 @@ Already persisted duplicate bubbles/timing are not rewritten. Human follow-up:
 rebuild/run the dev profile, send the reported long multiline prompt, verify
 one user bubble and reply, then verify the duration includes the whole turn and
 stays fixed after completion. Also check a real terminal-originated turn.
+
+## Publication
+
+Source `8f36e07878108fa93afa138851ab70871ee79b21` is pushed on the authorized
+branch and its exact remote SHA was verified. Native run `39049439898` passes
+its separate long-paste/single-GUI-turn step on Windows 2022 and 2025, each in
+supervised and Full access. The broad actions/diagnostic steps are still running
+at this checkpoint; their older fork/attachment failures remain a separate
+validation concern. No installer/version bump. The publication record changes
+documentation only; the passing 6,921-test source and builds are unchanged.
