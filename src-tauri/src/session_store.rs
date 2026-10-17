@@ -3014,7 +3014,10 @@ mod tests {
         });
         upsert_session(&conn, &sidechat).unwrap();
         let chats = list_sidechats(&conn).unwrap();
-        assert_eq!(chats.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["sidechat"]);
+        assert_eq!(
+            chats.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            ["sidechat"]
+        );
         // Empty project chats still stay out of the project list.
         assert!(list_by_project(&conn, "/tmp/project").unwrap().is_empty());
     }
