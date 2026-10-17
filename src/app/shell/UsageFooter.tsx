@@ -89,8 +89,11 @@ import {
 
 const CLOCK_MS = 30_000;
 
-/** Account providers the model picker would show: installed and not hidden. */
-function useEnabledAccountProviders(): ProviderAccountProvider[] {
+/** Profile accounts and the installed CLI's saved account, respecting visibility. */
+function useEnabledUsageProviders(): {
+  accountProviders: ProviderAccountProvider[];
+  antigravityCli: boolean;
+} {
   const availability = useSyncExternalStore(
     subscribeHarnessAvailability,
     getHarnessAvailabilitySnapshot,
@@ -102,14 +105,20 @@ function useEnabledAccountProviders(): ProviderAccountProvider[] {
     getPickerVisibilitySnapshot,
   );
   return useMemo(
-    () =>
-      PROVIDER_ACCOUNT_PROVIDERS.filter((provider) =>
+    () => ({
+      accountProviders: PROVIDER_ACCOUNT_PROVIDERS.filter((provider) =>
         showProviderInModelPicker(
           provider,
           isHarnessAvailable(provider),
           hasProbedHarnessAvailability(),
         ),
       ),
+      // Unlike profile accounts, do not run CLI reports before installation is
+      // known. The availability subscription adds the chip when probing ends.
+      antigravityCli:
+        isHarnessAvailable("antigravity-cli") &&
+        showProviderInModelPicker("antigravity-cli", true, true),
+    }),
     // The snapshots are version counters that invalidate the module-level reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [availability, visibility],
@@ -161,9 +170,11 @@ export function UsageFooter({
   const requestedClaude = providers.includes("claude");
   const requestedCodex = providers.includes("codex");
   const wantOpencode = providers.includes("opencode");
-  const wantCli = providers.includes("antigravity-cli");
   const cliAccountKey = runtimeProviderBinaryPath("antigravity-cli") ?? getCustomBinary("antigravity-cli") ?? "default";
-  const cliLimits = antigravityCliLimitsForModel(useCachedRateLimits("antigravity-cli", cliAccountKey), session?.model);
+  const cliLimits = antigravityCliLimitsForModel(
+    useCachedRateLimits("antigravity-cli", cliAccountKey),
+    session?.harness === "antigravity-cli" ? session.model : undefined,
+  );
   const requestedDevin = providers.includes("devin");
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
@@ -183,7 +194,11 @@ export function UsageFooter({
     loadAllAccountsUsage,
     () => false,
   );
-  const enabledAccountProviders = useEnabledAccountProviders();
+  const enabledUsageProviders = useEnabledUsageProviders();
+  const enabledAccountProviders = enabledUsageProviders.accountProviders;
+  const wantCli =
+    providers.includes("antigravity-cli") ||
+    (allAccountsUsage && enabledUsageProviders.antigravityCli);
   const allUsage = useSyncExternalStore(
     subscribeRateLimits,
     getAllRateLimits,

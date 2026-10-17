@@ -1,5 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Include Antigravity CLI in all-accounts usage (L-85)
+- What: All-accounts usage now includes the installed, visible Antigravity CLI's saved account across chats. Reuse its existing separate quota/credits chip, binary-scoped cache and manual/automatic refresh; do not invent managed account profiles or borrow a family quota from another provider's active model. Selected-only behavior remains when the experiment is off.
+- Files: `src/app/shell/UsageFooter.tsx`, `AntigravityCliUsage.test.ts`; L-85 feature and spec follow-up records. No native code, dependency, installer or version changes.
+- Verified: 14 focused footer tests and 6,937 full web tests pass (627 files passed, one opt-in native CLI file skipped); strict TypeScript and production build pass. Manual: enable All accounts usage with Antigravity CLI installed and visible, then inspect its quotas/credits while another provider's chat is selected.
+- Commit: this fix on the authorized 0.10.0 branch.
+
 ## 2026-10-17 — Refresh account usage automatically on the foreground cadence (L-92)
 - What: Match Orca's normal 15-minute poll and five-minute stale-on-activation timing for selected/all-account footer usage, Settings Accounts and open account pickers. Pause while hidden/unfocused, stagger accounts by 750ms, cancel obsolete queues and join shared in-flight reads without queuing extra forced fetches. Existing quota fetch paths and manual refresh remain; no chat prompts, dependencies, Rust, installer or version changes.
 - Files: `useRateLimitsPolling.ts` and tests; `rateLimitsCache.ts`, `accountUsage.ts`, footer wiring and account-view/footer regressions. The shared stagger constant also preserves existing initial-load pacing.

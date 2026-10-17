@@ -8,6 +8,14 @@ usage refresh](account-usage-auto-refresh.md) adds the shared 15-minute foregrou
 poll and five-minute stale-on-focus refresh. The original no-polling scope below
 describes the initial implementation.
 
+Follow-up 2026-10-17: the all-accounts footer also includes the installed,
+non-hidden Antigravity CLI's saved account, even with no CLI chat selected.
+It retains its existing separate chip (no invented managed profiles), native
+model-group quota details and credits, binary-scoped cache, manual refresh and
+L-92 automatic polling. Before installation is known it does not run reports.
+Only an active Antigravity CLI model selects an inline family quota; a different
+provider's model never selects that account's family. ACP credentials are separate.
+
 ## Goal
 
 Show usage for every configured provider account in the bottom bar at once, behind an
