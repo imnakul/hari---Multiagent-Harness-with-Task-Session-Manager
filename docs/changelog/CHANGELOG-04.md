@@ -1,5 +1,23 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 19:30 IST — Expandable process lists in the process monitor (L-84)
+- What: Every monitor row (MonoCode app, chats, terminals) now has a disclosure arrow that lists the processes inside it in tree order: name, PID, CPU and memory. View only, no per-process Stop. WebView2 processes read "Web view (main)" or "Web view helper". Lists stay open across refreshes; exited rows show none.
+- Files: `src-tauri/src/process_metrics.rs` (process names in all three OS snapshots); `src-tauri/src/process_stats.rs` (`ProcessDetail`, depth-first `details`, `children` on rows + test); `src/app/shell/processMonitorModel.ts` (types, `processLabel`); `src/app/shell/ProcessMonitor.tsx` (`DisclosureButton`, `ProcessList`); `ProcessMonitor.test.ts`; spec follow-up in `docs/specs/process-monitor-app-row.md`.
+- Verified: tsc ✅ tests ✅ (6,846 passed, 2 opt-in skips) Rust process tests ✅ (7) Clippy (changed files) ✅ rustfmt ✅ | manual: expand app and terminal rows in the desktop app.
+- Commit: uncommitted
+
+## 2026-10-17 — Process monitor shows MonoCode's own usage (L-84)
+- What: The monitor counted only chats and terminals, so with nothing running it read `CPU 0.0% · 0 MiB`. It now adds a non-stoppable "MonoCode app" row (host plus web view processes, minus chat/terminal trees, from one shared snapshot) and includes it in the chip total. Unreadable helper processes are counted and reported instead of blanking the total. Command renamed `owned_process_stats` → `process_monitor_stats` (returns `{ app, owned }`).
+- Files: `src-tauri/src/process_stats.rs` (app usage + tests); `src-tauri/src/lib.rs` (command name); `src/app/shell/processMonitorModel.ts` (types, `processTotals`); `src/app/shell/ProcessMonitor.tsx` (app row, totals, empty copy); `ProcessMonitor.test.ts`; spec `docs/specs/process-monitor-app-row.md`.
+- Verified: tsc ✅ tests ✅ (6,845 passed, 2 opt-in skips) Rust process tests ✅ (6) Clippy (changed files) ✅ rustfmt ✅ | manual: app row with nothing running; terminal row not double-counted.
+- Commit: uncommitted
+
+## 2026-10-17 — Fix blank window at boot from case-only file name clash
+- What: `src/app/shell` held both `ProcessMonitor.tsx` and `processMonitor.ts`. On Windows' case-insensitive file system, `./ProcessMonitor` in `UsageFooter.tsx` resolved to the `.ts` helper, so the missing `ProcessMonitor` export failed the App module load and the boot splash never cleared. Renamed the helper to `processMonitorModel.ts`.
+- Files: `src/app/shell/processMonitorModel.ts` (renamed from `processMonitor.ts`); `src/app/shell/ProcessMonitor.tsx` (line 29) and `ProcessMonitor.test.ts` (line 12) imports.
+- Verified: tsc ✅ tests ✅ (6,843 passed, 2 opt-in skips) | manual: relaunch `npm run tauri:dev-profile` and confirm the workspace appears.
+- Commit: uncommitted
+
 ## 2026-10-17 — Match the reference's actual cursor default and typed request
 - What: Bundled node-pty restored the long fork and passed full-access end to end in 39030559003. Supervised capture retained `R[Pasted text…]`, so the literal lead was present but insufficient. Probe a bounded full first-line lead. Also correct the earlier flag assumption: node-pty defaults cursor inheritance to false and Orca does not enable it. Compare flags=0 with normal query replies, plus the bundled runtime with that same default.
 - Verified: Windows-target fixture Clippy, changed Rust formatting, reference JS syntax and opt-in transformation pass. Application defaults/dependencies remain unchanged; the latest full frontend gate remains 6,843 passed.

@@ -22,11 +22,17 @@ import {
 import {
   processIdleAge,
   processIdleCandidate,
+  processLabel,
   processMemory,
   processSessionId,
+  processTotals,
   retainExitedProcesses,
+  type AppProcess,
   type OwnedProcess,
-} from "./processMonitor";
+  type ProcessDetail,
+  type ProcessMonitorStats,
+} from "./processMonitorModel";
+import { ChevronRight } from "../../shared/ui/icons";
 
 type Props = {
   sessions: Session[];
@@ -51,9 +57,18 @@ function EnabledProcessMonitor({
 }: Props): ReactElement {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<OwnedProcess[] | null>(null);
+  const [app, setApp] = useState<AppProcess | null>(null);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [stopping, setStopping] = useState(new Set<string>());
+  // Keyed by row id + root PID so a restarted process starts collapsed.
+  const [expanded, setExpanded] = useState(new Set<string>());
+  const toggle = (key: string): void =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const button = useRef<HTMLButtonElement>(null);
   const refresh = useRef<() => void>(() => undefined);
   const busy = useRef(false);
@@ -73,11 +88,12 @@ function EnabledProcessMonitor({
       }
       busy.current = true;
       try {
-        const next = await invoke<OwnedProcess[]>("owned_process_stats");
+        const next = await invoke<ProcessMonitorStats>("process_monitor_stats");
         if (!disposed) {
-          const merged = retainExitedProcesses(previous.current, next);
+          const merged = retainExitedProcesses(previous.current, next.owned);
           previous.current = merged;
           setRows(merged);
+          setApp(next.app);
           setError(undefined);
         }
       } catch (failure) {
@@ -127,8 +143,10 @@ function EnabledProcessMonitor({
     try {
       if (idleOnly && row.root.kind !== "interactive") {
         const fresh = (
-          await invoke<OwnedProcess[]>("owned_process_stats")
-        ).find((r) => r.root.id === row.root.id && r.root.pid === row.root.pid);
+          await invoke<ProcessMonitorStats>("process_monitor_stats")
+        ).owned.find(
+          (r) => r.root.id === row.root.id && r.root.pid === row.root.pid,
+        );
         const freshSession = latest.current.sessions.find((s) => s.id === id);
         if (!fresh || !processIdleCandidate(fresh, freshSession)) return;
       }
@@ -155,16 +173,8 @@ function EnabledProcessMonitor({
       refresh.current();
     }
   };
-  const live = rows?.filter((r) => r.status !== "exited") ?? [];
-  const memory =
-    live.length && live.every((r) => r.memory != null)
-      ? live.reduce((n, r) => n + (r.memory ?? 0), 0)
-      : live.length
-        ? null
-        : 0;
-  const cpu = live.every((r) => r.cpu != null)
-    ? live.reduce((n, r) => n + (r.cpu ?? 0), 0).toFixed(1) + "%"
-    : "…";
+  const totals = app ? processTotals(app, rows ?? []) : null;
+  const cpu = totals?.cpu == null ? "…" : `${totals.cpu.toFixed(1)}%`;
   const groups = new Map<string, OwnedProcess[]>();
   for (const row of rows ?? []) {
     const project =
@@ -185,13 +195,13 @@ function EnabledProcessMonitor({
         aria-expanded={open}
         aria-label="Process monitor"
         className="shrink-0 rounded px-1.5 py-0.5 text-content/65 hover:bg-content/10"
-        title="MonoCode-owned process trees; CPU as a share of machine capacity"
+        title="MonoCode and the chats and terminals it started; CPU as a share of machine capacity"
       >
         {error
           ? "Processes unavailable"
-          : rows == null
+          : rows == null || !totals
             ? "Processes loading…"
-            : `CPU ${cpu} · ${processMemory(memory)}`}
+            : `CPU ${cpu} · ${processMemory(totals.memory)}`}
       </button>
       {open ? (
         <Popover
@@ -229,64 +239,122 @@ function EnabledProcessMonitor({
                 {notice}
               </p>
             ) : null}
-            {rows == null ? (
-              <p role="status">Loading process stats…</p>
-            ) : rows.length === 0 ? (
-              <p>No processes started by MonoCode.</p>
+            {rows == null ? <p role="status">Loading process stats…</p> : null}
+            {app ? (
+              <div className="mb-3">
+                <div className="flex items-center gap-2 py-2">
+                  <DisclosureButton
+                    label="MonoCode app"
+                    expanded={expanded.has(`app:${app.pid}`)}
+                    onToggle={() => toggle(`app:${app.pid}`)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">MonoCode app</div>
+                    <div className="text-content/50">
+                      App and web view · {app.processes} process
+                      {app.processes === 1 ? "" : "es"}
+                      {app.unreadable
+                        ? ` · ${app.unreadable} not readable`
+                        : ""}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-content/65">
+                    {app.cpu == null
+                      ? app.memory == null
+                        ? "CPU unavailable"
+                        : "Measuring CPU…"
+                      : `${app.cpu.toFixed(1)}%`}{" "}
+                    · {processMemory(app.memory)}
+                  </span>
+                </div>
+                {expanded.has(`app:${app.pid}`) ? (
+                  <ProcessList
+                    label="MonoCode app"
+                    items={app.children}
+                    appPid={app.pid}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {rows?.length === 0 ? (
+              <p className="mb-3">No chats or terminals running.</p>
             ) : null}
             {[...groups].map(([project, group]) => (
               <div key={project} className="mb-3">
                 <div className="mb-1 truncate text-content/50" title={project}>
                   {project}
                 </div>
-                {group.map((row) => (
-                  <div
-                    key={`${row.root.id}:${row.root.pid}`}
-                    className="flex items-center gap-2 border-t border-content/10 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate" title={row.root.id}>
-                        {metadataFor(row)?.title ??
-                          (row.root.kind === "terminal"
-                            ? "Terminal"
-                            : "Background helper")}
+                {group.map((row) => {
+                  const key = `${row.root.id}:${row.root.pid}`;
+                  const title =
+                    metadataFor(row)?.title ??
+                    (row.root.kind === "terminal"
+                      ? "Terminal"
+                      : "Background helper");
+                  const listable =
+                    row.status !== "exited" && row.children.length > 0;
+                  return (
+                    <div key={key} className="border-t border-content/10">
+                      <div className="flex items-center gap-2 py-2">
+                        {listable ? (
+                          <DisclosureButton
+                            label={title}
+                            expanded={expanded.has(key)}
+                            onToggle={() => toggle(key)}
+                          />
+                        ) : (
+                          <span aria-hidden className="size-5 shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate" title={row.root.id}>
+                            {title}
+                          </div>
+                          <div className="text-content/50">
+                            {row.root.kind === "interactive"
+                              ? "Interactive"
+                              : row.root.kind === "structured"
+                                ? "Structured"
+                                : "Terminal"}{" "}
+                            · {processIdleAge(row.root.idleMs)} ·{" "}
+                            {row.processes} process
+                            {row.processes === 1 ? "" : "es"}
+                          </div>
+                        </div>
+                        {row.status === "exited" ? (
+                          <span>Exited</span>
+                        ) : (
+                          <span className="shrink-0 text-content/65">
+                            {row.cpu == null
+                              ? row.status === "unavailable"
+                                ? "CPU unavailable"
+                                : "Measuring CPU…"
+                              : `${row.cpu.toFixed(1)}%`}{" "}
+                            · {processMemory(row.memory)}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={
+                            row.status === "exited" || stopping.has(row.root.id)
+                          }
+                          className="rounded px-2 py-1 hover:bg-content/10 disabled:opacity-40"
+                          onClick={() => {
+                            void stop(row, false);
+                          }}
+                        >
+                          {stopping.has(row.root.id) ? "Stopping…" : "Stop"}
+                        </button>
                       </div>
-                      <div className="text-content/50">
-                        {row.root.kind === "interactive"
-                          ? "Interactive"
-                          : row.root.kind === "structured"
-                            ? "Structured"
-                            : "Terminal"}{" "}
-                        · {processIdleAge(row.root.idleMs)} · {row.processes}{" "}
-                        process{row.processes === 1 ? "" : "es"}
-                      </div>
+                      {listable && expanded.has(key) ? (
+                        <ProcessList
+                          label={title}
+                          items={row.children}
+                          appPid={app?.pid}
+                        />
+                      ) : null}
                     </div>
-                    {row.status === "exited" ? (
-                      <span>Exited</span>
-                    ) : (
-                      <span className="shrink-0 text-content/65">
-                        {row.cpu == null
-                          ? row.status === "unavailable"
-                            ? "CPU unavailable"
-                            : "Measuring CPU…"
-                          : `${row.cpu.toFixed(1)}%`}{" "}
-                        · {processMemory(row.memory)}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      disabled={
-                        row.status === "exited" || stopping.has(row.root.id)
-                      }
-                      className="rounded px-2 py-1 hover:bg-content/10 disabled:opacity-40"
-                      onClick={() => {
-                        void stop(row, false);
-                      }}
-                    >
-                      {stopping.has(row.root.id) ? "Stopping…" : "Stop"}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
             <p className="text-content/40">
@@ -298,5 +366,71 @@ function EnabledProcessMonitor({
         </Popover>
       ) : null}
     </>
+  );
+}
+
+function DisclosureButton({
+  label,
+  expanded,
+  onToggle,
+}: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "Hide" : "Show"} processes for ${label}`}
+      onClick={onToggle}
+      className="grid size-5 shrink-0 place-items-center rounded text-content/50 hover:bg-content/10 hover:text-content"
+    >
+      <ChevronRight
+        className={`size-3.5 transition-transform duration-150 motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
+      />
+    </button>
+  );
+}
+
+/** Read-only: stopping single processes could crash the web view or confuse a chat. */
+function ProcessList({
+  label,
+  items,
+  appPid,
+}: {
+  label: string;
+  items: ProcessDetail[];
+  appPid?: number;
+}): ReactElement {
+  if (items.length === 0)
+    return <p className="pb-2 pl-7 text-content/50">No process details.</p>;
+  return (
+    <ul aria-label={`Processes for ${label}`} className="pb-2 pl-7">
+      {items.map((item) => (
+        <li
+          key={item.pid}
+          className="flex items-center gap-2 py-0.5 text-content/65"
+          style={{ paddingLeft: `${Math.min(item.depth, 6) * 12}px` }}
+        >
+          <span className="min-w-0 flex-1 truncate" title={item.name}>
+            {appPid == null
+              ? item.name || "Unnamed process"
+              : processLabel(item, appPid)}
+          </span>
+          <span className="shrink-0 tabular-nums text-content/50">
+            PID {item.pid}
+          </span>
+          <span className="w-36 shrink-0 text-right tabular-nums">
+            {item.cpu == null
+              ? item.memory == null
+                ? "unavailable"
+                : "Measuring…"
+              : `${item.cpu.toFixed(1)}%`}{" "}
+            · {processMemory(item.memory)}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

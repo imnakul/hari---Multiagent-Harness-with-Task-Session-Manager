@@ -589,7 +589,7 @@ pub fn run() {
             claude_interactive::claude_interactive_stop,
             claude_interactive::claude_interactive_park,
             claude_interactive::claude_interactive_attachments,
-            process_stats::owned_process_stats,
+            process_stats::process_monitor_stats,
             pty::pty_replay,
             pty::pty_write,
             pty::pty_resize,

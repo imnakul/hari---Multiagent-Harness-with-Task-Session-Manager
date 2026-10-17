@@ -7,8 +7,20 @@ pub(crate) struct Sample {
     pub pid: u32,
     pub parent: u32,
     pub birth: u64,
+    /// Executable or command name from the snapshot; empty when the OS gives none.
+    pub name: String,
     pub cpu_ns: Option<u64>,
     pub memory: Option<u64>,
+}
+
+#[cfg(target_os = "macos")]
+fn c_name(raw: &[libc::c_char]) -> String {
+    let bytes: Vec<u8> = raw
+        .iter()
+        .take_while(|c| **c != 0)
+        .map(|c| *c as u8)
+        .collect();
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 pub(crate) fn tree(roots: &[u32], samples: &[Sample]) -> HashMap<u32, Vec<u32>> {
@@ -89,10 +101,16 @@ pub(crate) fn snapshot() -> Result<Vec<Sample>, String> {
         }
         let mut result = Vec::new();
         loop {
+            let len = entry
+                .szExeFile
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(entry.szExeFile.len());
             result.push(Sample {
                 pid: entry.th32ProcessID,
                 parent: entry.th32ParentProcessID,
                 birth: 0,
+                name: String::from_utf16_lossy(&entry.szExeFile[..len]),
                 cpu_ns: None,
                 memory: None,
             });
@@ -186,6 +204,7 @@ fn linux_stat(pid: u32, stat: &str) -> Option<Sample> {
         pid,
         parent: fields.get(1)?.parse().ok()?,
         birth: fields.get(19)?.parse().ok()?,
+        name: stat.get(stat.find('(')? + 1..stat.rfind(')')?)?.to_string(),
         cpu_ns: None,
         memory: None,
     })
@@ -261,6 +280,10 @@ pub(crate) fn snapshot() -> Result<Vec<Sample>, String> {
                 pid: pid as u32,
                 parent: info.pbi_ppid,
                 birth: info.pbi_start_tvsec.saturating_mul(1_000_000) + info.pbi_start_tvusec,
+                name: match c_name(&info.pbi_name) {
+                    name if name.is_empty() => c_name(&info.pbi_comm),
+                    name => name,
+                },
                 cpu_ns: None,
                 memory: None,
             });
@@ -321,6 +344,7 @@ mod tests {
             pid,
             parent,
             birth,
+            name: String::new(),
             cpu_ns: Some(cpu),
             memory: Some(1),
         }
