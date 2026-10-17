@@ -1,6 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "../../shared/ui/icons";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "../../features/notifications/ui/NotificationBell";
 
 export function WindowControls() {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -56,6 +57,7 @@ export function WindowControls() {
       className="flex h-full shrink-0 items-stretch border-l border-stroke"
       data-tauri-drag-region="false"
     >
+      <NotificationBell />
       <button
         type="button"
         title="Minimize"

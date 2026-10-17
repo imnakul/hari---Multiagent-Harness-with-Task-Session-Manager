@@ -711,6 +711,10 @@ import {
   type Automation,
   type AutomationRun,
 } from "../features/automations/model/automations";
+import {
+  OPEN_NOTIFICATION_SESSION_EVENT,
+  recordAutomationNotification,
+} from "../features/notifications/model/notificationCenter";
 import { useQuickComposerLaunches } from "../features/quick-composer/hooks/useQuickComposerLaunches";
 import type { QuickLaunch } from "../features/quick-composer/model/quickComposer";
 import { claimInboxAutomationRuns } from "../features/automations/model/automationEvents";
@@ -883,11 +887,11 @@ import { type RecentProject } from "../features/projects/model/recents";
 import { queuePersistFingerprint } from "../features/sessions/data/sessionStore";
 import { SidechatSubmitPreflight, createSidechatSession } from "../features/sessions/model/sidechatSubmit";
 import { planBranch } from "../features/sessions/model/branchPlan";
+import { saveSessionLink } from "../features/sessions/model/sessionLinks";
 import { sendBranchTurn } from "../features/sessions/model/branchFlow";
 import {
   HarnessRemoteControlError,
   type HarnessSessionInput,
-import { saveSessionLink } from "../features/sessions/model/sessionLinks";
   type NativeForkRequest,
 } from "../integrations/harness/core/types";
 import { settleQueuedSteerCancellations } from "../features/sessions/model/messageQueue";
@@ -9691,6 +9695,11 @@ function Workspace({
                 : outcome.status === "cancelled"
                   ? "cancelled"
                   : "failed";
+            if (status !== "cancelled")
+              recordAutomationNotification(automation, status, {
+                sessionId: session.id,
+                ...(outcome.error ? { error: outcome.error } : {}),
+              });
             void updateAutomationRun(run.id, status, {
               sessionId: session.id,
               ...(outcome.error ? { error: outcome.error } : {}),
@@ -9700,6 +9709,9 @@ function Workspace({
           },
         });
       } catch (reason: unknown) {
+        recordAutomationNotification(automation, "failed", {
+          error: reason instanceof Error ? reason.message : String(reason),
+        });
         await updateAutomationRun(run.id, "failed", {
           error: reason instanceof Error ? reason.message : String(reason),
         }).catch(() => undefined);
@@ -10723,6 +10735,10 @@ function Workspace({
         ),
         title: secondOpinionSessionTitle(source.title),
       };
+      saveSessionLink(session.id, {
+        parentId: sourceId,
+        relation: "secondOpinion",
+      });
       openSessionBeside(sourceId, session, source.cwd);
       onSubmit(session.id, request.prompt, [], request.options);
     },
@@ -10735,10 +10751,6 @@ function Workspace({
       threadId: string,
       update: (thread: BtwThread | undefined) => BtwThread | undefined,
     ): Session | undefined => {
-      saveSessionLink(session.id, {
-        parentId: sourceId,
-        relation: "secondOpinion",
-      });
       const previous = sessionsRef.current;
       let updatedSession: Session | undefined;
       const next = previous.map((session) => {
@@ -11630,6 +11642,7 @@ function Workspace({
             }
           : { composerSeed: plan.bundleText }),
       };
+      saveSessionLink(forked.id, { parentId: session.id, relation: "fork" });
       setSessions((prev) => [...prev, forked]);
       const tab = newTab(forked.id);
       appendTab(tab, session.cwd);
@@ -11642,7 +11655,6 @@ function Workspace({
   /** A separate saved Chat beside the source, with source context attached per send. */
   const onSidechat = useCallback(
     (sourceId: string, turn: Block[]) => {
-      saveSessionLink(forked.id, { parentId: session.id, relation: "fork" });
       const source = sessionsRef.current.find((s) => s.id === sourceId);
       const lastId = turn.length > 0 ? turn[turn.length - 1]?.id : undefined;
       if (!source || !lastId) return;
@@ -11804,6 +11816,19 @@ function Workspace({
     },
     [focusOpenSession, onSelectHistorySession],
   );
+
+  // The title-bar notification panel (L-91) asks to open a chat by id.
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const sessionId: unknown = event.detail;
+      if (typeof sessionId === "string" && sessionId)
+        onOpenApprovalSession(sessionId);
+    };
+    window.addEventListener(OPEN_NOTIFICATION_SESSION_EVENT, onOpen);
+    return () =>
+      window.removeEventListener(OPEN_NOTIFICATION_SESSION_EVENT, onOpen);
+  }, [onOpenApprovalSession]);
 
   useEffect(() => {
     setSessions((prev) => attachOrchestrationWorkers(prev, orchestrationRuns));

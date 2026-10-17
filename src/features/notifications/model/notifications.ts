@@ -6,6 +6,7 @@ import {
   type NotificationSubject,
 } from "./notificationPreferences";
 import { knownNotificationProject } from "./notificationProjects";
+import { recordCenterNotification } from "./notificationCenter";
 
 const KEY = "monocode.notifications";
 
@@ -220,6 +221,33 @@ function clip(text: string): string {
 }
 
 /**
+ * Adds the event to the title-bar notification history (L-91) unless the user
+ * is looking at that chat right now. Independent of the OS banner setting.
+ * One entry per chat reply and per pending request, so repeats replace it.
+ */
+export function recordSessionNotification(
+  session: Session,
+  event: NotificationEvent,
+  sessionVisible: boolean,
+): void {
+  if (session.inboxAsk || (windowFocused && sessionVisible)) return;
+  const { subtitle, body } = notificationText(session, event);
+  recordCenterNotification({
+    key:
+      event === "finished"
+        ? `${session.id}:finished`
+        : `${session.id}:${event.kind}:${event.requestId}`,
+    kind: event === "finished" ? "finished" : event.kind,
+    title: subtitle,
+    body,
+    cwd: session.cwd,
+    harness: session.harness,
+    model: session.model,
+    sessionId: session.id,
+  });
+}
+
+/**
  * Sends the banner when policy allows. Resolves true once the OS accepted it
  * so callers can skip the in-app cue: the OS sound stands in for it. A
  * rejected dispatch resolves false so the cue still plays.
@@ -230,6 +258,7 @@ export async function notifySession(
   sessionVisible: boolean,
 ): Promise<boolean> {
   if (session.inboxAsk) return false;
+  recordSessionNotification(session, event, sessionVisible);
   const occurredAt = Date.now();
   const project = knownNotificationProject(session.cwd);
   if (!project) return false;
@@ -246,6 +275,7 @@ export async function announceSessionFinished(
   sessionVisible: boolean,
 ): Promise<void> {
   if (session.inboxAsk) return;
+  recordSessionNotification(session, "finished", sessionVisible);
   const occurredAt = Date.now();
   const project = knownNotificationProject(session.cwd);
   if (!project) return;
