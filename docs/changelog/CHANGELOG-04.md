@@ -1,5 +1,55 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 20:39 IST — Notification center (L-91)
+- Type: feature
+- What: A bell next to the minimize/maximize/close buttons shows a dot when something new happened. Click it to see every chat reply, approval, question and automation run since you looked, with project, model and time. Click a card to read it all or open the chat; hover to dismiss it, or clear everything with the X.
+- Why: Coming back after a while, there was no single place showing what finished.
+- Files: `src/features/notifications/model/notificationCenter.ts` (new), `notifications.ts`, `src/features/notifications/ui/NotificationBell.tsx` (new), `src/app/shell/WindowControls.tsx`, `src/app/App.tsx`, `src/shared/ui/icons.tsx`; tests `notificationCenter.test.ts`, `NotificationBell.test.ts`; spec `docs/specs/notification-center-plan.md`
+- Commit: 74df4335
+- Verified: tsc ✅ tests ✅ (6,901 passed, 2 skipped); lint not run (no eslint config); desktop check manual.
+
+## 2026-10-17 20:39 IST — Add more tasks quickly (L-90)
+- Type: feature
+- What: The task editor has an "Add more" toggle. While on, Ctrl+Enter saves the task and starts a new one in the same project.
+- Why: Adding many tasks in a row needed Ctrl+Shift+Enter or the mouse.
+- Files: `src/features/tasks/ui/TaskEditor.tsx`; `TasksView.test.ts`
+- Commit: 737178d1
+- Verified: as L-91.
+
+## 2026-10-17 20:39 IST — New task picker uses the project search list (L-75)
+- Type: fix
+- What: The arrow beside New task now opens the same searchable, scrollable project list as All projects.
+- Why: It used a different-looking menu.
+- Files: `src/shared/ui/SearchableSelect.tsx` (icon variant), `src/features/tasks/ui/TasksView.tsx`; `TasksView.test.ts`
+- Commit: 737178d1
+- Note: Remote Control is not offered for Interactive CLI chats: that mode is a terminal with no control channel to start it or read its link. Type `/remote-control` in the terminal instead. Left as is.
+- Verified: as L-91.
+
+## 2026-10-17 20:18 IST — Images in Notes and Tasks (L-89)
+- Type: feature
+- What: You can paste a screenshot, drop image files, or click Insert image in both Notes and the Task editor. The image is saved and placed where your cursor is. Deleting a task also deletes its images.
+- Why: Images worked only by dropping files into Notes; Tasks had no way to add them.
+- Files: `src/features/notes/ui/useMarkdownImages.tsx` (new shared hook, overlay, button); `NotesView.tsx`; `TaskEditor.tsx`; `MarkdownDetailTabs.tsx` (`actions` slot); `noteImages.ts` (messages); `src-tauri/src/tasks.rs`, `notes.rs` (task image cleanup); `useMarkdownImages.test.ts`
+- Commit: 070d7322
+- Verified: tsc ✅ tests ✅ (6,892 passed, 2 opt-in skips) cargo test ✅ (756); lint not run (no eslint config); desktop check manual.
+
+## 2026-10-17 20:18 IST — Linked chats nest under their source (L-88)
+- Type: feature
+- What: Forks, sidechats and second opinions now appear indented under the chat they came from, with a small label. An empty sidechat is no longer lost when you close it.
+- Why: Related chats were scattered in the list, and sidechats with no message disappeared.
+- Files: `src/features/sessions/model/sessionLinks.ts` (new); `src/app/shell/Sidebar.tsx`; `src/app/App.tsx`; `src/features/sessions/data/sessionStore.ts`; `src-tauri/src/session_store.rs`; `sessionLinks.test.ts`
+- Commit: 0fffd479
+- Decision: links kept in localStorage to avoid a sessions schema migration; losing them only flattens the list. Nested folders deferred (large change to the folder model).
+- Verified: tsc ✅ tests ✅ cargo test ✅; desktop check manual.
+
+## 2026-10-17 20:18 IST — Wrap toggle on chat code blocks (L-87)
+- Type: feature
+- What: Each code block in a chat has a wrap button next to Copy, so long lines can scroll sideways instead of wrapping.
+- Why: Request to control code wrapping in chat.
+- Files: `src/features/sessions/ui/AgentMarkdown.tsx`, `HighlightedCodeBlock.tsx`, `src/styles/index.css`, `src/shared/ui/icons.tsx`; `AgentMarkdownCodeWrap.test.ts`
+- Commit: 7302d8a9
+- Verified: tsc ✅ tests ✅; desktop check manual.
+
 ## 2026-10-17 19:56 IST — Resizable Automations list (L-86)
 - Type: feature
 - What: The Automations list on the left can now be dragged wider or narrower from its right edge, like the Notes list. Double-click the edge to reset it.

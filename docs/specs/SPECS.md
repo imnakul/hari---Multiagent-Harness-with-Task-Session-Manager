@@ -17,6 +17,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-10-17 20:39 | [Done — Notification center (L-91)](notification-center-plan.md) | Title-bar bell + glass panel for chat replies, approvals, questions and automation runs; desktop check manual. |
 | 2026-10-06 | [Draft — Antigravity CLI local capability verification](antigravity-cli-local-capability-verification.md) | Local Windows agent handoff: exact headless pipes, usage/MCP/RC/fork evidence, optional mode research, and separate human desktop checklist. No provider implementation in this task. |
 | 2026-10-06 | [Draft — Hari: branded builds, CI releases and auto-update](hari-release-pipeline-plan.md) | New main branch `nakul/hari-kripa`; private `Hari-harness` rebrands each pushed commit at build time, runs all checks plus a "no MonoCode" guard, publishes signed Windows installers to public `hari-releases`; app auto-update and one-time MonoCode data copy. Phase 0 is Nakul's manual setup. |
 | 2026-10-04 23:48:33 | [Draft — Repeatable Windows installer build — delegation runbook](repeatable-windows-installer-build.md) | Reusable lower-cost-agent checklist and copyable prompt: dynamic version, checks, storage/failure stops, archive verification and per-run records. Explicit build invocation approves that run; keep this standing document for reuse. |
