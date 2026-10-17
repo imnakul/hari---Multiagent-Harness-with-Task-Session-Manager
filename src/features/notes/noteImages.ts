@@ -38,7 +38,7 @@ async function saveNoteImageAttachments(
 ): Promise<NoteImageAsset[]> {
   const images = attachments.filter((file) => file.kind === "image");
   if (images.length === 0) {
-    throw new Error("Drop a PNG, JPG, GIF, WebP, or SVG image.");
+    throw new Error("Add a PNG, JPG, GIF, WebP, or SVG image.");
   }
 
   const saved: NoteImageAsset[] = [];
@@ -79,7 +79,7 @@ async function saveNoteImageAttachments(
   if (saved.length === 0) {
     if (failure instanceof Error) throw failure;
     if (failure) throw new Error(String(failure));
-    throw new Error("None of the dropped images could be added to the note.");
+    throw new Error("None of the images could be added.");
   }
   return saved;
 }

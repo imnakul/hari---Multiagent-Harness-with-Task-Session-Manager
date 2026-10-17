@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::session_store::{now_millis, validate_id, SessionStore};
 
@@ -218,10 +218,18 @@ pub fn tasks_upsert(store: State<'_, SessionStore>, task: TaskUpsert) -> Result<
 }
 
 #[tauri::command(async)]
-pub fn tasks_delete(store: State<'_, SessionStore>, id: String) -> Result<(), String> {
+pub fn tasks_delete(
+    app: AppHandle,
+    store: State<'_, SessionStore>,
+    id: String,
+) -> Result<(), String> {
     validate_id(&id, "task")?;
     let conn = store.lock_conn()?;
-    delete_task(&conn, &id).map_err(|error| error.to_string())
+    delete_task(&conn, &id).map_err(|error| error.to_string())?;
+    drop(conn);
+    // Same as notes: the row deletion is authoritative, image cleanup is best effort.
+    let _ = crate::notes::remove_note_assets(&app, &id);
+    Ok(())
 }
 
 fn validate_task_upsert(task: &TaskUpsert) -> Result<(), String> {

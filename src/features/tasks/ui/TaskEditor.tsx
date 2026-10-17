@@ -17,6 +17,11 @@ import {
 import { SearchableProjectPicker } from "../../projects/ui/SearchableProjectPicker";
 import { useProjectMarks } from "../../projects/ui/ProjectMark";
 import { NoteSource, NoteTagsEditor } from "../../notes/ui/NotesView";
+import {
+  InsertImageButton,
+  MarkdownImageOverlay,
+  useMarkdownImages,
+} from "../../notes/ui/useMarkdownImages";
 import { AgentMarkdown } from "../../sessions/ui/AgentMarkdown";
 import { MarkdownDetailTabs } from "../../sessions/ui/MarkdownDetailTabs";
 import { useMarkdownMode } from "../../sessions/ui/MarkdownModeToggle";
@@ -266,6 +271,15 @@ export function TaskEditor({
       void save().catch(() => undefined);
     };
     // The editor is keyed by task ID; changing its saved fields must not reset it.
+  const taskBody = useRef(task.body);
+  taskBody.current = task.body;
+  const images = useMarkdownImages({
+    ownerId: task.id,
+    fieldRef: source,
+    getValue: () => editsRef.current.body ?? taskBody.current,
+    onInsert: (next) => edit({ body: next }),
+    onError: setActionError,
+  });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [save]);
 
@@ -561,19 +575,31 @@ export function TaskEditor({
           markdown={body}
           label="Task sections"
         />
-        {mode === "source" ? (
-          <NoteSource
-            value={body}
-            textareaRef={source}
-            autoFocus={!autoFocusTitle && !body.trim()}
-            label="Task Markdown"
-            onChange={(next) => edit({ body: next })}
-          />
-        ) : body.trim() ? (
-          <AgentMarkdown text={body} cwd={project} hardBreaks />
-        ) : (
-          <p className="text-[13px] text-content/45">No description</p>
-        )}
+        <div
+          ref={images.dropZoneRef}
+          aria-busy={images.busy}
+          className={`relative rounded-lg border transition-colors ${
+            images.dragging
+              ? "border-accent/60 bg-accent/5"
+              : "border-transparent"
+          }`}
+          {...images.dropZoneProps}
+        >
+          <MarkdownImageOverlay images={images} />
+          {mode === "source" ? (
+            <NoteSource
+              value={body}
+              textareaRef={source}
+              autoFocus={!autoFocusTitle && !body.trim()}
+              label="Task Markdown"
+              onChange={(next) => edit({ body: next })}
+            />
+          ) : body.trim() ? (
+            <AgentMarkdown text={body} cwd={project} hardBreaks />
+          ) : (
+            <p className="text-[13px] text-content/45">No description</p>
+          )}
+        </div>
         <TaskTimeline task={task} today={today} />
       </div>
     </div>
@@ -602,6 +628,7 @@ function shownValue(
     case "focusDate":
       return { value: task.focusDate ?? null };
     default:
+          actions={<InsertImageButton images={images} />}
       return null;
   }
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { MarkdownCopyButton } from "./MarkdownCopyButton";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
 
@@ -7,11 +8,14 @@ export function MarkdownDetailTabs({
   onChange,
   markdown,
   label,
+  actions,
 }: {
   mode: MarkdownViewMode;
   onChange: (mode: MarkdownViewMode) => void;
   markdown: string;
   label: string;
+  /** Extra toolbar buttons shown before Copy. */
+  actions?: ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between border-b border-stroke">
@@ -31,7 +35,10 @@ export function MarkdownDetailTabs({
           onSelect={() => onChange("source")}
         />
       </div>
-      <MarkdownCopyButton text={markdown} />
+      <span className="inline-flex items-center gap-1">
+        {actions}
+        <MarkdownCopyButton text={markdown} />
+      </span>
     </div>
   );
 }

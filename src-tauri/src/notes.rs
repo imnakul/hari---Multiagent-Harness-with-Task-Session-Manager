@@ -310,7 +310,8 @@ fn validate_note_asset_path(asset: &str) -> Result<PathBuf, String> {
     Ok(path.to_path_buf())
 }
 
-fn remove_note_assets(app: &AppHandle, note_id: &str) -> Result<(), String> {
+/// Removes `note-assets/<id>/`. Tasks store their images here too, under the task id.
+pub(crate) fn remove_note_assets(app: &AppHandle, note_id: &str) -> Result<(), String> {
     let dir = note_assets_dir(app, note_id)?;
     match std::fs::remove_dir_all(dir) {
         Ok(()) => Ok(()),
