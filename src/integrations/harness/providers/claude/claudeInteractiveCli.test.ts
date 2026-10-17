@@ -285,15 +285,25 @@ it
       throw new Error("No fixture address");
     const url = `http://127.0.0.1:${address.port}`;
     const nativeHost = process.env.MONOCODE_INTERACTIVE_TEST_PTY_HOST;
+    const referenceHost = process.env.MONOCODE_INTERACTIVE_TEST_NODE_PTY_ROOT;
     const driver = spawn(
-      nativeHost ?? "python3",
-      nativeHost
-        ? []
-        : [
+      referenceHost ? process.execPath : (nativeHost ?? "python3"),
+      referenceHost
+        ? [
             fileURLToPath(
-              new URL("./fixtures/interactive-pty-host.py", import.meta.url),
+              new URL(
+                "./fixtures/interactive-node-pty-host.mjs",
+                import.meta.url,
+              ),
             ),
-          ],
+          ]
+        : nativeHost
+          ? []
+          : [
+              fileURLToPath(
+                new URL("./fixtures/interactive-pty-host.py", import.meta.url),
+              ),
+            ],
       { stdio: ["pipe", "pipe", "inherit"] },
     );
     const pending = new Map<
@@ -394,6 +404,23 @@ it
             };
             const fork = input.fork as
               { sourceProviderSessionId: string } | undefined;
+            if (referenceHost) {
+              // Orca's native-ConPTY primary device response, owned once here.
+              interactiveTerminalFor(id)?.term.parser.registerCsiHandler(
+                { final: "c" },
+                (params) => {
+                  if (
+                    params.length === 0 ||
+                    (params.length === 1 && params[0] === 0)
+                  ) {
+                    passiveReplies.push("\x1b[?61;4c");
+                    void rpc("write", { data: "\x1b[?61;4c" });
+                    return true;
+                  }
+                  return false;
+                },
+              );
+            }
             await rpc("start", {
               argv: [
                 process.env.MONOCODE_INTERACTIVE_TEST_CLI,
@@ -741,6 +768,9 @@ it
                 apiRequests: requests.length,
                 primaryRequests: requestPrefixes.length,
                 repaintProbes,
+                referenceBackend: referenceHost
+                  ? "node-pty-bundled"
+                  : undefined,
               },
               null,
               2,

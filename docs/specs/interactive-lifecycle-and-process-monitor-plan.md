@@ -158,6 +158,12 @@ cursor creation flag, while portable-pty additionally sets resize-quirk and
 Win32-input flags. Add an explicit creation option keeping defaults unchanged,
 then A/B flags=1 in the isolated Windows host before choosing production behavior.
 
+Flags=1 also fails on both runners (39029751814). Compare node-pty 1.1.0's
+actual bundled ConPTY runtime next, with the same frontend and scenario. The
+diagnostic host uses Orca's primary-device response and inherited-cursor handling;
+its package is temporary, install scripts are disabled, and no app dependency is
+added. Keep the original job failure so an oracle pass cannot mask a product failure.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable

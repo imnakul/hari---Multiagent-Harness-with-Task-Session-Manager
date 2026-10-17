@@ -59,15 +59,19 @@ jobs:
           $env:TMP = $env:TEMP
           npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
           exit $LASTEXITCODE
-      - name: Diagnostic comparison with Orca cursor-inheritance flags
+      - name: Diagnostic comparison with Orca bundled node-pty
         if: failure()
+        timeout-minutes: 6
         shell: pwsh
         run: |
-          $env:MONOCODE_CONPTY_PROBE_FLAGS = '1'
+          $referenceRoot = Join-Path $env:RUNNER_TEMP 'monocode-node-pty-reference'
+          npm install --prefix $referenceRoot --ignore-scripts 'node-pty@1.1.0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:MONOCODE_INTERACTIVE_TEST_NODE_PTY_ROOT = $referenceRoot
           $env:TEMP = Join-Path $env:RUNNER_TEMP 'interactive-accounts'
           New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
           $env:TMP = $env:TEMP
-          $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $env:RUNNER_TEMP 'interactive-capture/flags-1'
+          $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $env:RUNNER_TEMP 'interactive-capture/node-pty-bundled'
           npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
           exit $LASTEXITCODE
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml

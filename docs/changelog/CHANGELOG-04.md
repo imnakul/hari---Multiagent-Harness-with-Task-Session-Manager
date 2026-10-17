@@ -1,5 +1,9 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Compare Orca's actual bundled terminal runtime
+- What: Flags=1 also failed the complete-frame check on both Windows runners in 39029751814. Add a diagnostic-only node-pty reference host using its pinned bundled ConPTY and Orca's primary-device response. The same frontend, CLI, messages, hooks, transcript and assertions run unchanged; the original failure still fails the job.
+- Verified: Reference JavaScript syntax and opt-in test transformation pass. Application dependencies/defaults are unchanged from the 6,843-test checkpoint; node-pty installs only into the runner's temporary diagnostic directory, with install scripts disabled. No new Rust crate or production DLL dependency.
+- Commit: diagnostic follow-up on the authorized branch.
 ## 2026-10-17 — Compare native ConPTY compatibility flags
 - What: None of five geometries restored a complete Windows fork prompt. Orca/node-pty passes cursor inheritance only; portable-pty also enables resize-quirk and Win32-input modes. Add an explicit native creation option with the existing default unchanged and test flags=1 only in the opt-in host after the ordinary scenario fails. No new crate or DLL dependency.
 - Verified: Windows-target native-host all-target Clippy and changed-file Rust formatting pass. Production frontend/CLI behavior is unchanged from the 6,843-test checkpoint; local native tests also pass with CI/GITHUB_ACTIONS set, so those variables alone do not explain the Windows failure. Native A/B evidence follows in the spec.
