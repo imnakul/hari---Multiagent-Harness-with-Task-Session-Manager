@@ -9,7 +9,6 @@ import {
 import {
   Archive,
   CheckCircle,
-  ChevronDown,
   LoaderCircle,
   Plus,
   Target,
@@ -28,9 +27,7 @@ import { IS_MAC } from "../../../platform/tauri/platform";
 import { pathKey, projectName } from "../../../shared/lib/paths";
 import {
   ExplorerMenu,
-  type ExplorerMenuItem,
 } from "../../files/ui/ExplorerMenu";
-import type { NoteProjectChoice } from "../../notes/notes";
 import {
   looksLikeProject,
   type RecentProject,
@@ -106,8 +103,9 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-type Menu = { kind: "create"; x: number; y: number };
 type TaskMenu = { task: Task; x: number; y: number };
+/** Location value for Personal; project values are absolute paths, never ":"-led. */
+const PERSONAL_LOCATION = ":personal";
 
 const FOCUS_KEY = "monocode.tasks.focus";
 const SHOW_ARCHIVED_KEY = "monocode.tasks.showArchived";
@@ -161,7 +159,6 @@ export function TasksView({
   const [grouping, setGrouping] = useState<TaskGrouping>(loadGrouping);
   // List group collapsing is a per-visit convenience; it is not persisted.
   const [listCollapsed, setListCollapsed] = useState<string[]>([]);
-  const [menu, setMenu] = useState<Menu | null>(null);
   const [taskMenu, setTaskMenu] = useState<TaskMenu | null>(null);
   // Week-strip day (`null` means All). Starts on Today when the Focus flag
   // is set; a past or future day is never restored.
@@ -188,8 +185,8 @@ export function TasksView({
   const refreshId = useRef(0);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const menuRef = useRef<Menu | TaskMenu | null>(menu ?? taskMenu);
-  menuRef.current = menu ?? taskMenu;
+  const menuRef = useRef<TaskMenu | null>(taskMenu);
+  menuRef.current = taskMenu;
 
   const refresh = useCallback(async () => {
     const id = ++refreshId.current;
@@ -417,7 +414,6 @@ export function TasksView({
     saveFlag(SHOW_ARCHIVED_KEY, next);
   };
   const openTaskMenu = (task: Task, x: number, y: number) => {
-    setMenu(null);
     setTaskMenu({ task, x, y });
   };
   const onPickTaskMenu = (id: string) => {
@@ -498,59 +494,23 @@ export function TasksView({
       current.map((task) => (task.id === saved.id ? saved : task)),
     );
 
-  const createChoices = useMemo<NoteProjectChoice[]>(
-    () => {
-      if (menu?.kind !== "create") return [];
-      const choices: NoteProjectChoice[] = [];
-      const seen = new Set<string>();
-      const addProject = (path: string | undefined) => {
-        if (!path || !looksLikeProject(path)) return;
-        const fingerprint = pathKey(path);
-        if (seen.has(fingerprint)) return;
-        seen.add(fingerprint);
-        choices.push({
-          id: `project:${path}`,
-          kind: "project",
-          path,
-          current: !!cwd && fingerprint === pathKey(cwd),
-        });
-      };
-      addProject(cwd);
-      for (const path of projects) addProject(path);
-      choices.push({
-        id: "personal",
-        kind: "personal",
-        current: !cwd || !looksLikeProject(cwd),
-      });
-      return choices;
-    },
-    [cwd, menu?.kind, projects],
-  );
-  const menuItems = useMemo<ExplorerMenuItem[]>(() => {
-    if (menu?.kind !== "create") return [];
-    const items: ExplorerMenuItem[] = [];
-    for (const choice of createChoices) {
-      if (choice.kind === "personal") items.push({ kind: "sep" });
-      items.push({
-        kind: "item",
-        id: choice.id,
-        label:
-          choice.kind === "personal" ? "Personal" : projectName(choice.path),
-        checked: choice.current,
-      });
+  // Same searchable list as the Project filter: current project first, then
+  // recents and task projects, then Personal.
+  const locationOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options: SearchableSelectOption[] = [];
+    const seen = new Set<string>();
+    for (const path of [cwd, ...projects]) {
+      if (!path || !looksLikeProject(path)) continue;
+      const fingerprint = pathKey(path);
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
+      options.push({ value: path, label: projectName(path), keywords: path });
     }
-    return items;
-  }, [menu?.kind, createChoices]);
-
-  const onPickMenu = (id: string) => {
-    setMenu(null);
-    const choice = createChoices.find((item) => item.id === id);
-    if (choice) void create(choice.kind === "project" ? choice.path : undefined);
-  };
-  const openMenu = (anchor: HTMLElement) => {
-    const rect = anchor.getBoundingClientRect();
-    setMenu({ kind: "create", x: rect.left, y: rect.bottom + 4 });
-  };
+    options.push({ value: PERSONAL_LOCATION, label: "Personal" });
+    return options;
+  }, [cwd, projects]);
+  const currentLocation =
+    cwd && looksLikeProject(cwd) ? cwd : PERSONAL_LOCATION;
 
   const filteredEmpty = tasks.length > 0 && visible.length === 0;
   const resetFilters = () => {
@@ -693,9 +653,12 @@ export function TasksView({
         leading={
           <NewTaskButton
             creating={creating}
-            menuOpen={menu?.kind === "create"}
+            locations={locationOptions}
+            currentLocation={currentLocation}
             onCreate={() => void create(undefined)}
-            onChooseLocation={openMenu}
+            onChooseLocation={(value) =>
+              void create(value === PERSONAL_LOCATION ? undefined : value)
+            }
           />
         }
         center={
@@ -762,21 +725,6 @@ export function TasksView({
           </>
         }
       />
-      {menu ? (
-        <ExplorerMenu
-          x={menu.x}
-          y={menu.y}
-          ariaLabel="Choose where the task is filed"
-          header={
-            <p className="px-2 py-1 text-[11px] text-content/50">
-              File task under…
-            </p>
-          }
-          items={menuItems}
-          onPick={onPickMenu}
-          onClose={() => setMenu(null)}
-        />
-      ) : null}
       {taskMenu ? (
         <ExplorerMenu
           x={taskMenu.x}
@@ -877,14 +825,16 @@ function EmptyState({ children }: { children: ReactNode }) {
  */
 function NewTaskButton({
   creating,
-  menuOpen,
+  locations,
+  currentLocation,
   onCreate,
   onChooseLocation,
 }: {
   creating: boolean;
-  menuOpen: boolean;
+  locations: readonly SearchableSelectOption[];
+  currentLocation: string;
   onCreate: () => void;
-  onChooseLocation: (anchor: HTMLElement) => void;
+  onChooseLocation: (location: string) => void;
 }): ReactNode {
   return (
     <div className="flex h-7 shrink-0 items-stretch overflow-hidden rounded-md bg-content text-background-base">
@@ -908,18 +858,17 @@ function NewTaskButton({
         New task
       </button>
       <span aria-hidden className="my-1.5 w-px bg-background-base/20" />
-      <button
-        type="button"
-        title="Choose where the task is filed"
-        aria-label="Choose where the task is filed"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
+      <SearchableSelect
+        variant="icon"
+        label="Choose where the task is filed"
+        value={currentLocation}
+        options={locations}
+        onChange={onChooseLocation}
+        searchPlaceholder="Search projects…"
         disabled={creating}
-        onClick={(event) => onChooseLocation(event.currentTarget)}
-        className="grid w-6 place-items-center transition-colors duration-100 hover:bg-background-base/10 active:bg-background-base/20 disabled:opacity-60"
-      >
-        <ChevronDown aria-hidden className="size-3.5" strokeWidth={1.75} />
-      </button>
+        align="end"
+        triggerClassName="grid w-6 place-items-center transition-colors duration-100 hover:bg-background-base/10 active:bg-background-base/20 disabled:opacity-60"
+      />
     </div>
   );
 }

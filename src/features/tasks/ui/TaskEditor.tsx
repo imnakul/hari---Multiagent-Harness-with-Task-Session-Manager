@@ -40,6 +40,25 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Fork-only (L-90): when on, plain Ctrl/Cmd+Enter also saves and starts the next task. */
+const ADD_MORE_KEY = "monocode.tasks.addMore";
+
+function loadAddMore(): boolean {
+  try {
+    return localStorage.getItem(ADD_MORE_KEY) === "1";
+  } catch {
+    return false; // Storage unavailable: the toggle starts off.
+  }
+}
+
+function saveAddMore(value: boolean): void {
+  try {
+    localStorage.setItem(ADD_MORE_KEY, value ? "1" : "0");
+  } catch {
+    // Storage unavailable: the choice lasts for this editor only.
+  }
+}
+
 export type TaskEditorProps = {
   task: Task;
   /** `full` fills the workspace tab; `compact` fits the peek pane. */
@@ -85,6 +104,7 @@ export function TaskEditor({
   const observedTaskValues = useRef<Record<string, unknown>>({});
   const creatingAnother = useRef(false);
   const [creatingAnotherTask, setCreatingAnotherTask] = useState(false);
+  const [addMore, setAddMore] = useState(loadAddMore);
   const source = useRef<HTMLTextAreaElement>(null);
   const lock = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
@@ -251,6 +271,15 @@ export function TaskEditor({
     if (immediate) void save().catch(() => undefined);
     else timer.current = setTimeout(() => void save().catch(() => undefined), 400);
   };
+  const taskBody = useRef(task.body);
+  taskBody.current = task.body;
+  const images = useMarkdownImages({
+    ownerId: task.id,
+    fieldRef: source,
+    getValue: () => editsRef.current.body ?? taskBody.current,
+    onInsert: (next) => edit({ body: next }),
+    onError: setActionError,
+  });
   useEffect(() => {
     if (!autoFocusTitle) return;
     const frame = requestAnimationFrame(() => {
@@ -271,15 +300,6 @@ export function TaskEditor({
       void save().catch(() => undefined);
     };
     // The editor is keyed by task ID; changing its saved fields must not reset it.
-  const taskBody = useRef(task.body);
-  taskBody.current = task.body;
-  const images = useMarkdownImages({
-    ownerId: task.id,
-    fieldRef: source,
-    getValue: () => editsRef.current.body ?? taskBody.current,
-    onInsert: (next) => edit({ body: next }),
-    onError: setActionError,
-  });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [save]);
 
@@ -366,7 +386,7 @@ export function TaskEditor({
           !onCreateAnother ||
           event.defaultPrevented ||
           event.key !== "Enter" ||
-          !event.shiftKey ||
+          !(event.shiftKey || addMore) ||
           !(event.metaKey || event.ctrlKey) ||
           event.nativeEvent.isComposing ||
           event.nativeEvent.keyCode === 229 ||
@@ -402,6 +422,28 @@ export function TaskEditor({
               onChange={(next) => edit({ status: next }, true)}
             />
             <span className="ml-auto flex items-center gap-0.5">
+              {onCreateAnother ? (
+                <button
+                  type="button"
+                  aria-pressed={addMore}
+                  title={
+                    addMore
+                      ? "Add more is on: Ctrl+Enter saves this task and starts the next"
+                      : "Turn on to add tasks one after another with Ctrl+Enter"
+                  }
+                  onClick={() => {
+                    saveAddMore(!addMore);
+                    setAddMore(!addMore);
+                  }}
+                  className={`inline-flex h-7 items-center rounded-md px-2 text-[12px] transition-colors duration-100 ${
+                    addMore
+                      ? "bg-content/10 text-content"
+                      : "text-content/55 hover:bg-content/10 hover:text-content"
+                  }`}
+                >
+                  Add more
+                </button>
+              ) : null}
               {onCreateAnother ? (
                 <button
                   type="button"
@@ -500,7 +542,7 @@ export function TaskEditor({
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
-                event.shiftKey &&
+                (event.shiftKey || addMore) &&
                 (event.metaKey || event.ctrlKey)
               ) {
                 return; // Let the editor-scoped New task shortcut handle it.
@@ -574,6 +616,7 @@ export function TaskEditor({
           onChange={setMode}
           markdown={body}
           label="Task sections"
+          actions={<InsertImageButton images={images} />}
         />
         <div
           ref={images.dropZoneRef}
@@ -628,7 +671,6 @@ function shownValue(
     case "focusDate":
       return { value: task.focusDate ?? null };
     default:
-          actions={<InsertImageButton images={images} />}
       return null;
   }
 }

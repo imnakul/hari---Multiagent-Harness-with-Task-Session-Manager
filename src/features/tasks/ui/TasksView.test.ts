@@ -669,9 +669,8 @@ describe("creating tasks", () => {
     });
     expect(document.activeElement).toBe(input("Task title"));
     await click(byLabel("Choose where the task is filed"));
-    expect(document.body.textContent).toContain("File task under…");
     const project = [
-      ...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'),
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
     ].find((entry) => entry.textContent?.trim() === "project");
     await click(project);
     const created = [...rows.values()].find(
@@ -705,6 +704,36 @@ describe("creating tasks", () => {
     );
     expect([...rows.values()].filter((item) => item.title === "Untitled")).toHaveLength(1);
     expect(input("Task title").value).toBe("Untitled");
+  });
+
+  it("creates the next task on Ctrl+Enter only while Add more is on", async () => {
+    await render();
+    await click(listRow("Fix installer"));
+    const ctrlEnter = async () => {
+      await act(async () => {
+        input("Task title").dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        await tick(20);
+      });
+    };
+    const untitled = () =>
+      [...rows.values()].filter((item) => item.title === "Untitled").length;
+    await ctrlEnter();
+    expect(untitled()).toBe(0);
+    await click(button("Add more"));
+    expect(button("Add more").getAttribute("aria-pressed")).toBe("true");
+    expect(localStorage.getItem("monocode.tasks.addMore")).toBe("1");
+    await ctrlEnter();
+    expect(untitled()).toBe(1);
+    expect(input("Task title").value).toBe("Untitled");
+    await ctrlEnter();
+    expect(untitled()).toBe(2);
   });
 
   it("does not resubmit an exact title that autosaved before New task", async () => {
@@ -777,47 +806,41 @@ describe("creating tasks", () => {
     expect(upserts.filter((item) => item.id === "first")).toHaveLength(2);
   });
 
-  it("shows every project in the create menu and scrolls keyboard focus into view", async () => {
-    const original = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "scrollIntoView",
-    );
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
+  it("lists every project in the searchable create picker", async () => {
+    const recents = Array.from({ length: 10 }, (_, index) => ({
+      path: `/work/project-${index + 1}`,
+      openedAt: 100 - index,
+    }));
+    await render(recents);
+    await click(byLabel("Choose where the task is filed"));
+    const list = document.querySelector<HTMLElement>(
+      '[role="listbox"][aria-label="Choose where the task is filed"]',
+    )!;
+    // Same scrollable list as the Project filter, not a fixed-height menu.
+    expect(list.className).toContain("overflow-y-auto");
+    const choices = [...list.querySelectorAll('[role="option"]')];
+    expect(choices).toHaveLength(13); // recents, task projects, and Personal
+    expect(choices.at(-1)?.textContent).toBe("Personal");
+    // The picker renders in a portal, outside the view container.
+    const search = document.querySelector<HTMLInputElement>(
+      '[aria-label="Search projects…"][role="combobox"]',
+    )!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        search,
+        "project-10",
+      );
+      search.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    try {
-      const recents = Array.from({ length: 10 }, (_, index) => ({
-        path: `/work/project-${index + 1}`,
-        openedAt: 100 - index,
-      }));
-      await render(recents);
-      await click(byLabel("Choose where the task is filed"));
-      const menu = document.querySelector<HTMLElement>(
-        '[role="menu"][aria-label="Choose where the task is filed"]',
-      )!;
-      const choices = [...menu.querySelectorAll('[role="menuitemcheckbox"]')];
-      expect(choices).toHaveLength(13); // recents, task projects, and Personal
-      expect(choices.map((item) => item.textContent)).toContain("project-10");
-      for (let index = 0; index < 9; index++) {
-        await act(async () => {
-          menu.dispatchEvent(
-            new KeyboardEvent("keydown", {
-              key: "ArrowDown",
-              bubbles: true,
-            }),
-          );
-        });
-      }
-      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
-    } finally {
-      if (original) {
-        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", original);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
-      }
-    }
+    expect(list.querySelectorAll('[role="option"]')).toHaveLength(1);
+    await act(async () => {
+      search.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    expect(
+      [...rows.values()].some((entry) => entry.projectCwd === "/work/project-10"),
+    ).toBe(true);
   });
 
   it("disables the create buttons while a create is pending", async () => {
