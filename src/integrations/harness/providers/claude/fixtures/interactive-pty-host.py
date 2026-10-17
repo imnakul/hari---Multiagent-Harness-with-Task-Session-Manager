@@ -54,6 +54,9 @@ try:
         request = json.loads(line)
         try:
             command = request["command"]
+            if command == "paste-delay":
+                emit({"id": request["id"], "delayMs": 500 + (int(request["data"]) + 4095) // 4096})
+                continue
             if command == "start":
                 stop()
                 master, slave = pty.openpty()

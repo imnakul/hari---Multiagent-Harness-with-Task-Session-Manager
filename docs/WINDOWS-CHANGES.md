@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Let Claude attach a paste before the single Enter | ConPTY, send-once delivery |
 | 17 Oct 2026 | Sample owned process trees without spawning Windows commands | resources, native APIs |
 | 17 Oct 2026 | Answer the inherited cursor handshake once and support classic Claude | terminal, Claude Interactive |
 | 17 Oct 2026 | ConPTY paint cursor is separate from Claude's input row | terminal, Claude Interactive |
@@ -55,6 +56,17 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 - Let Claude attach a paste before the single Enter
+
+Windows action captures on 2.1.302 (39017396800) show the attachment-reference
+prompt left as `[Pasted text #1 +4 lines]`: writing paste-end did not mean the
+CLI had attached it. The earlier 120ms delay was too short. The shared Rust
+delay now allows 500ms for attachment plus the uncapped ingest floor derived
+from Orca's ConPTY measurements (64 bytes/ms). Unix uses 4096 bytes/ms. The
+Windows test host queries that exact production calculation before its single
+Enter. Native acceptance still confirms the exact text; no paste, Enter or
+uncertain prompt is retried. Sender ownership/phase checks remain in place.
 
 ## 17 Oct 2026 - Sample owned process trees without spawning Windows commands
 

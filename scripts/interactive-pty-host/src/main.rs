@@ -1,6 +1,8 @@
 //! Windows counterpart to the Unix opt-in PTY host: JSON plumbing only.
 #![allow(dead_code)]
 
+#[path = "../../../src-tauri/src/interactive_delivery.rs"]
+mod interactive_delivery;
 #[path = "../../../src-tauri/src/process_metrics.rs"]
 #[allow(dead_code)]
 mod process_metrics;
@@ -84,6 +86,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut live: Option<Live> = None;
     for line in std::io::stdin().lock().lines() {
         let request: Request = serde_json::from_str(&line?)?;
+        if request.command == "paste-delay" {
+            let bytes = request.data.as_deref().unwrap_or("0").parse::<usize>()?;
+            emit(
+                &stdout,
+                json!({"id":request.id, "delayMs":interactive_delivery::paste_settle_delay(bytes).as_millis()}),
+            );
+            continue;
+        }
         let result: Result<(), Box<dyn std::error::Error>> = (|| {
             match request.command.as_str() {
                 "start" => {

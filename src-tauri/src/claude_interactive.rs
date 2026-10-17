@@ -888,7 +888,9 @@ pub fn claude_interactive_send(
             pty_id(&session_id),
             format!("\x1b[200~{text}\x1b[201~"),
         )?;
-        thread::sleep(Duration::from_millis(120));
+        thread::sleep(crate::interactive_delivery::paste_settle_delay(
+            text.len() + 12,
+        ));
         let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.phase != "sending" || state.terminal_owner || !live.running.load(Ordering::Acquire)
         {

@@ -22,6 +22,7 @@ mod gitlab;
 mod harness;
 mod harness_updates;
 mod inbox_media;
+mod interactive_delivery;
 mod jira;
 mod jsonc;
 mod linear;

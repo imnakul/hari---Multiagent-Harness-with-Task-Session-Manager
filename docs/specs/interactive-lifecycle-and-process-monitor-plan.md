@@ -96,7 +96,7 @@ Large change. Preserve native context, single ownership and send-once safety.
 - [x] Owned-root stats, grouped monitor and safe stop actions
 - [x] Full web/TypeScript, Rust checks/tests/Clippy and builds (baseline exceptions below)
 - [ ] Native Windows regression covering new supported actions
-- [ ] Fork records, normal authorized push and remote SHA verification
+- [x] Fork records, normal authorized push and remote SHA verification
 - [ ] Separate human desktop/signed-in/cache usage checks
 
 ## Issues and fixes
@@ -106,6 +106,15 @@ outside this repository on the user's machine. Fix its misleading idle status
 here; document what the inherited hook failure means rather than editing
 unavailable user configuration. The generic 5-minute registry parking veto remains; the new Interactive policy
 owns the stricter 5–60 minute native shutdown path.
+
+The first Windows action run (39017396800, source 421afa7) passed backend,
+metrics, normal messages, native resume/fork and compact in the captured Windows scenario, then
+left the attachment-reference prompt as `[Pasted text #1 +4 lines]`. The fixed
+120ms Enter arrived before the CLI attached the paste. The correction uses a
+shared Rust 500ms settling window plus byte-dependent ingest time (64B/ms on
+ConPTY, 4096B/ms elsewhere), with no cap and still one Enter. Native fixtures
+query that production calculation and assert ordinary accepted prompts exactly
+match sends. Uncertain delivery is never retried or erased.
 
 ## Learnings
 
@@ -117,7 +126,7 @@ PID 1 as sleep left orphan zombies and produced unrelated cleanup failures.
 
 Final local source: 6,839 web tests passed / 619 files (two opt-in CLI cases
 skipped in that run and passed separately on 2.1.301). Strict TypeScript,
-production web/host builds, Rust check and production Clippy pass. Rust: 757
+production web/host builds, Rust check and production Clippy pass. Rust: 758
 passed / two ignored in the corrected container. Windows fixture all-target
 Clippy and macOS metrics cross-check pass. Full Rust fmt/test Clippy still hit
 unchanged debug_inspector formatting and needless_borrow at tests.rs:161.
@@ -129,5 +138,9 @@ human checks.
 
 ## Done
 
-Implementation and local gates complete; native Windows CI/publication follow below. No installer/version changes requested. Human desktop UI is a separate
+Source `421afa7462e7df4c953c4bc1ee8016c0275013f3` is pushed and matches
+`origin/nakul/windows-support-upstream-0.10.0`. Native Windows run
+[39017396800](https://github.com/imnakul/hari---Multiagent-Harness-with-Task-Session-Manager/actions/runs/39017396800)
+found the paste timing issue above. The correction is published separately;
+its Windows rerun is recorded after completion. No installer/version changes requested. Human desktop UI is a separate
 follow-up; do not drive the native window from this implementation session.

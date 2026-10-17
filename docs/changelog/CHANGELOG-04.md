@@ -1,5 +1,10 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Let Claude attach a paste before the single Enter
+- What: Native Windows run 39017396800 passed backend/metrics/messages/resume/fork/compact, then left attachment references in the input as a folded paste. Replace the fixed 120ms wait with a shared Rust 500ms attachment window plus byte-dependent ingest time, following Orca's measured ConPTY floor. Never resend or repeat Enter.
+- Verified: TypeScript and both real CLI 2.1.301 scenarios pass; 758 Rust tests (two ignored), production Clippy and Windows-target fixture Clippy pass. Web application code is unchanged from the 6,839-test gate; the opt-in fixture queries the production delay and verifies exact accepted prompts. Native Windows rerun follows this publication.
+- Commit: correction following 421afa7 on the same user-authorized branch; no version/installer change.
+
 ## 2026-10-17 — Interactive lifecycle/actions and optional process monitor (L-82/L-84)
 - What: Filter ordinary idle notifications; track subagents/background snapshots and task-notification continuations; poll at 200ms active/1.5s idle. Configurable 5–60 minute shutdown (default 15) rechecks native activity, transcript tail, ownership, approvals, background coverage and descendants, retaining the same resume UUID. Unknown work/CLI coverage skips shutdown.
 - Actions: Persist image/text attachments and send quoted file references; existing Compact uses exact `/compact`; full-history Fork uses verified native fork/resume/new-UUID flags. Historical cuts fall back to copied context because the real Interactive CLI ignores `--resume-session-at`. Ask in sidechat keeps its own Interactive process, account/model/effort and existing refreshed source snapshot. No `/model` or `/effort`, no global defaults/hook writes.

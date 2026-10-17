@@ -298,7 +298,7 @@ it
     );
     const pending = new Map<
       number,
-      { resolve: () => void; reject: (error: Error) => void }
+      { resolve: (delay?: number) => void; reject: (error: Error) => void }
     >();
     let requestId = 0;
     const lines = createInterface({ input: driver.stdout });
@@ -309,6 +309,7 @@ it
         data?: string;
         code?: number;
         error?: string;
+        delayMs?: number;
       };
       if (value.event === "data") {
         const chunk = Buffer.from(value.data!, "base64");
@@ -324,15 +325,15 @@ it
         const waiter = pending.get(value.id);
         pending.delete(value.id);
         if (value.error) waiter?.reject(new Error(value.error));
-        else waiter?.resolve();
+        else waiter?.resolve(value.delayMs);
       }
     });
     const rpc = async (
       command: string,
       args: Record<string, unknown> = {},
-    ): Promise<void> => {
+    ): Promise<number | undefined> => {
       const serial = ++requestId;
-      await new Promise<void>((resolve, reject) => {
+      return new Promise<number | undefined>((resolve, reject) => {
         pending.set(serial, { resolve, reject });
         driver.stdin.write(
           `${JSON.stringify({ id: serial, command, ...args })}\n`,
@@ -527,7 +528,14 @@ it
             await rpc("write", {
               data: `\x1b[200~${String(args.text)}\x1b[201~`,
             });
-            await new Promise((resolve) => setTimeout(resolve, 120));
+            const delay = await rpc("paste-delay", {
+              data: String(Buffer.byteLength(String(args.text), "utf8") + 12),
+            });
+            if (delay == null)
+              throw new Error(
+                "Native host did not report its production paste delay",
+              );
+            await new Promise((resolve) => setTimeout(resolve, delay));
             return rpc("write", { data: "\r" });
           }
           if (command === "claude_interactive_terminal") {
@@ -673,6 +681,9 @@ it
       )
         await new Promise((resolve) => setTimeout(resolve, 100));
       expect(acceptedPrompts.length).toBe(acceptedBefore);
+      expect(acceptedPrompts).toEqual(
+        sends.filter((text) => text !== "/compact"),
+      );
       expect(
         events.filter((event) => event.type === "externalTurn.finished").length,
       ).toBeGreaterThan(externalBefore);
