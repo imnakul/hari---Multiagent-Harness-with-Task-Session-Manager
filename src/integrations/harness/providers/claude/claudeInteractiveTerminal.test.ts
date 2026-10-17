@@ -1,4 +1,5 @@
 import fixture from "./fixtures/interactive-cli-2.1.301.json";
+import longHistory from "./fixtures/interactive-conpty-long-history-2.1.302.json";
 import conpty from "./fixtures/interactive-conpty-2.1.302.json";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInteractiveTerminal } from "./claudeInteractiveTerminal";
@@ -38,6 +39,31 @@ afterEach(() => {
 });
 
 describe("real VT parser input gate", () => {
+  it("requests one geometry repaint for captured long history and still requires a new empty frame", async () => {
+    mocks.windows = true;
+    const terminal = await createInteractiveTerminal("long-history", vi.fn());
+    cleanup = terminal.dispose;
+    await terminal.started();
+    const broken = new TextEncoder().encode(longHistory.vt);
+    mocks.data?.(broken, 0);
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(terminal.ready()).toBe(false);
+    await terminal.repaint?.();
+    expect(mocks.resize.mock.calls).toEqual([
+      ["claude-interactive:long-history", 119, 40],
+      ["claude-interactive:long-history", 120, 40],
+    ]);
+    expect(terminal.ready()).toBe(false);
+    await terminal.repaint?.();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    mocks.data?.(new TextEncoder().encode(conpty.empty), broken.length);
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(terminal.ready()).toBe(true);
+    expect(terminal.owner).toBe(false);
+  });
   it.each([false, true])(
     "answers cursor queries once per owner (Windows %s)",
     async (windows) => {

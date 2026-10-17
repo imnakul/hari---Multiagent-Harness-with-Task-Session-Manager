@@ -1,5 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Request a fresh Windows paint for long native history
+- What: Run 39027302518 passed all seven expanded ordinary messages but the long-history fork paint omitted its input row. Request one synchronized one-column resize/restore after settled startup mismatch, then apply the unchanged empty-prompt checks. Preserve user resizing and input ownership; no keys, clearing or resend.
+- Files: `claudeInteractiveTerminal.ts`, readiness wait, and a real-VT regression from the captured Windows 2.1.302 output. The escaped JSON fixture preserves exact control bytes across checkouts.
+- CI: Run native CLI checks before the independent full-backend check for faster failure feedback; successful jobs still require both.
+- Verified: Full web rerun 6,843 passed / 619 files (two opt-in skips), TypeScript, current web/host builds, targeted real-VT/delivery tests and both expanded native CLI 2.1.301 scenarios pass. An unchanged editor blur test failed under combined load, then passed isolated and in the full retry; no editor changes. Windows rerun follows publication.
+- Commit: follow-up to c31abbe on the authorized branch.
+
 ## 2026-10-17 — Keep typed request text outside Claude's folded paste
 - What: Windows run 39026195881 proves output quiet alone does not fix supervised context-only folded pastes. Follow Orca's typed-request contract without adding instructions: one original alphanumeric character stays literal, with the preceding/remainder text framed in the same write. Preserve one Enter, phase/ownership fencing and exact acceptance. Match the native editor's verified four-space tab expansion before sending.
 - Completion: Wait for the Stop hook's final assistant text to reach JSONL before completing. Preserve autonomous Stops that precede transcript output; a delayed final reply must not become a stuck false external turn.

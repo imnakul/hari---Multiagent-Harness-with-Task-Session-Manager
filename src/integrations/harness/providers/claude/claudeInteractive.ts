@@ -803,6 +803,14 @@ export async function sendInteractiveClaude(
     !live.terminal.owner &&
     Date.now() < deadline
   ) {
+    const screen = live.terminal.inspect();
+    if (
+      screen.reason === "prompt-mismatch" &&
+      screen.outputAgeMs != null &&
+      screen.outputAgeMs >= 750 &&
+      !screen.pendingParses
+    )
+      await live.terminal.repaint?.().catch(() => undefined);
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }
   if (live.fault) throw faultError(live);

@@ -42,6 +42,7 @@ export type InteractiveTerminal = {
   started: () => Promise<void>;
   ready: () => boolean;
   inspect: () => InteractiveReadiness;
+  repaint?: () => Promise<void>;
   reclaim: () => Promise<void>;
   resize: (cols: number, rows: number) => Promise<void>;
   dispose: () => void;
@@ -122,6 +123,7 @@ export async function createInteractiveTerminal(
   let started = false;
   let pendingParses = 0;
   let replyFailures = 0;
+  let repainted = false;
   const accept = (data: Uint8Array, start: number): void => {
     if (start > offset) return; // Replay fills gaps; never parse a broken VT stream.
     const skip = Math.max(0, offset - start);
@@ -198,6 +200,33 @@ export async function createInteractiveTerminal(
       changed();
     },
     ready: (): boolean => terminal.inspect().reason === "ready",
+    repaint: async (): Promise<void> => {
+      if (
+        !IS_WIN ||
+        repainted ||
+        !started ||
+        terminal.stopped ||
+        terminal.writing ||
+        owner
+      )
+        return;
+      repainted = true;
+      const { cols, rows } = term;
+      // ConPTY may omit the input row after its initial long-history paint.
+      // A real resize asks the CLI for a redraw without changing its input.
+      try {
+        await terminal.resize(Math.max(20, cols - 1), rows);
+        await new Promise<void>((resolve) => setTimeout(resolve, 200));
+      } finally {
+        // A visible terminal may have been resized by the user in the meantime.
+        if (
+          !terminal.stopped &&
+          term.cols === Math.max(20, cols - 1) &&
+          term.rows === rows
+        )
+          await terminal.resize(cols, rows);
+      }
+    },
     inspect: (): InteractiveReadiness => {
       const buffer = term.buffer.active;
       let row = buffer.baseY + buffer.cursorY;

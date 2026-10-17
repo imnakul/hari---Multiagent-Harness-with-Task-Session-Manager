@@ -137,6 +137,17 @@ Keep an autonomous Stop until its assistant arrives, even without a submit hook;
 otherwise a late reply becomes a stuck, false external turn. Both orders have
 regressions, and native probes exercise the real flush behavior.
 
+Run 39027302518 passed all seven expanded ordinary messages on Windows, but
+long-history fork startup omitted the native input row entirely (captured VT
+has a wrapped border and no prompt). Request one geometry repaint after settled
+startup mismatch, synchronize xterm/PTY sizes, and reapply unchanged readiness
+checks. No input clearing, keys, prompt retry or weakened frame recognition.
+
+The first repaint web run passed 6,842 tests but failed the unchanged
+FilePaneNavigation blur case (selection 24 versus 1) under concurrent native/
+build load. Its files are unchanged and the isolated nine-case rerun passes;
+the full rerun without other heavy local work passes all 6,843 tests. No editor changes.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable
@@ -145,7 +156,7 @@ Native CLI tests use fake credentials and local replies, never subscription quot
 The Linux Rust process suite needs a container init/reaper (`docker run --init`);
 PID 1 as sleep left orphan zombies and produced unrelated cleanup failures.
 
-Latest local gate: 6,840 web tests passed / 619 files, plus 29 targeted delivery tests including both new completion races (two opt-in CLI cases
+Latest local gate: 6,843 web tests passed / 619 files, including the captured repaint and both completion races (two opt-in CLI cases
 skipped in that run and passed separately on 2.1.301). Strict TypeScript,
 production web/host builds, Rust check and production Clippy pass. Rust: 761
 passed / two ignored in the corrected container. Windows fixture all-target

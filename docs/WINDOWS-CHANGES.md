@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Repaint omitted input after long native history | ConPTY, startup geometry |
 | 17 Oct 2026 | Keep literal request text outside a folded Claude paste | ConPTY, supervised input |
 | 17 Oct 2026 | Require observed output quiet before the single Enter | ConPTY, paste settlement |
 | 17 Oct 2026 | Let Claude attach a paste before the single Enter | ConPTY, send-once delivery |
@@ -58,6 +59,17 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 - Repaint omitted input after long native history
+
+The expanded c31abbe Windows probe (39027302518) accepted all seven ordinary
+messages in both permissions, then the fork painted long history without its
+input row. Exact VT replay shows a wrapped border and no prompt; this is not an
+empty prompt that should be accepted by a looser parser. Request one real
+one-column resize/restore after settled mismatch and synchronize xterm/PTY sizes.
+Keep user resize changes, ownership and unchanged readiness checks authoritative.
+The real-VT regression verifies no readiness until a new complete frame arrives.
+Store the capture as escaped JSON so checkout newline conversion cannot corrupt VT.
 
 ## 17 Oct 2026 - Keep literal request text outside a folded Claude paste
 

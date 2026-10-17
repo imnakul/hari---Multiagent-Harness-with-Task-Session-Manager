@@ -35,7 +35,6 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: cargo build --locked --manifest-path scripts/interactive-pty-host/Cargo.toml
       - run: cargo test --locked --manifest-path scripts/interactive-pty-host/Cargo.toml process_metrics
       - run: cargo test --locked --manifest-path scripts/interactive-pty-host/Cargo.toml interactive_delivery
@@ -60,6 +59,7 @@ jobs:
           $env:TMP = $env:TEMP
           npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
           exit $LASTEXITCODE
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
