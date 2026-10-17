@@ -58,7 +58,7 @@ type Poll = {
   more: boolean;
 };
 type ReadinessSnapshot = {
-  revision: "2026-10-17-conpty-handshake";
+  revision: "2026-10-17-native-paste-close-id";
   phase: string;
   pendingTurn: boolean;
   externalTurn: boolean;
@@ -198,7 +198,7 @@ export function hasInteractiveClaude(id: string): boolean {
 
 function readinessSnapshot(live: Live): ReadinessSnapshot {
   return {
-    revision: "2026-10-17-conpty-handshake",
+    revision: "2026-10-17-native-paste-close-id",
     phase: live.phase,
     pendingTurn: !!live.pending,
     externalTurn: !!live.external,

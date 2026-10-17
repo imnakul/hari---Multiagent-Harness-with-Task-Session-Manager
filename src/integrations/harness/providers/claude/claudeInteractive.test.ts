@@ -235,82 +235,129 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(1);
     expect(onAccepted).not.toHaveBeenCalled();
   });
-  it("keeps a folded native paste in its original GUI turn and times the complete response", async () => {
-    vi.setSystemTime(1_000);
-    const text =
-      "create a new branch\nDiscuss the walkthrough\nKeep existing styles.";
-    let session = appendUser(newSession("claude", "/repo"), text);
-    let endedAt = 0;
-    const original = mocks.invoke.getMockImplementation()!;
-    mocks.invoke.mockImplementation(
-      async (command: string, args: Record<string, unknown>) => {
-        if (command === "claude_interactive_send") {
-          mocks.sends.push(String(args.text));
-          return;
-        }
-        return original(command, args);
-      },
-    );
-    const turn = sendInteractiveClaude(
-      input({
+  it.each([
+    "plain",
+    "native",
+    "native-with-attachments",
+    "native-with-text-attachment",
+  ] as const)(
+    "keeps a folded paste in its original GUI turn and times the complete response (%s)",
+    async (format) => {
+      vi.setSystemTime(1_000);
+      const text =
+        "Students list page\nCheck the pagination controls and ranking.\nSee the attached screenshot.";
+      const attachments: SendTurnInput["attachments"] =
+        format === "native-with-attachments" ||
+        format === "native-with-text-attachment"
+          ? [
+              {
+                id: "screen",
+                kind: format === "native-with-attachments" ? "image" : "file",
+                name:
+                  format === "native-with-attachments"
+                    ? "screen.png"
+                    : "notes.txt",
+                mimeType:
+                  format === "native-with-attachments"
+                    ? "image/png"
+                    : "text/plain",
+                size: 1,
+                data: "AA==",
+              },
+            ]
+          : undefined;
+      const submitted = attachments
+        ? `${text}\n\nRead these attached files using your tools:\n"${attachments[0].name}": "/saved/one.txt"`
+        : text;
+      let session = appendUser(
+        newSession("claude", "/repo"),
         text,
-        onEvent: (event): void => {
-          events.push(event);
-          session = applyHarnessEvent(session, event);
+        attachments,
+      );
+      let endedAt = 0;
+      const original = mocks.invoke.getMockImplementation()!;
+      mocks.invoke.mockImplementation(
+        async (command: string, args: Record<string, unknown>) => {
+          if (command === "claude_interactive_send") {
+            mocks.sends.push(String(args.text));
+            return;
+          }
+          return original(command, args);
         },
-      }),
-    ).then(
-      () => {
-        endedAt = Date.now();
-        session = stopStreaming(session);
-      },
-      (error: unknown) => {
-        session = stopStreaming(session);
-        return error;
-      },
-    );
-    await waitFor(() => mocks.sends.length === 1);
-    await vi.advanceTimersByTimeAsync(8_000);
-    hook("UserPromptSubmit", {
-      prompt: `c\n\n<pasted_content id="faa9">\n${text.slice(1)}\n</pasted_content>`,
-    });
-    await waitFor(() => onAccepted.mock.calls.length === 1);
-    expect(session.blocks[0]).toMatchObject({ text, startedAt: 1_000 });
-    expect(session.blocks[0].durationMs).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(8_000);
-    mocks.lines.push(
-      JSON.stringify({
-        type: "assistant",
-        uuid: "long-paste-reply",
-        message: { content: [{ type: "text", text: "One complete reply" }] },
-      }),
-    );
-    finish();
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(await turn).toBeUndefined();
-    expect(mocks.sends).toEqual([text]);
-    expect(onAccepted).toHaveBeenCalledTimes(1);
-    expect(
-      events.filter((event) => event.type === "externalTurn.started"),
-    ).toEqual([]);
-    expect(
-      session.blocks.filter((block) => block.role === "user"),
-    ).toHaveLength(1);
-    expect(
-      session.blocks
-        .filter((block) => block.role === "assistant")
-        .map((block) => block.text),
-    ).toEqual(["One complete reply"]);
-    expect(session.blocks[0]).toMatchObject({
-      text,
-      startedAt: 1_000,
-      durationMs: endedAt - 1_000,
-    });
-    expect(session.blocks[0].durationMs).toBeGreaterThan(16_000);
-    expect(session.busy).toBe(false);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(session.blocks[0].durationMs).toBe(endedAt - 1_000);
-  });
+      );
+      const turn = sendInteractiveClaude(
+        input({
+          text,
+          attachments,
+          onEvent: (event): void => {
+            events.push(event);
+            session = applyHarnessEvent(session, event);
+          },
+        }),
+      ).then(
+        () => {
+          endedAt = Date.now();
+          session = stopStreaming(session);
+        },
+        (error: unknown) => {
+          session = stopStreaming(session);
+          return error;
+        },
+      );
+      await waitFor(() => mocks.sends.length === 1);
+      await vi.advanceTimersByTimeAsync(8_000);
+      hook("UserPromptSubmit", {
+        prompt: `S\n\n<pasted_content id="7f52">\n${submitted.slice(1)}\n${format === "plain" ? "</pasted_content>" : '</pasted_content id="7f52">\n'}`,
+      });
+      await waitFor(() => onAccepted.mock.calls.length === 1);
+      expect(session.blocks[0]).toMatchObject({ text, startedAt: 1_000 });
+      expect(session.blocks[0].durationMs).toBeUndefined();
+      mocks.lines.push(
+        JSON.stringify({
+          type: "assistant",
+          uuid: "long-paste-reply",
+          message: { content: [{ type: "text", text: "One " }] },
+        }),
+      );
+      await settle();
+      expect(session.blocks.at(-1)?.text).toBe("One ");
+      expect(session.blocks[0].durationMs).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(8_000);
+      mocks.lines.push(
+        JSON.stringify({
+          type: "assistant",
+          uuid: "long-paste-reply",
+          message: { content: [{ type: "text", text: "One complete reply" }] },
+        }),
+      );
+      finish();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await turn).toBeUndefined();
+      expect(mocks.sends).toEqual([submitted]);
+      expect(onAccepted).toHaveBeenCalledTimes(1);
+      expect(
+        events.filter((event) => event.type === "externalTurn.started"),
+      ).toEqual([]);
+      expect(
+        session.blocks.filter((block) => block.role === "user"),
+      ).toHaveLength(1);
+      expect(
+        session.blocks
+          .filter((block) => block.role === "assistant")
+          .map((block) => block.text),
+      ).toEqual(["One complete reply"]);
+      expect(session.blocks[0]).toMatchObject({
+        text,
+        startedAt: 1_000,
+        durationMs: endedAt - 1_000,
+      });
+      expect(session.blocks[0].durationMs).toBeGreaterThan(16_000);
+      expect(session.blocks[0].attachments).toEqual(attachments);
+      expect(session.busy).toBe(false);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(session.blocks[0].durationMs).toBe(endedAt - 1_000);
+    },
+  );
   it("still refuses a native paste whose expanded body differs from the pending prompt", async () => {
     const text = "create a branch\nDiscuss first";
     const original = mocks.invoke.getMockImplementation()!;

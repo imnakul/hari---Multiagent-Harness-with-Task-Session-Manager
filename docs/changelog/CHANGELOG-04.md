@@ -1,5 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Correct native pasted-content closing tags (L-82)
+- What: The earlier duplicate-turn/timing fix used a plain closing tag in its fixtures. The installed CLI repeats the paste ID in the closing tag; that valid echo was still rejected as different input. Match native same-ID closing tags and their trailing-newline convention while requiring every body/attachment path to remain exact. Keep the original GUI boundary and full duration; no resend or timer-only workaround. Rebuilt diagnostics use `2026-10-17-native-paste-close-id`.
+- Files: `claudeInteractivePrompt.ts`, matching and image/text attachment lifecycle tests; `claudeInteractive.ts` diagnostics revision; L-82/spec records. No Rust, dependency, CLI flag, installer or release version changes.
+- Verified: native-format matcher and lifecycle regressions fail before and pass after the correction; 71 focused and 6,950 full web tests pass (two opt-in cases skipped there), strict TypeScript and production build pass. Both opt-in real CLI smoke cases pass separately; that fake account uses unwrapped echoes, so signed-in Windows wrapping remains a separate human check. The user confirmed the reported failure used a rebuild after 8f36e078. Rebuild and send a new long prompt with an attachment; old saved duplicates are not rewritten.
+- Commit: this follow-up on the authorized 0.10.0 branch, based on c4288b21.
+
 ## 2026-10-17 — Include Antigravity CLI in all-accounts usage (L-85)
 - What: All-accounts usage now includes the installed, visible Antigravity CLI's saved account across chats. Reuse its existing separate quota/credits chip, binary-scoped cache and manual/automatic refresh; do not invent managed account profiles or borrow a family quota from another provider's active model. Selected-only behavior remains when the experiment is off.
 - Files: `src/app/shell/UsageFooter.tsx`, `AntigravityCliUsage.test.ts`; L-85 feature and spec follow-up records. No native code, dependency, installer or version changes.

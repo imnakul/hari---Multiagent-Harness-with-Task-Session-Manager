@@ -3,6 +3,55 @@
 Branch: `nakul/windows-support-upstream-0.10.0`
 Base: `757daab45a860d4f8fbcae717a0b855091d2414a`
 
+## Follow-up — native ID-bearing closing tags (2026-10-17)
+
+Base: `c4288b21`. A second screenshot shows the same duplicate turn with an
+image attachment. Inspection of the installed CLI 2.1.301's native paste
+formatter/parser confirms the actual closing tag is
+`</pasted_content id="…">`, with the opening tag's same ID. The previous
+fixtures used an unqualified closing tag, so their passing tests did not cover
+this real native representation. This is a concrete gap independent of whether
+the screenshot's installed build already includes the earlier fix.
+The user subsequently confirmed this occurred after rebuilding from `8f36e078`;
+the report is not attributed to an unchanged local2 installer.
+
+Plan: accept matching-ID native closing tags while retaining the prior plain
+closing representation. Require the exact typed/pasted body, including saved
+attachment paths; reject changed content, truncated bodies and mismatched IDs.
+Exercise the adapter and real session reducer with delayed acceptance, a
+multi-stage reply and image/text attachment references. Verify one submission,
+one acceptance, one original user boundary and full elapsed duration frozen at
+completion. No resend, timer-only workaround, Rust, flags or installer changes.
+
+- [x] Reproduce the native closing-tag mismatch with failing regressions.
+- [x] Fix the matcher and verify attachment/timing lifecycle regressions.
+- [x] Strict TypeScript, full web suite and production build.
+- [x] Prepare publication on the authorized branch (this follow-up's commit).
+- [ ] Human desktop rebuild/check.
+
+Evidence: six native-format matcher cases and both native-format adapter cases
+failed before the change. The corrected matcher passes them; an additional
+text-file case and partial-reply snapshot keep attachments and the original
+clock intact. All IDs must agree and every body/path must match exactly.
+Diagnostics revision is `2026-10-17-native-paste-close-id` to distinguish a
+rebuilt app from earlier installers without changing the release version.
+
+The real local CLI's fake-account run retains its unwrapped fallback even with
+the paste feature cached on; requiring a wrapped echo there failed because no
+wrapped echo was generated. That test-only override was removed. Do not count
+the fallback smoke test as proof of signed-in Windows wrapping. The concrete
+native format comes from the installed 2.1.301 formatter/parser, with separate
+failing-then-passing acceptance and reducer timing regressions. Human validation
+must rebuild, send a new long message with an attachment and check one bubble
+and full frozen duration; existing saved duplicate turns are not rewritten.
+
+Final automated gates: 71 focused tests; 6,950 full web tests across 627 passing
+files (one opt-in native file/two cases skipped); strict TypeScript and the
+production build pass. Both opt-in local CLI cases pass separately in supervised
+and Full access, including messages, resume, compact, attachments and background
+continuation. The built JS contains the new diagnostics revision. No Windows
+desktop or subscription-usage equivalence is claimed by those isolated checks.
+
 ## Goal
 
 Keep a long Interactive composer message in one GUI turn when Claude represents
