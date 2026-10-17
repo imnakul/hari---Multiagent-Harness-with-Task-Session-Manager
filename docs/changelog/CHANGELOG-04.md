@@ -1,5 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Observe native paste output before submitting
+- What: Run 39018068301 passed full-access on both Windows runners, but supervised mode still left attachment references editable. Add Orca's 1.5s output-quiet gate after the byte-dependent minimum, require output after the paste, and fail closed after eight extra seconds. Production and the Windows fixture share the Rust gate; passive terminal replies remain live. No repeat Enter or resend.
+- Files: `src-tauri/src/interactive_delivery.rs`, `claude_interactive.rs`, `pty.rs`; native CLI fixture hosts.
+- Verified: 6,839 web tests, strict TypeScript, 760 Rust tests (two ignored), production Clippy, changed-file Rust fmt and Windows fixture Clippy pass. Both real CLI 2.1.301 scenarios pass, with exact accepted prompts and unchanged resume prefix. Native Windows rerun follows publication; no installer/version change.
+- Commit: follow-up to 8c58290 on the authorized branch.
+
 ## 2026-10-17 — Let Claude attach a paste before the single Enter
 - What: Native Windows run 39017396800 passed backend/metrics/messages/resume/fork/compact, then left attachment references in the input as a folded paste. Replace the fixed 120ms wait with a shared Rust 500ms attachment window plus byte-dependent ingest time, following Orca's measured ConPTY floor. Never resend or repeat Enter.
 - Verified: TypeScript and both real CLI 2.1.301 scenarios pass; 758 Rust tests (two ignored), production Clippy and Windows-target fixture Clippy pass. Web application code is unchanged from the 6,839-test gate; the opt-in fixture queries the production delay and verifies exact accepted prompts. Native Windows rerun follows this publication.

@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Require observed output quiet before the single Enter | ConPTY, paste settlement |
 | 17 Oct 2026 | Let Claude attach a paste before the single Enter | ConPTY, send-once delivery |
 | 17 Oct 2026 | Sample owned process trees without spawning Windows commands | resources, native APIs |
 | 17 Oct 2026 | Answer the inherited cursor handshake once and support classic Claude | terminal, Claude Interactive |
@@ -56,6 +57,16 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 - Require observed output quiet before the single Enter
+
+Run 39018068301 at 8c58290 passed full-access on Windows 2022/2025 but still
+left the supervised attachment prompt in the paste buffer. The 500ms minimum
+alone is insufficient. Follow Orca's additional 1.5s output-quiet gate: native
+output must advance after the paste and settle, after its uncapped ingest floor.
+An eight-second extra deadline fails without Enter. The native fixture and
+production share the Rust gate, with passive replies serviced while it waits.
+Ownership/phase checks and the single-attempt ledger remain authoritative.
 
 ## 17 Oct 2026 - Let Claude attach a paste before the single Enter
 

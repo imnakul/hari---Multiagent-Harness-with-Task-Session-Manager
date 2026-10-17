@@ -32,7 +32,7 @@ Large change. Preserve native context, single ownership and send-once safety.
   task-notification UserPromptSubmit on 2.1.301; regression also covers no such hook.
   A notification racing old-turn drain must not fail an already accepted prompt.
 - Installed hook names include SubagentStart/Stop and TaskCreated/Completed;
-  TaskStarted is absent. Background Bash completion coverage needs a real probe.
+  TaskStarted is absent. Background Bash completion was verified in real probes.
   Unknown coverage/work is a reason to skip shutdown, never assume nothing runs.
 - Stats dependency comparison: existing windows-sys/libc needs no new crate and
   minimizes dependency size, but requires per-OS maintenance. sysinfo 0.39.6 is
@@ -116,6 +116,13 @@ ConPTY, 4096B/ms elsewhere), with no cap and still one Enter. Native fixtures
 query that production calculation and assert ordinary accepted prompts exactly
 match sends. Uncertain delivery is never retried or erased.
 
+Run 39018068301 passed both full-access scenarios, but supervised Windows still
+left the attachment paste editable. A fixed minimum alone is insufficient.
+Use Orca's additional 1.5s output-quiet gate after the ingest minimum, requiring
+new native output since the paste and failing closed after eight extra seconds.
+Production and the Windows host share the gate; passive parser replies stay live.
+No second Enter, erase or automatic retry is introduced.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable
@@ -126,7 +133,7 @@ PID 1 as sleep left orphan zombies and produced unrelated cleanup failures.
 
 Final local source: 6,839 web tests passed / 619 files (two opt-in CLI cases
 skipped in that run and passed separately on 2.1.301). Strict TypeScript,
-production web/host builds, Rust check and production Clippy pass. Rust: 758
+production web/host builds, Rust check and production Clippy pass. Rust: 760
 passed / two ignored in the corrected container. Windows fixture all-target
 Clippy and macOS metrics cross-check pass. Full Rust fmt/test Clippy still hit
 unchanged debug_inspector formatting and needless_borrow at tests.rs:161.
@@ -138,9 +145,12 @@ human checks.
 
 ## Done
 
-Source `421afa7462e7df4c953c4bc1ee8016c0275013f3` is pushed and matches
-`origin/nakul/windows-support-upstream-0.10.0`. Native Windows run
-[39017396800](https://github.com/imnakul/hari---Multiagent-Harness-with-Task-Session-Manager/actions/runs/39017396800)
-found the paste timing issue above. The correction is published separately;
-its Windows rerun is recorded after completion. No installer/version changes requested. Human desktop UI is a separate
-follow-up; do not drive the native window from this implementation session.
+Feature `421afa7` and paste-minimum correction `8c58290` are published on the
+authorized branch. Windows runs 39017396800 and 39018068301 exposed the paste
+timing issues above; the output-quiet correction's rerun is recorded after
+completion. No installer/version changes requested. Human desktop UI is a
+separate follow-up; do not drive the native window from this implementation session.
+
+Human check: use `npm run tauri:dev-profile` (separate app data, shared CLI
+account), enable the monitor in Experimentation, try Stop/resume and the new
+actions, then compare signed-in prompt-cache/quota behavior within an hour.

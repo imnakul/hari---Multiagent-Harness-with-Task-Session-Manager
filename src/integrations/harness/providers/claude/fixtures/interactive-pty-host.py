@@ -10,11 +10,16 @@ import subprocess
 import sys
 import termios
 import threading
+import time
 
 lock = threading.Lock()
 process = None
 master = None
 reader = None
+output_lock = threading.Lock()
+output_total = 0
+output_at = time.monotonic()
+paste_baseline = 0
 
 
 def emit(value):
@@ -23,15 +28,35 @@ def emit(value):
 
 
 def read_output(fd, child):
+    global output_total, output_at
     try:
         while True:
             chunk = os.read(fd, 65536)
             if not chunk:
                 break
+            with output_lock:
+                output_total += len(chunk)
+                output_at = time.monotonic()
             emit({"event": "data", "data": base64.b64encode(chunk).decode()})
     except OSError:
         pass
     emit({"event": "exit", "code": child.wait()})
+
+
+def settle_paste(request, baseline):
+    minimum = (500 + (int(request["data"]) + 4095) // 4096) / 1000
+    started = time.monotonic()
+    while True:
+        elapsed = time.monotonic() - started
+        with output_lock:
+            settled = output_total > baseline and time.monotonic() - output_at >= 1.5
+        if elapsed >= minimum and settled:
+            emit({"id": request["id"]})
+            return
+        if elapsed >= minimum + 8:
+            emit({"id": request["id"], "error": "Native paste output did not settle; no Enter was sent"})
+            return
+        time.sleep(0.02)
 
 
 def stop():
@@ -54,8 +79,8 @@ try:
         request = json.loads(line)
         try:
             command = request["command"]
-            if command == "paste-delay":
-                emit({"id": request["id"], "delayMs": 500 + (int(request["data"]) + 4095) // 4096})
+            if command == "paste-settle":
+                threading.Thread(target=settle_paste, args=(request, paste_baseline), daemon=True).start()
                 continue
             if command == "start":
                 stop()
@@ -74,9 +99,14 @@ try:
                 reader.start()
             elif command == "write":
                 data = request["data"].encode()
+                if data.startswith(b"\x1b[200~"):
+                    with output_lock:
+                        paste_baseline = output_total
                 while data:
                     count = os.write(master, data)
                     data = data[count:]
+                with output_lock:
+                    output_at = time.monotonic()
             elif command == "resize":
                 fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", request["rows"], request["cols"], 0, 0))
             elif command == "stop":

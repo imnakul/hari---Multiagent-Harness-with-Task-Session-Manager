@@ -883,14 +883,21 @@ pub fn claude_interactive_send(
     }
     // A write error is uncertain: retain the ledger and never retry either part.
     let result = (|| {
-        crate::pty::pty_write(
-            app.state(),
-            pty_id(&session_id),
-            format!("\x1b[200~{text}\x1b[201~"),
-        )?;
-        thread::sleep(crate::interactive_delivery::paste_settle_delay(
-            text.len() + 12,
-        ));
+        let pty_host = app.state::<crate::pty::PtyHost>();
+        let id = pty_id(&session_id);
+        let baseline = pty_host.paste_output(&id)?.0;
+        crate::pty::pty_write(app.state(), id.clone(), format!("\x1b[200~{text}\x1b[201~"))?;
+        crate::interactive_delivery::wait_for_paste(text.len() + 12, baseline, || {
+            let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+            if state.phase != "sending"
+                || state.terminal_owner
+                || !live.running.load(Ordering::Acquire)
+            {
+                return Err("Native input ownership changed after paste; no Enter was sent".into());
+            }
+            drop(state);
+            pty_host.paste_output(&id)
+        })?;
         let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.phase != "sending" || state.terminal_owner || !live.running.load(Ordering::Acquire)
         {

@@ -55,6 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         master: Box<dyn portable_pty::MasterPty + Send>,
         child: Arc<Mutex<Child>>,
         reader: std::thread::JoinHandle<()>,
+        output: Arc<Mutex<(u64, std::time::Instant, bool)>>,
+        paste_baseline: u64,
     }
     fn stop(live: Option<Live>) {
         if let Some(live) = live {
@@ -86,12 +88,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut live: Option<Live> = None;
     for line in std::io::stdin().lock().lines() {
         let request: Request = serde_json::from_str(&line?)?;
-        if request.command == "paste-delay" {
+        if request.command == "paste-settle" {
             let bytes = request.data.as_deref().unwrap_or("0").parse::<usize>()?;
-            emit(
-                &stdout,
-                json!({"id":request.id, "delayMs":interactive_delivery::paste_settle_delay(bytes).as_millis()}),
-            );
+            let live = live.as_ref().ok_or("No live PTY")?;
+            let baseline = live.paste_baseline;
+            let output = live.output.clone();
+            let stdout = stdout.clone();
+            // Keep serving passive parser replies while the shared production
+            // settlement gate waits on native output.
+            std::thread::spawn(move || {
+                let result = interactive_delivery::wait_for_paste(bytes, baseline, || {
+                    let state = output.lock().unwrap();
+                    if !state.2 {
+                        return Err("Native terminal exited".into());
+                    }
+                    Ok((state.0, state.1.elapsed()))
+                });
+                emit(
+                    &stdout,
+                    match result {
+                        Ok(()) => json!({"id":request.id}),
+                        Err(error) => json!({"id":request.id, "error":error}),
+                    },
+                );
+            });
             continue;
         }
         let result: Result<(), Box<dyn std::error::Error>> = (|| {
@@ -132,13 +152,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let child = Arc::new(Mutex::new(child));
                     let child_reader = child.clone();
                     let stream = stdout.clone();
+                    let output = Arc::new(Mutex::new((0u64, std::time::Instant::now(), true)));
+                    let output_reader = output.clone();
                     let reader = std::thread::spawn(move || {
                         output::pump(reader, |bytes| {
+                            let mut state = output_reader.lock().unwrap();
+                            state.0 += bytes.len() as u64;
+                            state.1 = std::time::Instant::now();
+                            drop(state);
                             emit(
                                 &stream,
                                 json!({"event":"data", "data":base64::engine::general_purpose::STANDARD.encode(bytes)}),
                             );
                         });
+                        output_reader.lock().unwrap().2 = false;
                         let code = child_reader
                             .lock()
                             .unwrap()
@@ -153,13 +180,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         master: pair.master,
                         child,
                         reader,
+                        output,
+                        paste_baseline: 0,
                     });
                 }
                 "write" => {
                     let live = live.as_mut().ok_or("No live PTY")?;
                     let data = request.data.as_deref().ok_or("Missing input")?;
+                    if data.starts_with("\x1b[200~") {
+                        live.paste_baseline = live.output.lock().unwrap().0;
+                    }
                     live.writer.write_all(data.as_bytes())?;
                     live.writer.flush()?;
+                    live.output.lock().unwrap().1 = std::time::Instant::now();
                 }
                 "resize" => {
                     live.as_ref().ok_or("No live PTY")?.master.resize(PtySize {

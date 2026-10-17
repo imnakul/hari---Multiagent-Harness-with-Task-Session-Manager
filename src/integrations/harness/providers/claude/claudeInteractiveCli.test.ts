@@ -528,14 +528,9 @@ it
             await rpc("write", {
               data: `\x1b[200~${String(args.text)}\x1b[201~`,
             });
-            const delay = await rpc("paste-delay", {
+            await rpc("paste-settle", {
               data: String(Buffer.byteLength(String(args.text), "utf8") + 12),
             });
-            if (delay == null)
-              throw new Error(
-                "Native host did not report its production paste delay",
-              );
-            await new Promise((resolve) => setTimeout(resolve, delay));
             return rpc("write", { data: "\r" });
           }
           if (command === "claude_interactive_terminal") {

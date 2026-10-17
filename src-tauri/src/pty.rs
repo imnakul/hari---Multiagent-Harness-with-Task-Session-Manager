@@ -97,6 +97,20 @@ pub struct PtyHost {
 }
 
 impl PtyHost {
+    pub(crate) fn paste_output(&self, id: &str) -> Result<(u64, Duration), String> {
+        let live = self
+            .get(id)
+            .ok_or("Native terminal exited before submission")?;
+        let activity = live.activity.lock().unwrap_or_else(|e| e.into_inner());
+        let total = self
+            .replay
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .map_or(0, |replay| replay.total);
+        Ok((total, activity.elapsed()))
+    }
+
     pub(crate) fn process_roots(&self) -> Vec<crate::process_stats::ProcessRoot> {
         self.sessions
             .lock()
