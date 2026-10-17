@@ -1,5 +1,9 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Match the reference's actual cursor default and typed request
+- What: Bundled node-pty restored the long fork and passed full-access end to end in 39030559003. Supervised capture retained `R[Pasted text…]`, so the literal lead was present but insufficient. Probe a bounded full first-line lead. Also correct the earlier flag assumption: node-pty defaults cursor inheritance to false and Orca does not enable it. Compare flags=0 with normal query replies, plus the bundled runtime with that same default.
+- Verified: Windows-target fixture Clippy, changed Rust formatting, reference JS syntax and opt-in transformation pass. Application defaults/dependencies remain unchanged; the latest full frontend gate remains 6,843 passed.
+- Commit: diagnostic follow-up on the authorized branch.
 ## 2026-10-17 — Compare Orca's actual bundled terminal runtime
 - What: Flags=1 also failed the complete-frame check on both Windows runners in 39029751814. Add a diagnostic-only node-pty reference host using its pinned bundled ConPTY and Orca's primary-device response. The same frontend, CLI, messages, hooks, transcript and assertions run unchanged; the original failure still fails the job.
 - Verified: Reference JavaScript syntax and opt-in test transformation pass. Application dependencies/defaults are unchanged from the 6,843-test checkpoint; node-pty installs only into the runner's temporary diagnostic directory, with install scripts disabled. No new Rust crate or production DLL dependency.

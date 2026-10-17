@@ -164,6 +164,14 @@ diagnostic host uses Orca's primary-device response and inherited-cursor handlin
 its package is temporary, install scripts are disabled, and no app dependency is
 added. Keep the original job failure so an oracle pass cannot mask a product failure.
 
+39030559003: bundled node-pty restores the long fork and its full-access case
+passes completely. Supervised retains `R[Pasted text…]` after compact: the lead
+is present, but one letter is insufficient. Probe a bounded full first-line
+lead. Correction to the earlier flag assumption: node-pty's inherit-cursor
+option defaults false and Orca leaves it unset. Compare system flags=0 without
+a pre-answer (normal frontend query replies) and bundled ConPTY with that same
+setting before changing production. No new app package, DLL or Rust crate yet.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable

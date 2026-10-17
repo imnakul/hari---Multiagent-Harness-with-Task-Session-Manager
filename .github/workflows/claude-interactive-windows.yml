@@ -59,6 +59,17 @@ jobs:
           $env:TMP = $env:TEMP
           npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
           exit $LASTEXITCODE
+      - name: Diagnostic comparison without cursor inheritance
+        if: failure()
+        shell: pwsh
+        run: |
+          $env:MONOCODE_CONPTY_PROBE_FLAGS = '0'
+          $env:TEMP = Join-Path $env:RUNNER_TEMP 'interactive-accounts'
+          New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+          $env:TMP = $env:TEMP
+          $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $env:RUNNER_TEMP 'interactive-capture/flags-0'
+          npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
+          exit $LASTEXITCODE
       - name: Diagnostic comparison with Orca bundled node-pty
         if: failure()
         timeout-minutes: 6

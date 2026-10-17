@@ -404,6 +404,23 @@ it
             };
             const fork = input.fork as
               { sourceProviderSessionId: string } | undefined;
+            if (
+              referenceHost ||
+              process.env.MONOCODE_CONPTY_PROBE_FLAGS === "0"
+            ) {
+              const terminal = interactiveTerminalFor(id)!.term;
+              // Non-inheriting consoles have no Rust-preanswered cursor query.
+              terminal.parser.registerCsiHandler({ final: "n" }, (params) => {
+                if (params.length === 1 && params[0] === 6) {
+                  const buffer = terminal.buffer.active;
+                  const data = `\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`;
+                  passiveReplies.push(data);
+                  void rpc("write", { data });
+                  return true;
+                }
+                return false;
+              });
+            }
             if (referenceHost) {
               // Orca's native-ConPTY primary device response, owned once here.
               interactiveTerminalFor(id)?.term.parser.registerCsiHandler(

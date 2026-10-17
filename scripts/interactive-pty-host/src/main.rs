@@ -153,9 +153,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     drop(pair.slave);
                     let reader = pair.master.try_clone_reader()?;
                     let mut writer = pair.master.take_writer()?;
-                    // Match the production Windows startup handshake exactly.
-                    writer.write_all(b"\x1b[1;1R")?;
-                    writer.flush()?;
+                    // Only cursor-inheriting consoles need this pre-answer.
+                    let inherited = std::env::var("MONOCODE_CONPTY_PROBE_FLAGS")
+                        .ok()
+                        .and_then(|value| value.parse::<u32>().ok())
+                        .unwrap_or(7)
+                        & 1
+                        != 0;
+                    if inherited {
+                        writer.write_all(b"\x1b[1;1R")?;
+                        writer.flush()?;
+                    }
                     let child = Arc::new(Mutex::new(child));
                     let child_reader = child.clone();
                     let stream = stdout.clone();

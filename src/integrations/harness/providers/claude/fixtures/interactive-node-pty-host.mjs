@@ -19,10 +19,14 @@ function paste(text) {
     let offset = 0;
     for (const letter of text) {
       if (/[\p{L}\p{N}]/u.test(letter)) {
-        const end = offset + letter.length;
+        let end = offset;
+        for (const next of [...text.slice(offset)].slice(0, 128)) {
+          if (next === "\n" || next === "\t") break;
+          end += next.length;
+        }
         return (
           (offset ? frame(text.slice(0, offset)) : "") +
-          letter +
+          text.slice(offset, end) +
           (end < text.length ? frame(text.slice(end)) : "")
         );
       }
@@ -67,7 +71,7 @@ async function dispatch(request) {
           env,
           name: "xterm-256color",
           useConptyDll: true,
-          conptyInheritCursor: true,
+          conptyInheritCursor: false,
         });
         let exited;
         const value = {
@@ -92,9 +96,6 @@ async function dispatch(request) {
           if (live === value) emit({ event: "exit", code: event.exitCode });
           exited();
         });
-        // Same inherited-cursor pre-answer as production; its echoed query is
-        // consumed by the existing frontend handler.
-        proc.write("\x1b[1;1R");
         break;
       }
       case "write":
