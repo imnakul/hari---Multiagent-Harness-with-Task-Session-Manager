@@ -78,7 +78,11 @@ type Props = {
   onSettingsChange: (settings: Record<string, string>) => void;
   onClose?: () => void;
   /** Local chat only: execution choices belong inside this existing picker. */
-  claudeExecution?: { disabled: boolean; onOpenTerminal?: () => void };
+  claudeExecution?: {
+    disabled: boolean;
+    onOpenTerminal?: () => void;
+    onOpenDiagnostics?: () => void;
+  };
 };
 
 type MenuEntry = { kind: "setting"; setting: ModelSetting } | { kind: "model" };
@@ -734,16 +738,16 @@ export function ModelPicker({
           ))}
         </div>
         {values.claudeExecution === "interactive" &&
-        claudeExecution.onOpenTerminal ? (
+        (claudeExecution.onOpenTerminal || claudeExecution.onOpenDiagnostics) ? (
           <button
             type="button"
             className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-[12px] text-content/70 hover:bg-content/5"
             onClick={() => {
               dismiss(false);
-              claudeExecution.onOpenTerminal?.();
+              (claudeExecution.onOpenTerminal ?? claudeExecution.onOpenDiagnostics)?.();
             }}
           >
-            Open native terminal
+            {claudeExecution.onOpenTerminal ? "Open native terminal" : "View startup diagnostics"}
           </button>
         ) : null}
       </div>

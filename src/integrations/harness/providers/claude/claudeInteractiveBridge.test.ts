@@ -17,6 +17,7 @@ const host = vi.hoisted(() => ({
   replies: [] as string[],
   terminalOwner: false,
   running: false,
+  startup: "",
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: host.invoke,
@@ -36,13 +37,24 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../core/child", () => ({
   hasHeadlessChildBackend: () => false,
   resolveClaudeBinary: async () => ({ path: "/fixture/claude" }),
+  killChild: async () => undefined,
+  unwatchChild: () => undefined,
 }));
 import {
   forgetInteractiveClaude,
   sendInteractiveClaude,
   stopInteractiveClaude,
+  interactiveClaudeDiagnostics,
+  hasInteractiveClaudeDiagnostics,
 } from "./claudeInteractive";
 import { interactiveTerminalFor } from "./claudeInteractiveTerminal";
+import { claudeAdapter } from "./claudeAdapter";
+import {
+  HARNESS_IDLE_PARK_MS,
+  registerHarness,
+  resetHarnessIdlePark,
+  sendHarnessTurn,
+} from "../../core/registry";
 
 const id = "whole-bridge";
 const events: HarnessEvent[] = [];
@@ -87,6 +99,7 @@ beforeEach(() => {
   host.nativeInput = [];
   host.replies = [];
   host.running = false;
+  host.startup = fixture.startup;
   host.terminalOwner = false;
   events.length = 0;
   accepted.mockClear();
@@ -95,12 +108,16 @@ beforeEach(() => {
     .mockImplementation(
       async (command: string, args: Record<string, unknown>) => {
         switch (command) {
+          case "harness_stop_confirmed":
+          case "control_authorize_turn":
+          case "control_turn_finished":
+            return;
           case "claude_interactive_start":
             host.running = true;
             host.terminalOwner = false;
             host.output = "";
             host.starts.push(args.input as Record<string, unknown>);
-            output(fixture.startup);
+            output(host.startup);
             return;
           case "pty_write":
             host.replies.push(String(args.data));
@@ -160,9 +177,66 @@ beforeEach(() => {
     );
 });
 afterEach(async () => {
+  resetHarnessIdlePark();
   await forgetInteractiveClaude(id);
   await vi.advanceTimersByTimeAsync(600); // Release the real PTY event bridge.
   vi.useRealTimers();
+});
+
+it("keeps the native recovery terminal and blocked snapshot past the idle parking deadline", async () => {
+  // An actual draft must block chat; no attempt to guess or erase its origin.
+  host.startup += "c";
+  registerHarness(claudeAdapter);
+  const turn = sendHarnessTurn({ ...input("First"), harness: "claude" }).catch(
+    (error: unknown) => error,
+  );
+  await waitFor(() => host.running);
+  await vi.advanceTimersByTimeAsync(21000);
+  expect(String(await turn)).toContain("No prompt was sent");
+  const terminal = interactiveTerminalFor(id);
+  const blocked = interactiveClaudeDiagnostics(id)?.lastBlocked;
+  expect(blocked?.terminal.reason).toBe("prompt-mismatch");
+  await vi.advanceTimersByTimeAsync(HARNESS_IDLE_PARK_MS * 2);
+  expect(host.running).toBe(true);
+  expect(interactiveTerminalFor(id)).toBe(terminal);
+  expect(interactiveClaudeDiagnostics(id)?.lastBlocked).toEqual(blocked);
+  expect(host.sends).toEqual([]);
+  expect(host.nativeInput).toEqual([]);
+  await stopInteractiveClaude(id);
+  expect(host.running).toBe(false);
+  expect(interactiveTerminalFor(id)).toBeUndefined();
+  expect(hasInteractiveClaudeDiagnostics(id)).toBe(true);
+  expect(interactiveClaudeDiagnostics(id)).toMatchObject({
+    status: "stopped",
+    current: { phase: "stopped", terminal: { reason: "stopped" } },
+    lastBlocked: blocked,
+  });
+  await forgetInteractiveClaude(id);
+  expect(hasInteractiveClaudeDiagnostics(id)).toBe(false);
+});
+
+it("retains the terminal and failure report when the native process exits", async () => {
+  host.startup += "c";
+  const turn = sendInteractiveClaude(input("First")).catch(
+    (error: unknown) => error,
+  );
+  await waitFor(() => host.running);
+  await vi.advanceTimersByTimeAsync(21000);
+  expect(String(await turn)).toContain("No prompt was sent");
+  const terminal = interactiveTerminalFor(id);
+  const blocked = interactiveClaudeDiagnostics(id)?.lastBlocked;
+  host.running = false;
+  host.listeners.get("pty-exit")?.({
+    payload: { id: `claude-interactive:${id}`, code: 1 },
+  });
+  expect(interactiveTerminalFor(id)).toBe(terminal);
+  expect(terminal?.stopped).toBe(true);
+  expect(interactiveClaudeDiagnostics(id)).toMatchObject({
+    status: "exited",
+    current: { terminal: { reason: "stopped" } },
+    lastBlocked: blocked,
+  });
+  expect(host.sends).toEqual([]);
 });
 
 it("sends two GUI turns without mounting a terminal or losing input to focus reports", async () => {

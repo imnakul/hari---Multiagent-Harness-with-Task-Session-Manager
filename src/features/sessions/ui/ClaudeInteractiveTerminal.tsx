@@ -26,6 +26,7 @@ export function ClaudeInteractiveTerminal({
     interactiveTerminalRevision,
   );
   const terminal = interactiveTerminalFor(sessionId);
+  const diagnostics = interactiveClaudeDiagnostics(sessionId);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const host = useRef<HTMLDivElement>(null);
@@ -53,13 +54,13 @@ export function ClaudeInteractiveTerminal({
   }, [terminal]);
   return (
     <Modal
-      title="Claude native terminal"
+      title={terminal ? "Claude native terminal" : "Claude startup diagnostics"}
       onClose={onClose}
-      closeOnEscape={false}
+      closeOnEscape={!terminal || terminal.stopped}
       fitViewport
     >
       <div className="flex items-center gap-3 px-3 py-2 text-[11px]">
-        {terminal ? (
+        {terminal && !terminal.stopped ? (
           <>
             <button
               type="button"
@@ -99,37 +100,37 @@ export function ClaudeInteractiveTerminal({
             >
               Stop Claude
             </button>
-            <button
-              type="button"
-              className="hover:text-accent"
-              onClick={() => {
-                void navigator.clipboard
-                  .writeText(
-                    JSON.stringify(
-                      interactiveClaudeDiagnostics(sessionId),
-                      null,
-                      2,
-                    ),
-                  )
-                  .then(() => setCopied(true))
-                  .catch((reason: unknown) => setError(String(reason)));
-              }}
-            >
-              {copied ? "Copied" : "Copy diagnostics"}
-            </button>
-            <span className="ml-auto text-content/50">
-              {terminal.stopped
-                ? "Process exited"
-                : terminal.owner
-                  ? "Terminal has input"
-                  : "Chat has input"}
-            </span>
           </>
         ) : null}
+        <button
+          type="button"
+          disabled={!diagnostics}
+          className="hover:text-accent disabled:opacity-50"
+          onClick={() => {
+            const report = interactiveClaudeDiagnostics(sessionId);
+            if (!report) return;
+            void navigator.clipboard
+              .writeText(JSON.stringify(report, null, 2))
+              .then(() => setCopied(true))
+              .catch((reason: unknown) => setError(String(reason)));
+          }}
+        >
+          {copied ? "Copied" : "Copy diagnostics"}
+        </button>
+        <span className="ml-auto text-content/50">
+          {!terminal
+            ? "Process stopped"
+            : terminal.stopped
+              ? "Process exited"
+              : terminal.owner
+                ? "Terminal has input"
+                : "Chat has input"}
+        </span>
       </div>
       <p className="px-3 pb-2 text-[11px] text-content/60">
-        Same conversation as chat. Use this for Claude setup or native commands.
-        Close menus and clear terminal drafts, then Return to chat.
+        {terminal && !terminal.stopped
+          ? "Same conversation as chat. Use this for Claude setup or native commands. Close menus and clear terminal drafts, then Return to chat."
+          : "Claude is no longer running. Copy diagnostics to share its saved readiness checks and last blocked send. This does not start Claude or send a message."}
       </p>
       {error ? (
         <p role="alert" className="px-3 pb-2 text-[11px] text-amber-400">

@@ -161,6 +161,21 @@ describe("model picker", () => {
     expect(onOpenTerminal).toHaveBeenCalledTimes(1);
   });
 
+  it.each([true, false])("keeps saved startup diagnostics available without a live terminal (beside=%s)", (hideSettings) => {
+    const onOpenDiagnostics = vi.fn();
+    act(() => root.render(createElement(ModelPicker, {
+      harness: "claude", model: "claude:sonnet-5", values: { claudeExecution: "interactive" },
+      hideSettings, onChange: vi.fn(), onSettingsChange: vi.fn(),
+      claudeExecution: { disabled: false, onOpenDiagnostics },
+    })));
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+    expect(container.textContent).not.toContain("Open native terminal");
+    const diagnostics = [...container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "View startup diagnostics")!;
+    expect(diagnostics).toBeDefined();
+    act(() => diagnostics.click());
+    expect(onOpenDiagnostics).toHaveBeenCalledOnce();
+  });
+
   it("shows the model name and effort in the combined picker", () => {
     const onChange = vi.fn();
     const onSettingsChange = vi.fn();

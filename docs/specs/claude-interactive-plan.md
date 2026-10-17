@@ -45,6 +45,32 @@ existing chat UI. Claude owns native context; no summary transfer.
 
 ## Issues and fixes
 
+Fourth report (2026-10-17): the user cannot follow the diagnostics request
+because the terminal action disappears after several minutes. The registry
+unconditionally schedules its five-minute child parking timer when a send
+rejects with attention; parking stops the interactive owner, disposes the VT
+screen and deletes the only diagnostic snapshot. The picker also hides exited
+terminals. Small lifecycle repair: give providers an explicit idle-parking veto,
+retain native interactive owners until an explicit stop/detach, preserve bounded
+metadata reports after Stop, and expose reports independently of a live terminal.
+Reproduce the five-minute failure through the production registry/Claude adapter
+and real VT parser, then verify no resend and report access after stop/exit.
+This repairs disappearing recovery evidence; the first-send prompt mismatch and
+automatic `c` reported in Windows remain unconfirmed. Do not erase terminal
+drafts or treat a later ownership snapshot as proof of that startup cause.
+
+Reproduction uses the production registry, Claude transport router, real xterm
+and production PTY subscriptions, with only desktop IPC replaced. A synthetic
+draft blocks the first send; advancing the registry's real five-minute deadline
+then killed the process and deleted the evidence on the old source. The repaired
+provider veto prevents that stop; a ten-minute fake-clock wait retains the same
+owner and report without sending anything. Native exit retains its screen/report;
+explicit Stop retains up to 50 metadata-only reports per window, and Forget clears
+the report. The existing picker offers View startup diagnostics after disposal;
+copying this report starts no provider. This does not recover evidence already
+discarded by an older version or a window restart, and is not a reproduction of
+the automatic Windows `c`. Web regression/check/build results follow in the changelog.
+
 Repair after the first Windows trial (2026-10-16): user reported a readiness
 timeout, a dead terminal panel attached to the composer, and a native black
 execution select. Real CLI 2.1.301 startup captured with an isolated local fixture
@@ -242,3 +268,20 @@ Separate human desktop/provider checklist (`npm run tauri dev`):
   existing chat. A new chat alone does not load this Rust change. If an empty
   prompt is still rejected, Copy diagnostics preserves both blocked and current
   readiness metadata without prompt/screen/account data.
+
+### Lifecycle repair verification (2026-10-17)
+
+- The five-minute disappearance is reproduced through the registry/Claude router
+  and real VT parser; the repaired source retains the failed owner past ten fake
+  minutes without an attempted prompt write. Another test rechecks the provider
+  veto at timer expiry and verifies ordinary parking resumes when permitted.
+- Stop/exit report access, Forget cleanup, both existing picker layouts and the
+  actual composer-to-report/clipboard path pass regression tests. No Rust source
+  changed. Final full web suite **6,811 tests / 618 files passed**, including both opt-in real CLI cases; strict TypeScript and production web/host builds passed. Existing CSS optimizer/bundle warnings remain.
+- Human Windows follow-up after updating: send once in the same MonoCode chat.
+  If startup fails, open the model picker, Open native terminal, then Copy
+  diagnostics before using the terminal or retrying. Paste the copied JSON.
+  If the process has stopped, View startup diagnostics opens the retained report.
+  A window restart or Forget clears in-memory evidence, so an older lost report
+  needs one new failed attempt after updating. The original Windows first-send
+  mismatch/automatic `c` remains open; this repair does not claim its cause.

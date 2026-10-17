@@ -23,6 +23,13 @@ The second repair adds combined adapter/xterm/PTY tests because checking the scr
 alone missed `CSI O` focus replies claiming chat ownership. Normal web tests run
 those regressions without installing Claude or making requests.
 
+The lifecycle regressions also use the production registry and Claude transport
+router. A synthetic draft blocks sending, then a ten-minute fake-clock wait
+checks that idle parking does not kill the recovery owner. Explicit Stop and
+native exit retain metadata diagnostics, and Forget clears the report. The
+synthetic draft tests delivery safety; it does not reproduce or explain the
+automatic `c` reported with the signed-in Windows CLI.
+
 For the opt-in real CLI test on Linux/macOS (Python 3 and an installed CLI required):
 
 ```sh

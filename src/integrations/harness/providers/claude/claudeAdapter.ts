@@ -126,6 +126,8 @@ export const claudeAdapter: HarnessAdapter = {
       await stopInteractiveClaude(id);
     else await stopClaudeSession(id);
   },
+  // Menus, drafts and terminal turns outlive the GUI send. Stop/detach still tears down the owner.
+  canIdlePark: (id): boolean => !hasInteractiveClaude(id),
   forgetSession: async (id): Promise<void> => {
     interactiveSelections.delete(id);
     await forgetInteractiveClaude(id);

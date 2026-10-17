@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-17 — Keep interactive recovery sessions and diagnostics available (L-82)
+- What: Reproduced the registry's five-minute idle cleanup killing a Claude Interactive session after a blocked first send. Native interactive owners now veto idle parking; explicit Stop/detach/transport changes still tear them down. Exited terminal screens remain accessible, and Stop retains up to 50 metadata-only reports per window. The existing picker offers View startup diagnostics after terminal disposal, with Copy diagnostics independent of a running process; Forget clears the report.
+- Files: harness registry and Claude adapter/lifecycle; existing composer/model picker/native-terminal dialog; registry/real-VT lifecycle and composer/clipboard regressions; L-82 and spec records.
+- Verified: the new combined production-registry/Claude-adapter/real-xterm regression failed on the previous source, then passed with the same blocked owner retained past ten simulated minutes and no send. Stop/exit evidence and report-copy UI regressions pass. Final full web suite 6,811 passed / 618 files, including both opt-in real CLI cases; strict TypeScript and production web/host builds passed. Existing CSS optimizer/bundle warnings remain. No Rust source changed. Signed-in Windows remains manual; the original first-send prompt mismatch and automatic `c` are still unresolved. No terminal draft is automatically erased or submitted.
+- Commit: included in the user-authorized 0.10.0 lifecycle repair publication; SHA reported in the delivery message.
+
 ## 2026-10-17 — Flush Windows PTY output while its blocking reader is idle (L-14, L-82)
 - What: Replaced ConPTY's read-driven flush check with a bounded reader channel and independent 8ms receive deadline. A terminal query/final prompt no longer needs another write or EOF to reach the renderer/replay buffer. Startup failures now distinguish missing output, unsettled parsing and unmatched prompts; metadata-only current/blocked snapshots can be copied from the existing native-terminal dialog.
 - Files: `src-tauri/src/pty.rs`, `pty_output.rs`; Claude interactive protocol/terminal/adapter, native-terminal diagnostics UI and tests; L-14/L-82, Windows notes and spec.

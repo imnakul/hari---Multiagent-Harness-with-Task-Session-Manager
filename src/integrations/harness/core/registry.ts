@@ -105,6 +105,8 @@ export type HarnessAdapter = {
   keepQuestionOpen?(sessionId: string, requestId: number): void;
   /** Kill the child but keep resume state for later rebind. */
   stopSession(sessionId: string): Promise<void>;
+  /** False while a native session owns interactions beyond a MonoCode turn. Read-only. */
+  canIdlePark?(sessionId: string): boolean;
   /** Drop resume state and kill the child (delete, harness switch, idle detach). */
   forgetSession(sessionId: string): Promise<void>;
   /** Seed resume state from a restored MonoCode session. */
@@ -215,14 +217,15 @@ function cancelIdlePark(sessionId: string): void {
 
 function scheduleIdlePark(harness: HarnessId, sessionId: string): void {
   cancelIdlePark(sessionId);
-  const adapterDesired = adapters
-    .get(harness)
-    ?.isRemoteControlDesired?.(sessionId);
+  const adapter = adapters.get(harness);
+  if (adapter?.canIdlePark?.(sessionId) === false) return;
+  const adapterDesired = adapter?.isRemoteControlDesired?.(sessionId);
   if (adapterDesired ?? idleParkExempt.has(sessionId)) return;
   idleParkTimers.set(
     sessionId,
     setTimeout(() => {
       idleParkTimers.delete(sessionId);
+      if (adapters.get(harness)?.canIdlePark?.(sessionId) === false) return;
       void stopHarnessSession(harness, sessionId);
     }, HARNESS_IDLE_PARK_MS),
   );

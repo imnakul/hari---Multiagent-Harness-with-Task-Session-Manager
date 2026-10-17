@@ -375,6 +375,30 @@ describe("harness registry", () => {
     expect(stopSession).toHaveBeenCalledWith("s1");
   });
 
+  it("rechecks a provider's native ownership before an already scheduled idle stop", async () => {
+    vi.useFakeTimers();
+    const stopSession = vi.fn(async () => undefined);
+    let canPark = true;
+    registerHarness(stub("cursor", { stopSession, canIdlePark: () => canPark }));
+    const input: SendTurnInput & { harness: HarnessId } = {
+      harness: "cursor",
+      sessionId: "native-ownership",
+      cwd: "/tmp",
+      model: "cursor:composer-2.5",
+      text: "hi",
+      runtimeMode: "supervised",
+      onEvent: () => undefined,
+    };
+    await sendHarnessTurn(input);
+    canPark = false;
+    await vi.advanceTimersByTimeAsync(HARNESS_IDLE_PARK_MS);
+    expect(stopSession).not.toHaveBeenCalled();
+    canPark = true;
+    await sendHarnessTurn(input);
+    await vi.advanceTimersByTimeAsync(HARNESS_IDLE_PARK_MS);
+    expect(stopSession).toHaveBeenCalledExactlyOnceWith(input.sessionId);
+  });
+
   it("keeps desired Remote Control sessions warm and restores parking on disable", async () => {
     vi.useFakeTimers();
     const stopSession = vi.fn(async () => undefined);

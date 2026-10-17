@@ -53,11 +53,16 @@ type Poll = {
   more: boolean;
 };
 type ReadinessSnapshot = {
-  revision: "2026-10-17-pty-flush";
+  revision: "2026-10-17-session-lifecycle";
   phase: string;
   pendingTurn: boolean;
   externalTurn: boolean;
   terminal: InteractiveReadiness;
+};
+type InteractiveDiagnostics = {
+  status: "live" | "exited" | "stopped";
+  current: ReadinessSnapshot;
+  lastBlocked?: ReadinessSnapshot;
 };
 type Live = {
   id: string;
@@ -79,6 +84,9 @@ type Live = {
 };
 const bindings = new Map<string, Binding>();
 const lives = new Map<string, Live>();
+// Metadata only, bounded per window. Explicit Forget clears the session's report.
+const stoppedDiagnostics = new Map<string, InteractiveDiagnostics>();
+const MAX_STOPPED_DIAGNOSTICS = 50;
 const epochs = new Map<string, number>();
 
 export function interactiveClaudeEpoch(id: string): number {
@@ -108,23 +116,27 @@ export function hasInteractiveClaude(id: string): boolean {
 
 function readinessSnapshot(live: Live): ReadinessSnapshot {
   return {
-    revision: "2026-10-17-pty-flush",
+    revision: "2026-10-17-session-lifecycle",
     phase: live.phase,
     pendingTurn: !!live.pending,
     externalTurn: !!live.external,
     terminal: live.terminal.inspect(),
   };
 }
-export function interactiveClaudeDiagnostics(id: string):
-  | {
-      current: ReadinessSnapshot;
-      lastBlocked?: ReadinessSnapshot;
-    }
-  | undefined {
+export function hasInteractiveClaudeDiagnostics(id: string): boolean {
+  return lives.has(id) || stoppedDiagnostics.has(id);
+}
+export function interactiveClaudeDiagnostics(
+  id: string,
+): InteractiveDiagnostics | undefined {
   const live = lives.get(id);
   return live
-    ? { current: readinessSnapshot(live), lastBlocked: live.lastBlocked }
-    : undefined;
+    ? {
+        status: live.terminal.stopped ? "exited" : "live",
+        current: readinessSnapshot(live),
+        lastBlocked: live.lastBlocked,
+      }
+    : stoppedDiagnostics.get(id);
 }
 
 function emit(live: Live, event: HarnessEvent): void {
@@ -429,6 +441,7 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
     stopping: 0,
   };
   lives.set(input.sessionId, live);
+  stoppedDiagnostics.delete(input.sessionId);
   try {
     const effort = input.modelSettings?.effort;
     if (
@@ -681,14 +694,27 @@ export async function stopInteractiveClaude(
     live.pending = undefined;
   }
   await invoke("claude_interactive_stop", { sessionId: id });
-  live?.terminal.dispose();
+  if (live) {
+    live.phase = "stopped";
+    live.terminal.stopped = true;
+    stoppedDiagnostics.delete(id);
+    stoppedDiagnostics.set(id, {
+      status: "stopped",
+      current: readinessSnapshot(live),
+      lastBlocked: live.lastBlocked,
+    });
+    while (stoppedDiagnostics.size > MAX_STOPPED_DIAGNOSTICS)
+      stoppedDiagnostics.delete(stoppedDiagnostics.keys().next().value!);
+  }
   lives.delete(id);
+  live?.terminal.dispose();
 }
 
 export async function forgetInteractiveClaude(id: string): Promise<void> {
   epochs.set(id, interactiveClaudeEpoch(id) + 1);
   if (lives.has(id)) await stopInteractiveClaude(id);
   bindings.delete(id);
+  stoppedDiagnostics.delete(id);
 }
 
 export function rejectInteractiveSteer(): never {
