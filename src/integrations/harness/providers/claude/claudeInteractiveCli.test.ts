@@ -525,12 +525,8 @@ it
           }
           if (command === "claude_interactive_send") {
             sends.push(String(args.text));
-            await rpc("write", {
-              data: `\x1b[200~${String(args.text)}\x1b[201~`,
-            });
-            await rpc("paste-settle", {
-              data: String(Buffer.byteLength(String(args.text), "utf8") + 12),
-            });
+            await rpc("paste", { data: String(args.text) });
+            await rpc("paste-settle");
             return rpc("write", { data: "\r" });
           }
           if (command === "claude_interactive_terminal") {
@@ -549,6 +545,9 @@ it
         "Line one\nLine two",
         "After Stop and native resume",
         "One more resumed turn",
+        "Dense single-line request " + "context ".repeat(300).trimEnd(),
+        "Long Unicode request 你好 नमस्ते\nLine 2\nLine 3\nLine 4\nLine 5",
+        "\n\t!नमस्ते\nLine 2\nLine 3\nLine 4\nLine 5",
       ];
       for (const text of messages) {
         if (text === messages[2]) await stopInteractiveClaude(id);
@@ -568,8 +567,11 @@ it
         expect(interactiveTerminalFor(id)?.owner).toBe(false);
         expect(interactiveTerminalFor(id)?.term.element).toBeUndefined();
       }
-      expect(sends).toEqual(messages);
-      expect(acceptedPrompts).toEqual(messages);
+      const nativeMessages = messages.map((text) =>
+        text.replaceAll("\t", "    "),
+      );
+      expect(sends).toEqual(nativeMessages);
+      expect(acceptedPrompts).toEqual(nativeMessages);
       expect(accepted).toHaveBeenCalledTimes(messages.length);
       expect(nativeInput).toEqual([]);
       expect(events.filter((event) => event.type === "message.delta")).toEqual(

@@ -886,8 +886,10 @@ pub fn claude_interactive_send(
         let pty_host = app.state::<crate::pty::PtyHost>();
         let id = pty_id(&session_id);
         let baseline = pty_host.paste_output(&id)?.0;
-        crate::pty::pty_write(app.state(), id.clone(), format!("\x1b[200~{text}\x1b[201~"))?;
-        crate::interactive_delivery::wait_for_paste(text.len() + 12, baseline, || {
+        let payload = crate::interactive_delivery::paste_payload(&text);
+        let bytes = payload.len();
+        crate::pty::pty_write(app.state(), id.clone(), payload)?;
+        crate::interactive_delivery::wait_for_paste(bytes, baseline, || {
             let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
             if state.phase != "sending"
                 || state.terminal_owner

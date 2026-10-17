@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Keep literal request text outside a folded Claude paste | ConPTY, supervised input |
 | 17 Oct 2026 | Require observed output quiet before the single Enter | ConPTY, paste settlement |
 | 17 Oct 2026 | Let Claude attach a paste before the single Enter | ConPTY, send-once delivery |
 | 17 Oct 2026 | Sample owned process trees without spawning Windows commands | resources, native APIs |
@@ -57,6 +58,18 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 - Keep literal request text outside a folded Claude paste
+
+Both Windows runners in 39026195881 still left supervised attachment references
+editable despite output quiet. Timing alone was an incomplete diagnosis. Orca's
+Claude config explicitly requires typed request text outside the folded context
+paste. Keep one original alphanumeric character literal and frame everything
+before/after it in the same write, without adding text or typing shortcuts.
+The shared Rust builder and gate are used by production and the Windows host.
+Actual native tests compare complete accepted messages, including long one-line,
+Unicode and leading-whitespace inputs. CLI tabs expand to four spaces; normalize
+that representation before sending so exact confirmation remains meaningful.
 
 ## 17 Oct 2026 - Require observed output quiet before the single Enter
 

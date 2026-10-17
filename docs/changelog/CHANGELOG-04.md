@@ -1,5 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Keep typed request text outside Claude's folded paste
+- What: Windows run 39026195881 proves output quiet alone does not fix supervised context-only folded pastes. Follow Orca's typed-request contract without adding instructions: one original alphanumeric character stays literal, with the preceding/remainder text framed in the same write. Preserve one Enter, phase/ownership fencing and exact acceptance. Match the native editor's verified four-space tab expansion before sending.
+- Completion: Wait for the Stop hook's final assistant text to reach JSONL before completing. Preserve autonomous Stops that precede transcript output; a delayed final reply must not become a stuck false external turn.
+- Files: `interactive_delivery.rs`, native fixture hosts, `claudeInteractive.ts` and delivery/real-CLI tests. Regressions include dense single-line, long Unicode, leading-whitespace inputs and both late-JSONL completion orders.
+- Verified: 6,840 web tests and 29 targeted delivery tests (including two new late-JSONL cases), strict TypeScript, current web/host builds, 761 Rust tests (two ignored), production Clippy and Windows fixture Clippy pass. Both expanded native CLI 2.1.301 scenarios pass with ten exactly accepted ordinary prompts. Windows rerun follows publication. No global settings, installer or version change.
+- Commit: follow-up to eb4cd8a on the authorized branch.
+
 ## 2026-10-17 — Observe native paste output before submitting
 - What: Run 39018068301 passed full-access on both Windows runners, but supervised mode still left attachment references editable. Add Orca's 1.5s output-quiet gate after the byte-dependent minimum, require output after the paste, and fail closed after eight extra seconds. Production and the Windows fixture share the Rust gate; passive terminal replies remain live. No repeat Enter or resend.
 - Files: `src-tauri/src/interactive_delivery.rs`, `claude_interactive.rs`, `pty.rs`; native CLI fixture hosts.

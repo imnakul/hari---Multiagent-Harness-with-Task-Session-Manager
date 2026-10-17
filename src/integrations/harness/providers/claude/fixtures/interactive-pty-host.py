@@ -20,6 +20,7 @@ output_lock = threading.Lock()
 output_total = 0
 output_at = time.monotonic()
 paste_baseline = 0
+paste_bytes = 0
 
 
 def emit(value):
@@ -43,8 +44,21 @@ def read_output(fd, child):
     emit({"event": "exit", "code": child.wait()})
 
 
-def settle_paste(request, baseline):
-    minimum = (500 + (int(request["data"]) + 4095) // 4096) / 1000
+def frame(text):
+    return "\x1b[200~" + text + "\x1b[201~"
+
+
+def paste_payload(text):
+    if text != "/compact":
+        for offset, letter in enumerate(text):
+            if letter.isalnum():
+                return ((frame(text[:offset]) if offset else "") + letter +
+                        (frame(text[offset + 1:]) if offset + 1 < len(text) else ""))
+    return frame(text)
+
+
+def settle_paste(request, baseline, size):
+    minimum = (500 + (size + 4095) // 4096) / 1000
     started = time.monotonic()
     while True:
         elapsed = time.monotonic() - started
@@ -80,7 +94,7 @@ try:
         try:
             command = request["command"]
             if command == "paste-settle":
-                threading.Thread(target=settle_paste, args=(request, paste_baseline), daemon=True).start()
+                threading.Thread(target=settle_paste, args=(request, paste_baseline, paste_bytes), daemon=True).start()
                 continue
             if command == "start":
                 stop()
@@ -97,11 +111,12 @@ try:
                     os.close(slave)
                 reader = threading.Thread(target=read_output, args=(master, process), daemon=True)
                 reader.start()
-            elif command == "write":
-                data = request["data"].encode()
-                if data.startswith(b"\x1b[200~"):
+            elif command in ["write", "paste"]:
+                data = (paste_payload(request["data"]) if command == "paste" else request["data"]).encode()
+                if command == "paste":
                     with output_lock:
                         paste_baseline = output_total
+                        paste_bytes = len(data)
                 while data:
                     count = os.write(master, data)
                     data = data[count:]

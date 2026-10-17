@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         reader: std::thread::JoinHandle<()>,
         output: Arc<Mutex<(u64, std::time::Instant, bool)>>,
         paste_baseline: u64,
+        paste_bytes: usize,
     }
     fn stop(live: Option<Live>) {
         if let Some(live) = live {
@@ -89,8 +90,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for line in std::io::stdin().lock().lines() {
         let request: Request = serde_json::from_str(&line?)?;
         if request.command == "paste-settle" {
-            let bytes = request.data.as_deref().unwrap_or("0").parse::<usize>()?;
             let live = live.as_ref().ok_or("No live PTY")?;
+            let bytes = live.paste_bytes;
             let baseline = live.paste_baseline;
             let output = live.output.clone();
             let stdout = stdout.clone();
@@ -182,13 +183,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         reader,
                         output,
                         paste_baseline: 0,
+                        paste_bytes: 0,
                     });
                 }
-                "write" => {
+                "write" | "paste" => {
                     let live = live.as_mut().ok_or("No live PTY")?;
-                    let data = request.data.as_deref().ok_or("Missing input")?;
-                    if data.starts_with("\x1b[200~") {
+                    let input = request.data.as_deref().ok_or("Missing input")?;
+                    let data = if request.command == "paste" {
+                        interactive_delivery::paste_payload(input)
+                    } else {
+                        input.to_string()
+                    };
+                    if request.command == "paste" {
                         live.paste_baseline = live.output.lock().unwrap().0;
+                        live.paste_bytes = data.len();
                     }
                     live.writer.write_all(data.as_bytes())?;
                     live.writer.flush()?;

@@ -2,6 +2,35 @@
 //! Enter. A write acknowledgement does not mean the paste is attached.
 use std::time::{Duration, Instant};
 
+fn frame(text: &str) -> String {
+    format!("\x1b[200~{text}\x1b[201~")
+}
+
+/// Claude manual mode needs literal request text outside a folded context paste.
+/// Keep every original character and never type a control or mode shortcut.
+pub(crate) fn paste_payload(text: &str) -> String {
+    if text != "/compact" {
+        if let Some((offset, letter)) = text.char_indices().find(|(_, c)| c.is_alphanumeric()) {
+            let end = offset + letter.len_utf8();
+            return format!(
+                "{}{}{}",
+                if offset == 0 {
+                    String::new()
+                } else {
+                    frame(&text[..offset])
+                },
+                letter,
+                if end == text.len() {
+                    String::new()
+                } else {
+                    frame(&text[end..])
+                },
+            );
+        }
+    }
+    frame(text)
+}
+
 pub(crate) fn paste_settle_delay(bytes: usize) -> Duration {
     // Orca's measured ConPTY ingest floor is 64 bytes/ms; Unix is much faster.
     // Keep the CLI's 500ms attachment window after ingestion, without a cap.
@@ -38,6 +67,28 @@ pub(crate) fn wait_for_paste(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn typed_request_preserves_unicode_whitespace_and_punctuation_without_hotkeys() {
+        for (text, expected) in [
+            (
+                "Read files\none\ntwo\nthree\nfour",
+                "R\x1b[200~ead files\none\ntwo\nthree\nfour\x1b[201~",
+            ),
+            (
+                "\n\t!हैलो\nworld",
+                "\x1b[200~\n\t!\x1b[201~ह\x1b[200~ैलो\nworld\x1b[201~",
+            ),
+            ("///\n123", "\x1b[200~///\n\x1b[201~1\x1b[200~23\x1b[201~"),
+            ("/compact", "\x1b[200~/compact\x1b[201~"),
+        ] {
+            assert_eq!(paste_payload(text), expected);
+            assert_eq!(
+                expected.replace("\x1b[200~", "").replace("\x1b[201~", ""),
+                text
+            );
+        }
+    }
+
     #[test]
     fn large_pastes_keep_the_full_ingest_floor_before_one_submit() {
         assert!(paste_settle_delay(512 * 1024) > paste_settle_delay(1024));

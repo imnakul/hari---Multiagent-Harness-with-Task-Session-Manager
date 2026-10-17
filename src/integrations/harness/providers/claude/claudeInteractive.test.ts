@@ -198,25 +198,28 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(0);
   });
 
-  it("submits multiline input once and only acknowledges the native UserPromptSubmit", async () => {
-    const turn = sendInteractiveClaude(input());
-    await waitFor(() => mocks.sends.length === 1);
-    await settle();
-    expect(onAccepted).toHaveBeenCalledTimes(1);
-    finish();
-    await vi.advanceTimersByTimeAsync(1000);
-    await turn;
-    expect(mocks.sends).toEqual(["first line\nsecond line"]);
-    expect(mocks.starts[0]).toMatchObject({
-      resume: false,
-      model: "claude-sonnet-5",
-      effort: "medium",
-      permissionMode: "default",
-    });
-    expect(events.some((event) => event.type === "session.providerBound")).toBe(
-      true,
-    );
-  });
+  it.each(["first line\nsecond line", "Tabbed\tline\n\tIndented"])(
+    "submits multiline input once and confirms native tab expansion (%s)",
+    async (text) => {
+      const turn = sendInteractiveClaude(input({ text }));
+      await waitFor(() => mocks.sends.length === 1);
+      await settle();
+      expect(onAccepted).toHaveBeenCalledTimes(1);
+      finish();
+      await vi.advanceTimersByTimeAsync(1000);
+      await turn;
+      expect(mocks.sends).toEqual([text.replaceAll("\t", "    ")]);
+      expect(mocks.starts[0]).toMatchObject({
+        resume: false,
+        model: "claude-sonnet-5",
+        effort: "medium",
+        permissionMode: "default",
+      });
+      expect(
+        events.some((event) => event.type === "session.providerBound"),
+      ).toBe(true);
+    },
+  );
   it("does not retry an uncertain write, even when another send is attempted", async () => {
     mocks.sendError = true;
     const turn = sendInteractiveClaude(input()).catch(
@@ -416,6 +419,34 @@ describe("interactive turn delivery", () => {
 });
 
 describe("interactive observation and parking", () => {
+  it("waits for the Stop hook's final reply when native JSONL flushes late", async () => {
+    let finished = false;
+    const turn = sendInteractiveClaude(input()).then(() => {
+      finished = true;
+    });
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    hook("Stop", {
+      last_assistant_message: "Late final reply",
+      background_tasks: [],
+      session_crons: [],
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(finished).toBe(false);
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "late-final",
+        message: { content: [{ type: "text", text: "Late final reply" }] },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events.filter((e) => e.type === "externalTurn.started")).toEqual([]);
+    expect(events).toContainEqual({
+      type: "message.delta",
+      text: "Late final reply",
+    });
+  });
   async function idle(): Promise<void> {
     const turn = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);
@@ -423,6 +454,32 @@ describe("interactive observation and parking", () => {
     await vi.advanceTimersByTimeAsync(3000);
     await turn;
   }
+  it("retains an autonomous Stop before its transcript without UserPromptSubmit", async () => {
+    await idle();
+    hook("Stop", {
+      last_assistant_message: "Automatic reply",
+      background_tasks: [],
+      session_crons: [],
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "late-automatic",
+        message: { content: [{ type: "text", text: "Automatic reply" }] },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "externalTurn.started" }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "externalTurn.finished" }),
+    );
+    expect(
+      interactiveClaudeDiagnostics("interactive-test")?.current.externalTurn,
+    ).toBe(false);
+  });
   it("suppresses ordinary idle notifications and preserves genuine attention", async () => {
     await idle();
     hook("Notification", {

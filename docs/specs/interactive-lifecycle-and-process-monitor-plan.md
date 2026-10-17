@@ -123,6 +123,20 @@ new native output since the paste and failing closed after eight extra seconds.
 Production and the Windows host share the gate; passive parser replies stay live.
 No second Enter, erase or automatic retry is introduced.
 
+The quiet gate alone also fails supervised Windows (39026195881). Orca marks
+Claude as needing a typed request outside a folded paste. Preserve the exact
+message by typing one alphanumeric character from it and framing the preceding
+and remaining text as paste blocks, in one write. Test long/Unicode/leading
+whitespace messages and exact native acceptance; no invented lead instruction.
+The native editor expands tabs to four spaces; normalize that before delivery
+instead of falsely treating indentation as a different accepted prompt.
+
+A loaded native probe also delivered Stop before its final JSONL flush. Require
+the hook's `last_assistant_message` to be rendered before completing that turn.
+Keep an autonomous Stop until its assistant arrives, even without a submit hook;
+otherwise a late reply becomes a stuck, false external turn. Both orders have
+regressions, and native probes exercise the real flush behavior.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable
@@ -131,13 +145,13 @@ Native CLI tests use fake credentials and local replies, never subscription quot
 The Linux Rust process suite needs a container init/reaper (`docker run --init`);
 PID 1 as sleep left orphan zombies and produced unrelated cleanup failures.
 
-Final local source: 6,839 web tests passed / 619 files (two opt-in CLI cases
+Latest local gate: 6,840 web tests passed / 619 files, plus 29 targeted delivery tests including both new completion races (two opt-in CLI cases
 skipped in that run and passed separately on 2.1.301). Strict TypeScript,
-production web/host builds, Rust check and production Clippy pass. Rust: 760
+production web/host builds, Rust check and production Clippy pass. Rust: 761
 passed / two ignored in the corrected container. Windows fixture all-target
 Clippy and macOS metrics cross-check pass. Full Rust fmt/test Clippy still hit
 unchanged debug_inspector formatting and needless_borrow at tests.rs:161.
-Real loopback probes count 14 API requests / 12 primary requests per permission
+Expanded real 2.1.301 loopback probes count 17 API requests / 15 primary requests per permission
 mode: two native naming/helper requests, not extra MonoCode title requests.
 System/tool prefixes match across a resume with a changed hook URL; fork target
 UUID matches the actual native hook identity. Desktop quota/cache meters remain

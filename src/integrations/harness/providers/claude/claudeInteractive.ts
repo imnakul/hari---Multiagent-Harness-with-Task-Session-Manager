@@ -94,6 +94,8 @@ type Live = {
   seenMessages: Set<string>;
   lastParkCheck: number;
   continuation?: string;
+  stopText?: string;
+  lastReply?: string[];
 };
 const bindings = new Map<string, Binding>();
 const lives = new Map<string, Live>();
@@ -322,6 +324,8 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     }
     live.stopping = 0;
     live.transcript = newTranscriptState();
+    live.stopText = undefined;
+    live.lastReply = undefined;
     if (live.pending && row.prompt === live.pending.text) {
       if (!live.pending.accepted) {
         live.pending.accepted = true;
@@ -425,7 +429,13 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     clearTimeout(live.pending.timer);
     live.pending.onAccepted?.();
   }
-  if (event === "Stop" || event === "PostCompact") live.stopping = 1;
+  if (event === "Stop" || event === "PostCompact") {
+    live.stopping = 1;
+    live.stopText =
+      event === "Stop" && typeof row.last_assistant_message === "string"
+        ? row.last_assistant_message.trim() || undefined
+        : undefined;
+  }
   if (event === "StopFailure")
     fail(
       live,
@@ -501,6 +511,16 @@ async function poll(live: Live): Promise<void> {
           });
         }
       }
+      if (row?.type === "assistant" && !row.isSidechain) {
+        const content = asRecord(row.message)?.content;
+        if (Array.isArray(content))
+          live.lastReply = content.flatMap((part) => {
+            const block = asRecord(part);
+            return block?.type === "text" && typeof block.text === "string"
+              ? [block.text]
+              : [];
+          });
+      }
       for (const event of interactiveTranscriptEvents(line, live.transcript))
         emit(live, event);
     }
@@ -508,7 +528,19 @@ async function poll(live: Live): Promise<void> {
     // Let final JSONL writes settle after Stop, including multi-page tool results.
     if (live.stopping && !result.more) {
       live.stopping = result.lines.length ? 1 : live.stopping + 1;
-      if (live.stopping >= 3 && live.phase === "ready") {
+      const finalReplyRendered =
+        live.pending?.compact ||
+        !live.stopText ||
+        ["", "\n"].some(
+          (separator) =>
+            live.lastReply?.join(separator).trim() === live.stopText,
+        );
+      if (
+        live.stopping >= 3 &&
+        live.phase === "ready" &&
+        (live.pending || live.external) &&
+        finalReplyRendered
+      ) {
         live.stopping = 0;
         complete(live);
       }
@@ -812,7 +844,10 @@ export async function sendInteractiveClaude(
     throw new HarnessNeedsAttentionError(
       "Wait for background work to finish before compacting. No command was sent.",
     );
-  let text = compact ? "/compact" : input.text;
+  // The native input editor expands pasted tabs to four spaces before its hook.
+  // Match that verified representation so indentation is not mistaken for a
+  // different prompt and delivery can still be confirmed exactly.
+  let text = compact ? "/compact" : input.text.replace(/\t/g, "    ");
   if (input.attachments?.length) {
     if (compact)
       throw new Error(
