@@ -64,13 +64,15 @@ from an experimental Win32-encoded runtime-input case. Both park the hidden VT
 output cursor outside the input row. They test the framed-row guard, not a fixed
 send: the experimental live run still failed, including a truncated prompt.
 
-The temporary Windows workflow now compares unchanged startup replies, omitted
-extra DSR, omitted focus, omission of both and Win32-encoded replies. The earlier
-DA1 variants had no effect: no DA1 reply reached xterm on either runner. New
-transformations exist only in the opt-in Rust host
-(`MONOCODE_INTERACTIVE_TEST_INPUT_EXPERIMENT`), not MonoCode. Causal probes run
-supervised mode only for speed; the permanent production regression must cover
-both permission modes, two messages and native resume. A failed default stays a
-failure, and artifacts retain its evidence. These checks do not qualify the
-signed-in Tauri/WebView workflow or subscription consumption. Remove experimental
-variants after diagnosis and keep the production regression.
+Native comparison `39006633423` then isolated the duplicate frontend cursor reply:
+unchanged replies and omitting only focus fail on both Windows runners; omitting
+only the extra cursor reply accepts all three exact prompts, including native
+resume. `resumed` captures the successful classic-renderer screen, whose input
+is higher in the viewport. The application now consumes the first ConPTY cursor
+query already answered by Rust, and checks the unique full-width framed input.
+
+The permanent Windows workflow uses production frontend code and an unmodified
+native PTY host: no input rewriting or omission experiments remain. It pins CLI
+2.1.302 and sends two messages before and two after Stop/native resume, in both
+permission modes, on Windows 2022/2025. These checks use a fake account/loopback
+API; they do not qualify signed-in Tauri UI or subscription consumption.

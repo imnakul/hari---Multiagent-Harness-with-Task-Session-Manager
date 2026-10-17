@@ -39,6 +39,33 @@ afterEach(() => {
 
 describe("real VT parser input gate", () => {
   it.each([false, true])(
+    "answers cursor queries once per owner (Windows %s)",
+    async (windows) => {
+      mocks.windows = windows;
+      const terminal = await createInteractiveTerminal(
+        "dsr-ownership",
+        vi.fn(),
+      );
+      cleanup = terminal.dispose;
+      const initial = new TextEncoder().encode("\x1b[6n");
+      mocks.data?.(initial, 0);
+      await new Promise<void>((resolve) => terminal.term.write("", resolve));
+      expect(mocks.write).toHaveBeenCalledTimes(windows ? 0 : 1);
+      mocks.data?.(
+        new TextEncoder().encode("\x1b[3;5H\x1b[6n"),
+        initial.length,
+      );
+      await new Promise<void>((resolve) => terminal.term.write("", resolve));
+      expect(mocks.write).toHaveBeenLastCalledWith(
+        "claude-interactive:dsr-ownership",
+        "\x1b[3;5R",
+      );
+      expect(mocks.write).toHaveBeenCalledTimes(windows ? 1 : 2);
+      expect(terminal.owner).toBe(false);
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
     "fails closed on a parked cursor without one unique Windows frame (Windows %s)",
     async (windows) => {
       mocks.windows = windows;
@@ -49,8 +76,9 @@ describe("real VT parser input gate", () => {
       cleanup = terminal.dispose;
       // On Unix the physical cursor stays authoritative. On Windows, add a second
       // framed prompt and park the cursor in it: ambiguity must still block sends.
+      const border = "─".repeat(120);
       const extra = windows
-        ? "\x1b[34;1H────────────────────\x1b[35;1H❯ \x1b[36;1H────────────────────\x1b[35;3H"
+        ? `\x1b[34;1H${border}\x1b[35;1H❯ \x1b[36;1H${border}\x1b[35;3H`
         : "";
       mocks.data?.(new TextEncoder().encode(conpty.empty + extra), 0);
       await new Promise<void>((resolve) => terminal.term.write("", resolve));
@@ -59,7 +87,27 @@ describe("real VT parser input gate", () => {
       expect(terminal.ready()).toBe(false);
     },
   );
-  it.each(["default", "empty"] as const)(
+  it("checks menu footers throughout a classic renderer's remaining viewport", async () => {
+    mocks.windows = true;
+    const terminal = await createInteractiveTerminal("classic-menu", vi.fn());
+    cleanup = terminal.dispose;
+    const border = "─".repeat(120);
+    mocks.data?.(
+      new TextEncoder().encode(
+        `\x1b[2J\x1b[3;1H${border}\r\n❯ \r\n${border}\x1b[40;1HEnter to select · Esc to cancel\x1b[40;120H`,
+      ),
+      0,
+    );
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(terminal.inspect()).toMatchObject({
+      promptSource: "conpty-frame",
+      reason: "native-dialog",
+    });
+    expect(terminal.ready()).toBe(false);
+  });
+  it.each(["default", "empty", "resumed"] as const)(
     "checks the complete captured ConPTY %s input while its output cursor is elsewhere",
     async (stage) => {
       mocks.windows = true;
@@ -74,10 +122,10 @@ describe("real VT parser input gate", () => {
       await vi.advanceTimersByTimeAsync(200);
       expect(terminal.inspect()).toMatchObject({
         promptSource: "conpty-frame",
-        cursorX: 119,
-        checks: { cursorAtPrompt: true, emptyDraft: stage === "empty" },
+        cursorX: stage === "resumed" ? 118 : 119,
+        checks: { cursorAtPrompt: true, emptyDraft: stage !== "default" },
       });
-      expect(terminal.ready()).toBe(stage === "empty");
+      expect(terminal.ready()).toBe(stage !== "default");
       expect(mocks.invoke).not.toHaveBeenCalled();
     },
   );

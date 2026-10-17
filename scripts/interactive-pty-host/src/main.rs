@@ -144,23 +144,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "write" => {
                     let live = live.as_mut().ok_or("No live PTY")?;
                     let data = request.data.as_deref().ok_or("Missing input")?;
-                    // Causal startup-reply experiments; no product input changes here.
-                    let mode = std::env::var("MONOCODE_INTERACTIVE_TEST_INPUT_EXPERIMENT")
-                        .unwrap_or_default();
-                    let dsr = data == "\x1b[1;1R";
-                    let focus = data == "\x1b[O";
-                    let data = if (mode == "omit-dsr" && dsr)
-                        || (mode == "omit-focus" && focus)
-                        || (mode == "omit-passive" && (dsr || focus))
-                    {
-                        String::new()
-                    } else if mode == "encoded-replies" && (dsr || focus) {
-                        data.encode_utf16()
-                            .map(|code| format!("\x1b[0;0;{code};1;0;1_"))
-                            .collect::<String>()
-                    } else {
-                        data.into()
-                    };
                     live.writer.write_all(data.as_bytes())?;
                     live.writer.flush()?;
                 }

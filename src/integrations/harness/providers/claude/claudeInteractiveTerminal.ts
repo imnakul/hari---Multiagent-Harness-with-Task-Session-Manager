@@ -82,6 +82,18 @@ export async function createInteractiveTerminal(
     allowProposedApi: true,
     fontSize: 12,
   });
+  // spawn_windows already answers ConPTY's inherited-cursor handshake before
+  // its reader starts. Its echoed query must not elicit a second response into
+  // the running CLI. Later application cursor queries keep the normal handler.
+  let conptyDsrAnswered = false;
+  const conptyDsr = IS_WIN
+    ? term.parser.registerCsiHandler({ final: "n" }, (params): boolean => {
+        if (conptyDsrAnswered || params.length !== 1 || params[0] !== 6)
+          return false;
+        conptyDsrAnswered = true;
+        return true;
+      })
+    : undefined;
   // Public onData merges typing with parser replies. Orca uses this same core
   // signal; keep its contract covered against the installed real xterm build.
   const core = (
@@ -191,24 +203,23 @@ export async function createInteractiveTerminal(
       let row = buffer.baseY + buffer.cursorY;
       let column = buffer.cursorX;
       let promptSource: InteractiveReadiness["promptSource"] = "cursor";
-      let ambiguousFrame = false;
       if (IS_WIN) {
         // ConPTY paints Claude's software caret, then parks the VT output cursor
-        // on a status row. Inspect the entire unique bottom input line instead.
+        // on a status row. Inspect the entire unique framed input line instead.
         // A draft (including text before that painted caret) must remain blocked.
         const candidates: { row: number; column: number }[] = [];
-        for (let y = Math.max(1, term.rows - 6); y < term.rows - 1; y++) {
+        const isFrame = (line: string): boolean =>
+          /^[─━]{8,}$/.test(line.trim()) && line.trim().length >= term.cols - 2;
+        for (let y = 1; y < term.rows - 1; y++) {
           const absolute = buffer.baseY + y;
           const line = buffer.getLine(absolute)?.translateToString(true) ?? "";
           const prefix = /^\s*❯\s*/.exec(line);
           if (
             prefix &&
-            /[─━]{8}/.test(
+            isFrame(
               buffer.getLine(absolute - 1)?.translateToString(true) ?? "",
             ) &&
-            /[─━]{8}/.test(
-              buffer.getLine(absolute + 1)?.translateToString(true) ?? "",
-            )
+            isFrame(buffer.getLine(absolute + 1)?.translateToString(true) ?? "")
           )
             candidates.push({ row: absolute, column: prefix[0].length });
         }
@@ -217,7 +228,6 @@ export async function createInteractiveTerminal(
           column = candidates[0].column;
           promptSource = "conpty-frame";
         }
-        ambiguousFrame = candidates.length > 1;
       }
       const current = buffer.getLine(row);
       const after = current?.translateToString(true, column) ?? "";
@@ -227,7 +237,7 @@ export async function createInteractiveTerminal(
         if (cell?.getChars().trim() && !cell.isDim()) afterIsDim = false;
       }
       const screen = Array.from(
-        { length: 14 },
+        { length: IS_WIN ? term.rows - (row - buffer.baseY) : 14 },
         (_, i) => buffer.getLine(row + i)?.translateToString(true) ?? "",
       ).join("\n");
       const checks = interactivePromptChecks({
@@ -238,7 +248,8 @@ export async function createInteractiveTerminal(
         below: buffer.getLine(row + 1)?.translateToString(true) ?? "",
         screen,
       });
-      if (ambiguousFrame) checks.cursorAtPrompt = false;
+      if (IS_WIN && promptSource !== "conpty-frame")
+        checks.cursorAtPrompt = false;
       const age = offset ? Math.max(0, Date.now() - lastWrite) : null;
       const reason = terminal.stopped
         ? "stopped"
@@ -292,6 +303,7 @@ export async function createInteractiveTerminal(
       unsubscribe();
       input.dispose();
       userInput.dispose();
+      conptyDsr?.dispose();
       term.dispose();
       terminals.delete(id);
       changed();

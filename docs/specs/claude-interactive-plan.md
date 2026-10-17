@@ -45,6 +45,25 @@ existing chat UI. Claude owns native context; no summary transfer.
 
 ## Issues and fixes
 
+Native comparison `39006633423` isolates the startup injection: unchanged input
+and omitting only focus fail on Windows 2022/2025; omitting only the duplicate
+frontend DSR reply accepts all three exact messages, including multiline and
+native resume, on both. Rust already prewrites that inherited-cursor response.
+Windows xterm now consumes only its first plain CSI 6 n query without replying;
+later application queries and all Unix queries retain normal behavior. This is
+query ownership, not draft erasure. Experimental reply transformations are
+removed from the native host/workflow.
+
+The successful resumed capture uses Claude's classic renderer, with its framed
+input above unused screen rows. The bottom-six-row assumption was incomplete.
+Windows now requires one full-width framed input in the active viewport and
+checks all text and footer rows below it; ambiguous frames and drafts block
+sending. Captured fullscreen/classic regressions cover this. The permanent live
+test now sends two turns before and two after native resume, in both permissions.
+Final web gate passed (6,823 tests / 618 files, including both real Linux CLI
+four-turn cases); strict TypeScript and Windows-target fixture format/Clippy pass.
+The final production-path native Windows run follows publication of this repair.
+
 Native run `38995820658` reached CLI 2.1.302 on both Windows runners. The
 default screen contains `❯ C` while ConPTY parks its hidden output cursor at
 column 119 on a status row. Only DSR and focus replies reach the frontend; no

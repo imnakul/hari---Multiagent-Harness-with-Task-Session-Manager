@@ -45,23 +45,15 @@ jobs:
           "MONOCODE_INTERACTIVE_TEST_CLI=$cli" >> $env:GITHUB_ENV
           "MONOCODE_INTERACTIVE_TEST_PTY_HOST=$env:GITHUB_WORKSPACE\scripts\interactive-pty-host\target\debug\interactive-pty-host.exe" >> $env:GITHUB_ENV
           "MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR=$env:RUNNER_TEMP\interactive-capture" >> $env:GITHUB_ENV
-      - name: Compare startup reply ownership
+      - name: Native interactive messages and resume
         shell: pwsh
         run: |
-          $captureRoot = $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR
           # Avoid the runner's 8.3 TEMP alias in native project trust keys.
           $env:TEMP = Join-Path $env:RUNNER_TEMP 'interactive-accounts'
           New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
           $env:TMP = $env:TEMP
-          $failed = $false
-          foreach ($mode in @('default', 'omit-dsr', 'omit-focus', 'omit-passive', 'encoded-replies')) {
-            $env:MONOCODE_INTERACTIVE_TEST_INPUT_EXPERIMENT = $mode
-            $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $captureRoot $mode
-            Write-Output "Startup reply experiment: $mode"
-            npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts -t supervised
-            if ($LASTEXITCODE -ne 0) { $failed = $true }
-          }
-          if ($failed) { exit 1 }
+          npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
+          exit $LASTEXITCODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:

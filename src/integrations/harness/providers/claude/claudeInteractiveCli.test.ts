@@ -69,7 +69,7 @@ it
         !!process.env.MONOCODE_INTERACTIVE_TEST_PTY_HOST),
   )
   .each(["supervised", "full-access"] as const)(
-  "real interactive CLI: two GUI turns and native resume (%s)",
+  "real interactive CLI: two GUI turns before and after native resume (%s)",
   async (runtimeMode) => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "monocode-interactive-test-")),
@@ -417,6 +417,7 @@ it
         "Radhe Radhe",
         "Line one\nLine two",
         "After Stop and native resume",
+        "One more resumed turn",
       ];
       for (const text of messages) {
         if (text === messages[2]) await stopInteractiveClaude(id);
@@ -438,7 +439,7 @@ it
       }
       expect(sends).toEqual(messages);
       expect(acceptedPrompts).toEqual(messages);
-      expect(accepted).toHaveBeenCalledTimes(3);
+      expect(accepted).toHaveBeenCalledTimes(messages.length);
       expect(nativeInput).toEqual([]);
       expect(events.filter((event) => event.type === "message.delta")).toEqual(
         messages.map(() => ({
@@ -451,7 +452,7 @@ it
         nativeId: starts[0].nativeId,
         resume: true,
       });
-      expect(requests.length).toBeGreaterThanOrEqual(3);
+      expect(requests.length).toBeGreaterThanOrEqual(messages.length);
     } finally {
       const capture = process.env.MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR;
       if (capture) {

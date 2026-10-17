@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Answer the inherited cursor handshake once and support classic Claude | terminal, Claude Interactive |
 | 17 Oct 2026 | ConPTY paint cursor is separate from Claude's input row | terminal, Claude Interactive |
 | 17 Oct 2026 | ConPTY small output must flush while its reader is blocked | terminal, Claude Interactive |
 | 16 Oct 2026 | Claude Interactive launches the native executable in ConPTY | Claude, terminal, accounts |
@@ -53,6 +54,21 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 — Answer the inherited cursor handshake once and support classic Claude
+
+The native comparison in run `39006633423` fails with default replies on Windows
+2022/2025 and passes three exact messages/native resume when only the frontend's
+duplicate cursor-position response is omitted. Rust prewrites the initial
+response before reading output; xterm must consume its echoed first query without
+answering again. Later application queries remain live, and Unix is unchanged.
+No draft is erased. The production regression uses an unmodified input host.
+
+Claude can resume in its classic renderer after process teardown. Its input is
+not always at the bottom of the terminal. This supersedes the earlier bottom-six
+row limit: require one full-width framed input throughout the current viewport,
+and check every footer below it for menus/busy state. The native test now checks
+two turns before and two after resume; real account/UI checks remain separate.
 
 ## 17 Oct 2026 — ConPTY paint cursor is separate from Claude's input row
 
