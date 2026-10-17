@@ -347,8 +347,16 @@ function applyExternalTurnEvent(
     ) };
   }
   if (event.type === "externalTurn.finished") {
+    const boundary = session.blocks.find((block) => block.externalTurnId === event.turnId);
+    const endedAt = Date.now();
     return { ...session, externalTurnId: undefined, blocks: session.blocks.map((block) =>
-      block.externalTurnId === event.turnId ? { ...block, streaming: false } : block,
+      block.externalTurnId === event.turnId ? {
+        ...block,
+        streaming: false,
+        ...(block.id === boundary?.id && block.startedAt != null && block.durationMs == null
+          ? { durationMs: Math.max(0, endedAt - block.startedAt) }
+          : {}),
+      } : block,
     ) };
   }
   return applyExternalTranscriptEvents(session, event.turnId, [event.event]);

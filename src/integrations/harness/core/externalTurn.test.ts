@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { newSession } from "../../../features/sessions/model/session";
 import { sanitizeSessionForPersist } from "../../../features/sessions/data/sessionStore";
 import { applyHarnessEvent, applyHarnessEvents, appendUser } from "./apply";
@@ -6,6 +6,41 @@ import type { HarnessEvent } from "./types";
 import { operatorEnabledInThread } from "../../../features/sessions/model/operatorCommand";
 
 describe("independent phone transcript", () => {
+  it.each(["Native terminal prompt", undefined])(
+    "freezes the external duration at completion without ending a concurrent local turn (%s)",
+    (text) => {
+      const clock = vi.spyOn(Date, "now").mockReturnValue(1_000);
+      try {
+        let session = applyHarnessEvent(newSession("claude", "/tmp"), {
+          type: "externalTurn.started",
+          turnId: "native",
+          text,
+        });
+        clock.mockReturnValue(5_000);
+        session = appendUser(session, "Queued local follow-up");
+        clock.mockReturnValue(26_000);
+        session = applyHarnessEvent(session, {
+          type: "externalTurn.finished",
+          turnId: "native",
+        });
+        expect(session.blocks[0]).toMatchObject({
+          startedAt: 1_000,
+          durationMs: 25_000,
+        });
+        expect(session.blocks[1].durationMs).toBeUndefined();
+        expect(session.busy).toBe(true);
+        clock.mockReturnValue(90_000);
+        expect(
+          applyHarnessEvent(session, {
+            type: "externalTurn.finished",
+            turnId: "native",
+          }).blocks[0].durationMs,
+        ).toBe(25_000);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
   it("batches deltas and snapshots with the same result as individual delivery", () => {
     const session = applyHarnessEvent(newSession("claude", "/tmp"), {
       type: "externalTurn.started",

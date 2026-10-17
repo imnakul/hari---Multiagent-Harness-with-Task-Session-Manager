@@ -37,6 +37,7 @@ import {
   type InteractiveTerminal,
   type InteractiveReadiness,
 } from "./claudeInteractiveTerminal";
+import { interactivePromptMatches } from "./claudeInteractivePrompt";
 
 type Binding = { nativeId: string; cwd: string; accountId?: string };
 type Pending = {
@@ -326,7 +327,7 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     live.transcript = newTranscriptState();
     live.stopText = undefined;
     live.lastReply = undefined;
-    if (live.pending && row.prompt === live.pending.text) {
+    if (live.pending && interactivePromptMatches(live.pending.text, row.prompt)) {
       if (!live.pending.accepted) {
         live.pending.accepted = true;
         clearTimeout(live.pending.timer);

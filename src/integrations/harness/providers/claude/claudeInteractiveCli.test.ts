@@ -53,6 +53,7 @@ import {
   compactInteractiveClaude,
 } from "./claudeInteractive";
 import { interactiveTerminalFor } from "./claudeInteractiveTerminal";
+import { interactivePromptMatches } from "./claudeInteractivePrompt";
 
 function reply(response: ServerResponse, body: unknown): void {
   response.writeHead(200, { "Content-Type": "application/json" });
@@ -593,6 +594,12 @@ it
         "Dense single-line request " + "context ".repeat(300).trimEnd(),
         "Long Unicode request 你好 नमस्ते\nLine 2\nLine 3\nLine 4\nLine 5",
         "\n\t!नमस्ते\nLine 2\nLine 3\nLine 4\nLine 5",
+        "create a new branch in the current checkout\n" +
+          Array.from(
+            { length: 12 },
+            (_, index) =>
+              `Paragraph ${index + 1}: discuss the animated onboarding walkthrough, reusable dashboard styles and implementation choices before changing code.`,
+          ).join("\n"),
       ];
       for (const text of messages) {
         if (text === messages[2]) await stopInteractiveClaude(id);
@@ -616,9 +623,17 @@ it
         text.replaceAll("\t", "    "),
       );
       expect(sends).toEqual(nativeMessages);
-      expect(acceptedPrompts).toEqual(nativeMessages);
+      expect(acceptedPrompts).toHaveLength(nativeMessages.length);
+      expect(
+        acceptedPrompts.every((text, index) =>
+          interactivePromptMatches(nativeMessages[index], text),
+        ),
+      ).toBe(true);
       expect(accepted).toHaveBeenCalledTimes(messages.length);
       expect(nativeInput).toEqual([]);
+      expect(
+        events.filter((event) => event.type === "externalTurn.started"),
+      ).toEqual([]);
       expect(events.filter((event) => event.type === "message.delta")).toEqual(
         messages.map(() => ({
           type: "message.delta",
@@ -634,6 +649,7 @@ it
       // Native resume reuses the recorded system/tool prefix; no summary or
       // added system instructions are introduced by our idle-stop path.
       expect(requestPrefixes[2] === requestPrefixes[0]).toBe(true);
+      if (process.env.MONOCODE_INTERACTIVE_TEST_MESSAGES_ONLY === "1") return;
       const compactInput: SendTurnInput = {
         sessionId: id,
         cwd,
@@ -723,9 +739,13 @@ it
       )
         await new Promise((resolve) => setTimeout(resolve, 100));
       expect(acceptedPrompts.length).toBe(acceptedBefore);
-      expect(acceptedPrompts).toEqual(
-        sends.filter((text) => text !== "/compact"),
-      );
+      const ordinarySends = sends.filter((text) => text !== "/compact");
+      expect(acceptedPrompts).toHaveLength(ordinarySends.length);
+      expect(
+        acceptedPrompts.every((text, index) =>
+          interactivePromptMatches(ordinarySends[index], text),
+        ),
+      ).toBe(true);
       expect(
         events.filter((event) => event.type === "externalTurn.finished").length,
       ).toBeGreaterThan(externalBefore);

@@ -4,6 +4,8 @@ import {
   type SendTurnInput,
   type HarnessEvent,
 } from "../../core/types";
+import { appendUser, applyHarnessEvent, stopStreaming } from "../../core/apply";
+import { newSession } from "../../../../features/sessions/model/session";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -232,6 +234,107 @@ describe("interactive turn delivery", () => {
     await expect(sendInteractiveClaude(input())).rejects.toThrow("unconfirmed");
     expect(mocks.sends).toHaveLength(1);
     expect(onAccepted).not.toHaveBeenCalled();
+  });
+  it("keeps a folded native paste in its original GUI turn and times the complete response", async () => {
+    vi.setSystemTime(1_000);
+    const text =
+      "create a new branch\nDiscuss the walkthrough\nKeep existing styles.";
+    let session = appendUser(newSession("claude", "/repo"), text);
+    let endedAt = 0;
+    const original = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation(
+      async (command: string, args: Record<string, unknown>) => {
+        if (command === "claude_interactive_send") {
+          mocks.sends.push(String(args.text));
+          return;
+        }
+        return original(command, args);
+      },
+    );
+    const turn = sendInteractiveClaude(
+      input({
+        text,
+        onEvent: (event): void => {
+          events.push(event);
+          session = applyHarnessEvent(session, event);
+        },
+      }),
+    ).then(
+      () => {
+        endedAt = Date.now();
+        session = stopStreaming(session);
+      },
+      (error: unknown) => {
+        session = stopStreaming(session);
+        return error;
+      },
+    );
+    await waitFor(() => mocks.sends.length === 1);
+    await vi.advanceTimersByTimeAsync(8_000);
+    hook("UserPromptSubmit", {
+      prompt: `c\n\n<pasted_content id="faa9">\n${text.slice(1)}\n</pasted_content>`,
+    });
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    expect(session.blocks[0]).toMatchObject({ text, startedAt: 1_000 });
+    expect(session.blocks[0].durationMs).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(8_000);
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "long-paste-reply",
+        message: { content: [{ type: "text", text: "One complete reply" }] },
+      }),
+    );
+    finish();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await turn).toBeUndefined();
+    expect(mocks.sends).toEqual([text]);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    expect(
+      events.filter((event) => event.type === "externalTurn.started"),
+    ).toEqual([]);
+    expect(
+      session.blocks.filter((block) => block.role === "user"),
+    ).toHaveLength(1);
+    expect(
+      session.blocks
+        .filter((block) => block.role === "assistant")
+        .map((block) => block.text),
+    ).toEqual(["One complete reply"]);
+    expect(session.blocks[0]).toMatchObject({
+      text,
+      startedAt: 1_000,
+      durationMs: endedAt - 1_000,
+    });
+    expect(session.blocks[0].durationMs).toBeGreaterThan(16_000);
+    expect(session.busy).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(session.blocks[0].durationMs).toBe(endedAt - 1_000);
+  });
+  it("still refuses a native paste whose expanded body differs from the pending prompt", async () => {
+    const text = "create a branch\nDiscuss first";
+    const original = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation(
+      async (command: string, args: Record<string, unknown>) => {
+        if (command === "claude_interactive_send") {
+          mocks.sends.push(String(args.text));
+          hook("UserPromptSubmit", {
+            prompt:
+              'c\n\n<pasted_content id="faa9">\nreate a worktree\nDiscuss first\n</pasted_content>',
+          });
+          return;
+        }
+        return original(command, args);
+      },
+    );
+    const turn = sendInteractiveClaude(input({ text })).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => mocks.sends.length === 1);
+    await settle();
+    expect(String(await turn)).toContain("different input");
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(mocks.sends).toEqual([text]);
   });
   it("does not submit into a menu or terminal draft", async () => {
     mocks.ready.mockReturnValue(false);

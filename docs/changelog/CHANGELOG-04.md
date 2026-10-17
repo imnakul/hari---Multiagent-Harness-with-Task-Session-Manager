@@ -1,5 +1,10 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Keep folded Interactive prompts and their timer in one turn (L-82)
+- What: Recognize Claude's pasted-content representation only when every typed/pasted part exactly matches the pending composer prompt. Keep the original message and turn start; no duplicate external turn, early completion or resend. Different/truncated input remains unconfirmed. Freeze genuine terminal/background turn durations at their own completion without ending concurrent local work.
+- Files: `claudeInteractivePrompt.ts` and tests; `claudeInteractive.ts`; session reducer `apply.ts` and external-duration tests; adapter/session lifecycle regression; expanded native CLI probe and a separate Windows messages-only check.
+- Verified: 135 focused tests and strict TypeScript pass. Both actual CLI 2.1.301 loopback scenarios pass with the longer multiline prompt; this fake-account CLI does not wrap that prompt, so the supplied Windows wrapper shape is separately covered by deterministic regressions. Full web: 6,921 passed / 627 files (two opt-in skips), production web and host builds pass; native Windows regression follows publication. No Rust, dependency, installer or version changes; earlier long-history Windows startup and supervised attachment failures remain separate.
+- Commit: this fix on the authorized 0.10.0 branch, based on release 757daab4.
 ## 2026-10-17 20:55 IST — Windows build 0.10.0-local2-upstream-sync
 - Type: chore
 - What: New Windows installer with L-85 to L-91 and the New task picker change; version bumped from local1.

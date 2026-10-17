@@ -1,0 +1,61 @@
+type InputPart = { text: string; pasted: boolean };
+
+/** Mirror interactive_delivery::paste_payload without changing the submitted text. */
+function inputParts(text: string): InputPart[] {
+  const offset = text.search(/[\p{Alphabetic}\p{Number}]/u);
+  if (offset < 0) return [{ text, pasted: true }];
+  const end = offset + String.fromCodePoint(text.codePointAt(offset)!).length;
+  return [
+    { text: text.slice(0, offset), pasted: true },
+    { text: text.slice(offset, end), pasted: false },
+    { text: text.slice(end), pasted: true },
+  ].filter((part) => part.text.length > 0);
+}
+
+function partEnds(actual: string, from: number, part: InputPart): number[] {
+  const ends: number[] = [];
+  if (actual.startsWith(part.text, from)) ends.push(from + part.text.length);
+  if (!part.pasted) return ends;
+  // Claude can put blank-line separators around a folded paste. Match the
+  // expected body verbatim, including literal user markup; never strip tags
+  // globally or accept a truncated/changed native prompt.
+  for (const separator of ["", "\n", "\n\n"]) {
+    if (!actual.startsWith(separator, from)) continue;
+    const start = from + separator.length;
+    const header = /^<pasted_content id="[A-Za-z0-9_-]{1,64}">\n/.exec(
+      actual.slice(start, start + 100),
+    );
+    if (!header) continue;
+    const body = start + header[0].length;
+    const close = body + part.text.length;
+    const closing = "\n</pasted_content>";
+    if (
+      !actual.startsWith(part.text, body) ||
+      !actual.startsWith(closing, close)
+    )
+      continue;
+    const end = close + closing.length;
+    for (const trailing of ["", "\n", "\n\n"])
+      if (actual.startsWith(trailing, end)) ends.push(end + trailing.length);
+  }
+  return ends;
+}
+
+/** Confirm only the exact prompt or Claude's equivalent of our known paste parts. */
+export function interactivePromptMatches(
+  expected: string,
+  actual: unknown,
+): boolean {
+  if (typeof actual !== "string") return false;
+  if (actual === expected) return true;
+  if (!expected || expected === "/compact") return false;
+  let positions = new Set([0]);
+  for (const part of inputParts(expected)) {
+    const next = new Set<number>();
+    for (const from of positions)
+      for (const end of partEnds(actual, from, part)) next.add(end);
+    if (!next.size) return false;
+    positions = next;
+  }
+  return positions.has(actual.length);
+}

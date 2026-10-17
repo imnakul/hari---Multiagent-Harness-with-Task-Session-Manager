@@ -50,6 +50,16 @@ jobs:
           "MONOCODE_INTERACTIVE_TEST_CLI=$cli" >> $env:GITHUB_ENV
           "MONOCODE_INTERACTIVE_TEST_PTY_HOST=$env:GITHUB_WORKSPACE\scripts\interactive-pty-host\target\debug\interactive-pty-host.exe" >> $env:GITHUB_ENV
           "MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR=$env:RUNNER_TEMP\interactive-capture" >> $env:GITHUB_ENV
+      - name: Native long-paste acceptance and single GUI turn regression
+        shell: pwsh
+        run: |
+          $env:TEMP = Join-Path $env:RUNNER_TEMP 'interactive-accounts'
+          New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+          $env:TMP = $env:TEMP
+          $env:MONOCODE_INTERACTIVE_TEST_MESSAGES_ONLY = '1'
+          $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $env:RUNNER_TEMP 'interactive-capture/messages-only'
+          npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
+          exit $LASTEXITCODE
       - name: Native messages, resume, compact, fork, attachments and background continuation
         shell: pwsh
         run: |

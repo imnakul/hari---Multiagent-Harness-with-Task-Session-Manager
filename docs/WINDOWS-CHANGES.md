@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Reconcile folded native input with the original GUI turn | Claude Interactive, timing |
 | 17 Oct 2026 | Repaint omitted input after long native history | ConPTY, startup geometry |
 | 17 Oct 2026 | Keep literal request text outside a folded Claude paste | ConPTY, supervised input |
 | 17 Oct 2026 | Require observed output quiet before the single Enter | ConPTY, paste settlement |
@@ -59,6 +60,20 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 - Reconcile folded native input with the original GUI turn
+
+The Windows report shows `create…` as literal `c` plus a
+`<pasted_content id="faa9">` block containing `reate…`. The typed-character
+workaround is still in the local2 release. A literal hook-string comparison
+mistook this representation for a different submission, rejected the GUI turn
+and created an external one; its original timer ended at acceptance. Match only
+our known payload parts and their exact content, allowing the observed native
+wrapper/separators. Do not globally remove tags from user text or resend.
+The fake-account Linux CLI does not produce this wrapper for the longer probe;
+the user's reported representation has dedicated adapter/session regressions.
+External terminal/background completion also needs to freeze its own boundary
+duration, independently of any local turn.
 
 ## 17 Oct 2026 - Repaint omitted input after long native history
 
