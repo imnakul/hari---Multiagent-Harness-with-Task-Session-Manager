@@ -1,7 +1,7 @@
 {
   "name": "monocode-desktop",
   "private": true,
-  "version": "0.10.0-local1-upstream-sync",
+  "version": "0.10.0-local2-upstream-sync",
   "type": "module",
   "scripts": {
     "dev": "vite",

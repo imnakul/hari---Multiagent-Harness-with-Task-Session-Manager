@@ -1,5 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 20:55 IST — Windows build 0.10.0-local2-upstream-sync
+- Type: chore
+- What: New Windows installer with L-85 to L-91 and the New task picker change; version bumped from local1.
+- Files: `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json` (version); record [windows-0100-local2-upstream-sync-build](../notes/windows-0100-local2-upstream-sync-build/README.md)
+- Commit: see git log (version + record commit)
+- Verified: tsc ✅ tests ✅ (6,901) cargo test ✅ (756) build ✅; clippy ❌ and fmt ❌ only on pre-existing files (listed in the record); manual: desktop checklist in the record.
+
 ## 2026-10-17 20:39 IST — Notification center (L-91)
 - Type: feature
 - What: A bell next to the minimize/maximize/close buttons shows a dot when something new happened. Click it to see every chat reply, approval, question and automation run since you looked, with project, model and time. Click a card to read it all or open the chat; hover to dismiss it, or clear everything with the X.
