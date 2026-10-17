@@ -146,6 +146,12 @@ import type {
 } from "../../features/sessions/model/session";
 import type { LiveAgent } from "../../features/sessions/model/liveAgents";
 import type { SessionSummary } from "../../features/sessions/data/sessionStore";
+import {
+  nestLinkedSessions,
+  SESSION_LINK_LABEL,
+  sessionLinksSnapshot,
+  subscribeSessionLinks,
+} from "../../features/sessions/model/sessionLinks";
 import type { SettingsSectionId } from "../../features/settings/model/settings";
 import type { InstalledUpdate } from "../model/updateNotice";
 import { TAB_GROUP_COLORS } from "../../features/workspace/model/tabGroups";
@@ -778,7 +784,7 @@ function SidebarComponent({
       !session.orchestrationLeadId &&
       inWorktreeFocus(session, focusedWorktree),
   );
-  const visibleSessions = [
+  const filteredSessions = [
     ...filterSessionsByQuery(
       filterSessionsByStatus(
         filterSessionsByTime(
@@ -810,6 +816,24 @@ function SidebarComponent({
       searchQuery,
     ),
   ].sort(compareSessionSummaries);
+  // Forks, sidechats and second opinions nest under the chat they came from.
+  // Saved sidechats are listed separately upstream, so they join here only as
+  // children of a listed chat (not while searching).
+  const sessionLinks = useSyncExternalStore(
+    subscribeSessionLinks,
+    sessionLinksSnapshot,
+    sessionLinksSnapshot,
+  );
+  const linkedSessions = nestLinkedSessions(
+    filteredSessions,
+    remoteProject || searchQuery.trim()
+      ? []
+      : sidechatSessions.filter((session) =>
+          sameProjectPath(session.cwd, cwd),
+        ),
+    sessionLinks,
+  );
+  const visibleSessions = linkedSessions.top;
   const filtersActive = hasActiveSessionFilters(sessionFilters);
   const searchNarrowed = Boolean(searchQuery.trim());
   // Summaries for the whole project stay in `sessions` so filters still work.
@@ -1718,7 +1742,38 @@ function SidebarComponent({
     for (const session of listedSessions) motion.seen.add(session.id);
   });
 
-  const renderSessionCard = (session: SessionSummary, compact = false) => {
+  const renderSessionCard = (
+    session: SessionSummary,
+    compact = false,
+  ): ReactNode => {
+    const children = linkedSessions.children.get(session.id);
+    const card = renderSingleSessionCard(session, compact);
+    if (!children?.length) return card;
+    return (
+      <>
+        {card}
+        <div
+          role="group"
+          aria-label={`Chats from ${sessionDisplayTitle(session.title, session.harness)}`}
+          className="ml-3 border-l border-stroke/70 pl-1.5"
+        >
+          {children.map((child) => (
+            <div key={child.session.id} data-session-link={child.relation}>
+              <div className="px-2 pt-1 text-[10px] leading-3 text-content/40">
+                {SESSION_LINK_LABEL[child.relation]}
+              </div>
+              {renderSessionCard(child.session, true)}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  const renderSingleSessionCard = (
+    session: SessionSummary,
+    compact: boolean,
+  ) => {
     const runKey = session.activeRunKey;
     const working =
       listedBusySessionIds.has(session.id) &&

@@ -150,6 +150,9 @@ export function shouldPersistSession(session: Session): boolean {
     !isRemoteProjectPath(session.cwd) &&
     session.cwd !== "~" &&
     (session.blocks.some((block) => block.role === "user") ||
+      // Fork-only (L-88): a sidechat is kept from the moment it opens, so
+      // closing it before the first message does not lose it.
+      !!session.sidechat ||
       (isMonoSession(session.id) &&
         (session.blocks.length > 0 || !!session.monoTranscript)))
   );

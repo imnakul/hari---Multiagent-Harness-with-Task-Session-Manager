@@ -887,6 +887,7 @@ import { sendBranchTurn } from "../features/sessions/model/branchFlow";
 import {
   HarnessRemoteControlError,
   type HarnessSessionInput,
+import { saveSessionLink } from "../features/sessions/model/sessionLinks";
   type NativeForkRequest,
 } from "../integrations/harness/core/types";
 import { settleQueuedSteerCancellations } from "../features/sessions/model/messageQueue";
@@ -10734,6 +10735,10 @@ function Workspace({
       threadId: string,
       update: (thread: BtwThread | undefined) => BtwThread | undefined,
     ): Session | undefined => {
+      saveSessionLink(session.id, {
+        parentId: sourceId,
+        relation: "secondOpinion",
+      });
       const previous = sessionsRef.current;
       let updatedSession: Session | undefined;
       const next = previous.map((session) => {
@@ -11637,6 +11642,7 @@ function Workspace({
   /** A separate saved Chat beside the source, with source context attached per send. */
   const onSidechat = useCallback(
     (sourceId: string, turn: Block[]) => {
+      saveSessionLink(forked.id, { parentId: session.id, relation: "fork" });
       const source = sessionsRef.current.find((s) => s.id === sourceId);
       const lastId = turn.length > 0 ? turn[turn.length - 1]?.id : undefined;
       if (!source || !lastId) return;

@@ -1998,7 +1998,7 @@ fn list_sidechats(conn: &Connection) -> rusqlite::Result<Vec<SessionSummary>> {
                 linked_work_item_json, archived, pinned, is_draft,
                 automation_id, sidebar_hidden, sidechat_json
          FROM sessions
-         WHERE has_user_message = 1 AND is_sidechat = 1 AND archived = 0
+         WHERE is_sidechat = 1 AND archived = 0
            AND inbox_ask IS NULL
            AND id NOT IN (SELECT session_id FROM orchestration_workers)
          ORDER BY updated_at DESC, id ASC",
@@ -2999,6 +2999,24 @@ mod tests {
             restored.provider_session_id.as_deref(),
             Some("acp-session-1")
         );
+    }
+
+    #[test]
+    fn empty_saved_sidechats_are_listed_until_archived() {
+        let store = SessionStore::open_in_memory().unwrap();
+        let conn = store.lock_conn().unwrap();
+        let mut sidechat = sample("sidechat", "/tmp/project", "Sidechat — Source");
+        sidechat.blocks = json!([]);
+        sidechat.sidechat = Some(SidechatMeta {
+            source_session_id: "source".into(),
+            source_title: "Source".into(),
+            source_context: None,
+        });
+        upsert_session(&conn, &sidechat).unwrap();
+        let chats = list_sidechats(&conn).unwrap();
+        assert_eq!(chats.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["sidechat"]);
+        // Empty project chats still stay out of the project list.
+        assert!(list_by_project(&conn, "/tmp/project").unwrap().is_empty());
     }
 
     #[test]
