@@ -62,7 +62,16 @@ sending. Captured fullscreen/classic regressions cover this. The permanent live
 test now sends two turns before and two after native resume, in both permissions.
 Final web gate passed (6,823 tests / 618 files, including both real Linux CLI
 four-turn cases); strict TypeScript and Windows-target fixture format/Clippy pass.
-The final production-path native Windows run follows publication of this repair.
+Source `8b151667544ab4a27f8d172c1650bc06aaff71a5` passed production-path native
+Windows run [39007414449](https://github.com/imnakul/hari---Multiagent-Harness-with-Task-Session-Manager/actions/runs/39007414449):
+CLI 2.1.302 on Windows 2022/2025, two exact messages before and two after native
+resume in both permissions. No terminal view opened and no driving input was
+reported. Experimental host input transforms are absent. The production web
+build passed with existing CSS/bundle warnings. These automated tests use isolated
+accounts and loopback mock replies; signed-in desktop UI and subscription usage
+remain the separate human check. Restart the app/dev process and use a fresh
+interactive chat for the first retry, since old PTYs can retain already-injected
+input. The source stays Review until that human check is complete.
 
 Native run `38995820658` reached CLI 2.1.302 on both Windows runners. The
 default screen contains `❯ C` while ConPTY parks its hidden output cursor at

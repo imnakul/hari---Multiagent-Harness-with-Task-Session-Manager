@@ -3,8 +3,9 @@
 **Last updated: 2026-10-17 (L-82 ConPTY handshake and classic-renderer repair)**
 
 L-82 native Windows comparison isolated a duplicate startup cursor reply and a
-separate paint-cursor assumption. The repair and native CLI evidence are recorded
-in the task handoff; signed-in desktop UI and quota checks remain separate.
+separate paint-cursor assumption. Source `8b15166` passed native CLI 2.1.302 run
+`39007414449` on Windows 2022/2025: four turns across resume in both permissions.
+Signed-in desktop UI and quota checks remain separate; details are in the spec.
 
 L-74–L-79 are part of the reviewed source merge based on published checkpoint
 `8ea88359`. The full automated gate and primary source review passed. Normal
