@@ -82,6 +82,19 @@ copying this report starts no provider. This does not recover evidence already
 discarded by an older version or a window restart, and is not a reproduction of
 the automatic Windows `c`. Web regression/check/build results follow in the changelog.
 
+Native test run `38994473276` built and launched CLI 2.1.302 on Windows 2022
+and 2025. All reply variants stopped at the fixture's trust dialog, not the
+user's framed draft. Windows TMP used an 8.3 RUNNER~1 alias; the fixture now
+canonicalizes its temporary root, seeds both native/slash project spellings and
+uses a dedicated long TEMP path in CI. This is fixture setup only; no product
+trust decision or prompt guard changes. Test setup can explicitly approve only
+the exact fake temporary folder in a recognized trust menu; it verifies the
+selection before Enter. A fifth probe encodes all runtime input, rather than
+DA1 alone, to distinguish input translation from device-attribute handling.
+Downloaded captures are under
+`/tmp/monocode-win2022-capture`; a two-second delayed DA1 reply still passes on
+Unix, so delay alone is not established as the source.
+
 Repair after the first Windows trial (2026-10-16): user reported a readiness
 timeout, a dead terminal panel attached to the composer, and a native black
 execution select. Real CLI 2.1.301 startup captured with an isolated local fixture

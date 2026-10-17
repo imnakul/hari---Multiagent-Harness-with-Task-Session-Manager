@@ -5,6 +5,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  realpath,
   rm,
   stat,
   writeFile,
@@ -67,7 +68,9 @@ it
   .each(["supervised", "full-access"] as const)(
   "real interactive CLI: two GUI turns and native resume (%s)",
   async (runtimeMode) => {
-    const root = await mkdtemp(join(tmpdir(), "monocode-interactive-test-"));
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "monocode-interactive-test-")),
+    );
     const config = join(root, "config");
     const cwd = join(root, "project");
     await Promise.all([mkdir(config), mkdir(cwd)]);
@@ -79,12 +82,15 @@ it
         theme: "dark",
         bypassPermissionsModeAccepted: true,
         customApiKeyResponses: { approved: [key.slice(-20)], rejected: [] },
-        projects: {
-          [cwd]: {
-            hasTrustDialogAccepted: true,
-            hasCompletedProjectOnboarding: true,
-          },
-        },
+        projects: Object.fromEntries(
+          [...new Set([cwd, cwd.replaceAll("\\", "/")])].map((path) => [
+            path,
+            {
+              hasTrustDialogAccepted: true,
+              hasCompletedProjectOnboarding: true,
+            },
+          ]),
+        ),
       }),
     );
     const id = randomUUID();
@@ -299,6 +305,42 @@ it
                 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
               },
             });
+            // Fixture-owned approval only: native Windows may canonicalize its
+            // project key differently from Node. Never type into an unknown menu.
+            if (process.platform === "win32") {
+              const deadline = Date.now() + 8000;
+              const screen = (): string => {
+                const terminal = interactiveTerminalFor(id)?.term;
+                if (!terminal) return "";
+                const buffer = terminal.buffer.active;
+                return Array.from(
+                  { length: terminal.rows },
+                  (_, row) =>
+                    buffer
+                      .getLine(buffer.baseY + row)
+                      ?.translateToString(true) ?? "",
+                ).join("\n");
+              };
+              while (Date.now() < deadline) {
+                const text = screen();
+                if (
+                  text.includes(cwd) &&
+                  text.includes("Quick safety check") &&
+                  text.includes("Yes, I trust this folder")
+                ) {
+                  if (text.includes("❯ No, exit")) {
+                    await rpc("write", { data: "\x1b[B" });
+                    await new Promise((resolve) => setTimeout(resolve, 150));
+                  }
+                  if (!screen().includes("❯ Yes, I trust this folder"))
+                    throw new Error("Fixture trust selection did not settle");
+                  await rpc("write", { data: "\r" });
+                  break;
+                }
+                if (interactiveTerminalFor(id)?.ready()) break;
+                await new Promise((resolve) => setTimeout(resolve, 25));
+              }
+            }
             return;
           }
           if (command === "pty_write") {

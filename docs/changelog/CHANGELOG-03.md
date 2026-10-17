@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-17 — Correct native Windows test account setup
+- What: The first Windows run built and launched the real CLI on both runners, but all reply experiments stopped at the fixture folder's trust dialog. Canonicalize fixture paths, avoid the runner's short TEMP alias, and explicitly approve only the recognized temporary fake-account folder in test setup. Add a full Win32-input encoding probe alongside the DA1 variants.
+- Files: native CLI test, Windows workflow and isolated PTY test host; fixture README and interactive spec.
+- Verified: Windows-target fixture Clippy/format and strict TypeScript passed; full web gate passed (6,811 tests / 618 files), including both Linux real CLI cases. No application input, native prompt guard or real-account trust behavior changed. The user's first-send failure remains unresolved; Windows rerun follows publication.
+- Commit: included in the next user-authorized diagnostic publication on the existing 0.10.0 branch.
+
 ## 2026-10-17 — Reproduce Claude startup at the native ConPTY boundary (L-82)
 - What: Extended the opt-in real CLI regression to a Windows JSON PTY host using the vendored ConPTY, production managed spawn and output pump. Added a branch-scoped Windows 2022/2025 workflow with isolated CLI 2.1.302 and loopback responses. It captures test-account VT/metadata and compares default/omitted/basic-conformance/Win32-encoded DA1 replies without changing MonoCode input behavior.
 - Why: The user's pre-open snapshot rules out terminal ownership, busy state, a dialog and pending output; only the cursor-prefix check fails with cursorX 3. The screenshot's automatic `c` needs a native Windows reproduction rather than another permissive prompt check.

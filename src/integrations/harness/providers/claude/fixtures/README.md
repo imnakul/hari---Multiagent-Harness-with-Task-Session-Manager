@@ -53,8 +53,14 @@ The CLI still uses an isolated fake account and loopback API. Optional
 `MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR` saves only that fixture's VT stream,
 readiness metadata and writes; never enable fixture capture on a real account.
 
+Windows fixture roots use canonical long paths and both project-key spellings.
+If the native CLI still asks for trust, test setup approves only the exact
+temporary fixture folder in the recognized trust menu, after checking its selected
+option. This is not application trust automation or a real-account test.
+
 The temporary fork Windows workflow compares default DA1 replies, omitted DA1
-replies, basic-conformance replies and Win32-encoded replies on Windows 2022/2025. Those transformations
+replies, basic-conformance replies, Win32-encoded DA1 replies and Win32-encoded
+runtime input on Windows 2022/2025. Those transformations
 exist only in the opt-in Rust host (`MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT`),
 not in MonoCode. They are causal probes, not proposed product behavior. A failed
 default run stays a failure; artifacts retain each case for diagnosis. The

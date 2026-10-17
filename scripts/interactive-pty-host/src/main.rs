@@ -145,7 +145,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let live = live.as_mut().ok_or("No live PTY")?;
                     let data = request.data.as_deref().ok_or("Missing input")?;
                     // Causal experiment in test plumbing only. Product code is untouched.
-                    let data = if data == "\x1b[?1;2c" {
+                    let data = if std::env::var("MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT")
+                        .as_deref()
+                        == Ok("encoded-all")
+                    {
+                        data.encode_utf16()
+                            .map(|code| format!("\x1b[0;0;{code};1;0;1_"))
+                            .collect::<String>()
+                    } else if data == "\x1b[?1;2c" {
                         match std::env::var("MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT").as_deref() {
                             Ok("omit") => String::new(),
                             Ok("conpty") => "\x1b[?61;0c".into(),
