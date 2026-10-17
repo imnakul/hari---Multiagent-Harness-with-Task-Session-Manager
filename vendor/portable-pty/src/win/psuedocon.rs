@@ -77,16 +77,19 @@ impl Drop for PsuedoCon {
 }
 
 impl PsuedoCon {
-    pub fn new(size: COORD, input: FileDescriptor, output: FileDescriptor) -> Result<Self, Error> {
+    pub fn new(
+        size: COORD,
+        input: FileDescriptor,
+        output: FileDescriptor,
+        flags: DWORD,
+    ) -> Result<Self, Error> {
         let mut con: HPCON = INVALID_HANDLE_VALUE;
         let result = unsafe {
             (CONPTY.CreatePseudoConsole)(
                 size,
                 input.as_raw_handle() as _,
                 output.as_raw_handle() as _,
-                PSUEDOCONSOLE_INHERIT_CURSOR
-                    | PSEUDOCONSOLE_RESIZE_QUIRK
-                    | PSEUDOCONSOLE_WIN32_INPUT_MODE,
+                flags,
                 &mut con,
             )
         };

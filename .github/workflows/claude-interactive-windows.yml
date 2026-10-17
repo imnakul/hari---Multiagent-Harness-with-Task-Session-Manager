@@ -59,6 +59,17 @@ jobs:
           $env:TMP = $env:TEMP
           npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
           exit $LASTEXITCODE
+      - name: Diagnostic comparison with Orca cursor-inheritance flags
+        if: failure()
+        shell: pwsh
+        run: |
+          $env:MONOCODE_CONPTY_PROBE_FLAGS = '1'
+          $env:TEMP = Join-Path $env:RUNNER_TEMP 'interactive-accounts'
+          New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+          $env:TMP = $env:TEMP
+          $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $env:RUNNER_TEMP 'interactive-capture/flags-1'
+          npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
+          exit $LASTEXITCODE
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - uses: actions/upload-artifact@v4
         if: always()

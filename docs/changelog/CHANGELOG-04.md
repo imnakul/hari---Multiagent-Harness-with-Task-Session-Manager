@@ -1,5 +1,9 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Compare native ConPTY compatibility flags
+- What: None of five geometries restored a complete Windows fork prompt. Orca/node-pty passes cursor inheritance only; portable-pty also enables resize-quirk and Win32-input modes. Add an explicit native creation option with the existing default unchanged and test flags=1 only in the opt-in host after the ordinary scenario fails. No new crate or DLL dependency.
+- Verified: Windows-target native-host all-target Clippy and changed-file Rust formatting pass. Production frontend/CLI behavior is unchanged from the 6,843-test checkpoint; local native tests also pass with CI/GITHUB_ACTIONS set, so those variables alone do not explain the Windows failure. Native A/B evidence follows in the spec.
+- Commit: diagnostic follow-up on the authorized branch.
 ## 2026-10-17 — Capture terminal-size recovery evidence for native history
 - What: The one-column repaint in 39028767023 still omitted the Windows fork input. On native-fixture failure only, capture five read-only geometry probes and complete VT screens, then rethrow the original failure. No production behavior or input changes.
 - Verified: Production remains the 6,843-test/TypeScript/build checkpoint 8cec9f6. The opt-in test transforms and skips cleanly locally; native Windows provides the diagnostic evidence. The earlier editor test retry passed without changes.

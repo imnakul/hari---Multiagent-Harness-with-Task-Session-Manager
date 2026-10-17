@@ -1,5 +1,8 @@
 use crate::cmdbuilder::CommandBuilder;
-use crate::win::psuedocon::PsuedoCon;
+use crate::win::psuedocon::{
+    PsuedoCon, PSEUDOCONSOLE_RESIZE_QUIRK, PSEUDOCONSOLE_WIN32_INPUT_MODE,
+    PSUEDOCONSOLE_INHERIT_CURSOR,
+};
 use crate::{Child, MasterPty, PtyPair, PtySize, PtySystem, SlavePty};
 use anyhow::Error;
 use filedescriptor::{FileDescriptor, Pipe};
@@ -11,6 +14,19 @@ pub struct ConPtySystem {}
 
 impl PtySystem for ConPtySystem {
     fn openpty(&self, size: PtySize) -> anyhow::Result<PtyPair> {
+        self.openpty_with_flags(
+            size,
+            PSUEDOCONSOLE_INHERIT_CURSOR
+                | PSEUDOCONSOLE_RESIZE_QUIRK
+                | PSEUDOCONSOLE_WIN32_INPUT_MODE,
+        )
+    }
+}
+
+impl ConPtySystem {
+    /// Select native ConPTY compatibility flags without changing other terminals.
+    pub fn openpty_with_flags(&self, size: PtySize, flags: u32) -> anyhow::Result<PtyPair> {
+        anyhow::ensure!(flags & !0xf == 0, "unsupported ConPTY flags");
         let stdin = Pipe::new()?;
         let stdout = Pipe::new()?;
 
@@ -21,6 +37,7 @@ impl PtySystem for ConPtySystem {
             },
             stdin.read,
             stdout.write,
+            flags,
         )?;
 
         let master = ConPtyMasterPty {

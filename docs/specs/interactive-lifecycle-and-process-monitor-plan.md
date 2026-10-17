@@ -152,6 +152,12 @@ the full rerun without other heavy local work passes all 6,843 tests. No editor 
 opt-in Windows fixture now records five safe geometry/screen probes on failure
 and rethrows. Use their results to choose a recovery; do not weaken readiness.
 
+All five geometry probes fail the complete frame check. Local native tests
+still pass with CI/GITHUB_ACTIONS enabled. Orca/node-pty uses only the inherit-
+cursor creation flag, while portable-pty additionally sets resize-quirk and
+Win32-input flags. Add an explicit creation option keeping defaults unchanged,
+then A/B flags=1 in the isolated Windows host before choosing production behavior.
+
 ## Learnings
 
 CPU/crate size comparisons must distinguish archive size from actual executable

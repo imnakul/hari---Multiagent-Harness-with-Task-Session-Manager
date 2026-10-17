@@ -119,11 +119,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match request.command.as_str() {
                 "start" => {
                     stop(live.take());
-                    let pair = native_pty_system().openpty(PtySize {
+                    let size = PtySize {
                         cols: 120,
                         rows: 40,
                         ..Default::default()
-                    })?;
+                    };
+                    let pair = if let Ok(flags) = std::env::var("MONOCODE_CONPTY_PROBE_FLAGS") {
+                        portable_pty::win::conpty::ConPtySystem::default()
+                            .openpty_with_flags(size, flags.parse()?)?
+                    } else {
+                        native_pty_system().openpty(size)?
+                    };
                     let mut command = CommandBuilder::new(
                         request.argv.first().ok_or("Missing native executable")?,
                     );
