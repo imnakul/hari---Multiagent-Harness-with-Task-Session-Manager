@@ -30,6 +30,42 @@ afterEach(() => {
 });
 
 describe("real VT parser input gate", () => {
+  it("distinguishes missing output from an incomplete prompt without exporting terminal text", async () => {
+    const terminal = await createInteractiveTerminal(
+      "diagnostic-test",
+      vi.fn(),
+    );
+    cleanup = terminal.dispose;
+    await terminal.started();
+    expect(terminal.inspect()).toMatchObject({
+      reason: "no-output",
+      receivedBytes: 0,
+    });
+    const partial = new TextEncoder().encode(
+      "\x1b[2J\x1b[HPRIVATE ACCOUNT TEXT\r\n────────────────────\r\n❯ ",
+    );
+    mocks.data?.(partial, 0);
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(200);
+    const blocked = terminal.inspect();
+    expect(blocked).toMatchObject({
+      reason: "prompt-mismatch",
+      pendingParses: 0,
+      checks: { cursorAtPrompt: true, frameAbove: true, frameBelow: false },
+    });
+    expect(JSON.stringify(blocked)).not.toContain("PRIVATE");
+    vi.useRealTimers();
+    mocks.data?.(
+      new TextEncoder().encode("\r\n────────────────────\x1b[3;3H"),
+      partial.length,
+    );
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(terminal.inspect().reason).toBe("ready");
+    expect(blocked.reason).toBe("prompt-mismatch");
+  });
   it("preserves real input provenance even when typed data resembles a parser reply", async () => {
     const terminal = await createInteractiveTerminal("input-source", vi.fn());
     cleanup = terminal.dispose;

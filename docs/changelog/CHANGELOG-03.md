@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-17 — Flush Windows PTY output while its blocking reader is idle (L-14, L-82)
+- What: Replaced ConPTY's read-driven flush check with a bounded reader channel and independent 8ms receive deadline. A terminal query/final prompt no longer needs another write or EOF to reach the renderer/replay buffer. Startup failures now distinguish missing output, unsettled parsing and unmatched prompts; metadata-only current/blocked snapshots can be copied from the existing native-terminal dialog.
+- Files: `src-tauri/src/pty.rs`, `pty_output.rs`; Claude interactive protocol/terminal/adapter, native-terminal diagnostics UI and tests; L-14/L-82, Windows notes and spec.
+- Verified: open blocking-pipe query/prompt delivery and EOF-preservation tests passed; targeted frontend suites, Rust workspace check, production Clippy and 751 Rust tests passed / 2 ignored. Final full web suite 6,804 passed / 617 files (including both opt-in real CLI cases); strict TypeScript and production web/host builds passed. Changed Rust files pass format; known Debug Inspector whole-tree format/all-target Clippy exceptions remain. The user saw an empty native prompt after opening the terminal; the exact pre-open session state and signed-in ConPTY verification remain unconfirmed. No prompt guard was bypassed.
+- Commit: included in the user-authorized 0.10.0 repair publication; SHA reported in the delivery message. Restart the native dev backend after pulling.
+
 ## 2026-10-16 — Keep Claude terminal focus replies out of chat ownership (L-82)
 - What: Matched Orca's xterm input-provenance approach: parser-generated focus/query replies no longer claim human input ownership and block the first send. Fresh CLI owners reset PTY offsets on Stop/resume; ordinary terminal view reattachment retains its offsets. New chats have no empty terminal action/dialog; optional terminal access requires a live process and never opens automatically.
 - Files: Claude interactive terminal/protocol; composer/model picker/terminal dialog; PTY subscription lifecycle; combined adapter/real-xterm tests and opt-in real CLI PTY host; L-82 and spec records.

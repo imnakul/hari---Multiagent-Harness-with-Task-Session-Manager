@@ -6,13 +6,19 @@ use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(any(unix, test))]
+use std::time::Instant;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::dirs_home;
 use crate::fs::expand_home;
+
+#[cfg(any(windows, test))]
+#[path = "pty_output.rs"]
+mod blocking_output;
 
 const DATA_EVENT: &str = "pty-data";
 const EXIT_EVENT: &str = "pty-exit";
@@ -440,7 +446,6 @@ fn spawn_windows(
     program: Option<PtyProgram>,
 ) -> Result<(), String> {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-    use std::io::Read;
 
     let workdir = working_dir(&cwd);
     let (shell, args, extra_env, remove_env) = if let Some(program) = program {
@@ -511,31 +516,11 @@ fn spawn_windows(
     });
     host.insert(id.clone(), live);
 
-    // ConPTY closes the pipe once the child is gone, which unblocks the
-    // reader below. No poll fd exists on Windows — a plain blocking read
-    // with the shared coalesce thresholds (same 8ms budget as Unix).
+    // A blocking ConPTY read cannot drive an idle flush timer itself.
     let data_app = app.clone();
     let data_id = id.clone();
     thread::spawn(move || {
-        let mut reader = reader;
-        let mut buf = vec![0_u8; READ_CHUNK];
-        let mut acc = Vec::with_capacity(READ_CHUNK);
-        let mut last_emit = Instant::now();
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    acc.extend_from_slice(&buf[..n]);
-                    if pty_should_flush(acc.len(), last_emit.elapsed()) {
-                        emit_pty_data(&data_app, &data_id, &acc);
-                        acc.clear();
-                        last_emit = Instant::now();
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-        emit_pty_data(&data_app, &data_id, &acc);
+        blocking_output::pump(reader, |chunk| emit_pty_data(&data_app, &data_id, chunk));
     });
 
     // Never block on `wait()`: with ConPTY torn down it can hang forever
@@ -1121,6 +1106,7 @@ pub fn pty_replay(host: State<PtyHost>, id: String, offset: u64) -> Result<PtyRe
     })
 }
 
+#[cfg(unix)]
 fn pty_should_flush(buffered: usize, since: Duration) -> bool {
     buffered >= READ_CHUNK || since >= PTY_COALESCE
 }

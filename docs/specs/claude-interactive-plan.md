@@ -91,6 +91,18 @@ loopback API, temporary fake account, and pre-accepted fixture setup/trust. They
 do not validate the Rust/ConPTY boundary or signed-in Windows/Tauri GUI. No native
 UI automation was used. Full web/build gates are recorded in the changelog.
 
+Third Windows report (2026-10-17, after `ff4717c`): the user still sees the
+20s readiness timeout. A fresh chat is not a diagnosis. Requested the current
+native terminal state; do not claim the exact session blocker until observed.
+Source review found a real ConPTY output defect: its blocking reader accumulates
+small reads, but checks the 8ms flush deadline only when another read completes.
+A final query/prompt chunk can remain buffered indefinitely while the child waits
+for input; the Unix path has an idle poll flush and the prior Unix test host did
+not exercise this Windows reader. Plan: use a bounded reader channel and timed
+flush for ConPTY, test delivery before more data/EOF, retain the 8ms event budget,
+and report bounded readiness metadata on failure without storing terminal text.
+Keep prompt safety gates and explicit setup decisions intact. The user reports a normal empty native prompt after opening the terminal. This confirms a bridge failure; the pre-open readiness state remains unknown. Signed-in Windows verification is separate from the open-pipe test.
+
 The cloud environment initially lacked Rust and Linux desktop libraries. Installed
 Rust 1.99.1 and used an isolated Debian container with GTK/WebKit and Git. The first
 Rust test run lacked Git (30 unrelated fixture failures); installing Git resolved
@@ -207,3 +219,26 @@ Separate human desktop/provider checklist (`npm run tauri dev`):
 - Native human follow-up: a fresh Windows interactive chat, two GUI messages and
   Stop/resume. No terminal action should be needed for an already configured CLI.
   Login/trust prompts, if present, remain explicit setup; tests used fixture setup.
+
+
+### Windows output repair verification (2026-10-17)
+
+- The old Windows read loop was reproduced against a blocking open pipe: its query
+  stayed buffered beyond 50ms despite the 8ms budget, then appeared only after a
+  second write. The production replacement pump passes open-pipe query/prompt
+  delivery plus EOF byte-preservation tests without changing Unix's reader.
+- Rust workspace check, production-target Clippy and **751 tests / 2 ignored**
+  passed in the Debian build environment. Changed Rust files pass rustfmt.
+  Whole-tree format/all-target Clippy still report the unchanged Debug Inspector
+  formatting/needless-borrow exceptions recorded above.
+- Frontend tests cover missing output, incomplete frame checks, metadata-only
+  snapshots and retaining the blocked snapshot after the prompt becomes ready.
+  Existing real CLI supervised/Full access tests passed during the full run.
+- Final full web check **6,804 passed / 617 files**, including both opt-in real CLI cases; strict TypeScript and production web/host builds passed. Existing CSS optimizer/bundle warnings remain.
+- User reports an empty native prompt after opening the view. Asked whether
+  Return to chat accepts that prompt; no answer is assumed. The exact pre-open
+  session state and signed-in ConPTY/Tauri behavior remain unverified here.
+- After pulling, fully restart the native Tauri dev backend before retrying the
+  existing chat. A new chat alone does not load this Rust change. If an empty
+  prompt is still rejected, Copy diagnostics preserves both blocked and current
+  readiness metadata without prompt/screen/account data.

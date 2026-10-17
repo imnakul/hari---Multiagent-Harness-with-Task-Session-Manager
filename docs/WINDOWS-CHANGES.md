@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | ConPTY small output must flush while its reader is blocked | terminal, Claude Interactive |
 | 16 Oct 2026 | Claude Interactive launches the native executable in ConPTY | Claude, terminal, accounts |
 | 7 Oct 2026 | MCP test fixtures use discovery paths and repository boundaries | Windows tests, MCP |
 | 6 Oct 2026 | Native session identity preserves Windows project paths | provider resume, drive/UNC paths |
@@ -51,6 +52,28 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 — ConPTY small output must flush while its reader is blocked
+
+The old Windows reader checked its 8ms coalescing deadline only after another
+blocking `read` returned. A short final chunk could remain in `acc` indefinitely
+while Claude/the shell waited for input; the replay buffer could not help because
+those bytes had never reached `emit_pty_data`. Opening/resizing a terminal could
+produce another read and release the older bytes. Unix already uses an idle poll.
+
+`pty_output.rs` now reads into a bounded four-chunk channel. The emitter uses a
+timed receive, so it flushes the tail on deadline without needing more data or
+EOF, preserving bounded memory and the 8ms batching budget. Only ConPTY selects
+this output pump; Unix's production reader is unchanged. Tests exercise the same
+pump with an open blocking pipe, then check complete byte preservation at EOF.
+
+The user reported an empty native Claude prompt after the 20s GUI failure. This
+confirms a bridge failure but does not prove its precise readiness state before
+the terminal was opened. Startup errors now preserve metadata-only snapshots
+(current and blocked), including bytes, parse/settle state, cursor/frame checks
+and reply failures. Native terminal → Copy diagnostics exports no screen text,
+account identifiers, paths or prompt payloads. Signed-in ConPTY verification
+remains a human follow-up; a full native/backend restart is needed after pulling.
 
 ## 16 Oct 2026 — Claude Interactive launches the native executable in ConPTY
 

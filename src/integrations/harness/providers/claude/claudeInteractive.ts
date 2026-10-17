@@ -32,6 +32,7 @@ import {
 import {
   createInteractiveTerminal,
   type InteractiveTerminal,
+  type InteractiveReadiness,
 } from "./claudeInteractiveTerminal";
 
 type Binding = { nativeId: string; cwd: string; accountId?: string };
@@ -51,6 +52,13 @@ type Poll = {
   lines: string[];
   more: boolean;
 };
+type ReadinessSnapshot = {
+  revision: "2026-10-17-pty-flush";
+  phase: string;
+  pendingTurn: boolean;
+  externalTurn: boolean;
+  terminal: InteractiveReadiness;
+};
 type Live = {
   id: string;
   binding: Binding;
@@ -67,6 +75,7 @@ type Live = {
   approvals: Map<number, Record<string, unknown>>;
   external?: string;
   stopping: number;
+  lastBlocked?: ReadinessSnapshot;
 };
 const bindings = new Map<string, Binding>();
 const lives = new Map<string, Live>();
@@ -95,6 +104,27 @@ export function interactiveClaudeBinding(id: string): Binding | undefined {
 }
 export function hasInteractiveClaude(id: string): boolean {
   return lives.has(id);
+}
+
+function readinessSnapshot(live: Live): ReadinessSnapshot {
+  return {
+    revision: "2026-10-17-pty-flush",
+    phase: live.phase,
+    pendingTurn: !!live.pending,
+    externalTurn: !!live.external,
+    terminal: live.terminal.inspect(),
+  };
+}
+export function interactiveClaudeDiagnostics(id: string):
+  | {
+      current: ReadinessSnapshot;
+      lastBlocked?: ReadinessSnapshot;
+    }
+  | undefined {
+  const live = lives.get(id);
+  return live
+    ? { current: readinessSnapshot(live), lastBlocked: live.lastBlocked }
+    : undefined;
 }
 
 function emit(live: Live, event: HarnessEvent): void {
@@ -510,8 +540,28 @@ export async function sendInteractiveClaude(
     live.terminal.owner ||
     !live.terminal.ready()
   ) {
+    const snapshot = readinessSnapshot(live);
+    live.lastBlocked = snapshot;
+    emit(live, {
+      type: "diagnostic.lifecycle",
+      operation: "interactive-readiness",
+      identity: live.binding.nativeId,
+      state: JSON.stringify(snapshot),
+    });
+    const reason = snapshot.terminal.reason;
+    const explanation = live.terminal.owner
+      ? "The native terminal currently has input."
+      : live.pending || live.external || live.phase !== "ready"
+        ? "Claude has not reached an idle conversation state."
+        : reason === "no-output" || reason === "starting"
+          ? "Claude started, but no terminal output reached MonoCode."
+          : reason === "settling" || reason === "parsing"
+            ? "Claude's terminal output did not settle before the startup timeout."
+            : reason === "native-dialog"
+              ? "Claude is showing a native menu or setup dialog."
+              : "MonoCode could not recognize Claude's empty input prompt.";
     throw new HarnessNeedsAttentionError(
-      "Claude needs attention before chat can send. Open the model picker → Open native terminal, finish setup or close the menu, then Return to chat. No prompt was sent.",
+      `${explanation} Open the model picker → Open native terminal. Use Return to chat once its prompt is empty; if it is already empty, Copy diagnostics there. No prompt was sent.`,
     );
   }
   live.terminal.writing = true;

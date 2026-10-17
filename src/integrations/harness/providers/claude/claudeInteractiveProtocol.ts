@@ -31,19 +31,31 @@ export type PromptScreen = {
   screen: string;
 };
 
+export function interactivePromptChecks(screen: PromptScreen): {
+  cursorAtPrompt: boolean;
+  emptyDraft: boolean;
+  frameAbove: boolean;
+  frameBelow: boolean;
+  dialogFree: boolean;
+} {
+  return {
+    cursorAtPrompt: /^\s*❯\s*$/.test(screen.before),
+    emptyDraft:
+      !screen.after.trim() ||
+      screen.afterIsDim ||
+      /^Try\s+["“][^\r\n]*["”]\s*$/.test(screen.after.trim()),
+    frameAbove: /[─━]{8}/.test(screen.above),
+    frameBelow: /[─━]{8}/.test(screen.below),
+    dialogFree:
+      !/enter to (?:confirm|select)|esc to (?:cancel|close|interrupt)|select (?:a |the )?model|do you (?:want|trust)|trust this|type to search/i.test(
+        screen.screen,
+      ),
+  };
+}
+
 /** Fail closed on unfamiliar screens, drafts and native selection dialogs. */
 export function isEmptyInteractivePrompt(screen: PromptScreen): boolean {
-  return (
-    /^\s*❯\s*$/.test(screen.before) &&
-    (!screen.after.trim() ||
-      screen.afterIsDim ||
-      /^Try\s+["“][^\r\n]*["”]\s*$/.test(screen.after.trim())) &&
-    /[─━]{8}/.test(screen.above) &&
-    /[─━]{8}/.test(screen.below) &&
-    !/enter to (?:confirm|select)|esc to (?:cancel|close|interrupt)|select (?:a |the )?model|do you (?:want|trust)|trust this|type to search/i.test(
-      screen.screen,
-    )
-  );
+  return Object.values(interactivePromptChecks(screen)).every(Boolean);
 }
 
 export type TranscriptState = {

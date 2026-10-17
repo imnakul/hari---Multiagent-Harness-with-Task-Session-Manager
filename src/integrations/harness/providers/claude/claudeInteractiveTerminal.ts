@@ -6,7 +6,31 @@ import {
   subscribePty,
   writePty,
 } from "../../../../platform/tauri/pty";
-import { isEmptyInteractivePrompt } from "./claudeInteractiveProtocol";
+import { interactivePromptChecks } from "./claudeInteractiveProtocol";
+
+export type InteractiveReadiness = {
+  reason:
+    | "starting"
+    | "no-output"
+    | "stopped"
+    | "submitting"
+    | "parsing"
+    | "settling"
+    | "native-dialog"
+    | "prompt-mismatch"
+    | "ready";
+  receivedBytes: number;
+  outputAgeMs: number | null;
+  pendingParses: number;
+  replyFailures: number;
+  started: boolean;
+  inputOwner: boolean;
+  cols: number;
+  rows: number;
+  cursorX: number;
+  cursorY: number;
+  checks: ReturnType<typeof interactivePromptChecks>;
+};
 
 export type InteractiveTerminal = {
   term: Terminal;
@@ -15,6 +39,7 @@ export type InteractiveTerminal = {
   stopped: boolean;
   started: () => Promise<void>;
   ready: () => boolean;
+  inspect: () => InteractiveReadiness;
   reclaim: () => Promise<void>;
   resize: (cols: number, rows: number) => Promise<void>;
   dispose: () => void;
@@ -81,13 +106,18 @@ export async function createInteractiveTerminal(
   let lastWrite = Date.now();
   let owner = false;
   let started = false;
+  let pendingParses = 0;
+  let replyFailures = 0;
   const accept = (data: Uint8Array, start: number): void => {
     if (start > offset) return; // Replay fills gaps; never parse a broken VT stream.
     const skip = Math.max(0, offset - start);
     if (skip >= data.length) return;
     offset = start + data.length;
     lastWrite = Date.now();
-    term.write(data.subarray(skip));
+    pendingParses++;
+    term.write(data.subarray(skip), () => {
+      pendingParses--;
+    });
   };
   const unsubscribe = subscribePty(
     ptyId,
@@ -105,7 +135,9 @@ export async function createInteractiveTerminal(
     if (terminal.stopped) return;
     // Focus reports and all parser replies keep the CLI alive without taking chat input.
     if (!wasUserInput) {
-      void writePty(ptyId, data).catch(() => undefined);
+      void writePty(ptyId, data).catch(() => {
+        replyFailures++;
+      });
       return;
     }
     terminal.owner = true;
@@ -151,31 +183,62 @@ export async function createInteractiveTerminal(
         await resizePty(ptyId, term.cols, term.rows);
       changed();
     },
-    ready: (): boolean => {
-      if (terminal.stopped || terminal.writing || Date.now() - lastWrite < 180)
-        return false;
+    ready: (): boolean => terminal.inspect().reason === "ready",
+    inspect: (): InteractiveReadiness => {
       const buffer = term.buffer.active;
       const row = buffer.baseY + buffer.cursorY;
       const current = buffer.getLine(row);
-      if (!current) return false;
-      const after = current.translateToString(true, buffer.cursorX);
+      const after = current?.translateToString(true, buffer.cursorX) ?? "";
       let afterIsDim = true;
       for (let x = buffer.cursorX; x < term.cols; x++) {
-        const cell = current.getCell(x);
+        const cell = current?.getCell(x);
         if (cell?.getChars().trim() && !cell.isDim()) afterIsDim = false;
       }
       const screen = Array.from(
         { length: 14 },
         (_, i) => buffer.getLine(row + i)?.translateToString(true) ?? "",
       ).join("\n");
-      return isEmptyInteractivePrompt({
-        before: current.translateToString(false, 0, buffer.cursorX),
+      const checks = interactivePromptChecks({
+        before: current?.translateToString(false, 0, buffer.cursorX) ?? "",
         after,
         afterIsDim,
         above: buffer.getLine(row - 1)?.translateToString(true) ?? "",
         below: buffer.getLine(row + 1)?.translateToString(true) ?? "",
         screen,
       });
+      const age = offset ? Math.max(0, Date.now() - lastWrite) : null;
+      const reason = terminal.stopped
+        ? "stopped"
+        : terminal.writing
+          ? "submitting"
+          : !offset
+            ? started
+              ? "no-output"
+              : "starting"
+            : pendingParses
+              ? "parsing"
+              : age != null && age < 180
+                ? "settling"
+                : !checks.dialogFree
+                  ? "native-dialog"
+                  : Object.values(checks).every(Boolean)
+                    ? "ready"
+                    : "prompt-mismatch";
+      // Deliberately omit terminal text, paths, account identifiers and reply bytes.
+      return {
+        reason,
+        receivedBytes: offset,
+        outputAgeMs: age,
+        pendingParses,
+        replyFailures,
+        started,
+        inputOwner: owner,
+        cols: term.cols,
+        rows: term.rows,
+        cursorX: buffer.cursorX,
+        cursorY: buffer.cursorY,
+        checks,
+      };
     },
     reclaim: async (): Promise<void> => {
       if (!terminal.ready())

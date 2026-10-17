@@ -41,6 +41,7 @@ vi.mock("./claudeInteractiveTerminal", () => ({
         mocks.owner = value;
       },
       ready: mocks.ready,
+      inspect: () => ({ reason: mocks.ready() ? "ready" : "prompt-mismatch", receivedBytes: 20, inputOwner: mocks.owner }),
       dispose: vi.fn(),
       writing: false,
       stopped: false,
@@ -55,6 +56,7 @@ const {
   bindInteractiveClaude,
   replyInteractiveClaude,
   hasInteractiveClaude,
+  interactiveClaudeDiagnostics,
 } = await import("./claudeInteractive");
 
 let events: HarnessEvent[];
@@ -226,6 +228,8 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(0);
     expect(await turn).toBeInstanceOf(HarnessNeedsAttentionError);
     expect(hasInteractiveClaude("interactive-test")).toBe(true);
+    expect(interactiveClaudeDiagnostics("interactive-test")?.lastBlocked).toMatchObject({ phase: "ready", terminal: { reason: "prompt-mismatch" } });
+    expect(events).toContainEqual(expect.objectContaining({ type: "diagnostic.lifecycle", operation: "interactive-readiness" }));
     expect(
       mocks.invoke.mock.calls.some(
         ([command]) => command === "claude_interactive_stop",
@@ -233,6 +237,8 @@ describe("interactive turn delivery", () => {
     ).toBe(false);
     // After setup is completed, retry reuses the existing process once.
     mocks.ready.mockReturnValue(true);
+    expect(interactiveClaudeDiagnostics("interactive-test")?.current.terminal.reason).toBe("ready");
+    expect(interactiveClaudeDiagnostics("interactive-test")?.lastBlocked?.terminal.reason).toBe("prompt-mismatch");
     const retry = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);
     finish();

@@ -8,6 +8,7 @@ import {
 } from "../../../integrations/harness/providers/claude/claudeInteractiveTerminal";
 import {
   releaseInteractiveApprovals,
+  interactiveClaudeDiagnostics,
   stopInteractiveClaude,
 } from "../../../integrations/harness/providers/claude/claudeInteractive";
 import "@xterm/xterm/css/xterm.css";
@@ -26,6 +27,7 @@ export function ClaudeInteractiveTerminal({
   );
   const terminal = interactiveTerminalFor(sessionId);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = host.current;
@@ -96,6 +98,24 @@ export function ClaudeInteractiveTerminal({
               }}
             >
               Stop Claude
+            </button>
+            <button
+              type="button"
+              className="hover:text-accent"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(
+                    JSON.stringify(
+                      interactiveClaudeDiagnostics(sessionId),
+                      null,
+                      2,
+                    ),
+                  )
+                  .then(() => setCopied(true))
+                  .catch((reason: unknown) => setError(String(reason)));
+              }}
+            >
+              {copied ? "Copied" : "Copy diagnostics"}
             </button>
             <span className="ml-auto text-content/50">
               {terminal.stopped
