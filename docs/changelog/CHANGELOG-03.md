@@ -1,5 +1,11 @@
 # Changelog 03 — MonoCode Windows fork
 
+## 2026-10-17 — Reproduce Claude startup at the native ConPTY boundary (L-82)
+- What: Extended the opt-in real CLI regression to a Windows JSON PTY host using the vendored ConPTY, production managed spawn and output pump. Added a branch-scoped Windows 2022/2025 workflow with isolated CLI 2.1.302 and loopback responses. It captures test-account VT/metadata and compares default/omitted/basic-conformance/Win32-encoded DA1 replies without changing MonoCode input behavior.
+- Why: The user's pre-open snapshot rules out terminal ownership, busy state, a dialog and pending output; only the cursor-prefix check fails with cursorX 3. The screenshot's automatic `c` needs a native Windows reproduction rather than another permissive prompt check.
+- Verified: Windows-target Rust check/Clippy and fixture format passed; existing Unix native CLI cases and TypeScript passed. Final full web gate passed (6,811 tests / 618 files); Windows runtime result pending. The application first-send bug remains open; no product parser, prompt guard or native draft changed in this diagnostic publication.
+- Commit: this user-authorized diagnostic publication to the existing 0.10.0 branch; no application input changes.
+
 ## 2026-10-17 — Keep interactive recovery sessions and diagnostics available (L-82)
 - What: Reproduced the registry's five-minute idle cleanup killing a Claude Interactive session after a blocked first send. Native interactive owners now veto idle parking; explicit Stop/detach/transport changes still tear them down. Exited terminal screens remain accessible, and Stop retains up to 50 metadata-only reports per window. The existing picker offers View startup diagnostics after terminal disposal, with Copy diagnostics independent of a running process; Forget clears the report.
 - Files: harness registry and Claude adapter/lifecycle; existing composer/model picker/native-terminal dialog; registry/real-VT lifecycle and composer/clipboard regressions; L-82 and spec records.

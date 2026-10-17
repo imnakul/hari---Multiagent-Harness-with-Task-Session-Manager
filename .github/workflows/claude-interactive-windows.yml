@@ -1,0 +1,67 @@
+name: Claude Interactive Windows
+
+on:
+  push:
+    branches: [nakul/windows-support-upstream-0.10.0]
+    paths:
+      - .github/workflows/claude-interactive-windows.yml
+      - scripts/interactive-pty-host/**
+      - src/integrations/harness/providers/claude/claudeInteractive*.ts
+      - src-tauri/src/pty*.rs
+      - src-tauri/src/windows.rs
+      - vendor/portable-pty/**
+
+permissions:
+  contents: read
+
+jobs:
+  conpty:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: cargo build --locked --manifest-path scripts/interactive-pty-host/Cargo.toml
+      - name: Install isolated native CLI and select test plumbing
+        shell: pwsh
+        run: |
+          $cliRoot = Join-Path $env:RUNNER_TEMP 'monocode-cli'
+          npm install --prefix $cliRoot '@anthropic-ai/claude-code@2.1.302'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $cli = Join-Path $cliRoot 'node_modules\@anthropic-ai\claude-code\bin\claude.exe'
+          if (-not (Test-Path $cli)) { throw 'Native Claude executable was not installed' }
+          & $cli --version
+          "MONOCODE_INTERACTIVE_TEST_CLI=$cli" >> $env:GITHUB_ENV
+          "MONOCODE_INTERACTIVE_TEST_PTY_HOST=$env:GITHUB_WORKSPACE\scripts\interactive-pty-host\target\debug\interactive-pty-host.exe" >> $env:GITHUB_ENV
+          "MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR=$env:RUNNER_TEMP\interactive-capture" >> $env:GITHUB_ENV
+      - name: Reproduce and isolate primary attribute replies
+        shell: pwsh
+        run: |
+          $captureRoot = $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR
+          $failed = $false
+          foreach ($mode in @('default', 'omit', 'conpty', 'encoded')) {
+            $env:MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT = $mode
+            $env:MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR = Join-Path $captureRoot $mode
+            Write-Output "Primary attribute experiment: $mode"
+            npx vitest run src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interactive-capture-${{ matrix.os }}
+          path: ${{ runner.temp }}/interactive-capture
+          if-no-files-found: ignore
+          retention-days: 3

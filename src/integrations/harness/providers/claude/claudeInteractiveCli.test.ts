@@ -45,6 +45,7 @@ import {
   forgetInteractiveClaude,
   sendInteractiveClaude,
   stopInteractiveClaude,
+  interactiveClaudeDiagnostics,
 } from "./claudeInteractive";
 import { interactiveTerminalFor } from "./claudeInteractiveTerminal";
 
@@ -55,10 +56,13 @@ function reply(response: ServerResponse, body: unknown): void {
 
 // Explicit opt-in: starts the real installed CLI with a temporary fake account
 // and a loopback response server. The production frontend/VT/PTY path stays real;
-// this test host replaces desktop IPC, not Windows ConPTY or the Rust backend.
+// Desktop IPC is replaced. On Windows the opt-in host reuses the production
+// managed spawn, vendored ConPTY and output pump; it does not drive a Tauri view.
 it
   .runIf(
-    process.platform !== "win32" && !!process.env.MONOCODE_INTERACTIVE_TEST_CLI,
+    !!process.env.MONOCODE_INTERACTIVE_TEST_CLI &&
+      (process.platform !== "win32" ||
+        !!process.env.MONOCODE_INTERACTIVE_TEST_PTY_HOST),
   )
   .each(["supervised", "full-access"] as const)(
   "real interactive CLI: two GUI turns and native resume (%s)",
@@ -181,13 +185,16 @@ it
     if (!address || typeof address === "string")
       throw new Error("No fixture address");
     const url = `http://127.0.0.1:${address.port}`;
+    const nativeHost = process.env.MONOCODE_INTERACTIVE_TEST_PTY_HOST;
     const driver = spawn(
-      "python3",
-      [
-        fileURLToPath(
-          new URL("./fixtures/interactive-pty-host.py", import.meta.url),
-        ),
-      ],
+      nativeHost ?? "python3",
+      nativeHost
+        ? []
+        : [
+            fileURLToPath(
+              new URL("./fixtures/interactive-pty-host.py", import.meta.url),
+            ),
+          ],
       { stdio: ["pipe", "pipe", "inherit"] },
     );
     const pending = new Map<
@@ -236,6 +243,7 @@ it
     const starts: Record<string, unknown>[] = [];
     const sends: string[] = [];
     const nativeInput: string[] = [];
+    const passiveReplies: string[] = [];
     ipc.invoke
       .mockReset()
       .mockImplementation(
@@ -293,7 +301,10 @@ it
             });
             return;
           }
-          if (command === "pty_write") return rpc("write", { data: args.data });
+          if (command === "pty_write") {
+            passiveReplies.push(String(args.data));
+            return rpc("write", { data: args.data });
+          }
           if (command === "pty_resize")
             return rpc("resize", { cols: args.cols, rows: args.rows });
           if (command === "pty_replay") {
@@ -397,6 +408,26 @@ it
       });
       expect(requests.length).toBeGreaterThanOrEqual(3);
     } finally {
+      const capture = process.env.MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR;
+      if (capture) {
+        await mkdir(capture, { recursive: true });
+        await Promise.all([
+          writeFile(join(capture, `${runtimeMode}.vt`), output),
+          writeFile(
+            join(capture, `${runtimeMode}.json`),
+            JSON.stringify(
+              {
+                readiness: interactiveClaudeDiagnostics(id),
+                passiveReplies,
+                nativeInput,
+                acceptedPrompts,
+              },
+              null,
+              2,
+            ),
+          ),
+        ]);
+      }
       await forgetInteractiveClaude(id);
       lines.close();
       driver.stdin.end();

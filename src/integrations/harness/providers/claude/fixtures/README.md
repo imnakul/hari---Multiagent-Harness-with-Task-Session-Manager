@@ -44,3 +44,21 @@ responses over loopback. Account data lives in a temporary directory with fixtur
 onboarding/trust/Full access already accepted. No real credentials or external
 model requests are used, and no terminal view is mounted. This still does not
 exercise Windows ConPTY, the native Rust command boundary or the signed-in GUI.
+
+Windows opt-in runs set `MONOCODE_INTERACTIVE_TEST_PTY_HOST` to the executable
+built from `scripts/interactive-pty-host/Cargo.toml`. That host reuses the vendored
+ConPTY implementation, production managed-job spawn and timed output pump;
+desktop IPC and the hook/transcript polling endpoint remain test plumbing.
+The CLI still uses an isolated fake account and loopback API. Optional
+`MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR` saves only that fixture's VT stream,
+readiness metadata and writes; never enable fixture capture on a real account.
+
+The temporary fork Windows workflow compares default DA1 replies, omitted DA1
+replies, basic-conformance replies and Win32-encoded replies on Windows 2022/2025. Those transformations
+exist only in the opt-in Rust host (`MONOCODE_INTERACTIVE_TEST_DA1_EXPERIMENT`),
+not in MonoCode. They are causal probes, not proposed product behavior. A failed
+default run stays a failure; artifacts retain each case for diagnosis. The
+workflow pins the user's CLI 2.1.302 and exercises two messages plus native resume
+in both permission modes. It does not qualify a signed-in Tauri/WebView workflow
+or subscription consumption. Once the defect is reproduced, remove experimental
+variants and keep the production regression.

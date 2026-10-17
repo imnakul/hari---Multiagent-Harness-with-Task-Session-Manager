@@ -45,6 +45,17 @@ existing chat UI. Claude owns native context; no summary transfer.
 
 ## Issues and fixes
 
+Fifth report (2026-10-17, after `08f4180`): the saved pre-open state is ready,
+has no pending/external turn, has chat ownership, no parser/reply errors and a
+settled framed input. Only cursorAtPrompt fails; cursorX is 3 rather than 2.
+The same off-by-one persists after resize. Together with the screenshot this
+is consistent with an unsolicited `c` already in the native draft before the
+terminal opens. Do not widen the prompt regex or erase the draft. Plan: extend
+the opt-in real CLI regression to Windows, reusing the vendored ConPTY, managed
+spawn and output pump; capture its isolated fake-account wire on failure. Run
+it on a Windows runner before selecting a source repair. The current Unix host
+does not qualify that boundary; exact injection source is not yet established.
+
 Fourth report (2026-10-17): the user cannot follow the diagnostics request
 because the terminal action disappears after several minutes. The registry
 unconditionally schedules its five-minute child parking timer when a send
