@@ -25,6 +25,7 @@ import type {
   ProviderRateLimits,
   RateLimitProvider,
 } from "../../features/providers/model/rateLimits";
+import { RATE_LIMIT_POLL_MS } from "../../features/providers/model/rateLimits";
 import { saveProviderAccount } from "../../features/providers/model/providerAccounts";
 import { clearCachedRateLimits } from "../../features/providers/model/rateLimitsCache";
 import {
@@ -37,7 +38,10 @@ import { UsageFooter } from "./UsageFooter";
 let container: HTMLDivElement;
 let root: Root;
 
-function okLimits(provider: RateLimitProvider, used: number): ProviderRateLimits {
+function okLimits(
+  provider: RateLimitProvider,
+  used: number,
+): ProviderRateLimits {
   return {
     provider,
     session: { usedPercent: used, windowMinutes: 300, resetsAt: null },
@@ -52,6 +56,8 @@ function okLimits(provider: RateLimitProvider, used: number): ProviderRateLimits
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -61,15 +67,15 @@ beforeEach(() => {
     },
   );
   localStorage.clear();
-  rateLimitsFetch.fetchClaudeRateLimits.mockReset().mockImplementation(
-    async () => okLimits("claude", 10),
-  );
-  rateLimitsFetch.fetchCodexRateLimits.mockReset().mockImplementation(
-    async () => okLimits("codex", 20),
-  );
-  rateLimitsFetch.fetchDevinRateLimits.mockReset().mockImplementation(
-    async () => okLimits("devin", 30),
-  );
+  rateLimitsFetch.fetchClaudeRateLimits
+    .mockReset()
+    .mockImplementation(async () => okLimits("claude", 10));
+  rateLimitsFetch.fetchCodexRateLimits
+    .mockReset()
+    .mockImplementation(async () => okLimits("codex", 20));
+  rateLimitsFetch.fetchDevinRateLimits
+    .mockReset()
+    .mockImplementation(async () => okLimits("devin", 30));
   clearCachedRateLimits();
   container = document.createElement("div");
   document.body.append(container);
@@ -80,6 +86,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.useRealTimers();
   localStorage.clear();
 });
@@ -93,8 +100,65 @@ function chips(): HTMLButtonElement[] {
 }
 
 describe("UsageFooter all accounts usage", () => {
+  it("automatically refreshes the selected account without reading unused accounts", async () => {
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
+    await act(async () =>
+      root.render(createElement(UsageFooter, { providers: ["claude"] })),
+    );
+    expect(
+      rateLimitsFetch.fetchClaudeRateLimits.mock.calls.map(([id]) => id),
+    ).toEqual(["default"]);
+    rateLimitsFetch.fetchClaudeRateLimits.mockImplementation(async () =>
+      okLimits("claude", 67),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_POLL_MS);
+    });
+    expect(
+      rateLimitsFetch.fetchClaudeRateLimits.mock.calls.map(([id]) => id),
+    ).toEqual(["default", "default"]);
+    expect(chips()[0].textContent).toContain("67%");
+    expect(rateLimitsFetch.fetchCodexRateLimits).not.toHaveBeenCalled();
+  });
+  it("automatically refreshes all accounts, including those behind the +N chip", async () => {
+    saveAllAccountsUsage(true);
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
+    await act(async () =>
+      root.render(createElement(UsageFooter, { providers: [] })),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 4);
+    });
+    expect(rateLimitsFetch.fetchClaudeRateLimits).toHaveBeenCalledTimes(2);
+    expect(rateLimitsFetch.fetchDevinRateLimits).toHaveBeenCalledTimes(1);
+    rateLimitsFetch.fetchClaudeRateLimits.mockImplementation(async () =>
+      okLimits("claude", 55),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_POLL_MS);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 4);
+    });
+    expect(rateLimitsFetch.fetchClaudeRateLimits).toHaveBeenCalledTimes(4);
+    expect(rateLimitsFetch.fetchCodexRateLimits).toHaveBeenCalledTimes(2);
+    expect(rateLimitsFetch.fetchDevinRateLimits).toHaveBeenCalledTimes(2);
+    expect(chips()[0].textContent).toContain("55%");
+  });
   it("shows only the selected account until the setting is switched on", async () => {
-    saveProviderAccount({ id: "account-work", provider: "claude", label: "Work" });
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
     await act(async () =>
       root.render(
         createElement(UsageFooter, {
@@ -112,7 +176,11 @@ describe("UsageFooter all accounts usage", () => {
   });
 
   it("switches live to one labelled chip per account, loading them one by one", async () => {
-    saveProviderAccount({ id: "account-work", provider: "claude", label: "Work" });
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
     await act(async () =>
       root.render(
         createElement(UsageFooter, {
@@ -156,7 +224,11 @@ describe("UsageFooter all accounts usage", () => {
 
   it("opens the +N popover with the collapsed accounts", async () => {
     saveAllAccountsUsage(true);
-    saveProviderAccount({ id: "account-work", provider: "claude", label: "Work" });
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
     await act(async () =>
       root.render(createElement(UsageFooter, { providers: [] })),
     );

@@ -5,6 +5,7 @@ import {
 } from "../../features/providers/model/providerAccounts";
 import {
   RATE_LIMIT_MIN_REFETCH_MS,
+  RATE_LIMIT_ACCOUNT_STAGGER_MS,
   type ProviderRateLimits,
   type RateLimitWindow,
 } from "../../features/providers/model/rateLimits";
@@ -20,7 +21,7 @@ export type AccountChipEntry = {
 };
 
 /** Pause between consecutive account loads so many accounts never burst. */
-export const ACCOUNT_LOAD_GAP_MS = 750;
+export const ACCOUNT_LOAD_GAP_MS = RATE_LIMIT_ACCOUNT_STAGGER_MS;
 
 /** Rough rendered width of one account chip (icon, label, bar, 5h figure). */
 const CHIP_WIDTH_PX = 180;

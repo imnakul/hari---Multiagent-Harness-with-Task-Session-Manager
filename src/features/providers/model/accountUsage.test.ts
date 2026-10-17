@@ -2,7 +2,12 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProviderRateLimits, RateLimitWindow } from "./rateLimits";
+import {
+  RATE_LIMIT_ACCOUNT_STAGGER_MS,
+  RATE_LIMIT_POLL_MS,
+  type ProviderRateLimits,
+  type RateLimitWindow,
+} from "./rateLimits";
 
 const fetches = vi.hoisted(() => ({
   claude: vi.fn<(accountId: string) => Promise<ProviderRateLimits>>(),
@@ -172,6 +177,10 @@ describe("useProviderAccountUsage", () => {
   }
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const values = new Map<string, string>();
     vi.stubGlobal("localStorage", {
@@ -198,6 +207,8 @@ describe("useProviderAccountUsage", () => {
     container.remove();
     localStorage.clear();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("loads every account of the provider once enabled", async () => {
@@ -220,7 +231,7 @@ describe("useProviderAccountUsage", () => {
     expect(fetches.claude).toHaveBeenCalledTimes(2);
   });
 
-  it("only reloads cached accounts when the user refreshes", async () => {
+  it("reuses fresh readings and allows an immediate manual refresh", async () => {
     fetches.claude
       .mockResolvedValueOnce(limits(window(10)))
       .mockResolvedValueOnce(limits(window(10)))
@@ -233,6 +244,28 @@ describe("useProviderAccountUsage", () => {
     expect(fetches.claude).toHaveBeenCalledTimes(4);
     expect(latest.usage["claude:default"]?.session?.usedPercent).toBe(70);
     expect(latest.refreshing).toBe(false);
+  });
+
+  it("automatically updates an enabled Accounts view and stops when it closes", async () => {
+    fetches.claude.mockImplementation(async () =>
+      limits(window(12), null, { updatedAt: Date.now() }),
+    );
+    await act(async () => render());
+    expect(fetches.claude).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_POLL_MS);
+    });
+    expect(fetches.claude).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_ACCOUNT_STAGGER_MS);
+    });
+    expect(fetches.claude).toHaveBeenCalledTimes(4);
+    expect(latest.usage["claude:account-work"].updatedAt).toBe(Date.now());
+    await act(async () => render(false));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_POLL_MS);
+    });
+    expect(fetches.claude).toHaveBeenCalledTimes(4);
   });
 
   it("shares an in-flight account request between views", async () => {

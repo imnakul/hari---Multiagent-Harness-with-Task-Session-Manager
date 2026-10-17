@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { useRateLimitsPolling } from "./useRateLimitsPolling";
 import {
   clampUsedPercent,
   exhaustedWindowResetAt,
@@ -132,7 +139,8 @@ export type AccountUsage = {
  * Settings and the footer account picker can show which account has
  * headroom. `accountsVersion` should change when accounts are added or
  * removed. While `enabled`, accounts without a window snapshot load once;
- * `refresh` explicitly reloads every account.
+ * `refresh` explicitly reloads every account. Mounted, enabled views refresh
+ * stale cached accounts automatically on the foreground usage cadence.
  */
 export function useProviderAccountUsage(
   accountsVersion: unknown,
@@ -182,6 +190,18 @@ export function useProviderAccountUsage(
       ),
     );
   }, [accountsVersion, enabled, load, provider]);
+
+  const pollingTargets = useMemo(
+    () =>
+      enabled
+        ? accountsFor(provider).map((account) => ({
+            provider: account.provider,
+            accountId: account.id,
+          }))
+        : [],
+    [accountsVersion, enabled, provider],
+  );
+  useRateLimitsPolling(pollingTargets);
 
   const refresh = useCallback(
     () => void load(accountsFor(provider), true),

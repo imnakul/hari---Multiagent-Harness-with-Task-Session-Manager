@@ -3,6 +3,11 @@
 Created: 2026-10-13 17:07 IST. Tier: Medium (one UI surface, one setting, no fetch changes).
 Working branch: `feature/all-accounts-usage-monocode`, created from `79cb6f4d`. Not pushed.
 
+Follow-up 2026-10-17: this feature is merged on the 0.10.0 branch. [L-92 automatic
+usage refresh](account-usage-auto-refresh.md) adds the shared 15-minute foreground
+poll and five-minute stale-on-focus refresh. The original no-polling scope below
+describes the initial implementation.
+
 ## Goal
 
 Show usage for every configured provider account in the bottom bar at once, behind an

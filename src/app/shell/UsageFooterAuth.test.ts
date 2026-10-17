@@ -91,7 +91,7 @@ function connectedLimits(provider: RateLimitProvider): ProviderRateLimits {
 }
 
 describe("UsageFooter provider authentication", () => {
-  it("reuses usage on remount and only fetches again on Refresh", async () => {
+  it("reuses fresh usage on remount and allows manual Refresh", async () => {
     rateLimitsFetch.fetchCodexRateLimits.mockResolvedValue(
       connectedLimits("codex"),
     );

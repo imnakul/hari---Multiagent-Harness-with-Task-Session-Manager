@@ -19,8 +19,6 @@ import {
   errorRateLimits,
   unavailableRateLimits,
   type RateLimitProvider,
-  RATE_LIMIT_POLL_MS,
-  RATE_LIMIT_MIN_REFETCH_MS,
 } from "../../features/providers/model/rateLimits";
 import {
   getAllRateLimits,
@@ -30,6 +28,10 @@ import {
   subscribeRateLimits,
   useCachedRateLimits,
 } from "../../features/providers/model/rateLimitsCache";
+import {
+  useRateLimitsPolling,
+  type RateLimitPollingTarget,
+} from "../../features/providers/model/useRateLimitsPolling";
 import {
   HARNESS_LABEL,
   HARNESS_TITLE,
@@ -244,8 +246,7 @@ export function UsageFooter({
     [],
   );
 
-  // New accounts load once. Returning from Settings or focusing the window
-  // reads the shared snapshot without starting another provider request.
+  // Initial loads use the cache; foreground polling below refreshes stale reads.
   useEffect(() => {
     if (wantClaude && claudeAccountAvailable)
       void loadRateLimits("claude", claudeAccountId);
@@ -340,22 +341,29 @@ export function UsageFooter({
     wantDevin,
   ]);
 
-  useEffect(() => {
-    if (!wantCli) return;
-    const poll = (): void => {
-      const cached = getCachedRateLimits("antigravity-cli", cliAccountKey);
-      if (document.visibilityState !== "visible" || Date.now() - cached.updatedAt < RATE_LIMIT_MIN_REFETCH_MS) return;
-      void loadRateLimits("antigravity-cli", cliAccountKey, true);
-    };
-    const timer = window.setInterval(poll, RATE_LIMIT_POLL_MS);
-    window.addEventListener("focus", poll);
-    document.addEventListener("visibilitychange", poll);
-    return (): void => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", poll);
-      document.removeEventListener("visibilitychange", poll);
-    };
-  }, [wantCli, cliAccountKey]);
+  const pollingTargets = useMemo(() => {
+    const targets: RateLimitPollingTarget[] = accountMode
+      ? accountEntries.map((entry) => ({
+          provider: entry.provider,
+          accountId: entry.account.id,
+        }))
+      : [];
+    if (wantClaude && claudeAccountAvailable)
+      targets.push({ provider: "claude", accountId: claudeAccountId });
+    if (wantCodex && codexAccountAvailable)
+      targets.push({ provider: "codex", accountId: codexAccountId });
+    if (wantDevin) targets.push({ provider: "devin", accountId: "default" });
+    if (wantOpencode) targets.push({ provider: "opencode", accountId: "default" });
+    if (wantCli)
+      targets.push({ provider: "antigravity-cli", accountId: cliAccountKey });
+    return targets;
+  }, [
+    accountMode, accountEntries,
+    wantClaude, claudeAccountAvailable, claudeAccountId,
+    wantCodex, codexAccountAvailable, codexAccountId,
+    wantDevin, wantOpencode, wantCli, cliAccountKey,
+  ]);
+  useRateLimitsPolling(pollingTargets);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), CLOCK_MS);

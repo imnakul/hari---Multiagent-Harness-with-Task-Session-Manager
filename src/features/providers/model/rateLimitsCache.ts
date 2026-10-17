@@ -5,6 +5,7 @@ import {
   errorRateLimits,
   fetchingRateLimits,
   idleRateLimits,
+  RATE_LIMIT_MIN_REFETCH_MS,
   type ProviderRateLimits,
   type RateLimitProvider,
 } from "./rateLimits";
@@ -75,7 +76,7 @@ export function setCachedRateLimits(
   publish(keyFor(provider, accountId), value);
 }
 
-/** Fetch an account once per window lifetime, or again on explicit refresh. */
+/** Reuse snapshots unless a caller explicitly requests a new read. */
 export function loadRateLimits(
   provider: RateLimitProvider,
   accountId = "default",
@@ -126,6 +127,31 @@ export function loadRateLimits(
   })();
   pending.set(key, run);
   return run;
+}
+
+/** Cold loads stay with their existing owner; throttle failed readings too. */
+export function rateLimitRefreshDue(
+  limits: ProviderRateLimits,
+  now = Date.now(),
+): boolean {
+  return (
+    limits.status !== "idle" &&
+    limits.status !== "fetching" &&
+    now - limits.updatedAt >= RATE_LIMIT_MIN_REFETCH_MS
+  );
+}
+
+/** Automatic refresh joins current work; it never queues a second forced read. */
+export function refreshStaleRateLimits(
+  provider: RateLimitProvider,
+  accountId = "default",
+): Promise<ProviderRateLimits> {
+  const key = keyFor(provider, accountId);
+  const running = pending.get(key);
+  if (running) return running;
+  const cached = snapshots.get(key);
+  if (cached && !rateLimitRefreshDue(cached)) return Promise.resolve(cached);
+  return loadRateLimits(provider, accountId, true);
 }
 
 /** Also used when an account is removed and by tests that need a clean cache. */

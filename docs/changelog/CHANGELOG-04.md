@@ -1,5 +1,10 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-17 — Refresh account usage automatically on the foreground cadence (L-92)
+- What: Match Orca's normal 15-minute poll and five-minute stale-on-activation timing for selected/all-account footer usage, Settings Accounts and open account pickers. Pause while hidden/unfocused, stagger accounts by 750ms, cancel obsolete queues and join shared in-flight reads without queuing extra forced fetches. Existing quota fetch paths and manual refresh remain; no chat prompts, dependencies, Rust, installer or version changes.
+- Files: `useRateLimitsPolling.ts` and tests; `rateLimitsCache.ts`, `accountUsage.ts`, footer wiring and account-view/footer regressions. The shared stagger constant also preserves existing initial-load pacing.
+- Verified: 85 focused tests, 6,932 full web tests / 628 files (two native CLI opt-in skips), strict TypeScript and production build pass. Account-hook fixtures now use a fixed clock so an old test snapshot is not accidentally treated as a month-old reading on remount. Desktop foreground/minimize behavior remains a human check.
+- Commit: automatic-usage follow-up on the authorized 0.10.0 branch.
 ## 2026-10-17 — Keep folded Interactive prompts and their timer in one turn (L-82)
 - What: Recognize Claude's pasted-content representation only when every typed/pasted part exactly matches the pending composer prompt. Keep the original message and turn start; no duplicate external turn, early completion or resend. Different/truncated input remains unconfirmed. Freeze genuine terminal/background turn durations at their own completion without ending concurrent local work.
 - Files: `claudeInteractivePrompt.ts` and tests; `claudeInteractive.ts`; session reducer `apply.ts` and external-duration tests; adapter/session lifecycle regression; expanded native CLI probe and a separate Windows messages-only check.
