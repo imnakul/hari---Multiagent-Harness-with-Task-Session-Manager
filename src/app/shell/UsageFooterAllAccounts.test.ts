@@ -27,7 +27,10 @@ import type {
 } from "../../features/providers/model/rateLimits";
 import { RATE_LIMIT_POLL_MS } from "../../features/providers/model/rateLimits";
 import { saveProviderAccount } from "../../features/providers/model/providerAccounts";
-import { clearCachedRateLimits } from "../../features/providers/model/rateLimitsCache";
+import {
+  clearCachedRateLimits,
+  getCachedRateLimits,
+} from "../../features/providers/model/rateLimitsCache";
 import {
   saveAllAccountsUsage,
   saveRemainingQuota,
@@ -100,6 +103,101 @@ function chips(): HTMLButtonElement[] {
 }
 
 describe("UsageFooter all accounts usage", () => {
+  it("forces a fresh manual read of every account including overflow, with staggered requests and one refresh at a time", async () => {
+    saveAllAccountsUsage(true);
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
+    await act(async () =>
+      root.render(createElement(UsageFooter, { providers: [] })),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 4);
+    });
+    expect(rateLimitsFetch.fetchClaudeRateLimits).toHaveBeenCalledTimes(2);
+    expect(rateLimitsFetch.fetchCodexRateLimits).toHaveBeenCalledTimes(1);
+    expect(rateLimitsFetch.fetchDevinRateLimits).toHaveBeenCalledTimes(1);
+    rateLimitsFetch.fetchClaudeRateLimits.mockImplementation(async () =>
+      okLimits("claude", 61),
+    );
+    rateLimitsFetch.fetchCodexRateLimits.mockImplementation(async () =>
+      okLimits("codex", 72),
+    );
+    rateLimitsFetch.fetchDevinRateLimits.mockImplementation(async () =>
+      okLimits("devin", 83),
+    );
+    const refresh = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Refresh usage"]',
+    )!;
+    await act(async () => refresh.click());
+    expect(rateLimitsFetch.fetchClaudeRateLimits).toHaveBeenCalledTimes(3);
+    expect(rateLimitsFetch.fetchCodexRateLimits).toHaveBeenCalledTimes(1);
+    expect(refresh.disabled).toBe(true);
+    await act(async () => refresh.click());
+    expect(rateLimitsFetch.fetchClaudeRateLimits).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 3);
+    });
+    expect(rateLimitsFetch.fetchClaudeRateLimits).toHaveBeenCalledTimes(4);
+    expect(
+      rateLimitsFetch.fetchClaudeRateLimits.mock.calls.map(([id]) => id),
+    ).toEqual(["default", "account-work", "default", "account-work"]);
+    expect(rateLimitsFetch.fetchCodexRateLimits).toHaveBeenCalledTimes(2);
+    expect(rateLimitsFetch.fetchDevinRateLimits).toHaveBeenCalledTimes(2);
+    expect(refresh.disabled).toBe(false);
+    expect(chips()[0].textContent).toContain("61% used");
+    expect(getCachedRateLimits("devin").session?.usedPercent).toBe(83);
+    const more = container.querySelector<HTMLButtonElement>(
+      '[aria-label="1 more account, usage details"]',
+    )!;
+    await act(async () => more.click());
+    // Overflow meters use the default remaining-usage display: 83% used is
+    // 17% left. The cache above verifies the provider's actual used reading.
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "17% left",
+    );
+  });
+
+  it("retains the last snapshot with an error on a failed manual refresh and permits a retry", async () => {
+    saveAllAccountsUsage(true);
+    await act(async () =>
+      root.render(createElement(UsageFooter, { providers: [] })),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 3);
+    });
+    rateLimitsFetch.fetchClaudeRateLimits.mockRejectedValue(
+      new Error("Temporary usage error"),
+    );
+    const refresh = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Refresh usage"]',
+    )!;
+    await act(async () => refresh.click());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 3);
+    });
+    expect(getCachedRateLimits("claude")).toMatchObject({
+      status: "error",
+      error: "Temporary usage error",
+      session: { usedPercent: 10 },
+    });
+    expect(refresh.disabled).toBe(false);
+    rateLimitsFetch.fetchClaudeRateLimits.mockResolvedValue(
+      okLimits("claude", 64),
+    );
+    await act(async () => refresh.click());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ACCOUNT_LOAD_GAP_MS * 3);
+    });
+    expect(getCachedRateLimits("claude")).toMatchObject({
+      status: "ok",
+      session: { usedPercent: 64 },
+    });
+    expect(chips()[0].textContent).toContain("64% used");
+  });
+
   it("automatically refreshes the selected account without reading unused accounts", async () => {
     saveProviderAccount({
       id: "account-work",

@@ -50,7 +50,6 @@ import { UsageProviderChip } from "./UsageProviderChip";
 import { AccountUsageStrip } from "./AccountUsageStrip";
 import {
   buildAccountChipEntries,
-  isFreshRateLimit,
   loadAccountsInSequence,
 } from "./allAccountsUsage";
 import {
@@ -311,16 +310,11 @@ export function UsageFooter({
     setRefreshing(true);
     const jobs: Promise<unknown>[] = [];
     if (accountMode) {
-      const stale = accountEntries.filter(
-        (entry) =>
-          !isFreshRateLimit(
-            getCachedRateLimits(entry.provider, entry.account.id),
-            Date.now(),
-          ),
-      );
+      // An explicit click asks for a new read, even within the automatic
+      // five-minute freshness floor. Keep overflow accounts in this queue.
       jobs.push(
         loadAccountsInSequence(
-          stale,
+          accountEntries,
           (entry) => loadRateLimits(entry.provider, entry.account.id, true),
           () => disposed.current,
         ),

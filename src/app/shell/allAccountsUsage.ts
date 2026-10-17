@@ -4,7 +4,6 @@ import {
   type ProviderAccountProvider,
 } from "../../features/providers/model/providerAccounts";
 import {
-  RATE_LIMIT_MIN_REFETCH_MS,
   RATE_LIMIT_ACCOUNT_STAGGER_MS,
   type ProviderRateLimits,
   type RateLimitWindow,
@@ -102,20 +101,6 @@ export function shortestWindow(
     (best, window) =>
       !best || window.windowMinutes < best.windowMinutes ? window : best,
     null,
-  );
-}
-
-/**
- * Whether a refresh should skip this snapshot: a good reading younger than
- * the shared minimum refetch interval. Failed or empty readings always retry.
- */
-export function isFreshRateLimit(
-  limits: ProviderRateLimits | undefined,
-  now: number,
-): boolean {
-  return (
-    limits?.status === "ok" &&
-    now - limits.updatedAt < RATE_LIMIT_MIN_REFETCH_MS
   );
 }
 

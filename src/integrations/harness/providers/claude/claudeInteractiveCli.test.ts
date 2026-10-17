@@ -87,6 +87,9 @@ it
         theme: "dark",
         bypassPermissionsModeAccepted: true,
         customApiKeyResponses: { approved: [key.slice(-20)], rejected: [] },
+        // Native suggestions can block a hidden input. The per-launch override
+        // below must win without altering this temporary user's preference.
+        promptSuggestionEnabled: true,
         projects: Object.fromEntries(
           [...new Set([cwd, cwd.replaceAll("\\", "/")])].map((path) => [
             path,
@@ -402,6 +405,7 @@ it
                 ]),
               ),
               fastMode: input.fast,
+              promptSuggestionEnabled: false,
             };
             const fork = input.fork as
               { sourceProviderSessionId: string } | undefined;
@@ -649,6 +653,10 @@ it
       // Native resume reuses the recorded system/tool prefix; no summary or
       // added system instructions are introduced by our idle-stop path.
       expect(requestPrefixes[2] === requestPrefixes[0]).toBe(true);
+      const savedUserConfig = JSON.parse(
+        await readFile(join(config, ".claude.json"), "utf8"),
+      ) as { promptSuggestionEnabled?: boolean };
+      expect(savedUserConfig.promptSuggestionEnabled).toBe(true);
       if (process.env.MONOCODE_INTERACTIVE_TEST_MESSAGES_ONLY === "1") return;
       const compactInput: SendTurnInput = {
         sessionId: id,

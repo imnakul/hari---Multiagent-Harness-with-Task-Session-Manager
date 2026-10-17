@@ -176,7 +176,10 @@ fn hook_settings(url: &str, fast: bool) -> Value {
             "type":"http", "url":url, "timeout": if matches!(event, "PermissionRequest" | "PreToolUse") { 600 } else { 10 }
         }]}]));
     }
-    json!({"hooks":hooks, "fastMode":fast})
+    // The GUI owns composing. Native suggested follow-ups otherwise occupy
+    // the hidden prompt and cannot safely be distinguished from a real draft
+    // in ConPTY. Keep this override local to the launched CLI, not user config.
+    json!({"hooks":hooks, "fastMode":fast, "promptSuggestionEnabled":false})
 }
 
 #[tauri::command(async)]
@@ -1115,6 +1118,7 @@ mod tests {
                 > 590
         );
         assert_eq!(settings["fastMode"], false);
+        assert_eq!(settings["promptSuggestionEnabled"], false);
         assert!(settings.get("permissionMode").is_none());
     }
 

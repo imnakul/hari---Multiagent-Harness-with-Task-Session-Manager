@@ -158,6 +158,10 @@ describe("real VT parser input gate", () => {
   it.each([
     ["unfinished", "? for shortcuts"],
     ["\x1b[2munfinished\x1b[22m", "? for shortcuts"],
+    [
+      "\x1b[38;2;153;153;153mI started the bridge, try again\x1b[m",
+      "? for shortcuts",
+    ],
     ["", "Enter to select · Esc to cancel"],
     ["", "esc to interrupt"],
   ])(
