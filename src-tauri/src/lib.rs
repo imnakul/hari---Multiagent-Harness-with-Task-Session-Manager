@@ -40,6 +40,8 @@ mod notes;
 mod notifications;
 mod pasteboard;
 mod pi_usage;
+mod process_metrics;
+mod process_stats;
 mod project_logo;
 mod prompts;
 mod provider_sessions;
@@ -313,6 +315,7 @@ pub fn run() {
         .manage(harness::HarnessHost::new())
         .manage(pty::PtyHost::new())
         .manage(claude_interactive::InteractiveHost::default())
+        .manage(process_stats::ProcessStats::default())
         .manage(remote::RemoteConnections::default())
         .manage(window_transfer::WindowTransferState::new())
         .setup(|app| {
@@ -583,6 +586,9 @@ pub fn run() {
             claude_interactive::claude_interactive_reply,
             claude_interactive::claude_interactive_terminal,
             claude_interactive::claude_interactive_stop,
+            claude_interactive::claude_interactive_park,
+            claude_interactive::claude_interactive_attachments,
+            process_stats::owned_process_stats,
             pty::pty_replay,
             pty::pty_write,
             pty::pty_resize,

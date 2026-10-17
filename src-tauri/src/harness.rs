@@ -165,6 +165,7 @@ impl Drop for WindowsJob {
 }
 
 struct LiveChild {
+    activity: Mutex<std::time::Instant>,
     cwd: PathBuf,
     stdin: Mutex<ChildStdin>,
     pid: u32,
@@ -191,6 +192,30 @@ pub struct HarnessHost {
 }
 
 impl HarnessHost {
+    pub(crate) fn process_roots(&self) -> Vec<crate::process_stats::ProcessRoot> {
+        self.lock_inner()
+            .children
+            .iter()
+            .map(|(id, live)| crate::process_stats::ProcessRoot {
+                id: id.clone(),
+                pid: live.pid,
+                cwd: live.cwd.to_string_lossy().into_owned(),
+                kind: "structured".into(),
+                idle_ms: live
+                    .activity
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .elapsed()
+                    .as_millis() as u64,
+            })
+            .collect()
+    }
+    fn touch_process(&self, id: &str) {
+        if let Some(live) = self.get(id) {
+            *live.activity.lock().unwrap_or_else(|e| e.into_inner()) = std::time::Instant::now();
+        }
+    }
+
     pub(crate) fn runtime_binary_path(&self, provider: &str) -> Option<String> {
         self.runtime_binary_paths
             .lock()
@@ -1093,6 +1118,7 @@ pub fn harness_spawn(
     #[cfg(windows)]
     let job = WindowsJob::attach(pid);
     let live = Arc::new(LiveChild {
+        activity: Mutex::new(std::time::Instant::now()),
         cwd: workdir.clone(),
         stdin: Mutex::new(stdin),
         pid,
@@ -1127,6 +1153,7 @@ pub fn harness_spawn(
                     store.sync_auth();
                 }
             }
+            stdout_app.state::<HarnessHost>().touch_process(&stdout_id);
             let _ = stdout_app.emit(
                 STDOUT_EVENT,
                 HarnessLine {
@@ -1142,6 +1169,7 @@ pub fn harness_spawn(
     thread::spawn(move || {
         for line in BufReader::new(stderr).lines() {
             let Ok(line) = line else { break };
+            stderr_app.state::<HarnessHost>().touch_process(&stderr_id);
             let _ = stderr_app.emit(
                 STDERR_EVENT,
                 HarnessLine {
@@ -1308,6 +1336,7 @@ pub async fn harness_write(
         .get(&session_id)
         .ok_or_else(|| "Harness process is not running".to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
+        *live.activity.lock().unwrap_or_else(|e| e.into_inner()) = std::time::Instant::now();
         let mut stdin = live.stdin.lock().unwrap_or_else(|e| e.into_inner());
         stdin
             .write_all(line.as_bytes())
@@ -4741,6 +4770,7 @@ mod tests {
         let stdin = child.stdin.take().expect("test child stdin");
         (
             Arc::new(LiveChild {
+                activity: Mutex::new(std::time::Instant::now()),
                 cwd: PathBuf::from("/test"),
                 stdin: Mutex::new(stdin),
                 pid,
@@ -4902,6 +4932,7 @@ mod tests {
         let stdin = child.stdin.take().expect("grouped child stdin");
         (
             Arc::new(LiveChild {
+                activity: Mutex::new(std::time::Instant::now()),
                 cwd: PathBuf::from("/test"),
                 stdin: Mutex::new(stdin),
                 pid,

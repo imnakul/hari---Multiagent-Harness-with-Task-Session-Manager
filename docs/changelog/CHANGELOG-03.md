@@ -185,3 +185,5 @@
 - Files: `src/features/providers/model/antigravityCli{Usage,Agents}.ts`; existing usage footer/chip, composer/automation/settings controls; CLI protocol/lifecycle; native MCP and agent discovery; adjacent tests; L-69 and [plan](../specs/antigravity-cli-usage-mcp-agents-plan.md).
 - Verified: Final `npm run check` passed: TypeScript, 5,643 web tests / 521 files, Rust format, Clippy and 619 tests (2 existing ignored). Cargo check, production frontend build and diff check passed. Fixed two unnecessary allocations caught by Clippy in a new test. One unchanged editor blur test failed during concurrent checks; isolated and final sequential reruns passed without editor edits. Manual: signed-in Windows footer, MCP scope switches/reload, custom agent first-turn/Stop/restart and ACP regression.
 - Commit: `ea1c228`; implementation and verification checkpoint `9c73304` pushed to `origin/nakul/windows-support-upstream-0.7.0` at the user's request, with remote hash verified. Manual Windows checks remain pending.
+
+Continued in [CHANGELOG-04.md](CHANGELOG-04.md).

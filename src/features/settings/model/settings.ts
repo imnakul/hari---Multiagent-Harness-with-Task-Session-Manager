@@ -587,6 +587,18 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "hidden conversations list",
   },
   {
+    id: "process-monitor",
+    section: "experimentation",
+    label: "Process monitor",
+    keywords: "CPU memory resource manager processes stop idle",
+  },
+  {
+    id: "interactive-idle",
+    section: "experimentation",
+    label: "Interactive idle shutdown",
+    keywords: "Claude terminal parking resume minutes",
+  },
+  {
     id: "compact-model-labels",
     section: "experimentation",
     label: "Compact model labels",
@@ -1539,6 +1551,41 @@ export function subscribeCompactModelLabels(
 }
 
 const CTRL = IS_MAC ? "⌃" : "Ctrl+";
+
+const PROCESS_MONITOR_KEY = "monocode.processMonitor";
+const PROCESS_MONITOR_EVENT = "monocode:process-monitor-change";
+export function loadProcessMonitor(): boolean {
+  try {
+    return localStorage.getItem(PROCESS_MONITOR_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+export function saveProcessMonitor(value: boolean): void {
+  try {
+    localStorage.setItem(PROCESS_MONITOR_KEY, value ? "1" : "0");
+  } catch {
+    /* unavailable storage */
+  }
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new Event(PROCESS_MONITOR_EVENT));
+}
+export function subscribeProcessMonitor(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const storage = (event: StorageEvent): void => {
+    if (event.key === PROCESS_MONITOR_KEY) onChange();
+  };
+  window.addEventListener(PROCESS_MONITOR_EVENT, onChange);
+  window.addEventListener("storage", storage);
+  return () => {
+    window.removeEventListener(PROCESS_MONITOR_EVENT, onChange);
+    window.removeEventListener("storage", storage);
+  };
+}
+export {
+  loadInteractiveIdleMinutes,
+  saveInteractiveIdleMinutes,
+} from "./interactiveIdleSettings";
 
 /** Shows or hides the in-window menu bar (Windows and Linux only). */
 export const MENU_BAR_TOGGLE_COMMAND = "View: Toggle Menu Bar";

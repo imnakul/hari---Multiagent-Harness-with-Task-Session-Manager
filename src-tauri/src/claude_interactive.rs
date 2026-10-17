@@ -1,7 +1,7 @@
 //! Local interactive Claude owner. No print/SDK transport and no global config writes.
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,12 +34,19 @@ struct LiveState {
     replies: HashMap<u64, Option<Value>>,
     transcript: Option<PathBuf>,
     offset: u64,
-    submissions: std::collections::HashSet<String>,
+    submissions: HashSet<String>,
+    activity: Option<Instant>,
+    background: HashSet<String>,
+    uncertain_background: bool,
+    skip_fork_history: bool,
+    background_coverage: bool,
+    untracked_work: bool,
 }
 
 impl Live {
     fn event(&self, mut value: Value) -> u64 {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.activity = Some(Instant::now());
         state.sequence += 1;
         let sequence = state.sequence;
         if is_interaction(&value) {
@@ -84,6 +91,13 @@ pub(crate) fn pty_id(id: &str) -> String {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ForkInput {
+    source_provider_session_id: String,
+    fork_point: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartInput {
     session_id: String,
     native_id: String,
@@ -95,10 +109,21 @@ pub struct StartInput {
     effort: Option<String>,
     permission_mode: String,
     fast: bool,
+    fork: Option<ForkInput>,
 }
 
 fn validate_start(input: &StartInput) -> Result<(), String> {
     uuid::Uuid::parse_str(&input.native_id).map_err(|_| "Invalid Claude native session ID")?;
+    if let Some(fork) = &input.fork {
+        uuid::Uuid::parse_str(&fork.source_provider_session_id)
+            .map_err(|_| "Invalid fork source")?;
+        if fork.source_provider_session_id == input.native_id || input.resume {
+            return Err("Fork must create a new native owner".into());
+        }
+        if fork.fork_point.is_some() {
+            return Err("Interactive Claude forks the full native history; a selected historical turn needs copied context".into());
+        }
+    }
     if input.session_id.is_empty() || !Path::new(&input.cwd).is_dir() {
         return Err("Claude Interactive requires an existing project folder".into());
     }
@@ -135,7 +160,12 @@ fn hook_settings(url: &str, fast: bool) -> Value {
         "UserPromptSubmit",
         "Stop",
         "StopFailure",
+        "PreCompact",
         "PostCompact",
+        "SubagentStart",
+        "SubagentStop",
+        "TaskCreated",
+        "TaskCompleted",
         "Notification",
         "PreToolUse",
         "PostToolUse",
@@ -166,6 +196,13 @@ pub fn claude_interactive_start(
     {
         return Err("Interactive mode requires the native Claude executable on Windows. Select claude.exe in Settings → Providers.".into());
     }
+    // Version coverage is explicit. Unknown CLI releases keep working as chat,
+    // but are never auto-stopped until their background hooks are verified.
+    let background_coverage =
+        crate::harness::harness_probe_provider("claude".into(), Some(binary.clone()))
+            .ok()
+            .and_then(|p| p.version)
+            .is_some_and(|v| matches!(v.split_whitespace().next(), Some("2.1.301" | "2.1.302")));
     let root = crate::provider_sessions::root_for(
         &app,
         &crate::provider_sessions::Provider::Claude,
@@ -173,13 +210,18 @@ pub fn claude_interactive_start(
     )?;
     let account_dir =
         crate::harness::provider_account_dir(&app, "claude", input.account_id.as_deref())?;
-    let transcript = if input.resume {
+    let source_id = input
+        .fork
+        .as_ref()
+        .map(|f| f.source_provider_session_id.as_str())
+        .unwrap_or(&input.native_id);
+    let transcript = if input.resume || input.fork.is_some() {
         let conversation = crate::provider_sessions::provider_sessions_resolve(
             app.clone(),
             app.state(),
             crate::provider_sessions::Provider::Claude,
             input.account_id.clone(),
-            input.native_id.clone(),
+            source_id.to_owned(),
         )?;
         if crate::provider_sessions::cwd_key(&conversation.cwd)
             != crate::provider_sessions::cwd_key(&input.cwd)
@@ -189,7 +231,7 @@ pub fn claude_interactive_start(
         crate::provider_sessions::find_transcript(
             &crate::provider_sessions::Provider::Claude,
             &root.join("projects"),
-            &input.native_id,
+            source_id,
             0,
         )
     } else {
@@ -218,8 +260,15 @@ pub fn claude_interactive_start(
         changed: Condvar::new(),
         state: Mutex::new(LiveState {
             phase: "starting".into(),
-            transcript,
-            offset,
+            transcript: if input.fork.is_some() {
+                None
+            } else {
+                transcript
+            },
+            offset: if input.fork.is_some() { 0 } else { offset },
+            activity: Some(Instant::now()),
+            skip_fork_history: input.fork.is_some(),
+            background_coverage,
             ..Default::default()
         }),
     });
@@ -234,13 +283,13 @@ pub fn claude_interactive_start(
     }
     let settings = hook_settings(&url, input.fast).to_string();
     let mut args = vec![
-        if input.resume {
+        if input.resume || input.fork.is_some() {
             "--resume"
         } else {
             "--session-id"
         }
         .into(),
-        input.native_id,
+        source_id.to_owned(),
         "--model".into(),
         input.model,
         "--permission-mode".into(),
@@ -248,6 +297,13 @@ pub fn claude_interactive_start(
         "--settings".into(),
         settings,
     ];
+    if input.fork.is_some() {
+        args.extend([
+            "--fork-session".into(),
+            "--session-id".into(),
+            input.native_id.clone(),
+        ]);
+    }
     if let Some(effort) = input.effort {
         args.extend(["--effort".into(), effort]);
     }
@@ -350,12 +406,18 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
     let permission = is_interaction(&value);
     {
         let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+        if !live.running.load(Ordering::Acquire) {
+            let _ = request.respond(tiny_http::Response::empty(409));
+            return;
+        }
+        state.activity = Some(Instant::now());
+        observe_background(&mut state, &value);
         if value["agent_id"].is_null() {
             match event {
                 "SessionStart" | "Stop" | "StopFailure" | "PostCompact" => {
                     state.phase = "ready".into()
                 }
-                "UserPromptSubmit" => state.phase = "busy".into(),
+                "UserPromptSubmit" | "PreCompact" | "PreToolUse" => state.phase = "busy".into(),
                 "SessionEnd" => state.phase = "ended".into(),
                 _ => {}
             }
@@ -363,6 +425,10 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
                 .as_str()
                 .and_then(|p| safe_transcript(&live.root, &live.native_id, Path::new(p)))
             {
+                if state.skip_fork_history && event == "UserPromptSubmit" {
+                    state.offset = path.metadata().map(|m| m.len()).unwrap_or(0);
+                    state.skip_fork_history = false;
+                }
                 state.transcript = Some(path);
             }
         }
@@ -402,6 +468,273 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
                 .expect("static header"),
         ),
     );
+}
+
+// Full Stop snapshots are verified on the supported CLI versions. Missing
+// coverage, scheduled jobs and unreported detached work veto automatic shutdown.
+fn observe_background(state: &mut LiveState, value: &Value) {
+    let event = value["hook_event_name"].as_str().unwrap_or("");
+    let agent = value["agent_id"].as_str();
+    let task = value["task_id"].as_str();
+    match (event, agent.or(task)) {
+        ("SubagentStart" | "TaskCreated", Some(id)) => {
+            let prefix = if event == "SubagentStart" {
+                "agent"
+            } else {
+                "task"
+            };
+            state.background.insert(format!("{prefix}:{id}"));
+        }
+        ("SubagentStop" | "TaskCompleted", Some(id)) => {
+            let prefix = if event == "SubagentStop" {
+                "agent"
+            } else {
+                "task"
+            };
+            state.background.remove(&format!("{prefix}:{id}"));
+        }
+        ("SubagentStart" | "TaskCreated", None) => state.uncertain_background = true,
+        _ => {}
+    }
+    if event == "PreToolUse" {
+        let name = value["tool_name"].as_str().unwrap_or("");
+        let command = value["tool_input"]["command"]
+            .as_str()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if name.starts_with("mcp__")
+            || (name == "Bash"
+                && (command.contains('&')
+                    || command.contains("nohup")
+                    || command.contains("start-process")
+                    || command.contains("disown")))
+        {
+            state.untracked_work = true;
+        }
+        if value["tool_input"]["run_in_background"] == true {
+            state.uncertain_background = true;
+        }
+    }
+    if event == "PostToolUse" {
+        if let Some(id) = value["tool_response"]["backgroundTaskId"].as_str() {
+            state.background.insert(format!("task:{id}"));
+        }
+    }
+    if event == "Stop" && agent.is_none() {
+        if let (Some(tasks), Some(crons)) = (
+            value["background_tasks"].as_array(),
+            value["session_crons"].as_array(),
+        ) {
+            state.background.retain(|key| !key.starts_with("task:"));
+            state.uncertain_background = !crons.is_empty();
+            for task in tasks {
+                match (task["id"].as_str(), task["status"].as_str()) {
+                    (Some(id), Some(status)) => {
+                        if !matches!(status, "completed" | "failed" | "killed" | "stopped") {
+                            state.background.insert(format!("task:{id}"));
+                        }
+                    }
+                    _ => state.uncertain_background = true,
+                }
+            }
+        } else {
+            state.uncertain_background = true;
+        }
+    }
+}
+
+fn idle_eligible(state: &LiveState, after: u64, minutes: u64, tail_settled: bool) -> bool {
+    state.sequence == after
+        && state.phase == "ready"
+        && !state.writing
+        && !state.terminal_owner
+        && state.replies.is_empty()
+        && state.background.is_empty()
+        && state.background_coverage
+        && !state.untracked_work
+        && !state.uncertain_background
+        && !state.skip_fork_history
+        && tail_settled
+        && state
+            .activity
+            .is_some_and(|t| t.elapsed() >= Duration::from_secs(minutes * 60))
+}
+
+#[tauri::command(async)]
+pub fn claude_interactive_park(
+    app: AppHandle,
+    host: State<'_, InteractiveHost>,
+    session_id: String,
+    after: u64,
+    minutes: u64,
+    explicit_idle_stop: Option<bool>,
+) -> Result<bool, String> {
+    if !(5..=60).contains(&minutes) && !(minutes == 0 && explicit_idle_stop == Some(true)) {
+        return Err("Idle timeout must be 5–60 minutes".into());
+    }
+    let _lifecycle = host.1.lock().unwrap_or_else(|e| e.into_inner());
+    let live = host.get(&session_id)?;
+    {
+        let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+        if !live.running.load(Ordering::Acquire) || !idle_eligible(&state, after, minutes, true) {
+            return Ok(false);
+        }
+    }
+    // Enumerate only at a possible shutdown. Unknown or still-live descendants
+    // (including unreported tools/MCP workers) conservatively veto parking.
+    let roots = app.state::<crate::pty::PtyHost>().process_roots();
+    let Some(root) = roots.iter().find(|r| r.id == pty_id(&session_id)) else {
+        return Ok(false);
+    };
+    if crate::process_stats::has_descendants(root.pid)? {
+        return Ok(false);
+    }
+    {
+        let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+        let tail_settled = state
+            .transcript
+            .as_ref()
+            .and_then(|p| p.metadata().ok())
+            .is_some_and(|m| m.len() == state.offset);
+        if !live.running.load(Ordering::Acquire)
+            || !idle_eligible(&state, after, minutes, tail_settled)
+        {
+            return Ok(false);
+        }
+        live.stop(); // Fence new hooks while holding the same state lock.
+    }
+    crate::pty::stop_program(&app.state::<crate::pty::PtyHost>(), &pty_id(&session_id))?;
+    host.0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&session_id);
+    Ok(true)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InteractiveAttachment {
+    name: String,
+    mime_type: String,
+    kind: String,
+    data: Option<String>,
+    path: Option<String>,
+    copy_from_path: Option<String>,
+}
+
+#[tauri::command(async)]
+pub fn claude_interactive_attachments(
+    app: AppHandle,
+    native_id: String,
+    attachments: Vec<InteractiveAttachment>,
+) -> Result<Vec<String>, String> {
+    uuid::Uuid::parse_str(&native_id).map_err(|_| "Invalid native attachment session")?;
+    if attachments.len() > 20 {
+        return Err("Too many attachments (maximum 20)".into());
+    }
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("interactive-attachments")
+        .join(native_id);
+    save_attachments(&dir, attachments)
+}
+
+fn save_attachments(
+    dir: &Path,
+    attachments: Vec<InteractiveAttachment>,
+) -> Result<Vec<String>, String> {
+    use base64::Engine;
+    use std::io::Write;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    let mut total = 0usize;
+    for file in attachments {
+        let extension = Path::new(&file.name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let image = file.kind == "image"
+            && matches!(
+                file.mime_type.as_str(),
+                "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+            );
+        let text = file.kind == "file"
+            && (file.mime_type.starts_with("text/")
+                || matches!(
+                    extension.as_str(),
+                    "txt"
+                        | "md"
+                        | "json"
+                        | "yaml"
+                        | "yml"
+                        | "csv"
+                        | "log"
+                        | "ts"
+                        | "tsx"
+                        | "js"
+                        | "py"
+                        | "rs"
+                        | "toml"
+                        | "xml"
+                        | "html"
+                        | "css"
+                ));
+        if !image && !text {
+            return Err("Interactive attachments support images and text files".into());
+        }
+        let bytes = if let Some(data) = file.data {
+            if data.len() > 45 * 1024 * 1024 {
+                return Err("Attachment too large".into());
+            }
+            base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|e| e.to_string())?
+        } else if let Some(path) = file.copy_from_path.or(file.path) {
+            let mut bytes = Vec::new();
+            std::fs::File::open(path)
+                .map_err(|e| e.to_string())?
+                .take(32 * 1024 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|e| e.to_string())?;
+            bytes
+        } else {
+            return Err("Attachment has no file data".into());
+        };
+        total = total.saturating_add(bytes.len());
+        if total > 32 * 1024 * 1024 {
+            return Err("Attachments exceed 32 MiB".into());
+        }
+        if text && std::str::from_utf8(&bytes).is_err() {
+            return Err("Text attachments must be UTF-8".into());
+        }
+        let ext = if image {
+            match file.mime_type.as_str() {
+                "image/png" => "png",
+                "image/jpeg" => "jpg",
+                "image/gif" => "gif",
+                _ => "webp",
+            }
+        } else {
+            "txt"
+        };
+        let target = dir.join(format!("{}.{}", uuid::Uuid::new_v4(), ext));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        options
+            .open(&target)
+            .and_then(|mut file| file.write_all(&bytes))
+            .map_err(|e| e.to_string())?;
+        result.push(target.to_string_lossy().into_owned());
+    }
+    Ok(result)
 }
 
 fn safe_transcript(root: &Path, id: &str, path: &Path) -> Option<PathBuf> {
@@ -466,6 +799,7 @@ pub fn claude_interactive_poll(
     if let Some(path) = state
         .transcript
         .as_ref()
+        .filter(|_| !state.skip_fork_history)
         .and_then(|p| safe_transcript(&live.root, &live.native_id, p))
     {
         let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
@@ -490,6 +824,7 @@ pub fn claude_interactive_poll(
                 .map(String::from)
                 .collect();
             state.offset += (end + 1) as u64;
+            state.activity = Some(Instant::now());
         } else if more {
             return Err("Claude transcript record exceeds the interactive read limit".into());
         }
@@ -522,7 +857,7 @@ pub fn claude_interactive_send(
         || text
             .chars()
             .any(|c| c.is_control() && c != '\n' && c != '\t')
-        || text.trim_start().starts_with('/')
+        || (text.trim_start().starts_with('/') && text.trim() != "/compact")
     {
         return Err(
             "Use the native terminal for slash commands or terminal control characters".into(),
@@ -542,6 +877,7 @@ pub fn claude_interactive_send(
                     .into(),
             );
         }
+        state.activity = Some(Instant::now());
         state.phase = "sending".into();
         state.writing = true;
     }
@@ -616,6 +952,7 @@ pub fn claude_interactive_terminal(
                 "Choose Use terminal to release the GUI question or approval before typing".into(),
             );
         }
+        state.activity = Some(Instant::now());
         state.terminal_owner = true;
         drop(state);
         crate::pty::pty_write(app.state(), pty_id(&session_id), data)
@@ -651,6 +988,106 @@ pub fn claude_interactive_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attachments_persist_decoded_text_and_reject_unsupported_or_binary_files() {
+        let dir =
+            std::env::temp_dir().join(format!("monocode-attachments-{}", uuid::Uuid::new_v4()));
+        let file = || InteractiveAttachment {
+            name: "../../notes.md".into(),
+            mime_type: "text/markdown".into(),
+            kind: "file".into(),
+            data: Some("aGVsbG8=".into()),
+            path: None,
+            copy_from_path: None,
+        };
+        let paths = save_attachments(&dir, vec![file()]).unwrap();
+        assert_eq!(std::fs::read_to_string(&paths[0]).unwrap(), "hello");
+        assert!(Path::new(&paths[0]).starts_with(&dir));
+        let mut bad = file();
+        bad.data = Some("/w==".into());
+        assert!(save_attachments(&dir, vec![bad]).is_err());
+        let mut audio = file();
+        audio.kind = "audio".into();
+        assert!(save_attachments(&dir, vec![audio]).is_err());
+        let mut missing = file();
+        missing.data = None;
+        assert!(save_attachments(&dir, vec![missing]).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn idle_shutdown_requires_full_observation_and_every_safety_gate() {
+        let mut state = LiveState {
+            phase: "ready".into(),
+            sequence: 8,
+            activity: Some(Instant::now() - Duration::from_secs(901)),
+            background_coverage: true,
+            ..Default::default()
+        };
+        assert!(idle_eligible(&state, 8, 15, true));
+        assert!(!idle_eligible(&state, 7, 15, true));
+        assert!(!idle_eligible(&state, 8, 15, false));
+        state.background.insert("agent:x".into());
+        assert!(!idle_eligible(&state, 8, 15, true));
+        state.background.clear();
+        state.uncertain_background = true;
+        assert!(!idle_eligible(&state, 8, 15, true));
+        state.uncertain_background = false;
+        state.untracked_work = true;
+        assert!(!idle_eligible(&state, 8, 15, true));
+        state.untracked_work = false;
+        state.terminal_owner = true;
+        assert!(!idle_eligible(&state, 8, 15, true));
+        state.terminal_owner = false;
+        state.replies.insert(1, None);
+        assert!(!idle_eligible(&state, 8, 15, true));
+        state.replies.clear();
+        state.background_coverage = false;
+        assert!(!idle_eligible(&state, 8, 15, true));
+        state.background_coverage = true;
+        state.activity = Some(Instant::now());
+        assert!(!idle_eligible(&state, 8, 15, true));
+    }
+
+    #[test]
+    fn background_hooks_snapshot_completion_crons_and_unknown_coverage() {
+        let mut state = LiveState::default();
+        observe_background(
+            &mut state,
+            &json!({"hook_event_name":"SubagentStart", "agent_id":"a"}),
+        );
+        observe_background(
+            &mut state,
+            &json!({"hook_event_name":"PreToolUse", "tool_input":{"run_in_background":true}}),
+        );
+        assert!(state.uncertain_background);
+        observe_background(
+            &mut state,
+            &json!({"hook_event_name":"Stop", "background_tasks":[{"id":"b", "status":"running"}], "session_crons":[]}),
+        );
+        assert_eq!(
+            state.background,
+            HashSet::from(["agent:a".into(), "task:b".into()])
+        );
+        observe_background(
+            &mut state,
+            &json!({"hook_event_name":"SubagentStop", "agent_id":"a"}),
+        );
+        observe_background(
+            &mut state,
+            &json!({"hook_event_name":"Stop", "background_tasks":[], "session_crons":[]}),
+        );
+        assert!(state.background.is_empty());
+        assert!(!state.uncertain_background);
+        observe_background(
+            &mut state,
+            &json!({"hook_event_name":"Stop", "background_tasks":[], "session_crons":[{}]}),
+        );
+        assert!(state.uncertain_background);
+        observe_background(&mut state, &json!({"hook_event_name":"Stop"}));
+        assert!(state.uncertain_background);
+    }
 
     #[test]
     fn interactive_settings_use_local_http_hooks_without_headless_flags() {

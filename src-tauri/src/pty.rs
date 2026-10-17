@@ -7,7 +7,6 @@ use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-#[cfg(any(unix, test))]
 use std::time::Instant;
 
 use serde::Serialize;
@@ -44,6 +43,7 @@ struct PtyExit {
 }
 
 struct LivePty {
+    activity: Mutex<Instant>,
     cwd: std::path::PathBuf,
     writer: Mutex<Box<dyn Write + Send>>,
     #[cfg(unix)]
@@ -97,6 +97,31 @@ pub struct PtyHost {
 }
 
 impl PtyHost {
+    pub(crate) fn process_roots(&self) -> Vec<crate::process_stats::ProcessRoot> {
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|(id, live)| crate::process_stats::ProcessRoot {
+                id: id.clone(),
+                pid: live.pid,
+                cwd: live.cwd.to_string_lossy().into_owned(),
+                kind: if id.starts_with("claude-interactive:") {
+                    "interactive"
+                } else {
+                    "terminal"
+                }
+                .into(),
+                idle_ms: live
+                    .activity
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .elapsed()
+                    .as_millis() as u64,
+            })
+            .collect()
+    }
+
     pub(crate) fn has_working_dir(&self, path: &std::path::Path) -> bool {
         self.sessions
             .lock()
@@ -278,6 +303,7 @@ pub fn pty_write(host: State<PtyHost>, id: String, data: String) -> Result<(), S
     let live = host
         .get(&id)
         .ok_or_else(|| "Terminal is not running".to_string())?;
+    *live.activity.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
     let mut writer = live.writer.lock().unwrap_or_else(|e| e.into_inner());
     writer
         .write_all(data.as_bytes())
@@ -508,6 +534,7 @@ fn spawn_windows(
     let killer = child.clone_killer();
 
     let live = Arc::new(LivePty {
+        activity: Mutex::new(Instant::now()),
         cwd: std::path::PathBuf::from(&cwd),
         writer: Mutex::new(writer),
         master: Mutex::new(pair.master),
@@ -603,6 +630,7 @@ mod windows_pty_tests {
             .clone_killer();
         let host = PtyHost::new();
         let live = Arc::new(LivePty {
+            activity: Mutex::new(Instant::now()),
             cwd: std::path::PathBuf::new(),
             writer: Mutex::new(Box::new(std::io::sink())),
             master: Mutex::new(pair.master),
@@ -779,6 +807,7 @@ fn spawn_unix(
     let writer = unsafe { File::from_raw_fd(dup_fd(master)?) };
 
     let live = Arc::new(LivePty {
+        activity: Mutex::new(Instant::now()),
         cwd: workdir.clone(),
         writer: Mutex::new(Box::new(writer)),
         master_fd: master,
@@ -1058,6 +1087,9 @@ fn emit_pty_data(app: &AppHandle, id: &str, bytes: &[u8]) {
         return;
     }
     if let Some(host) = app.try_state::<PtyHost>() {
+        if let Some(live) = host.get(id) {
+            *live.activity.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        }
         host.replay
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1275,6 +1307,7 @@ mod tests {
         host.insert(
             "term".into(),
             Arc::new(LivePty {
+                activity: Mutex::new(Instant::now()),
                 cwd: std::path::PathBuf::from("/test"),
                 writer: Mutex::new(Box::new(std::io::sink())),
                 master_fd: -1,

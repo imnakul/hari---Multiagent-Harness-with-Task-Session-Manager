@@ -1,0 +1,133 @@
+# Review — Interactive lifecycle, actions and owned-process monitor
+
+Branch: `nakul/windows-support-upstream-0.10.0`
+Base: `8bcf6db6a99699f8b67f1c0a5c998ea01bebfa4a`
+
+## Idea
+
+Keep normal Claude Interactive chat seamless, reduce idle work, add existing UI
+actions, and expose an optional monitor for processes MonoCode owns. This is a
+Large change. Preserve native context, single ownership and send-once safety.
+
+## Research
+
+- The screenshot's `claude-notify.ps1` failure belongs to an inherited command
+  hook. MonoCode installs an HTTP Stop hook and preserves user/project hooks.
+  Do not erase those settings or silently suppress their failures.
+- `Notification` is currently rendered as a chat status without distinguishing
+  `idle_prompt`; normal waiting at an empty prompt is not an unresolved question.
+- Local CLI is 2.1.301; Windows regression pins 2.1.302. Actual installed help
+  advertises `--fork-session` with `--resume`/`--continue`, `--session-id`,
+  `--setting-sources` and `--system-prompt-snapshot`. Preserve default setting
+  sources and prompt behavior on normal resume. No `/model` or `/effort` sends.
+- Real CLI 2.1.301 loopback probes verify `/compact`, full-history native fork
+  with `--resume --fork-session --session-id`, text/image Read tools and background
+  continuation. `--resume-session-at` is accepted but ignored in Interactive mode,
+  including before compaction. Never send it or claim a historical native cut.
+- Main system/tool request prefixes match before/after native resume in the probe.
+  The CLI also makes its own naming/helper calls; these are counted separately in
+  the fixture, not confused with root turns or MonoCode's disabled title helper.
+- Background Bash reports `PostToolUse.tool_response.backgroundTaskId` and root
+  Stop includes `background_tasks` and `session_crons`. Completion emitted a
+  task-notification UserPromptSubmit on 2.1.301; regression also covers no such hook.
+  A notification racing old-turn drain must not fail an already accepted prompt.
+- Installed hook names include SubagentStart/Stop and TaskCreated/Completed;
+  TaskStarted is absent. Background Bash completion coverage needs a real probe.
+  Unknown coverage/work is a reason to skip shutdown, never assume nothing runs.
+- Stats dependency comparison: existing windows-sys/libc needs no new crate and
+  minimizes dependency size, but requires per-OS maintenance. sysinfo 0.39.6 is
+  MIT, supports Windows/macOS/Linux, requires Rust 1.95 and downloads ~235 KiB
+  compressed source; executable size impact is unmeasured. Process-only features
+  avoid unrelated sensors/disks. User asked before any crate addition; User chose existing native APIs after comparison; add no new crate.
+
+## Plan
+
+1. Filter ordinary idle notifications; preserve genuine approval/question UI and
+   report inherited hook errors without editing global settings.
+2. Add buffered background/continuation observation and adaptive polling: 200ms
+   for activity, interactions and drains; ~1500ms once idle. Sends/replies wake
+   immediately. New assistant activity without UserPromptSubmit starts an external
+   turn and renders/finishes normally. Sequence gaps remain errors.
+3. Add configurable 5–60 minute idle shutdown (default 15). Require empty native
+   input, GUI ownership, no pending turns/interactions, complete observation,
+   inactivity throughout the interval and no known/uncertain background work.
+   Recheck backend activity/sequence/transcript tail/phase before existing teardown.
+   Conservatively skip on unknown CLI/background coverage or live tool children.
+   Automatic coverage is enabled only for probed 2.1.301/302. Missing Stop arrays,
+   scheduled jobs, detached shell patterns and MCP work veto shutdown. Recheck a
+   denied automatic park at most once/minute. Native Stop still retains UUID.
+   Model/effort/Fast restarts and Compact also wait for known background work.
+   Serialize parking with a new send; keep the native binding and resume UUID.
+4. Attachments: persist images/text files under app-owned session storage and add
+   quoted absolute references to the native prompt. No automatic resend; compare
+   native acceptance against the exact expanded prompt. Retain files for native
+   resume/forks; no shell quoting or execution. Unsupported attachments fail early.
+5. Fork latest native history with verified fork/resume/new-UUID flags. Earlier
+   GUI turns retain the existing explicit copied-context branch fallback; reject
+   supplied historical cuts before launch. Skip copied native history until the
+   target's first accepted input. Ask in sidechat reuses its existing source-context
+   snapshot and opens a separate Interactive owner with the same account/model/
+   effort. This preserves the sidechat's live source refresh and keeps the parent
+   conversation independent, without an extra SDK/headless request.
+6. Compact: existing Compact action / exact allow-listed `/compact` only, through
+   the same owner. Observe real compact lifecycle; never require UserPromptSubmit
+   for a native slash command. Other slash/control commands remain blocked.
+7. Add process roots from existing owned child/PTY registries, tree metrics and
+   generation-safe samples. Never accept arbitrary PID kill requests. CPU is a
+   delta normalized to machine capacity; memory is working set/RSS. Deduplicate
+   shared descendants in totals. Label/group owners using existing chat/project
+   metadata. Per-row Stop uses existing chat/terminal stop handling; Stop all idle
+   uses conservative provider eligibility rather than interrupting background work.
+   Bulk stopping rechecks settled output and current idle state; terminal shells and
+   unidentified helpers require explicit per-row Stop. Structured bulk stop gets
+   a fresh process snapshot and chat-state check; Interactive uses backend park.
+8. Add a default-off Experimentation setting and bottom-bar chip/popover. No
+   sampling/timers/IPC while disabled. Chip polls ~10s; open popover ~3s, no
+   overlapping requests. Show loading, empty, exited and unavailable states.
+
+## Todos
+
+- [x] Read instructions, trace current notification/hooks and check installed help
+- [x] User chose existing native APIs; no new crate
+- [x] Native compact/fork/background completion probes recorded
+- [x] Notification and autonomous-turn regressions
+- [x] Adaptive polling and conservative idle shutdown/settings
+- [x] Attachments, fork, sidechat and compact through existing UI
+- [x] Owned-root stats, grouped monitor and safe stop actions
+- [x] Full web/TypeScript, Rust checks/tests/Clippy and builds (baseline exceptions below)
+- [ ] Native Windows regression covering new supported actions
+- [ ] Fork records, normal authorized push and remote SHA verification
+- [ ] Separate human desktop/signed-in/cache usage checks
+
+## Issues and fixes
+
+Preserve existing hooks: the failing PowerShell file is
+outside this repository on the user's machine. Fix its misleading idle status
+here; document what the inherited hook failure means rather than editing
+unavailable user configuration. The generic 5-minute registry parking veto remains; the new Interactive policy
+owns the stricter 5–60 minute native shutdown path.
+
+## Learnings
+
+CPU/crate size comparisons must distinguish archive size from actual executable
+growth. Native event names are version-specific; do not invent TaskStarted.
+Native CLI tests use fake credentials and local replies, never subscription quota.
+The Linux Rust process suite needs a container init/reaper (`docker run --init`);
+PID 1 as sleep left orphan zombies and produced unrelated cleanup failures.
+
+Final local source: 6,839 web tests passed / 619 files (two opt-in CLI cases
+skipped in that run and passed separately on 2.1.301). Strict TypeScript,
+production web/host builds, Rust check and production Clippy pass. Rust: 757
+passed / two ignored in the corrected container. Windows fixture all-target
+Clippy and macOS metrics cross-check pass. Full Rust fmt/test Clippy still hit
+unchanged debug_inspector formatting and needless_borrow at tests.rs:161.
+Real loopback probes count 14 API requests / 12 primary requests per permission
+mode: two native naming/helper requests, not extra MonoCode title requests.
+System/tool prefixes match across a resume with a changed hook URL; fork target
+UUID matches the actual native hook identity. Desktop quota/cache meters remain
+human checks.
+
+## Done
+
+Implementation and local gates complete; native Windows CI/publication follow below. No installer/version changes requested. Human desktop UI is a separate
+follow-up; do not drive the native window from this implementation session.

@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   owner: false,
   starts: [] as Record<string, unknown>[],
   hooks: [] as Record<string, unknown>[],
+  lines: [] as string[],
+  parked: false,
   sends: [] as string[],
   sendError: false,
   seq: 0,
@@ -41,7 +43,11 @@ vi.mock("./claudeInteractiveTerminal", () => ({
         mocks.owner = value;
       },
       ready: mocks.ready,
-      inspect: () => ({ reason: mocks.ready() ? "ready" : "prompt-mismatch", receivedBytes: 20, inputOwner: mocks.owner }),
+      inspect: () => ({
+        reason: mocks.ready() ? "ready" : "prompt-mismatch",
+        receivedBytes: 20,
+        inputOwner: mocks.owner,
+      }),
       dispose: vi.fn(),
       writing: false,
       stopped: false,
@@ -57,6 +63,7 @@ const {
   replyInteractiveClaude,
   hasInteractiveClaude,
   interactiveClaudeDiagnostics,
+  parkInteractiveClaude,
 } = await import("./claudeInteractive");
 
 let events: HarnessEvent[];
@@ -90,7 +97,7 @@ function hook(
   mocks.hooks.push({ hook_event_name, bridgeId: ++mocks.seq, ...extra });
 }
 function finish(): void {
-  hook("Stop");
+  hook("Stop", { background_tasks: [], session_crons: [] });
 }
 
 beforeEach(() => {
@@ -102,6 +109,8 @@ beforeEach(() => {
   mocks.seq = 0;
   mocks.starts = [];
   mocks.hooks = [];
+  mocks.lines = [];
+  mocks.parked = false;
   mocks.sends = [];
   mocks.ready.mockReturnValue(true);
   mocks.isTauri.mockReturnValue(true);
@@ -122,7 +131,7 @@ beforeEach(() => {
           terminalOwner: mocks.owner,
           events: rows,
           sequence: mocks.seq,
-          lines: [],
+          lines: mocks.lines.splice(0),
           more: false,
         };
       }
@@ -131,6 +140,9 @@ beforeEach(() => {
         if (mocks.sendError) throw new Error("IPC disconnected after write");
         hook("UserPromptSubmit", { prompt: args.text });
       }
+      if (command === "claude_interactive_park") return mocks.parked;
+      if (command === "claude_interactive_attachments")
+        return ["/saved/one.txt"];
       return undefined;
     },
   );
@@ -228,8 +240,18 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(0);
     expect(await turn).toBeInstanceOf(HarnessNeedsAttentionError);
     expect(hasInteractiveClaude("interactive-test")).toBe(true);
-    expect(interactiveClaudeDiagnostics("interactive-test")?.lastBlocked).toMatchObject({ phase: "ready", terminal: { reason: "prompt-mismatch" } });
-    expect(events).toContainEqual(expect.objectContaining({ type: "diagnostic.lifecycle", operation: "interactive-readiness" }));
+    expect(
+      interactiveClaudeDiagnostics("interactive-test")?.lastBlocked,
+    ).toMatchObject({
+      phase: "ready",
+      terminal: { reason: "prompt-mismatch" },
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "diagnostic.lifecycle",
+        operation: "interactive-readiness",
+      }),
+    );
     expect(
       mocks.invoke.mock.calls.some(
         ([command]) => command === "claude_interactive_stop",
@@ -237,8 +259,13 @@ describe("interactive turn delivery", () => {
     ).toBe(false);
     // After setup is completed, retry reuses the existing process once.
     mocks.ready.mockReturnValue(true);
-    expect(interactiveClaudeDiagnostics("interactive-test")?.current.terminal.reason).toBe("ready");
-    expect(interactiveClaudeDiagnostics("interactive-test")?.lastBlocked?.terminal.reason).toBe("prompt-mismatch");
+    expect(
+      interactiveClaudeDiagnostics("interactive-test")?.current.terminal.reason,
+    ).toBe("ready");
+    expect(
+      interactiveClaudeDiagnostics("interactive-test")?.lastBlocked?.terminal
+        .reason,
+    ).toBe("prompt-mismatch");
     const retry = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);
     finish();
@@ -384,6 +411,237 @@ describe("interactive turn delivery", () => {
     hook("StopFailure", { error: "API request failed" });
     await settle();
     expect(String(await turn)).toContain("API request failed");
+    expect(mocks.sends).toHaveLength(1);
+  });
+});
+
+describe("interactive observation and parking", () => {
+  async function idle(): Promise<void> {
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(3000);
+    await turn;
+  }
+  it("suppresses ordinary idle notifications and preserves genuine attention", async () => {
+    await idle();
+    hook("Notification", {
+      notification_type: "idle_prompt",
+      message: "Claude is waiting for your input",
+    });
+    hook("Notification", {
+      notification_type: "auth_success",
+      message: "Sign-in complete",
+    });
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(events).not.toContainEqual({
+      type: "status",
+      text: "Claude is waiting for your input",
+    });
+    expect(events).toContainEqual({ type: "status", text: "Sign-in complete" });
+  });
+  it("slows idle polling, wakes immediately on send, and follows autonomous replies", async () => {
+    await idle();
+    const calls = (): number =>
+      mocks.invoke.mock.calls.filter(
+        ([cmd]) => cmd === "claude_interactive_poll",
+      ).length;
+    const before = calls();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(calls() - before).toBe(4);
+    hook("SubagentStart", { agent_id: "agent-1" });
+    await vi.advanceTimersByTimeAsync(1500);
+    const active = calls();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls() - active).toBe(5);
+    hook("SubagentStop", { agent_id: "agent-1" });
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "automatic-1",
+        message: {
+          content: [{ type: "text", text: "Background work completed." }],
+        },
+      }),
+    );
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    const start = events.findIndex((e) => e.type === "externalTurn.started");
+    const text = events.findIndex(
+      (e) =>
+        e.type === "externalTurn.event" && e.event.type === "message.delta",
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(text).toBeGreaterThan(start);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "externalTurn.finished" }),
+    );
+    const count = calls();
+    const next = sendInteractiveClaude(input({ text: "next" }));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls()).toBeGreaterThan(count);
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next;
+  });
+  it("keeps background completion from failing an accepted prompt during final drain", async () => {
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    hook("Stop", {
+      background_tasks: [{ id: "shell1", status: "running" }],
+      session_crons: [],
+    });
+    const notification =
+      "<task-notification>\n<task-id>shell1</task-id>\n<status>completed</status>\n</task-notification>";
+    hook("UserPromptSubmit", { prompt: notification });
+    hook("Stop", { background_tasks: [], session_crons: [] });
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "first-final",
+        message: { content: [{ type: "text", text: "Initial reply" }] },
+      }),
+      JSON.stringify({
+        type: "user",
+        uuid: "notification",
+        message: { content: notification },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        uuid: "automatic-final",
+        message: { content: [{ type: "text", text: "Background reply" }] },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events).toContainEqual({
+      type: "message.delta",
+      text: "Initial reply",
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "externalTurn.event",
+        event: { type: "message.delta", text: "Background reply" },
+      }),
+    );
+    expect(events.some((event) => event.type === "session.error")).toBe(false);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+  });
+  it("explicit bulk idle Stop uses all safety gates without waiting for the auto-shutdown interval", async () => {
+    await idle();
+    mocks.parked = true;
+    expect(await parkInteractiveClaude("interactive-test", 0, true)).toBe(true);
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      "claude_interactive_park",
+      expect.objectContaining({ minutes: 0, explicitIdleStop: true }),
+    );
+    expect(hasInteractiveClaude("interactive-test")).toBe(false);
+  });
+  it("parks after the configured idle interval and resumes the same native identity", async () => {
+    mocks.parked = true;
+    await idle();
+    await vi.advanceTimersByTimeAsync(15 * 60000 + 2000);
+    expect(hasInteractiveClaude("interactive-test")).toBe(false);
+    const next = sendInteractiveClaude(input({ text: "after parking" }));
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next;
+    expect(mocks.starts[1]).toMatchObject({
+      nativeId: mocks.starts[0].nativeId,
+      resume: true,
+    });
+  });
+  it.each([
+    "subagent",
+    "uncertain background",
+    "draft",
+    "terminal",
+    "question",
+  ])("does not park with %s", async (reason) => {
+    mocks.parked = true;
+    await idle();
+    if (reason === "subagent") hook("SubagentStart", { agent_id: "busy" });
+    if (reason === "uncertain background")
+      hook("PreToolUse", {
+        tool_name: "Bash",
+        tool_input: { run_in_background: true },
+      });
+    if (reason === "draft") mocks.ready.mockReturnValue(false);
+    if (reason === "terminal") mocks.owner = true;
+    if (reason === "question")
+      hook("PreToolUse", { tool_name: "AskUserQuestion", tool_input: {} });
+    await vi.advanceTimersByTimeAsync(16 * 60000);
+    expect(
+      mocks.invoke.mock.calls.some(
+        ([cmd]) => cmd === "claude_interactive_park",
+      ),
+    ).toBe(false);
+    expect(hasInteractiveClaude("interactive-test")).toBe(true);
+  });
+  it("does not restart for model changes or compact while background work owns context", async () => {
+    await idle();
+    hook("SubagentStart", { agent_id: "still-working" });
+    await vi.advanceTimersByTimeAsync(1600);
+    const stops = mocks.invoke.mock.calls.filter(
+      ([cmd]) => cmd === "claude_interactive_stop",
+    ).length;
+    await expect(
+      sendInteractiveClaude(input({ model: "claude:opus-5-5" })),
+    ).rejects.toThrow("idle native prompt");
+    await expect(
+      sendInteractiveClaude(input({ text: "/compact" })),
+    ).rejects.toThrow("background work");
+    expect(
+      mocks.invoke.mock.calls.filter(
+        ([cmd]) => cmd === "claude_interactive_stop",
+      ),
+    ).toHaveLength(stops);
+    expect(mocks.sends).toHaveLength(1);
+  });
+  it("rejects a historical fork before launch so the existing copied-context fallback can run", async () => {
+    await expect(
+      sendInteractiveClaude(
+        input({
+          fork: { sourceProviderSessionId: "source", forkPoint: "historical" },
+        }),
+      ),
+    ).rejects.toThrow("copied context");
+    expect(mocks.starts).toHaveLength(0);
+    expect(mocks.sends).toHaveLength(0);
+  });
+  it("adds persisted attachment references once, but blocks model and effort commands", async () => {
+    const turn = sendInteractiveClaude(
+      input({
+        attachments: [
+          {
+            id: "a",
+            name: "notes.md",
+            kind: "file",
+            mimeType: "text/markdown",
+            size: 2,
+            data: "aGk=",
+          },
+        ],
+      }),
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    expect(mocks.sends).toEqual([
+      'first line\nsecond line\n\nRead these attached files using your tools:\n"notes.md": "/saved/one.txt"',
+    ]);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    for (const text of [
+      "/model haiku",
+      "/effort low",
+      "/compact extra",
+      "/clear",
+    ])
+      await expect(sendInteractiveClaude(input({ text }))).rejects.toThrow(
+        "No prompt was sent",
+      );
     expect(mocks.sends).toHaveLength(1);
   });
 });

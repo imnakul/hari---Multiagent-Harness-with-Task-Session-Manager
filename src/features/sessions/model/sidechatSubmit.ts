@@ -1,5 +1,10 @@
-import { sidechatContextBlock } from "./fork";
-import { sessionDisplayTitle, type Session } from "./session";
+import { sidechatContextBlock, sidechatTitle } from "./fork";
+import {
+  formatSessionTitle,
+  newSession,
+  sessionDisplayTitle,
+  type Session,
+} from "./session";
 
 export type SidechatContextPrepared = {
   sourceTitle: string;
@@ -58,7 +63,9 @@ export class SidechatSubmitPreflight {
       timeout = setTimeout(() => resolve(null), input.timeoutMs ?? 5_000);
     });
     void Promise.race([
-      Promise.resolve().then(() => input.loadSavedSource(input.sourceSessionId)),
+      Promise.resolve().then(() =>
+        input.loadSavedSource(input.sourceSessionId),
+      ),
       expired,
     ])
       .then(async (source) => {
@@ -87,4 +94,34 @@ export class SidechatSubmitPreflight {
       });
     return true;
   }
+}
+
+/** A side question gets its own native owner, preserving the chosen transport.
+ * Use the existing context snapshot so subsequent side questions can refresh
+ * their source without splicing messages into a forked native history. */
+export function createSidechatSession(source: Session): Session {
+  const display = sessionDisplayTitle(source.title, source.harness);
+  const sourceContext = sidechatContextBlock(display, source.blocks);
+  return {
+    ...newSession(
+      source.harness,
+      source.cwd,
+      source.model,
+      source.runtimeMode,
+      source.modelSettings,
+    ),
+    model: source.model,
+    modelSettings: { ...source.modelSettings },
+    title: formatSessionTitle(source.harness, sidechatTitle(display)),
+    ...(source.providerAccountId
+      ? { providerAccountId: source.providerAccountId }
+      : {}),
+    ...(source.worktreeCwd ? { worktreeCwd: source.worktreeCwd } : {}),
+    ...(source.branch ? { branch: source.branch } : {}),
+    sidechat: {
+      sourceSessionId: source.id,
+      sourceTitle: display,
+      ...(sourceContext ? { sourceContext } : {}),
+    },
+  };
 }

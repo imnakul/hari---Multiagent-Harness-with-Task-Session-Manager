@@ -50,6 +50,7 @@ import {
   sendInteractiveClaude,
   stopInteractiveClaude,
   interactiveClaudeDiagnostics,
+  compactInteractiveClaude,
 } from "./claudeInteractive";
 import { interactiveTerminalFor } from "./claudeInteractiveTerminal";
 
@@ -69,7 +70,7 @@ it
         !!process.env.MONOCODE_INTERACTIVE_TEST_PTY_HOST),
   )
   .each(["supervised", "full-access"] as const)(
-  "real interactive CLI: two GUI turns before and after native resume (%s)",
+  "real interactive CLI: messages, resume, fork, compact, attachments and background continuation (%s)",
   async (runtimeMode) => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "monocode-interactive-test-")),
@@ -103,7 +104,15 @@ it
     let transcriptOffset = 0;
     const hooks: Record<string, unknown>[] = [];
     const acceptedPrompts: string[] = [];
+    let skipForkHistory = false;
+    const observedHooks: string[] = [];
+    const observedHookRows: Record<string, unknown>[] = [];
+    const backgroundCommand = 'node -e "setTimeout(()=>console.log(123),2500)"';
     const requests: string[] = [];
+    const requestPrefixes: string[] = [];
+    const requestMessages: string[] = [];
+    const attachmentPaths: string[] = [];
+    let sawAttachedImage = false;
     let output = Buffer.alloc(0);
     const server = createServer(async (request, response) => {
       try {
@@ -113,17 +122,47 @@ it
         const body = JSON.parse(
           Buffer.concat(chunks).toString() || "{}",
         ) as Record<string, unknown>;
-        if (request.url === "/hook") {
+        if (request.url?.startsWith("/hook/")) {
+          observedHooks.push(String(body.hook_event_name));
+          observedHookRows.push(body);
           const row = { ...body, bridgeId: ++sequence };
           hooks.push(row);
           if (typeof body.transcript_path === "string")
             transcriptPath = body.transcript_path;
           if (body.hook_event_name === "UserPromptSubmit") {
+            if (skipForkHistory && transcriptPath) {
+              transcriptOffset = (
+                await stat(transcriptPath).catch(() => ({ size: 0 }))
+              ).size;
+              skipForkHistory = false;
+            }
             phase = "busy";
-            acceptedPrompts.push(String(body.prompt));
+            if (!String(body.prompt).startsWith("<task-notification>"))
+              acceptedPrompts.push(String(body.prompt));
           }
-          if (body.hook_event_name === "Stop") phase = "ready";
-          reply(response, {});
+          if (body.hook_event_name === "PreCompact") phase = "busy";
+          if (
+            body.hook_event_name === "Stop" ||
+            body.hook_event_name === "PostCompact"
+          )
+            phase = "ready";
+          const tool = body.tool_input as
+            { command?: string; file_path?: string } | undefined;
+          reply(
+            response,
+            body.hook_event_name === "PreToolUse" &&
+              ((body.tool_name === "Bash" &&
+                tool?.command === backgroundCommand) ||
+                (body.tool_name === "Read" &&
+                  attachmentPaths.includes(tool?.file_path ?? "")))
+              ? {
+                  hookSpecificOutput: {
+                    hookEventName: "PreToolUse",
+                    permissionDecision: "allow",
+                  },
+                }
+              : {},
+          );
           return;
         }
         if (!request.url?.includes("/messages")) {
@@ -135,13 +174,57 @@ it
           return;
         }
         requests.push(request.url);
+        if (Array.isArray(body.tools) && body.tools.length)
+          requestPrefixes.push(JSON.stringify([body.system, body.tools]));
+        if (Array.isArray(body.tools) && body.tools.length)
+          requestMessages.push(JSON.stringify(body.messages));
+        sawAttachedImage ||= JSON.stringify(body.messages).includes(
+          '"type":"image"',
+        );
+        const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+        const background =
+          hasTools &&
+          JSON.stringify(body.messages).includes(
+            "Run background fixture command",
+          ) &&
+          !JSON.stringify(body.messages).includes("toolu_fixture_background");
+        const readFiles =
+          hasTools &&
+          JSON.stringify(body.messages).includes("Read fixture attachments");
+        const tool = background
+          ? {
+              id: "toolu_fixture_background",
+              name: "Bash",
+              input: {
+                command: backgroundCommand,
+                description: "Fixture-only background command",
+                run_in_background: true,
+              },
+            }
+          : readFiles &&
+              !JSON.stringify(body.messages).includes("toolu_fixture_file")
+            ? {
+                id: "toolu_fixture_file",
+                name: "Read",
+                input: { file_path: attachmentPaths[0] },
+              }
+            : readFiles &&
+                !JSON.stringify(body.messages).includes("toolu_fixture_image")
+              ? {
+                  id: "toolu_fixture_image",
+                  name: "Read",
+                  input: { file_path: attachmentPaths[1] },
+                }
+              : undefined;
         const message = {
           id: `msg_fixture_${requests.length}`,
           type: "message",
           role: "assistant",
           model: body.model,
-          content: [{ type: "text", text: "Reply from the local fixture." }],
-          stop_reason: "end_turn",
+          content: tool
+            ? [{ type: "tool_use", ...tool }]
+            : [{ type: "text", text: "Reply from the local fixture." }],
+          stop_reason: tool ? "tool_use" : "end_turn",
           stop_sequence: null,
           usage: { input_tokens: 12, output_tokens: 9 },
         };
@@ -163,17 +246,24 @@ it
           {
             type: "content_block_start",
             index: 0,
-            content_block: { type: "text", text: "" },
+            content_block: tool
+              ? { type: "tool_use", id: tool.id, name: tool.name, input: {} }
+              : { type: "text", text: "" },
           },
           {
             type: "content_block_delta",
             index: 0,
-            delta: { type: "text_delta", text: message.content[0].text },
+            delta: tool
+              ? {
+                  type: "input_json_delta",
+                  partial_json: JSON.stringify(tool.input),
+                }
+              : { type: "text_delta", text: message.content[0].text },
           },
           { type: "content_block_stop", index: 0 },
           {
             type: "message_delta",
-            delta: { stop_reason: "end_turn", stop_sequence: null },
+            delta: { stop_reason: message.stop_reason, stop_sequence: null },
             usage: { output_tokens: 9 },
           },
           { type: "message_stop" },
@@ -261,6 +351,7 @@ it
             const input = args.input as Record<string, unknown>;
             starts.push(input);
             phase = "ready";
+            skipForkHistory = !!input.fork;
             output = Buffer.alloc(0);
             transcriptOffset =
               input.resume && transcriptPath
@@ -268,13 +359,30 @@ it
                 : 0;
             const settings = {
               hooks: Object.fromEntries(
-                ["SessionStart", "UserPromptSubmit", "Stop"].map((name) => [
+                [
+                  "SessionStart",
+                  "UserPromptSubmit",
+                  "Stop",
+                  "PreCompact",
+                  "PostCompact",
+                  "SubagentStart",
+                  "SubagentStop",
+                  "TaskCreated",
+                  "TaskCompleted",
+                  "PreToolUse",
+                  "PostToolUse",
+                  "Notification",
+                ].map((name) => [
                   name,
                   [
                     {
                       matcher: "*",
                       hooks: [
-                        { type: "http", url: `${url}/hook`, timeout: 10 },
+                        {
+                          type: "http",
+                          url: `${url}/hook/${starts.length}-${String(input.nativeId)}`,
+                          timeout: 10,
+                        },
                       ],
                     },
                   ],
@@ -282,11 +390,16 @@ it
               ),
               fastMode: input.fast,
             };
+            const fork = input.fork as
+              { sourceProviderSessionId: string } | undefined;
             await rpc("start", {
               argv: [
                 process.env.MONOCODE_INTERACTIVE_TEST_CLI,
-                input.resume ? "--resume" : "--session-id",
-                input.nativeId,
+                input.resume || fork ? "--resume" : "--session-id",
+                fork?.sourceProviderSessionId ?? input.nativeId,
+                ...(fork
+                  ? ["--fork-session", "--session-id", input.nativeId]
+                  : []),
                 "--model",
                 input.model,
                 "--permission-mode",
@@ -362,7 +475,7 @@ it
           }
           if (command === "claude_interactive_poll") {
             let rows: string[] = [];
-            if (transcriptPath) {
+            if (transcriptPath && !skipForkHistory) {
               // UserPromptSubmit can name the transcript before its first write.
               // The native backend's safe_transcript canonicalization also skips it then.
               const contents = await readFile(transcriptPath).catch(
@@ -393,6 +506,21 @@ it
               lines: rows,
               more: false,
             };
+          }
+          if (command === "claude_interactive_attachments") {
+            const files = args.attachments as { data: string; kind: string }[];
+            const dir = join(root, "attachments");
+            await mkdir(dir, { recursive: true });
+            attachmentPaths.length = 0;
+            for (const [index, file] of files.entries()) {
+              const path = join(
+                dir,
+                `fixture-${index}.${file.kind === "image" ? "png" : "txt"}`,
+              );
+              await writeFile(path, Buffer.from(file.data, "base64"));
+              attachmentPaths.push(path);
+            }
+            return [...attachmentPaths];
           }
           if (command === "claude_interactive_send") {
             sends.push(String(args.text));
@@ -453,12 +581,113 @@ it
         resume: true,
       });
       expect(requests.length).toBeGreaterThanOrEqual(messages.length);
+      // Native resume reuses the recorded system/tool prefix; no summary or
+      // added system instructions are introduced by our idle-stop path.
+      expect(requestPrefixes[2] === requestPrefixes[0]).toBe(true);
+      const compactInput: SendTurnInput = {
+        sessionId: id,
+        cwd,
+        model: "claude:sonnet-5-5",
+        runtimeMode,
+        modelSettings: { claudeExecution: "interactive", effort: "low" },
+        text: "/compact",
+        onEvent: (event): void => {
+          events.push(event);
+        },
+      };
+      const sourceId = String(starts[0].nativeId);
+      await forgetInteractiveClaude(id);
+      await sendInteractiveClaude({
+        ...compactInput,
+        text: "After native fork",
+        fork: {
+          sourceProviderSessionId: sourceId,
+        },
+      });
+      expect(starts[2].nativeId).not.toBe(sourceId);
+      expect(
+        observedHookRows.find(
+          (row) =>
+            row.hook_event_name === "UserPromptSubmit" &&
+            row.prompt === "After native fork",
+        )?.session_id,
+      ).toBe(starts[2].nativeId);
+      expect(acceptedPrompts.at(-1)).toBe("After native fork");
+      expect(
+        events.filter((event) => event.type === "message.delta").at(-1),
+      ).toMatchObject({ text: "Reply from the local fixture." });
+      const forkMessages = requestMessages.at(-1)!;
+      expect(forkMessages).toContain("Radhe Radhe");
+      expect(forkMessages).toContain("Line one");
+      expect(forkMessages).toContain("One more resumed turn");
+      await compactInteractiveClaude(compactInput);
+      expect(observedHooks).toContain("PreCompact");
+      expect(observedHooks).toContain("PostCompact");
+
+      const image = await readFile(
+        fileURLToPath(
+          new URL("../../../../../src-tauri/icons/32x32.png", import.meta.url),
+        ),
+      );
+      await sendInteractiveClaude({
+        ...compactInput,
+        text: "Read fixture attachments",
+        attachments: [
+          {
+            id: "text",
+            name: "notes.md",
+            kind: "file",
+            mimeType: "text/markdown",
+            size: 23,
+            data: Buffer.from("fixture attachment body").toString("base64"),
+          },
+          {
+            id: "image",
+            name: "icon.png",
+            kind: "image",
+            mimeType: "image/png",
+            size: image.length,
+            data: image.toString("base64"),
+          },
+        ],
+      });
+      expect(
+        requestMessages.some((text) =>
+          text.includes("fixture attachment body"),
+        ),
+      ).toBe(true);
+      expect(sawAttachedImage).toBe(true);
+      const externalBefore = events.filter(
+        (event) => event.type === "externalTurn.finished",
+      ).length;
+      await sendInteractiveClaude({
+        ...compactInput,
+        text: "Run background fixture command",
+      });
+      const acceptedBefore = acceptedPrompts.length;
+      const deadline = Date.now() + 20000;
+      while (
+        Date.now() < deadline &&
+        events.filter((event) => event.type === "externalTurn.finished")
+          .length === externalBefore
+      )
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(acceptedPrompts.length).toBe(acceptedBefore);
+      expect(
+        events.filter((event) => event.type === "externalTurn.finished").length,
+      ).toBeGreaterThan(externalBefore);
     } finally {
       const capture = process.env.MONOCODE_INTERACTIVE_TEST_CAPTURE_DIR;
       if (capture) {
         await mkdir(capture, { recursive: true });
         await Promise.all([
           writeFile(join(capture, `${runtimeMode}.vt`), output),
+          writeFile(
+            join(capture, `${runtimeMode}.jsonl`),
+            transcriptPath
+              ? await readFile(transcriptPath).catch(() => Buffer.alloc(0))
+              : Buffer.alloc(0),
+          ),
           writeFile(
             join(capture, `${runtimeMode}.json`),
             JSON.stringify(
@@ -467,6 +696,12 @@ it
                 passiveReplies,
                 nativeInput,
                 acceptedPrompts,
+                observedHooks,
+                observedHookRows,
+                starts,
+                requestPrefixes,
+                apiRequests: requests.length,
+                primaryRequests: requestPrefixes.length,
               },
               null,
               2,
@@ -484,5 +719,5 @@ it
       await rm(root, { recursive: true, force: true });
     }
   },
-  60000,
+  120000,
 );

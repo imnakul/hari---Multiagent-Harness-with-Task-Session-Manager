@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 17 Oct 2026 | Sample owned process trees without spawning Windows commands | resources, native APIs |
 | 17 Oct 2026 | Answer the inherited cursor handshake once and support classic Claude | terminal, Claude Interactive |
 | 17 Oct 2026 | ConPTY paint cursor is separate from Claude's input row | terminal, Claude Interactive |
 | 17 Oct 2026 | ConPTY small output must flush while its reader is blocked | terminal, Claude Interactive |
@@ -54,6 +55,21 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 17 Oct 2026 - Sample owned process trees without spawning Windows commands
+
+The optional monitor reuses existing windows-sys bindings: Toolhelp enumerates
+parents, GetProcessTimes provides cumulative CPU plus process creation identity,
+and K32GetProcessMemoryInfo provides working set. Metrics are read only for
+owned roots/descendants; handles close in every path. CPU history uses PID and
+creation time, so PID reuse starts a fresh measurement. Shared descendants count
+once. Enumeration errors and access/exit races remain unavailable/exited states.
+No tasklist/PowerShell/wmic scanner, new console or new crate is involved.
+
+The standalone native fixture compiles the same metrics module and tests our own
+process on Windows 2022/2025. Full backend check precedes the native CLI action
+regression. The earlier ConPTY handshake/parser guards remain unchanged. Desktop
+popover appearance and signed-in quota/cache meter checks stay human follow-ups.
 
 ## 17 Oct 2026 — Answer the inherited cursor handshake once and support classic Claude
 

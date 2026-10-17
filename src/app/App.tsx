@@ -881,11 +881,7 @@ import { type ReviewIssue } from "../features/inbox/model/githubTasks";
 import { type PlanStatus } from "../features/sessions/model/session";
 import { type RecentProject } from "../features/projects/model/recents";
 import { queuePersistFingerprint } from "../features/sessions/data/sessionStore";
-import {
-  sidechatContextBlock,
-  sidechatTitle,
-} from "../features/sessions/model/fork";
-import { SidechatSubmitPreflight } from "../features/sessions/model/sidechatSubmit";
+import { SidechatSubmitPreflight, createSidechatSession } from "../features/sessions/model/sidechatSubmit";
 import { planBranch } from "../features/sessions/model/branchPlan";
 import { sendBranchTurn } from "../features/sessions/model/branchFlow";
 import {
@@ -11645,28 +11641,7 @@ function Workspace({
       const lastId = turn.length > 0 ? turn[turn.length - 1]?.id : undefined;
       if (!source || !lastId) return;
       const cwd = source.cwd;
-      const display = sessionDisplayTitle(source.title, source.harness);
-      const sourceContext = sidechatContextBlock(display, source.blocks);
-      const session = {
-        ...newSession(
-          source.harness,
-          cwd,
-          source.model,
-          source.runtimeMode,
-          source.modelSettings,
-        ),
-        title: formatSessionTitle(source.harness, sidechatTitle(display)),
-        ...(source.providerAccountId
-          ? { providerAccountId: source.providerAccountId }
-          : {}),
-        ...(source.worktreeCwd ? { worktreeCwd: source.worktreeCwd } : {}),
-        ...(source.branch ? { branch: source.branch } : {}),
-        sidechat: {
-          sourceSessionId: sourceId,
-          sourceTitle: display,
-          ...(sourceContext ? { sourceContext } : {}),
-        },
-      };
+      const session = createSidechatSession(source);
       openSessionBeside(sourceId, session, cwd, true);
     },
     [openSessionBeside],
@@ -15065,6 +15040,9 @@ function Workspace({
               settingsOpen ||
               monoCovers ? null : (
                 <UsageFooter
+                  processSessions={sessions}
+                  processMetadata={sidebarHistory}
+                  onStopProcess={onStop}
                   providers={usageProviders}
                   session={usageSession}
                   project={active?.cwd ?? projectCwd}

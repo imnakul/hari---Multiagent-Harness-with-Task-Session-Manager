@@ -1,6 +1,10 @@
 //! Windows counterpart to the Unix opt-in PTY host: JSON plumbing only.
 #![allow(dead_code)]
 
+#[path = "../../../src-tauri/src/process_metrics.rs"]
+#[allow(dead_code)]
+mod process_metrics;
+
 #[cfg(windows)]
 #[path = "../../../src-tauri/src/pty_output.rs"]
 mod output;
@@ -169,4 +173,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     stop(live);
     Ok(())
+}
+
+#[cfg(all(windows, test))]
+fn hide_window_console(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x0800_0000);
 }

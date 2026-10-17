@@ -35,7 +35,10 @@ describe("SidechatSubmitPreflight", () => {
   it("loads a closed parent once and submits exactly once under the sidechat identity", async () => {
     const load = deferred<ReturnType<typeof source> | null>();
     const parent = source();
-    const submitted: Array<{ id: string; prepared: { sourceTitle: string; sourceContext?: string } }> = [];
+    const submitted: Array<{
+      id: string;
+      prepared: { sourceTitle: string; sourceContext?: string };
+    }> = [];
     const gate = new SidechatSubmitPreflight();
     const input = {
       sessionId: "saved-sidechat",
@@ -173,8 +176,34 @@ describe("SidechatSubmitPreflight", () => {
     load.resolve(source());
     await load.promise;
     await Promise.resolve();
-    expect(submitted).toEqual([
-      { id: "timed-sidechat", prepared: fallback },
-    ]);
+    expect(submitted).toEqual([{ id: "timed-sidechat", prepared: fallback }]);
   });
+});
+
+it("keeps Interactive sidechat on its own native conversation and account", async () => {
+  const { createSidechatSession } = await import("./sidechatSubmit");
+  const { newSession } = await import("./session");
+  const source = {
+    ...newSession("claude", "/repo", "claude:sonnet-5", "supervised", {
+      claudeExecution: "interactive",
+      effort: "low",
+    }),
+    modelSettings: { claudeExecution: "interactive", effort: "low" },
+    providerSessionId: "source-native",
+    providerAccountId: "work",
+    title: "Source",
+    worktreeCwd: "/worktree",
+    blocks: [{ id: "u", role: "user" as const, text: "Explain this function" }],
+  };
+  const side = createSidechatSession(source);
+  expect(side.id).not.toBe(source.id);
+  expect(side.providerSessionId).toBeUndefined();
+  expect(side.modelSettings).toMatchObject({
+    claudeExecution: "interactive",
+    effort: "low",
+  });
+  expect(side.providerAccountId).toBe("work");
+  expect(side.worktreeCwd).toBe("/worktree");
+  expect(side.sidechat?.sourceContext).toContain("Explain this function");
+  expect(source.providerSessionId).toBe("source-native");
 });

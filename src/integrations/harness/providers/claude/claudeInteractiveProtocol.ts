@@ -209,3 +209,16 @@ export function interactiveTranscriptEvents(
   }
   return events;
 }
+
+/** Native background completion, never composer text or a slash command. */
+export function interactiveTaskNotification(text: unknown): string | undefined {
+  if (
+    typeof text !== "string" ||
+    !text.trimStart().startsWith("<task-notification>")
+  )
+    return undefined;
+  const id = /<task-id>([a-zA-Z0-9_-]+)<\/task-id>/.exec(text)?.[1];
+  return id && /<status>(completed|failed|killed|stopped)<\/status>/.test(text)
+    ? id
+    : undefined;
+}

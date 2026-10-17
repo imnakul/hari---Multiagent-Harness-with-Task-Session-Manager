@@ -1,3 +1,5 @@
+import { ProcessMonitor } from "./ProcessMonitor";
+import type { Session } from "../../features/sessions/model/session";
 import { antigravityCliLimitsForModel } from "../../features/providers/model/antigravityCliUsage";
 import { runtimeProviderBinaryPath } from "../../features/providers/model/providerBinaryPaths";
 import { getCustomBinary } from "../../integrations/harness/core/customBinary";
@@ -82,7 +84,13 @@ export function UsageFooter({
   projectTerminalActive = false,
   onSelectAccount,
   onManageAccounts,
+  processSessions = [],
+  processMetadata,
+  onStopProcess,
 }: {
+  processSessions?: Session[];
+  processMetadata?: Pick<Session, "id" | "title" | "cwd" | "worktreeCwd">[];
+  onStopProcess?: (id: string) => Promise<unknown> | void;
   providers: RateLimitProvider[];
   session?: UsageFooterSession;
   project?: string;
@@ -371,6 +379,7 @@ export function UsageFooter({
       aria-label={ariaLabel}
       className="flex h-7 shrink-0 items-center gap-1.5 overflow-x-auto border-t border-stroke px-3 text-[11px] text-content/55"
     >
+      {onStopProcess ? <ProcessMonitor sessions={processSessions} metadata={processMetadata} onStop={onStopProcess} /> : null}
       {session?.harness === "pi" ? (
         <PiUsage
           key={`${session.id}:${session.model}`}

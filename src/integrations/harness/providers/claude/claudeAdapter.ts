@@ -40,6 +40,7 @@ import {
   rejectInteractiveSteer,
   replyInteractiveClaude,
   sendInteractiveClaude,
+  compactInteractiveClaude,
   stopInteractiveClaude,
 } from "./claudeInteractive";
 
@@ -95,7 +96,7 @@ export const claudeAdapter: HarnessAdapter = {
       isClaudeInteractive(input.modelSettings) ||
       hasInteractiveClaude(input.sessionId)
     )
-      throw new Error("Use /compact in Claude's native terminal.");
+      return compactInteractiveClaude(input);
     await compactClaudeContext(input);
   },
   inspectContext: (id, signal) =>

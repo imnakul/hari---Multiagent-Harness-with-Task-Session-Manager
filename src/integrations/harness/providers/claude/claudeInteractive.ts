@@ -8,8 +8,10 @@ import {
   type ApprovalDecision,
   type HarnessEvent,
   type SendTurnInput,
+  type CompactContextInput,
 } from "../../core/types";
 import { nativeModelId } from "../../../../features/sessions/model/models";
+import { loadInteractiveIdleMinutes } from "../../../../features/settings/model/interactiveIdleSettings";
 import {
   questionsFromUnknown,
   type UserQuestionReply,
@@ -26,6 +28,7 @@ import {
 } from "./claudeProtocol";
 import {
   interactiveTranscriptEvents,
+  interactiveTaskNotification,
   newTranscriptState,
   type TranscriptState,
 } from "./claudeInteractiveProtocol";
@@ -39,6 +42,7 @@ type Binding = { nativeId: string; cwd: string; accountId?: string };
 type Pending = {
   text: string;
   accepted: boolean;
+  compact?: boolean;
   resolve: () => void;
   reject: (error: Error) => void;
   onAccepted?: () => void;
@@ -81,6 +85,15 @@ type Live = {
   external?: string;
   stopping: number;
   lastBlocked?: ReadinessSnapshot;
+  lastActivity: number;
+  fastUntil: number;
+  polling: boolean;
+  wake: boolean;
+  background: Set<string>;
+  uncertainBackground: boolean;
+  seenMessages: Set<string>;
+  lastParkCheck: number;
+  continuation?: string;
 };
 const bindings = new Map<string, Binding>();
 const lives = new Map<string, Live>();
@@ -88,6 +101,72 @@ const lives = new Map<string, Live>();
 const stoppedDiagnostics = new Map<string, InteractiveDiagnostics>();
 const MAX_STOPPED_DIAGNOSTICS = 50;
 const epochs = new Map<string, number>();
+const parking = new Map<string, Promise<boolean>>();
+
+function wakePoll(live: Live): void {
+  live.lastActivity = Date.now();
+  live.fastUntil = Date.now() + 2000;
+  clearTimeout(live.timer);
+  if (live.polling) live.wake = true;
+  else void poll(live);
+}
+
+/** Manual monitor bulk-stop uses the same conservative policy as parking. */
+export function interactiveClaudeIdleSafe(id: string): boolean {
+  const live = lives.get(id);
+  return (
+    !!live &&
+    !live.stopped &&
+    !live.fault &&
+    !live.pending &&
+    !live.external &&
+    !live.stopping &&
+    live.phase === "ready" &&
+    !live.approvals.size &&
+    !live.background.size &&
+    !live.uncertainBackground &&
+    !live.terminal.owner &&
+    live.terminal.ready()
+  );
+}
+
+export async function parkInteractiveClaude(
+  id: string,
+  minutes = loadInteractiveIdleMinutes(),
+  explicitIdleStop = false,
+): Promise<boolean> {
+  if (parking.has(id)) return parking.get(id)!;
+  const live = lives.get(id);
+  if (
+    !live ||
+    !interactiveClaudeIdleSafe(id) ||
+    Date.now() - live.lastActivity < minutes * 60000
+  )
+    return false;
+  const work = (async (): Promise<boolean> => {
+    const stopped = await invoke<boolean>("claude_interactive_park", {
+      sessionId: id,
+      after: live.sequence,
+      minutes,
+      explicitIdleStop,
+    });
+    if (stopped) {
+      // Backend already used the ordinary owned-process teardown. Keep binding
+      // and epoch: a send waiting on this promise resumes that exact session.
+      live.stopped = true;
+      clearTimeout(live.timer);
+      live.terminal.dispose();
+      lives.delete(id);
+    }
+    return stopped;
+  })();
+  parking.set(id, work);
+  try {
+    return await work;
+  } finally {
+    parking.delete(id);
+  }
+}
 
 export function interactiveClaudeEpoch(id: string): number {
   return epochs.get(id) ?? 0;
@@ -184,8 +263,55 @@ function complete(live: Live): void {
 
 function hookEvent(live: Live, row: Record<string, unknown>): void {
   const event = row.hook_event_name;
+  const agent = typeof row.agent_id === "string" ? row.agent_id : undefined;
+  if (event === "SubagentStart" && agent) live.background.add(`agent:${agent}`);
+  if (event === "SubagentStop" && agent)
+    live.background.delete(`agent:${agent}`);
+  const task = typeof row.task_id === "string" ? row.task_id : undefined;
+  if (event === "TaskCreated" && task) live.background.add(`task:${task}`);
+  if (event === "TaskCompleted" && task) live.background.delete(`task:${task}`);
+  const toolInput = asRecord(row.tool_input);
+  if (event === "PreToolUse" && toolInput?.run_in_background === true)
+    live.uncertainBackground = true;
+  const backgroundId = asRecord(row.tool_response)?.backgroundTaskId;
+  if (event === "PostToolUse" && typeof backgroundId === "string")
+    live.background.add(`task:${backgroundId}`);
+  if (event === "Stop" && !row.agent_id) {
+    if (
+      Array.isArray(row.background_tasks) &&
+      Array.isArray(row.session_crons)
+    ) {
+      for (const key of live.background)
+        if (key.startsWith("task:")) live.background.delete(key);
+      live.uncertainBackground = row.session_crons.length > 0;
+      for (const raw of row.background_tasks) {
+        const entry = asRecord(raw);
+        if (
+          !entry ||
+          typeof entry.id !== "string" ||
+          typeof entry.status !== "string"
+        )
+          live.uncertainBackground = true;
+        else if (
+          !["completed", "failed", "killed", "stopped"].includes(entry.status)
+        )
+          live.background.add(`task:${entry.id}`);
+      }
+    } else live.uncertainBackground = true;
+  }
   if (row.agent_id && event !== "PermissionRequest") return;
   if (event === "UserPromptSubmit") {
+    const taskId = interactiveTaskNotification(row.prompt);
+    if (
+      taskId &&
+      row.prompt !== live.pending?.text &&
+      live.background.has(`task:${taskId}`)
+    ) {
+      // Keep old-turn transcript lines attached to their turn. The native JSONL
+      // user notification is the boundary for the next autonomous response.
+      live.continuation = taskId;
+      return;
+    }
     // Native acceptance, rather than process creation, establishes resumable history.
     if (!bindings.has(live.id)) {
       bindings.set(live.id, live.binding);
@@ -252,7 +378,14 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
       });
     }
   }
-  if (event === "Notification") {
+  if (
+    event === "Notification" &&
+    row.notification_type !== "idle_prompt" &&
+    !(
+      typeof row.message === "string" &&
+      /^Claude is waiting for your input[.!]?$/i.test(row.message.trim())
+    )
+  ) {
     emit(live, {
       type: "status",
       text:
@@ -287,6 +420,11 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
         decision: "cancelled",
       });
   }
+  if (event === "PreCompact" && live.pending?.compact) {
+    live.pending.accepted = true;
+    clearTimeout(live.pending.timer);
+    live.pending.onAccepted?.();
+  }
   if (event === "Stop" || event === "PostCompact") live.stopping = 1;
   if (event === "StopFailure")
     fail(
@@ -304,7 +442,10 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
 }
 
 async function poll(live: Live): Promise<void> {
-  if (live.stopped) return;
+  if (live.stopped || live.polling) return;
+  live.polling = true;
+  live.wake = false;
+  let more = false;
   try {
     const result = await invoke<Poll>("claude_interactive_poll", {
       sessionId: live.id,
@@ -312,9 +453,54 @@ async function poll(live: Live): Promise<void> {
     });
     if (live.stopped) return;
     live.phase = result.phase;
+    more = result.more;
+    if (result.events.length || result.lines.length) {
+      live.lastActivity = Date.now();
+      live.fastUntil = Date.now() + 2000;
+    }
     // Prompt acceptance must be processed before its transcript activity.
     for (const row of result.events) hookEvent(live, row);
     for (const line of result.lines) {
+      // Background completions can trigger a root assistant without another
+      // UserPromptSubmit. Establish its GUI turn before rendering any deltas.
+      let row: Record<string, unknown> | undefined;
+      try {
+        row = asRecord(JSON.parse(line)) ?? undefined;
+      } catch {
+        /* parser handles malformed records */
+      }
+      if (row?.type === "user" && live.continuation) {
+        const content = asRecord(row.message)?.content;
+        const text =
+          typeof content === "string"
+            ? content
+            : Array.isArray(content)
+              ? content.map((part) => asRecord(part)?.text ?? "").join("\n")
+              : "";
+        if (interactiveTaskNotification(text) === live.continuation) {
+          if (live.pending?.accepted) complete(live);
+          live.background.delete(`task:${live.continuation}`);
+          live.continuation = undefined;
+          live.transcript = newTranscriptState();
+        }
+      }
+      if (
+        row?.type === "assistant" &&
+        !row.isSidechain &&
+        typeof row.uuid === "string" &&
+        !live.seenMessages.has(row.uuid)
+      ) {
+        live.seenMessages.add(row.uuid);
+        if (!live.pending && !live.external) {
+          live.external = `interactive:${live.binding.nativeId}:${row.uuid}`;
+          live.onEvent({
+            type: "externalTurn.started",
+            turnId: live.external,
+            text: "",
+            nativeId: live.binding.nativeId,
+          });
+        }
+      }
       for (const event of interactiveTranscriptEvents(line, live.transcript))
         emit(live, event);
     }
@@ -334,11 +520,39 @@ async function poll(live: Live): Promise<void> {
         `Interactive observation stopped: ${String(error)}. Use the native terminal or stop this session.`,
       );
     return;
+  } finally {
+    live.polling = false;
   }
-  if (!live.stopped)
-    live.timer = setTimeout(() => {
-      void poll(live);
-    }, 200);
+  if (!live.stopped) {
+    if (
+      interactiveClaudeIdleSafe(live.id) &&
+      Date.now() - live.lastParkCheck > 60000 &&
+      Date.now() - live.lastActivity >= loadInteractiveIdleMinutes() * 60000
+    ) {
+      live.lastParkCheck = Date.now();
+      try {
+        if (await parkInteractiveClaude(live.id)) return;
+      } catch {
+        /* unavailable observation never authorizes a shutdown */
+      }
+    }
+    const active =
+      live.wake ||
+      more ||
+      live.pending ||
+      live.external ||
+      live.stopping ||
+      live.approvals.size ||
+      live.background.size ||
+      live.phase !== "ready" ||
+      Date.now() < live.fastUntil;
+    live.timer = setTimeout(
+      () => {
+        void poll(live);
+      },
+      active ? 200 : 1500,
+    );
+  }
 }
 
 function launchKey(input: SendTurnInput): string {
@@ -355,6 +569,7 @@ function launchKey(input: SendTurnInput): string {
 }
 
 async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
+  await parking.get(input.sessionId);
   checkEpoch(input.sessionId, epoch);
   let live = lives.get(input.sessionId);
   const key = launchKey(input);
@@ -362,6 +577,9 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
     if (
       live.pending ||
       live.external ||
+      live.approvals.size ||
+      live.background.size ||
+      live.uncertainBackground ||
       live.phase !== "ready" ||
       live.terminal.owner ||
       !live.terminal.ready()
@@ -399,6 +617,7 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
     );
   }
   const nativeId =
+    (input.fork ? crypto.randomUUID() : undefined) ??
     input.nativeResume?.providerSessionId ??
     binding?.nativeId ??
     crypto.randomUUID();
@@ -413,7 +632,7 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
   checkEpoch(input.sessionId, epoch);
   const terminal = await createInteractiveTerminal(input.sessionId, (code) => {
     const current = lives.get(input.sessionId);
-    if (current && !current.stopped) {
+    if (current && !current.stopped && !parking.has(input.sessionId)) {
       fail(
         current,
         `Claude's native terminal exited${code == null ? "" : ` (code ${code})`}. Check the Claude installation and sign-in before starting another turn.`,
@@ -439,6 +658,14 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
     onEvent: input.onEvent,
     approvals: new Map(),
     stopping: 0,
+    lastActivity: Date.now(),
+    fastUntil: Date.now() + 2000,
+    polling: false,
+    wake: false,
+    background: new Set(),
+    uncertainBackground: false,
+    seenMessages: new Set(),
+    lastParkCheck: 0,
   };
   lives.set(input.sessionId, live);
   stoppedDiagnostics.delete(input.sessionId);
@@ -457,7 +684,8 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
       input: {
         sessionId: input.sessionId,
         nativeId,
-        resume: !!binding || !!input.nativeResume,
+        resume: !input.fork && (!!binding || !!input.nativeResume),
+        fork: input.fork,
         cwd: input.cwd,
         binary,
         accountId: input.providerAccountId,
@@ -495,30 +723,32 @@ export async function sendInteractiveClaude(
   input: SendTurnInput,
   epoch = interactiveClaudeEpoch(input.sessionId),
 ): Promise<void> {
-  if (input.fork)
+  if (input.fork?.forkPoint)
     throw new NativeForkError(
-      "Interactive branching is available in the native terminal. No prompt was sent.",
+      "Interactive Claude only forks full native history. Use copied context for a selected earlier turn. No prompt was sent.",
     );
-  if (
-    input.ephemeral ||
-    input.attachments?.length ||
-    input.controlsAgents ||
-    input.appAccess
-  ) {
+  if (input.ephemeral || input.controlsAgents || input.appAccess) {
     throw new Error(
-      "Interactive mode needs native transcript storage. Use the terminal for attachments, and Structured for Operator or orchestration turns. No prompt was sent.",
+      "Interactive mode needs native transcript storage. Use Structured for Operator or orchestration turns. No prompt was sent.",
     );
   }
   if (
     !input.text.trim() ||
-    input.text.trimStart().startsWith("/") ||
+    (input.text.trimStart().startsWith("/") &&
+      input.text.trim() !== "/compact") ||
     /[\x00-\x08\x0b-\x1f\x7f]/.test(input.text)
   ) {
     throw new Error(
       "Use the native terminal for slash commands and control characters. No prompt was sent.",
     );
   }
-  const live = await ensureLive(input, epoch);
+  const live = await ensureLive(input, epoch).catch((error: unknown) => {
+    if (input.fork)
+      throw new NativeForkError(
+        `Native Interactive fork failed before sending: ${String(error)}`,
+      );
+    throw error;
+  });
   checkEpoch(input.sessionId, epoch);
   if (live.fault) throw faultError(live);
   const deadline = Date.now() + 20000;
@@ -577,6 +807,42 @@ export async function sendInteractiveClaude(
       `${explanation} Open the model picker → Open native terminal. Use Return to chat once its prompt is empty; if it is already empty, Copy diagnostics there. No prompt was sent.`,
     );
   }
+  const compact = input.text.trim() === "/compact";
+  if (compact && (live.background.size || live.uncertainBackground))
+    throw new HarnessNeedsAttentionError(
+      "Wait for background work to finish before compacting. No command was sent.",
+    );
+  let text = compact ? "/compact" : input.text;
+  if (input.attachments?.length) {
+    if (compact)
+      throw new Error(
+        "Compact cannot include attachments. No prompt was sent.",
+      );
+    const paths = await invoke<string[]>("claude_interactive_attachments", {
+      nativeId: live.binding.nativeId,
+      attachments: input.attachments,
+    });
+    checkEpoch(input.sessionId, epoch);
+    if (
+      live.pending ||
+      live.external ||
+      live.stopped ||
+      live.phase !== "ready" ||
+      live.terminal.owner ||
+      !live.terminal.ready()
+    )
+      throw new HarnessNeedsAttentionError(
+        "Claude changed state while saving attachments. No prompt was sent.",
+      );
+    text +=
+      "\n\nRead these attached files using your tools:\n" +
+      paths
+        .map(
+          (path, index) =>
+            `${JSON.stringify(input.attachments![index].name)}: ${JSON.stringify(path)}`,
+        )
+        .join("\n");
+  }
   live.terminal.writing = true;
   let resolveTurn: () => void = () => undefined;
   let rejectTurn: (error: Error) => void = () => undefined;
@@ -585,20 +851,22 @@ export async function sendInteractiveClaude(
     rejectTurn = reject;
   });
   const pending: Pending = {
-    text: input.text,
+    text,
+    compact,
     accepted: false,
     resolve: resolveTurn,
     reject: rejectTurn,
     onAccepted: input.onAccepted,
   };
   live.pending = pending;
+  wakePoll(live);
   // Attach a rejection handler before IPC: hook polling can fail while it awaits.
   void done.catch(() => undefined);
   try {
     await invoke("claude_interactive_send", {
       sessionId: input.sessionId,
       submissionId: input.diagnostic?.submissionId ?? crypto.randomUUID(),
-      text: input.text,
+      text,
     });
     if (!pending.accepted && live.pending === pending) {
       pending.timer = setTimeout(() => {
@@ -629,6 +897,7 @@ export async function replyInteractiveClaude(
   const live = lives.get(id);
   const row = live?.approvals.get(requestId);
   if (!live || !row) return;
+  wakePoll(live);
   const input = asRecord(row.tool_input) ?? {};
   const questions = questionsFromUnknown(input);
   const updatedInput =
@@ -721,4 +990,11 @@ export function rejectInteractiveSteer(): never {
   throw new TurnNotReadyError(
     "Interactive Claude accepts one composer turn at a time. Queue it or use the native terminal.",
   );
+}
+
+/** The existing Compact button uses the same terminal owner and hook drain. */
+export async function compactInteractiveClaude(
+  input: CompactContextInput,
+): Promise<void> {
+  await sendInteractiveClaude({ ...input, text: "/compact" });
 }

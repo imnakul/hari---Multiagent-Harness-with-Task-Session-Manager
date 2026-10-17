@@ -412,6 +412,10 @@ import {
   loadCollapsedProjectRailMode,
   loadComposerRunner,
   loadCompactModelLabels,
+  loadProcessMonitor,
+  saveProcessMonitor,
+  loadInteractiveIdleMinutes,
+  saveInteractiveIdleMinutes,
   loadDetailedContext,
   loadDiffViewer,
   loadFileTabMode,
@@ -909,6 +913,10 @@ function SettingsSearch({
 }
 
 function ExperimentationPage(): ReactElement {
+  const [processMonitor, setProcessMonitor] = useState(loadProcessMonitor);
+  const [interactiveIdle, setInteractiveIdle] = useState(() =>
+    String(loadInteractiveIdleMinutes()),
+  );
   const [detailedContext, setDetailedContext] = useState(loadDetailedContext);
   const [remainingQuota, setRemainingQuota] = useState(loadRemainingQuota);
   const [compactModelLabels, setCompactModelLabels] = useState(
@@ -932,6 +940,49 @@ function ExperimentationPage(): ReactElement {
 
   return (
     <>
+      <Row
+        id="process-monitor"
+        label="Process monitor"
+        description="Show CPU and memory for MonoCode-owned process trees in the bottom bar. Sampling runs only while enabled."
+      >
+        <Toggle
+          label="Process monitor"
+          on={processMonitor}
+          onChange={(next) => {
+            saveProcessMonitor(next);
+            setProcessMonitor(next);
+          }}
+        />
+      </Row>
+      <Row
+        id="interactive-idle"
+        label="Interactive idle shutdown"
+        description="Stop an empty Claude Interactive process after 5–60 idle minutes, only when no background work or interaction is pending. The next message resumes the same native session."
+      >
+        <input
+          aria-label="Interactive idle shutdown minutes"
+          type="number"
+          min={5}
+          max={60}
+          className="w-20 rounded border border-stroke bg-surface-1 px-2 py-1 text-sm text-content"
+          value={interactiveIdle}
+          onChange={(event) => {
+            const value = event.target.value;
+            setInteractiveIdle(value);
+            const next = Number(value);
+            if (value && Number.isFinite(next) && next >= 5 && next <= 60)
+              saveInteractiveIdleMinutes(next);
+          }}
+          onBlur={() => {
+            const next = Math.min(
+              60,
+              Math.max(5, Math.round(Number(interactiveIdle) || 15)),
+            );
+            saveInteractiveIdleMinutes(next);
+            setInteractiveIdle(String(next));
+          }}
+        />
+      </Row>
       <Row
         label="Detailed context"
         description="Show the full context inspector with usage breakdowns, quota, costing, skills, and System & Tools details. Values are estimated and might not be fully accurate yet."
