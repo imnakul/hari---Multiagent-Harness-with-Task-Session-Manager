@@ -16,6 +16,14 @@ L-92 automatic polling. Before installation is known it does not run reports.
 Only an active Antigravity CLI model selects an inline family quota; a different
 provider's model never selects that account's family. ACP credentials are separate.
 
+Manual-refresh correction (2026-10-17): the explicit footer Refresh action must
+fetch every configured account, including those behind `+N`, even when its
+snapshot is under five minutes old. Keep sequential requests and 750ms spacing,
+and disable repeated clicks while the refresh is running. The five-minute
+freshness floor belongs to automatic activation refresh, not an explicit click.
+Retain the last snapshot with an error state on failure; allow another manual
+attempt. No credential rotation, provider fetch implementation or polling changes.
+
 ## Goal
 
 Show usage for every configured provider account in the bottom bar at once, behind an
@@ -44,13 +52,13 @@ chips pass `accounts=[]` so no identity lookups are added.
 
 - Initial load: accounts without a snapshot load one at a time with a 750 ms gap
   (`loadAccountsInSequence`), never in one burst. Cache dedupes in-flight requests.
-- Manual refresh: forced sequential load of accounts whose reading is not fresh (< 5 min, ok).
+- Manual refresh: forced sequential load of every account, including fresh snapshots and overflow. The automatic activation freshness floor does not suppress an explicit click.
 - Claude/codex had no timer polling before; none is added.
 
 ## Files
 
 - `src/features/settings/model/settings.ts`, `ui/SettingsView.tsx`: setting `monocode.allAccountsUsage`.
-- `src/app/shell/allAccountsUsage.ts`: pure list, split, freshness and sequencing logic.
+- `src/app/shell/allAccountsUsage.ts`: pure list, split and sequencing logic.
 - `src/app/shell/AccountUsageStrip.tsx`: strip and `+N` popover.
 - `src/app/shell/UsageProviderChip.tsx`: `accountLabel`, `inlineWindow`.
 - `src/app/shell/UsageFooter.tsx`: account mode wiring.

@@ -3,10 +3,61 @@ import { interactivePromptMatches } from "./claudeInteractivePrompt";
 
 const wrap = (text: string, id = "faa9"): string =>
   `<pasted_content id="${id}">\n${text}\n</pasted_content>`;
+// Installed CLI 2.1.301's formatter repeats the ID in the closing tag and
+// doesn't add another newline when the pasted text already ends with one.
+const nativeWrap = (text: string, id = "7f52"): string =>
+  `\n\n<pasted_content id="${id}">\n${text}${text.endsWith("\n") ? "" : "\n"}</pasted_content id="${id}">\n`;
 const prompt =
   "create a new branch\nDiscuss the walkthrough\nKeep existing styles.";
 
 describe("interactive native paste acceptance", () => {
+  it("recognizes the installed CLI's matching-ID closing tag", () => {
+    expect(
+      interactivePromptMatches(prompt, `c${nativeWrap(prompt.slice(1))}`),
+    ).toBe(true);
+  });
+  it.each(["", "\n", "\n\n"])(
+    "preserves trailing paste newlines with native closing tags (%j)",
+    (suffix) => {
+      const text = prompt + suffix;
+      expect(
+        interactivePromptMatches(text, `c${nativeWrap(text.slice(1))}`),
+      ).toBe(true);
+    },
+  );
+  it("matches the complete native paste including Windows attachment references", () => {
+    const text =
+      'Students list page\nCheck the pagination and ranking.\n\nRead these attached files using your tools:\n"screen.png": "C:\\\\Users\\\\tester\\\\AppData\\\\Roaming\\\\MonoCode\\\\interactive-attachments\\\\screen.png"';
+    expect(
+      interactivePromptMatches(text, `S${nativeWrap(text.slice(1))}`),
+    ).toBe(true);
+    expect(
+      interactivePromptMatches(
+        text,
+        `S${nativeWrap(text.slice(1).replace("screen.png", "other.png"))}`,
+      ),
+    ).toBe(false);
+  });
+  it("matches native closing IDs across leading and trailing paste parts", () => {
+    const text = "\n  !नमस्ते\nNext line";
+    expect(
+      interactivePromptMatches(
+        text,
+        `${nativeWrap("\n  !", "abcd")}न${nativeWrap("मस्ते\nNext line", "ef12")}`,
+      ),
+    ).toBe(true);
+  });
+  it.each([
+    `c${nativeWrap(prompt.slice(1)).replace('</pasted_content id="7f52">', '</pasted_content id="dead">')}`,
+    `c${nativeWrap(prompt.slice(1, -1))}`,
+    `c${nativeWrap(prompt.slice(1).replace("branch", "worktree"))}`,
+    `c${nativeWrap(prompt.slice(1))}Extra request`,
+  ])(
+    "rejects mismatched native closing IDs or changed content (%j)",
+    (actual) => {
+      expect(interactivePromptMatches(prompt, actual)).toBe(false);
+    },
+  );
   it("recognizes the reported c plus folded remainder as the original prompt", () => {
     expect(
       interactivePromptMatches(prompt, `c\n\n${wrap(prompt.slice(1))}`),

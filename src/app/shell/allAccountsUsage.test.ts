@@ -5,12 +5,10 @@ import type {
 } from "../../features/providers/model/providerAccounts";
 import {
   idleRateLimits,
-  RATE_LIMIT_MIN_REFETCH_MS,
   type ProviderRateLimits,
 } from "../../features/providers/model/rateLimits";
 import {
   buildAccountChipEntries,
-  isFreshRateLimit,
   loadAccountsInSequence,
   shortestWindow,
   splitVisibleEntries,
@@ -144,33 +142,6 @@ describe("shortestWindow", () => {
 
   it("is null without any window", () => {
     expect(shortestWindow(base)).toBeNull();
-  });
-});
-
-describe("isFreshRateLimit", () => {
-  const now = 1_000_000_000;
-  const ok = (age: number): ProviderRateLimits => ({
-    ...idleRateLimits("codex"),
-    status: "ok",
-    updatedAt: now - age,
-  });
-
-  it("treats a recent good reading as fresh", () => {
-    expect(isFreshRateLimit(ok(1_000), now)).toBe(true);
-  });
-
-  it("treats a reading past the minimum refetch interval as stale", () => {
-    expect(isFreshRateLimit(ok(RATE_LIMIT_MIN_REFETCH_MS + 1), now)).toBe(
-      false,
-    );
-  });
-
-  it("always retries failed, unavailable and missing readings", () => {
-    expect(isFreshRateLimit({ ...ok(0), status: "error" }, now)).toBe(false);
-    expect(isFreshRateLimit({ ...ok(0), status: "unavailable" }, now)).toBe(
-      false,
-    );
-    expect(isFreshRateLimit(undefined, now)).toBe(false);
   });
 });
 

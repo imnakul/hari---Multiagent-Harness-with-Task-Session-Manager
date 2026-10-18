@@ -22,21 +22,27 @@ function partEnds(actual: string, from: number, part: InputPart): number[] {
   for (const separator of ["", "\n", "\n\n"]) {
     if (!actual.startsWith(separator, from)) continue;
     const start = from + separator.length;
-    const header = /^<pasted_content id="[A-Za-z0-9_-]{1,64}">\n/.exec(
+    const header = /^<pasted_content id="([A-Za-z0-9_-]{1,64})">\n/.exec(
       actual.slice(start, start + 100),
     );
     if (!header) continue;
     const body = start + header[0].length;
     const close = body + part.text.length;
-    const closing = "\n</pasted_content>";
-    if (
-      !actual.startsWith(part.text, body) ||
-      !actual.startsWith(closing, close)
-    )
-      continue;
-    const end = close + closing.length;
-    for (const trailing of ["", "\n", "\n\n"])
-      if (actual.startsWith(trailing, end)) ends.push(end + trailing.length);
+    if (!actual.startsWith(part.text, body)) continue;
+    // The native CLI repeats the opening ID in its closing tag. A paste
+    // ending in a newline already supplies the delimiter before that tag.
+    // Retain the earlier plain-tag representation without weakening the body
+    // comparison or accepting a mismatched closing ID.
+    const closings = [
+      `${part.text.endsWith("\n") ? "" : "\n"}</pasted_content id="${header[1]}">`,
+      "\n</pasted_content>",
+    ];
+    for (const closing of closings) {
+      if (!actual.startsWith(closing, close)) continue;
+      const end = close + closing.length;
+      for (const trailing of ["", "\n", "\n\n"])
+        if (actual.startsWith(trailing, end)) ends.push(end + trailing.length);
+    }
   }
   return ends;
 }
