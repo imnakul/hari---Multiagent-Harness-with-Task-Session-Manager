@@ -5,7 +5,7 @@
 - What: New Windows installer with L-106 to L-110: Interactive send fixes and the Quick Composer / Add Draft dialog matching the chat composer. The installer file name no longer carries a setup date.
 - Why: User asked to commit and build a new version, without the setup-date in the name.
 - Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local2-upstream-sync_x64.exe` (13,955,096 bytes, SHA-256 6CE7ED28516961492647757F8F6603C043F329D012E59C2FBE976FB86F6AFCF2, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
-- Commit: uncommitted
+- Commit: 9684bb0c
 - Verified: tsc ✅ tests ✅ (7,438 passed, 2 skipped) cargo — (release build only) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
 
 ## 2026-10-19 02:05 IST — Quick Composer and Add Draft dialog match the chat composer (L-110)
