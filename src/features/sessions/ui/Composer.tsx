@@ -128,7 +128,11 @@ import { FileTypeIcon } from "../../files/ui/FileTypeIcon";
 import { InboxMiniCard } from "../../inbox/ui/InboxMiniCard";
 import { NoteMiniCard } from "../../notes/ui/NoteMiniCard";
 import { HandoffMiniCard } from "./HandoffMiniCard";
-import { ModelControlPills, ModelPicker } from "./ModelPicker";
+import {
+  ModelControlPills,
+  ModelPicker,
+  type ModelPickerAccount,
+} from "./ModelPicker";
 import { QuestionForm } from "./QuestionForm";
 import { McpForm } from "./McpForm";
 import { MessageQueue } from "./MessageQueue";
@@ -303,6 +307,8 @@ type Props = {
   onManageWorktrees?: () => void;
   onNewTerminal?: () => void;
   onModelChange: (harness: HarnessId, model: string) => void;
+  /** Account choice for the model picker (fork, L-96). */
+  providerAccount?: ModelPickerAccount;
   onModelSettingsChange?: (settings: Record<string, string>) => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
   onOperatorDisable?: () => void;
@@ -440,6 +446,7 @@ export function Composer({
   onManageWorktrees,
   onNewTerminal,
   onModelChange,
+  providerAccount,
   onModelSettingsChange,
   onRuntimeModeChange,
   onQuoteRequestConsumed,
@@ -2668,6 +2675,7 @@ export function Composer({
                     onOpenTerminal: liveInteractiveTerminal ? () => setInteractiveTerminalOpen(true) : undefined,
                     onOpenDiagnostics: interactiveDiagnosticsAvailable ? () => setInteractiveTerminalOpen(true) : undefined,
                   } : undefined}
+                  providerAccount={remoteSession ? undefined : providerAccount}
                   allowedHarnesses={allowedModelHarnesses}
                   project={cwd}
                   hideSettings={controlsBeside}

@@ -91,7 +91,7 @@ it("adds the installed saved-account chip in all-accounts mode without an active
   // Also covers a deferred installation probe completing after the footer mounts.
   await act(async () => setHarnessAvailability({ "antigravity-cli": true }));
   expect(fetchUsage).toHaveBeenCalledTimes(1);
-  expect(cliChip()?.textContent).toContain("Model quotas");
+  expect(cliChip()?.textContent).toContain("Gemini6% used 5h·Claude & GPT0% used 5h");
   await act(async () => cliChip()?.click());
   expect(document.body.textContent).toContain("Remaining credits: 0");
   expect(
@@ -170,8 +170,8 @@ it("does not use another provider's model to select the CLI account's family quo
       }),
     ),
   );
-  expect(cliChip()?.textContent).toContain("Model quotas");
-  expect(cliChip()?.textContent).not.toContain("0% used");
+  // No family is borrowed from the Claude chat: every family is named (L-97).
+  expect(cliChip()?.textContent).toContain("Gemini6% used 5h·Claude & GPT0% used 5h");
   expect(
     container.querySelector(
       '[aria-label="Claude Code Default account usage details"]',
@@ -260,7 +260,7 @@ it("does not borrow a model family's quota for the configured default and does n
       }),
     ),
   );
-  expect(container.textContent).toContain("Model quotas");
+  expect(container.textContent).toContain("Gemini6% used 5h·Claude & GPT0% used 5h");
   expect(container.textContent).not.toContain("17% used");
   await act(async () =>
     root.render(

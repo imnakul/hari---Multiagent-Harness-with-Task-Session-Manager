@@ -1,4 +1,8 @@
 import { WorkInPicker } from "../../provider-sessions/ui/WorkInPicker";
+import {
+  selectedProviderAccountId,
+  supportsProviderAccounts,
+} from "../../providers/model/providerAccounts";
 import type { RemoteControlControls } from "../../provider-sessions/ui/RemoteControlButton";
 import { editableSessionTodo } from "../../session-board/sessionTodos";
 import { composeSessionTodo } from "../../session-board/ui/SessionManagerCapture";
@@ -221,6 +225,8 @@ export type SessionPaneProps = {
   onUsageLimitResumeAtReset: (sessionId: string, enabled: boolean) => void;
   onUsageLimitDismiss: (sessionId: string) => void;
   onUsageLimitAccountChange?: (sessionId: string, accountId: string) => void;
+  /** Model picker account choice (fork, L-96). */
+  onProviderAccountChange?: (sessionId: string, accountId: string) => void;
   onInboxCardDismiss?: (sessionId: string) => void;
   onLinkedWorkItemUpdateCardDismiss?: (sessionId: string) => void;
   onNoteCardDismiss?: (sessionId: string) => void;
@@ -373,6 +379,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
   onUsageLimitResumeAtReset,
   onUsageLimitDismiss,
   onUsageLimitAccountChange,
+  onProviderAccountChange,
   onInboxCardDismiss,
   onLinkedWorkItemUpdateCardDismiss,
   onNoteCardDismiss,
@@ -871,6 +878,18 @@ const LocalSessionPane = memo(function LocalSessionPane({
       worktreeRemoved={session.worktreeRemoved}
       onManageWorktrees={onManageWorktrees}
       onNewTerminal={() => onNewTerminal(session.id)}
+      providerAccount={
+        onProviderAccountChange && supportsProviderAccounts(session.harness)
+          ? {
+              accountId:
+                session.providerAccountId ??
+                selectedProviderAccountId(session.harness, session.cwd),
+              opensNewChat: session.blocks.length > 0 || !!session.busy,
+              onSelect: (accountId) =>
+                onProviderAccountChange(session.id, accountId),
+            }
+          : undefined
+      }
       onModelChange={(harness, model) => {
         onModelChange(session.id, harness, model);
         const selected = resolveModel(harness, model);

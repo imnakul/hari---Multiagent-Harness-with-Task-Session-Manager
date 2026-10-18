@@ -27,15 +27,17 @@ export const ACCOUNT_LOAD_GAP_MS = RATE_LIMIT_ACCOUNT_STAGGER_MS;
 const CHIP_WIDTH_PX = 180;
 /** Room kept for the refresh button and the footer's own gaps. */
 const FIXED_RESERVE_PX = 36;
+/** Rough width of the divider (and its gaps) between provider groups. */
+export const GROUP_DIVIDER_PX = 13;
 /** Room kept for the "+N" chip when some accounts are collapsed. */
 const OVERFLOW_CHIP_PX = 44;
 /** Used before the footer has been measured. */
 const DEFAULT_VISIBLE_CHIPS = 3;
 
 /**
- * Chips for every account of the given providers, in provider order, with
- * `pinnedKeys` (the accounts in use right now) first so a collapsed bar never
- * hides the account the user is working with.
+ * Chips for every account of the given providers, grouped by provider (Claude,
+ * then Codex, then the rest) so each provider's accounts sit together. Inside
+ * a group, `pinnedKeys` (the accounts in use right now) come first.
  */
 export function buildAccountChipEntries(
   providers: readonly ProviderAccountProvider[],
@@ -62,14 +64,20 @@ export function buildAccountChipEntries(
     const index = pinnedKeys.indexOf(entry.key);
     return index === -1 ? pinnedKeys.length : index;
   };
-  // Array.prototype.sort is stable, so unpinned entries keep provider order.
-  return entries.sort((left, right) => rank(left) - rank(right));
+  const group = (entry: AccountChipEntry): number =>
+    PROVIDER_ACCOUNT_PROVIDERS.indexOf(entry.provider);
+  // Array.prototype.sort is stable, so unpinned entries keep account order.
+  return entries.sort(
+    (left, right) => group(left) - group(right) || rank(left) - rank(right),
+  );
 }
 
 /** How many chips fit in `widthPx`; null before the first measurement. */
 export function splitVisibleEntries<T>(
   entries: readonly T[],
   widthPx: number | null,
+  /** Width already taken by dividers and trailing chips in the same strip. */
+  reservedPx = 0,
 ): { visible: T[]; overflow: T[] } {
   if (widthPx == null) {
     return {
@@ -77,13 +85,14 @@ export function splitVisibleEntries<T>(
       overflow: entries.slice(DEFAULT_VISIBLE_CHIPS),
     };
   }
-  const fitsAll = Math.floor((widthPx - FIXED_RESERVE_PX) / CHIP_WIDTH_PX);
+  const fixed = FIXED_RESERVE_PX + reservedPx;
+  const fitsAll = Math.floor((widthPx - fixed) / CHIP_WIDTH_PX);
   if (entries.length <= fitsAll) {
     return { visible: [...entries], overflow: [] };
   }
   const capacity = Math.max(
     1,
-    Math.floor((widthPx - FIXED_RESERVE_PX - OVERFLOW_CHIP_PX) / CHIP_WIDTH_PX),
+    Math.floor((widthPx - fixed - OVERFLOW_CHIP_PX) / CHIP_WIDTH_PX),
   );
   return {
     visible: entries.slice(0, capacity),

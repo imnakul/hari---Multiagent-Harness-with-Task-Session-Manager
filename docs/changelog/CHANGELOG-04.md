@@ -1,5 +1,37 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 00:40 IST — Same-version Windows test build (0.10.0-local2-upstream-sync)
+- Type: chore
+- What: Built a new Windows installer without changing the version, so it includes L-93 to L-97 (bottom bar in Tasks, one-row task header, in-use account highlight, account choice in the model picker, Antigravity quotas inline). About shows the same version as the 2026-10-17 build, so tell them apart by hash.
+- Why: User request, to test the changes before a versioned release.
+- Files: E:DevelopingInstallable versionsMonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-accounts.exe; 12,391,496 bytes; SHA-256 872B802A4207E681BA26B3D7344EC6455BE72D13C4FEBF18DDE9773307DA37D4. Built from HEAD c4288b21 plus uncommitted changes. The 2026-10-17 installer (12,387,402 bytes) is unchanged in the same folder.
+- Commit: uncommitted
+- Verified: unsigned NSIS build ✅ (npm run build:windows); installed check manual
+
+## 2026-10-18 00:33 IST — Show Antigravity quotas in the bottom bar (L-97)
+- Type: feature
+- What: The Antigravity CLI chip in the bottom bar now shows each model family's 5-hour quota (for example "Gemini 0% used 5h · Claude & GPT 0% used 5h") instead of just "Model quotas". Clicking it still opens the full details.
+- Why: The quotas were only visible after clicking the chip.
+- Files: [UsageProviderChip.tsx](../../src/app/shell/UsageProviderChip.tsx), [AccountUsageStrip.tsx](../../src/app/shell/AccountUsageStrip.tsx); test `AntigravityCliUsage.test.ts`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,940 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
+
+## 2026-10-17 23:47 IST — Highlight the chat's account, account choice in the model picker (L-95, L-96)
+- Type: feature
+- What: The usage chip for the account the open chat is using is now highlighted with the same selected look as the model button, and its tooltip says "In use by this chat". When a provider has more than one account, the model picker shows an Account list at the top; choosing another account switches an empty chat, or opens a new chat on that account if the current one already has messages.
+- Why: With all accounts shown in the bottom bar you could not tell which account a chat used, and switching accounts needed the bottom bar.
+- Files: [UsageProviderChip.tsx](../../src/app/shell/UsageProviderChip.tsx), [UsageFooter.tsx](../../src/app/shell/UsageFooter.tsx), [AccountUsageStrip.tsx](../../src/app/shell/AccountUsageStrip.tsx), [ModelPicker.tsx](../../src/features/sessions/ui/ModelPicker.tsx), [Composer.tsx](../../src/features/sessions/ui/Composer.tsx), [SessionPane.tsx](../../src/features/sessions/ui/SessionPane.tsx), [PaneTree.tsx](../../src/features/workspace/ui/PaneTree.tsx), [App.tsx](../../src/app/App.tsx); tests `UsageFooterAllAccounts.test.ts`, `ModelPicker.test.ts`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,940 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
+
+## 2026-10-17 23:34 IST — Group usage by provider, bottom bar in Tasks, one-row task header (L-85, L-93, L-94)
+- Type: feature
+- What: With All accounts usage on, the bottom bar now keeps Claude accounts together, then Codex, then Devin, then Antigravity CLI, with a thin divider between groups. The bottom bar now shows in Task Manager and Session Manager too. The task editor header fits on one line: the "Task" label, the Add more toggle and the extra New task button are gone (the New task button at the top left of Tasks does the same). Ctrl/Cmd+Shift+Enter still creates the next task.
+- Why: Accounts from different providers were mixed, the bar was missing in two panels, and the editor had two buttons for the same job.
+- Files: [allAccountsUsage.ts](../../src/app/shell/allAccountsUsage.ts), [AccountUsageStrip.tsx](../../src/app/shell/AccountUsageStrip.tsx), [UsageFooter.tsx](../../src/app/shell/UsageFooter.tsx), [App.tsx](../../src/app/App.tsx), [TaskEditor.tsx](../../src/features/tasks/ui/TaskEditor.tsx); tests `allAccountsUsage.test.ts`, `UsageFooterAllAccounts.test.ts`, `TasksView.test.ts`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,938 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-17 — Include Antigravity CLI in all-accounts usage (L-85)
 - What: All-accounts usage now includes the installed, visible Antigravity CLI's saved account across chats. Reuse its existing separate quota/credits chip, binary-scoped cache and manual/automatic refresh; do not invent managed account profiles or borrow a family quota from another provider's active model. Selected-only behavior remains when the experiment is off.
 - Files: `src/app/shell/UsageFooter.tsx`, `AntigravityCliUsage.test.ts`; L-85 feature and spec follow-up records. No native code, dependency, installer or version changes.

@@ -64,6 +64,7 @@ vi.mock("../../../shared/ui/Popover", () => ({
     ),
 }));
 
+import { saveProviderAccount } from "../../providers/model/providerAccounts";
 import { ModelControlPills, ModelPicker } from "./ModelPicker";
 import {
   resetHarnessModelOverlays,
@@ -174,6 +175,36 @@ describe("model picker", () => {
     expect(diagnostics).toBeDefined();
     act(() => diagnostics.click());
     expect(onOpenDiagnostics).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])("offers an account choice only when the provider has more than one account (beside=%s)", (hideSettings) => {
+    localStorage.clear();
+    const onSelect = vi.fn();
+    const render = () => act(() => root.render(createElement(ModelPicker, {
+      harness: "claude", model: "claude:sonnet-5", values: {},
+      hideSettings, onChange: vi.fn(), onSettingsChange: vi.fn(),
+      providerAccount: { accountId: "default", opensNewChat: true, onSelect },
+    })));
+    render();
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+    expect(container.querySelector('[aria-label="Claude Code account"]')).toBeNull();
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+
+    saveProviderAccount({ id: "account-work", provider: "claude", label: "Work" });
+    render();
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+    const group = container.querySelector('[aria-label="Claude Code account"]')!;
+    expect(group).not.toBeNull();
+    const rows = [...group.querySelectorAll<HTMLButtonElement>("button")];
+    expect(rows.map((row) => row.textContent)).toEqual(["Default account", "Work"]);
+    expect(rows[0].getAttribute("aria-pressed")).toBe("true");
+    expect(rows[0].className).toContain("bg-selection");
+    expect(container.textContent).toContain("Switching opens a new chat on that account.");
+    act(() => rows[0].click());
+    expect(onSelect).not.toHaveBeenCalled();
+    act(() => rows[1].click());
+    expect(onSelect).toHaveBeenCalledWith("account-work");
+    localStorage.clear();
   });
 
   it("shows the model name and effort in the combined picker", () => {

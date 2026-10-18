@@ -228,6 +228,16 @@ export function UsageFooter({
   // With every account on show, the per-provider chips for claude, codex and
   // devin are replaced, and they stop loading on their own.
   const accountMode = accountEntries.length > 0;
+  // The open chat's account is highlighted, whichever provider it uses (L-95).
+  const inUseKey =
+    session?.harness === "claude"
+      ? `claude:${claudeAccountId}`
+      : session?.harness === "codex"
+        ? `codex:${codexAccountId}`
+        : session?.harness === "devin"
+          ? "devin:default"
+          : undefined;
+  const cliInUse = session?.harness === "antigravity-cli";
   const wantClaude = requestedClaude && !accountMode;
   const wantCodex = requestedCodex && !accountMode;
   const wantDevin = requestedDevin && !accountMode;
@@ -534,6 +544,15 @@ export function UsageFooter({
           ? "Session"
           : undefined;
 
+  const cliChip = (
+    <UsageProviderChip
+      limits={cliLimits}
+      now={now}
+      remainingQuota={remainingQuota}
+      presentation={{ harness: "antigravity-cli", label: "Antigravity CLI", sourceLabel: "Quota and credits from the CLI’s saved account" }}
+      inUse={cliInUse}
+    />
+  );
   const refreshButton = (
     <button
       type="button"
@@ -580,6 +599,7 @@ export function UsageFooter({
                 onManageAccounts ? () => onManageAccounts("claude") : undefined
               }
               onReconnect={reconnectClaude}
+              inUse={session?.harness === "claude"}
             />
           ) : null}
           {wantCodex ? (
@@ -597,22 +617,17 @@ export function UsageFooter({
               }
               onConsumeReset={consumeCodexReset}
               onReconnect={reconnectCodex}
+              inUse={session?.harness === "codex"}
             />
           ) : null}
-          {wantCli ? (
-            <UsageProviderChip
-              limits={cliLimits}
-              now={now}
-              remainingQuota={remainingQuota}
-              presentation={{ harness: "antigravity-cli", label: "Antigravity CLI", sourceLabel: "Quota and credits from the CLI’s saved account" }}
-            />
-          ) : null}
+          {wantCli && !accountMode ? cliChip : null}
           {showOpencodeChip ? (
             <UsageProviderChip
               limits={opencode}
               now={now}
               project={project}
               remainingQuota={remainingQuota}
+              inUse={session?.harness === "opencode"}
             />
           ) : null}
           {wantDevin ? (
@@ -622,6 +637,7 @@ export function UsageFooter({
               now={now}
               project={project}
               onReconnect={reconnectDevin}
+              inUse={session?.harness === "devin"}
             />
           ) : null}
           {accountMode ? (
@@ -632,6 +648,10 @@ export function UsageFooter({
               remainingQuota={remainingQuota}
               onReconnect={reconnectProvider}
               onConsumeReset={consumeCodexResetFor}
+              inUseKey={inUseKey}
+              // Antigravity CLI is its own group after the profile accounts.
+              trailing={wantCli ? cliChip : null}
+              trailingCount={wantCli ? 1 : 0}
             >
               {refreshButton}
             </AccountUsageStrip>

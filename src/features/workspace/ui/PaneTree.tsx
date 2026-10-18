@@ -156,6 +156,7 @@ type Shared = Pick<
     reply: McpFormReply,
   ) => void;
   onQuestionInteraction?: (sessionId: string, requestId: number) => void;
+  onProviderAccountChange?: (sessionId: string, accountId: string) => void;
   onOpenFile: (path: string) => void;
   editorNavigation?: EditorNavigationTarget | null;
   onOpenDiff: (
@@ -276,6 +277,7 @@ function PaneTreeComponent({
   onQuestionReply,
   onFormReply,
   onQuestionInteraction,
+  onProviderAccountChange,
   onOpenFile,
   editorNavigation,
   onOpenDiff,
@@ -577,6 +579,7 @@ function PaneTreeComponent({
                   onQuestionReply={onQuestionReply}
                   onFormReply={onFormReply}
                   onQuestionInteraction={onQuestionInteraction}
+                  onProviderAccountChange={onProviderAccountChange}
                   onOpenFile={onOpenFile}
                   onOpenDiff={onOpenDiff}
                   onOpenPlan={onOpenPlan}

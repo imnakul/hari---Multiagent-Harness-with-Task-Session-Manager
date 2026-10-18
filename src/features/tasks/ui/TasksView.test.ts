@@ -706,34 +706,36 @@ describe("creating tasks", () => {
     expect(input("Task title").value).toBe("Untitled");
   });
 
-  it("creates the next task on Ctrl+Enter only while Add more is on", async () => {
+  it("keeps the editor header to one row without duplicate create controls", async () => {
     await render();
     await click(listRow("Fix installer"));
-    const ctrlEnter = async () => {
+    const editor = peek()!;
+    // The panel's own New task button is the only create control.
+    expect(editor.querySelector('[aria-label="New task"]')).toBeNull();
+    expect(
+      [...editor.querySelectorAll("button")].some(
+        (entry) => entry.textContent?.trim() === "Add more",
+      ),
+    ).toBe(false);
+    expect(editor.querySelector("header")?.textContent).not.toMatch(/^Task/);
+    // Plain Ctrl+Enter no longer creates a task; Ctrl+Shift+Enter still does.
+    const untitled = () =>
+      [...rows.values()].filter((item) => item.title === "Untitled").length;
+    for (const shiftKey of [false, true]) {
       await act(async () => {
         input("Task title").dispatchEvent(
           new KeyboardEvent("keydown", {
             key: "Enter",
             ctrlKey: true,
+            shiftKey,
             bubbles: true,
             cancelable: true,
           }),
         );
         await tick(20);
       });
-    };
-    const untitled = () =>
-      [...rows.values()].filter((item) => item.title === "Untitled").length;
-    await ctrlEnter();
-    expect(untitled()).toBe(0);
-    await click(button("Add more"));
-    expect(button("Add more").getAttribute("aria-pressed")).toBe("true");
-    expect(localStorage.getItem("monocode.tasks.addMore")).toBe("1");
-    await ctrlEnter();
-    expect(untitled()).toBe(1);
-    expect(input("Task title").value).toBe("Untitled");
-    await ctrlEnter();
-    expect(untitled()).toBe(2);
+      expect(untitled()).toBe(shiftKey ? 1 : 0);
+    }
   });
 
   it("does not resubmit an exact title that autosaved before New task", async () => {

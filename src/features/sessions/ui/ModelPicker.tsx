@@ -47,6 +47,11 @@ import {
   getHarnessAvailabilitySnapshot,
 } from "../../../integrations/harness/core/availability";
 import { refreshHarnessCatalogs } from "../../../integrations/harness/core/registry";
+import {
+  providerAccounts,
+  subscribeProviderAccounts,
+  supportsProviderAccounts,
+} from "../../providers/model/providerAccounts";
 import { useModelSource, type ModelSource } from "./modelSource";
 import { HARNESSES, HARNESS_TITLE, type HarnessId } from "../model/session";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
@@ -56,6 +61,18 @@ import { Popover } from "../../../shared/ui/Popover";
 import { MOD } from "../../../platform/tauri/platform";
 import { keybindingPressed } from "../../settings/model/settings";
 import "./ModelPicker.css";
+
+/**
+ * Account choice shown inside the picker (fork, L-96). Only rendered when the
+ * session's provider has more than one account. Provider threads belong to
+ * one account, so the owner decides whether a switch reuses this chat (still
+ * empty) or opens a new one; `opensNewChat` only changes the hint.
+ */
+export type ModelPickerAccount = {
+  accountId: string;
+  opensNewChat: boolean;
+  onSelect: (accountId: string) => void;
+};
 
 type Props = {
   harness: HarnessId;
@@ -78,6 +95,7 @@ type Props = {
   onSettingsChange: (settings: Record<string, string>) => void;
   onClose?: () => void;
   /** Local chat only: execution choices belong inside this existing picker. */
+  providerAccount?: ModelPickerAccount;
   claudeExecution?: {
     disabled: boolean;
     onOpenTerminal?: () => void;
@@ -296,6 +314,7 @@ export function ModelPicker({
   variant = "pill",
   triggerLabel,
   claudeExecution,
+  providerAccount,
   onChange,
   onSettingsChange,
   onClose,
@@ -320,6 +339,14 @@ export function ModelPicker({
     subscribeProjectProviders,
     projectProvidersRevision,
     projectProvidersRevision,
+  );
+  const [, setAccountsRevision] = useState(0);
+  useEffect(
+    () =>
+      subscribeProviderAccounts(() =>
+        setAccountsRevision((revision) => revision + 1),
+      ),
+    [],
   );
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<ModelPickerTab>(harness);
@@ -753,6 +780,61 @@ export function ModelPicker({
       </div>
     ) : null;
 
+  const accountChoices =
+    open && providerAccount && supportsProviderAccounts(harness)
+      ? providerAccounts(harness)
+      : [];
+  const accountControls =
+    providerAccount && accountChoices.length > 1 ? (
+      <div
+        className="shrink-0 border-b border-stroke p-2"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") event.stopPropagation();
+        }}
+      >
+        <div className="px-2 pb-1 text-[11px] text-content/50">Account</div>
+        <div
+          role="group"
+          aria-label={`${HARNESS_TITLE[harness]} account`}
+          className="flex flex-col gap-0.5"
+        >
+          {accountChoices.map((account) => {
+            const selected = account.id === providerAccount.accountId;
+            return (
+              <button
+                key={account.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => {
+                  if (selected) return;
+                  dismiss(false);
+                  providerAccount.onSelect(account.id);
+                }}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] ${selected ? "bg-selection text-content" : "text-content/70 hover:bg-content/5"}`}
+              >
+                <span className="min-w-0 flex-1 truncate">{account.label}</span>
+                {selected ? (
+                  <Check className="size-3.5 shrink-0" strokeWidth={2} />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+        {providerAccount.opensNewChat ? (
+          <p className="px-2 pt-1 text-[11px] text-content/45">
+            Switching opens a new chat on that account.
+          </p>
+        ) : null}
+      </div>
+    ) : null;
+  const menuHeader =
+    accountControls || executionControls ? (
+      <>
+        {accountControls}
+        {executionControls}
+      </>
+    ) : null;
+
   return (
     <>
       <button
@@ -825,7 +907,7 @@ export function ModelPicker({
           anchor={button}
           side={side}
           autoFocusSearch
-          executionControls={executionControls}
+          executionControls={menuHeader}
           onDismiss={(reason) => dismiss(reason === "escape")}
           harnesses={pickerHarnesses}
           tab={visibleTab}
@@ -860,7 +942,7 @@ export function ModelPicker({
             data-model-picker
             className="p-1 font-sans"
           >
-            {executionControls}
+            {menuHeader}
             {entries.map((entry, index) => {
               const highlighted = index === active;
               if (entry.kind === "model") {

@@ -92,6 +92,7 @@ export function UsageProviderChip({
   presentation,
   accountLabel,
   inlineWindow = "all",
+  inUse = false,
 }: {
   limits: ProviderRateLimits;
   /**
@@ -99,6 +100,11 @@ export function UsageProviderChip({
    * side by side. Leave unset for the footer's single selected-account chip.
    */
   accountLabel?: string;
+  /**
+   * Marks the account the open chat runs on, in the same selected style as the
+   * model button (fork, L-95).
+   */
+  inUse?: boolean;
   /** "shortest" keeps only the shortest limit inline; the popover lists all. */
   inlineWindow?: "all" | "shortest";
   now: number;
@@ -146,9 +152,20 @@ export function UsageProviderChip({
     }
     return best;
   }, null);
-  const tooltip = windows
-    .map((entry) => rateLimitWindowTooltip(entry.window, now, remainingQuota))
-    .join(" · ");
+  // Without a selected model family (fork, L-97), name every family's
+  // shortest limit inline instead of hiding them all behind "Model quotas".
+  const familyWindows =
+    windows.length === 0 ? modelGroupShortestWindows(limits) : [];
+  const tooltip = (
+    windows.length > 0
+      ? windows.map((entry) =>
+          rateLimitWindowTooltip(entry.window, now, remainingQuota),
+        )
+      : familyWindows.map(
+          (family) =>
+            `${family.name}: ${rateLimitWindowTooltip(family.window, now, remainingQuota)}`,
+        )
+  ).join(" · ");
   const providerLabel = presentation?.label ?? HARNESS_TITLE[limits.provider];
   const detailsLabel = accountLabel
     ? `${providerLabel} ${accountLabel} usage details`
@@ -253,24 +270,31 @@ export function UsageProviderChip({
       <button
         ref={trigger}
         type="button"
-        className="-mx-1 inline-flex h-5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-1 text-content/55 transition-[background-color,color,transform] duration-150 ease-out hover:bg-content/10 hover:text-content focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97]"
+        className={`inline-flex h-5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97] ${
+          inUse
+            ? "bg-selection px-1.5 text-content hover:bg-selection-hover"
+            : "-mx-1 px-1 text-content/55 hover:bg-content/10 hover:text-content"
+        }`}
         aria-label={detailsLabel}
+        aria-current={inUse ? "true" : undefined}
         aria-expanded={open}
         aria-haspopup="dialog"
         title={
-          tooltip ||
-          limits.error ||
-          (disconnected
-            ? "Not connected"
-            : loading
-              ? "Loading usage…"
-              : "Usage details")
+          (tooltip ||
+            limits.error ||
+            (disconnected
+              ? "Not connected"
+              : loading
+                ? "Loading usage…"
+                : "Usage details")) + (inUse ? " · In use by this chat" : "")
         }
         onClick={() => setOpen((value) => !value)}
       >
         <HarnessIcon harness={iconHarness} className="size-3 shrink-0" />
         {accountLabel ? (
-          <span className="max-w-24 truncate text-content/45">
+          <span
+            className={`max-w-24 truncate ${inUse ? "text-content/80" : "text-content/45"}`}
+          >
             {accountLabel}
           </span>
         ) : null}
@@ -278,6 +302,25 @@ export function UsageProviderChip({
           <span className="animate-pulse text-content/35">···</span>
         ) : disconnected ? (
           <span className="text-content/35">not connected</span>
+        ) : windows.length === 0 && familyWindows.length > 0 ? (
+          <span className="flex min-w-0 items-center gap-1 tabular-nums">
+            {familyWindows.map((family, index) => (
+              <span
+                key={family.name}
+                className="inline-flex items-center gap-1"
+              >
+                {index > 0 ? <span className="text-content/25">·</span> : null}
+                <span className="text-content/45">{family.name}</span>
+                <span>
+                  {formatQuotaPercent(
+                    family.window.usedPercent,
+                    remainingQuota,
+                  )}{" "}
+                  {formatRateLimitWindowChipLabel(family.window, now)}
+                </span>
+              </span>
+            ))}
+          </span>
         ) : windows.length === 0 ? (
           <span className="text-content/35">{emptyUsageLabel(limits)}</span>
         ) : (
@@ -819,6 +862,24 @@ function usageWindows(limits: ProviderRateLimits): UsageWindowEntry[] {
       ? ({ key: "monthly", window: limits.monthly } as const)
       : null,
   ].filter((entry): entry is UsageWindowEntry => entry != null);
+}
+
+function modelGroupShortestWindows(
+  limits: ProviderRateLimits,
+): { name: string; window: RateLimitWindow }[] {
+  return (limits.modelGroups ?? []).flatMap((group) => {
+    const shortest = [
+      group.session,
+      group.weekly,
+    ].reduce<RateLimitWindow | null>(
+      (best, window) =>
+        window && (!best || window.windowMinutes < best.windowMinutes)
+          ? window
+          : best,
+      null,
+    );
+    return shortest ? [{ name: group.name, window: shortest }] : [];
+  });
 }
 
 /** The entry with the shortest window; empty when there are no windows. */

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
-  CheckCircle,
   Copy,
-  Plus,
   Target,
   Trash2,
 } from "../../../shared/ui/icons";
@@ -38,25 +36,6 @@ import { TaskTimeline } from "./TaskTimeline";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** Fork-only (L-90): when on, plain Ctrl/Cmd+Enter also saves and starts the next task. */
-const ADD_MORE_KEY = "monocode.tasks.addMore";
-
-function loadAddMore(): boolean {
-  try {
-    return localStorage.getItem(ADD_MORE_KEY) === "1";
-  } catch {
-    return false; // Storage unavailable: the toggle starts off.
-  }
-}
-
-function saveAddMore(value: boolean): void {
-  try {
-    localStorage.setItem(ADD_MORE_KEY, value ? "1" : "0");
-  } catch {
-    // Storage unavailable: the choice lasts for this editor only.
-  }
 }
 
 export type TaskEditorProps = {
@@ -103,8 +82,6 @@ export function TaskEditor({
   const savedValues = useRef<Record<string, unknown>>({});
   const observedTaskValues = useRef<Record<string, unknown>>({});
   const creatingAnother = useRef(false);
-  const [creatingAnotherTask, setCreatingAnotherTask] = useState(false);
-  const [addMore, setAddMore] = useState(loadAddMore);
   const source = useRef<HTMLTextAreaElement>(null);
   const lock = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
@@ -335,7 +312,6 @@ export function TaskEditor({
       return;
     }
     creatingAnother.current = true;
-    setCreatingAnotherTask(true);
     setActionError(null);
     const projectCwd =
       editsRef.current.projectCwd === null
@@ -349,7 +325,6 @@ export function TaskEditor({
       if (alive.current) setActionError(message(error));
     } finally {
       creatingAnother.current = false;
-      if (alive.current) setCreatingAnotherTask(false);
     }
   };
   const copy = async () => {
@@ -386,7 +361,7 @@ export function TaskEditor({
           !onCreateAnother ||
           event.defaultPrevented ||
           event.key !== "Enter" ||
-          !(event.shiftKey || addMore) ||
+          !event.shiftKey ||
           !(event.metaKey || event.ctrlKey) ||
           event.nativeEvent.isComposing ||
           event.nativeEvent.keyCode === 229 ||
@@ -403,8 +378,8 @@ export function TaskEditor({
       <div className={outer}>
         <header className="flex flex-col gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-content/50">
-            <CheckCircle className="size-3.5 shrink-0" strokeWidth={1.75} />
-            <span>Task</span>
+            {/* One row: the Tasks panel already says this is a task, and the
+                panel's own New task button replaces the duplicate here (fork, L-94). */}
             <TaskProjectMark task={{ projectCwd: project }} marks={marks} />
             <SearchableProjectPicker
               cwd={project ?? "~"}
@@ -422,45 +397,6 @@ export function TaskEditor({
               onChange={(next) => edit({ status: next }, true)}
             />
             <span className="ml-auto flex items-center gap-0.5">
-              {onCreateAnother ? (
-                <button
-                  type="button"
-                  aria-pressed={addMore}
-                  title={
-                    addMore
-                      ? "Add more is on: Ctrl+Enter saves this task and starts the next"
-                      : "Turn on to add tasks one after another with Ctrl+Enter"
-                  }
-                  onClick={() => {
-                    saveAddMore(!addMore);
-                    setAddMore(!addMore);
-                  }}
-                  className={`inline-flex h-7 items-center rounded-md px-2 text-[12px] transition-colors duration-100 ${
-                    addMore
-                      ? "bg-content/10 text-content"
-                      : "text-content/55 hover:bg-content/10 hover:text-content"
-                  }`}
-                >
-                  Add more
-                </button>
-              ) : null}
-              {onCreateAnother ? (
-                <button
-                  type="button"
-                  aria-label="New task"
-                  title="Save this task and create another"
-                  disabled={creatingAnotherTask || deleting}
-                  onClick={() => void createAnother()}
-                  className={`${actionClass} disabled:opacity-40`}
-                >
-                  {creatingAnotherTask ? (
-                    <span className="size-3.5 animate-spin rounded-full border border-current border-t-transparent" />
-                  ) : (
-                    <Plus aria-hidden className="size-3.5" strokeWidth={1.75} />
-                  )}
-                  New task
-                </button>
-              ) : null}
               <TaskFocusChip
                 task={{ ...task, focusDate }}
                 today={today}
@@ -542,7 +478,7 @@ export function TaskEditor({
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
-                (event.shiftKey || addMore) &&
+                event.shiftKey &&
                 (event.metaKey || event.ctrlKey)
               ) {
                 return; // Let the editor-scoped New task shortcut handle it.

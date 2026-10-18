@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  accountStatus,
-} from "../../features/providers/model/accountUsage";
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { accountStatus } from "../../features/providers/model/accountUsage";
 import {
   formatWindowLabel,
   idleRateLimits,
@@ -17,6 +22,7 @@ import { HARNESS_TITLE } from "../../features/sessions/model/session";
 import { HarnessIcon } from "../../features/sessions/ui/HarnessIcon";
 import { Popover, type PopoverDismissReason } from "../../shared/ui/Popover";
 import {
+  GROUP_DIVIDER_PX,
   splitVisibleEntries,
   type AccountChipEntry,
 } from "./allAccountsUsage";
@@ -25,8 +31,10 @@ import { UsageProviderChip } from "./UsageProviderChip";
 /**
  * One usage chip per account, collapsing what does not fit into a "+N" chip.
  * It fills the space the footer leaves for usage and measures that space, so
- * the terminal controls on the right are never pushed out. `children` (the
- * refresh button) trail the chips.
+ * the terminal controls on the right are never pushed out. A thin divider
+ * separates each provider's group (fork, L-85). `trailing` (chips for
+ * providers without profile accounts, like Antigravity CLI) form the last
+ * group, and `children` (the refresh button) trail everything.
  */
 export function AccountUsageStrip({
   entries,
@@ -35,6 +43,9 @@ export function AccountUsageStrip({
   remainingQuota,
   onReconnect,
   onConsumeReset,
+  inUseKey,
+  trailing,
+  trailingCount = 0,
   children,
 }: {
   entries: readonly AccountChipEntry[];
@@ -49,6 +60,11 @@ export function AccountUsageStrip({
     accountId: string,
     creditId?: string,
   ) => Promise<CodexRateLimitResetOutcome>;
+  /** `provider:accountId` of the account the open chat runs on. */
+  inUseKey?: string;
+  trailing?: ReactNode;
+  /** How many chips `trailing` renders, so the strip can leave room for them. */
+  trailingCount?: number;
   children?: ReactNode;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -64,9 +80,18 @@ export function AccountUsageStrip({
     return () => observer.disconnect();
   }, []);
 
+  const groupCount =
+    new Set(entries.map((entry) => entry.provider)).size +
+    (trailingCount > 0 ? 1 : 0);
   const { visible, overflow } = useMemo(
-    () => splitVisibleEntries(entries, width),
-    [entries, width],
+    () =>
+      splitVisibleEntries(
+        entries,
+        width,
+        Math.max(0, groupCount - 1) * GROUP_DIVIDER_PX +
+          trailingCount * TRAILING_CHIP_PX,
+      ),
+    [entries, width, groupCount, trailingCount],
   );
   const limitsFor = (entry: AccountChipEntry): ProviderRateLimits =>
     usage[entry.key] ?? idleRateLimits(entry.provider);
@@ -78,27 +103,51 @@ export function AccountUsageStrip({
       aria-label="Usage for every account"
       className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden"
     >
-      {visible.map((entry) => (
-        <UsageProviderChip
-          key={entry.key}
-          limits={limitsFor(entry)}
-          now={now}
-          remainingQuota={remainingQuota}
-          accountLabel={entry.label}
-          inlineWindow="shortest"
-          onReconnect={() => onReconnect(entry.provider, entry.account.id)}
-          onConsumeReset={
-            entry.provider === "codex"
-              ? (creditId) => onConsumeReset(entry.account.id, creditId)
-              : undefined
-          }
-        />
+      {visible.map((entry, index) => (
+        <Fragment key={entry.key}>
+          {index > 0 && visible[index - 1]?.provider !== entry.provider ? (
+            <GroupDivider />
+          ) : null}
+          <UsageProviderChip
+            limits={limitsFor(entry)}
+            now={now}
+            remainingQuota={remainingQuota}
+            accountLabel={entry.label}
+            inlineWindow="shortest"
+            inUse={entry.key === inUseKey}
+            onReconnect={() => onReconnect(entry.provider, entry.account.id)}
+            onConsumeReset={
+              entry.provider === "codex"
+                ? (creditId) => onConsumeReset(entry.account.id, creditId)
+                : undefined
+            }
+          />
+        </Fragment>
       ))}
       {overflow.length > 0 ? (
         <OverflowChip entries={overflow} limitsFor={limitsFor} now={now} />
       ) : null}
+      {trailing && trailingCount > 0 ? (
+        <>
+          {visible.length > 0 ? <GroupDivider /> : null}
+          {trailing}
+        </>
+      ) : null}
       {children}
     </div>
+  );
+}
+
+/** Rough width of a provider chip rendered in `trailing`. */
+const TRAILING_CHIP_PX = 260;
+
+function GroupDivider() {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="usage-group-divider"
+      className="h-3.5 w-px shrink-0 bg-content/20"
+    />
   );
 }
 
@@ -185,7 +234,9 @@ function OverflowChip({
                         {meters.map((meter) => (
                           <UsageMeter
                             key={meter.title}
-                            title={formatWindowLabel(meter.window.windowMinutes)}
+                            title={formatWindowLabel(
+                              meter.window.windowMinutes,
+                            )}
                             window={meter.window}
                             now={now}
                             className="min-w-0 flex-1"

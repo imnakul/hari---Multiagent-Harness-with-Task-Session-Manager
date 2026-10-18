@@ -72,16 +72,16 @@ describe("buildAccountChipEntries", () => {
     ]);
   });
 
-  it("moves pinned accounts first and keeps the rest in order", () => {
+  it("keeps providers grouped and moves pinned accounts first in each group", () => {
     const entries = buildAccountChipEntries(
       ["claude", "codex", "devin"],
       accountsFor,
       ["codex:default", "claude:account-a"],
     );
     expect(entries.map((entry) => entry.key)).toEqual([
-      "codex:default",
       "claude:account-a",
       "claude:default",
+      "codex:default",
       "devin:default",
     ]);
   });

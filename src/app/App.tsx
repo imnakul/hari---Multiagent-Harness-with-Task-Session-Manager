@@ -2884,16 +2884,27 @@ function Workspace({
     [insertBesideActive],
   );
 
-  const onSelectProviderAccount = useCallback(
-    (provider: ProviderAccountProvider, accountId: string) => {
-      if (!active || active.harness !== provider) return;
-      const currentId = active.providerAccountId ?? DEFAULT_PROVIDER_ACCOUNT_ID;
+  /** Footer chips and the model picker (fork, L-96) share this switch. */
+  const onProviderAccountChange = useCallback(
+    (sessionId: string, accountId: string) => {
+      const source = sessionsRef.current.find(
+        (session) => session.id === sessionId,
+      );
+      if (
+        !source ||
+        !supportsProviderAccounts(source.harness) ||
+        !providerAccountExists(source.harness, accountId)
+      )
+        return;
+      const currentId =
+        source.providerAccountId ??
+        selectedProviderAccountId(source.harness, source.cwd);
       if (currentId === accountId) return;
 
-      if (active.blocks.length === 0 && !active.busy) {
+      if (source.blocks.length === 0 && !source.busy) {
         setSessions((current) =>
           current.map((session) =>
-            session.id === active.id
+            session.id === source.id
               ? { ...session, providerAccountId: accountId }
               : session,
           ),
@@ -2905,21 +2916,29 @@ function Workspace({
       // pinned to its account and open a clean one for the selected profile.
       const session = {
         ...newSession(
-          active.harness,
-          active.cwd,
-          active.model,
-          active.runtimeMode,
-          active.modelSettings,
+          source.harness,
+          source.cwd,
+          source.model,
+          source.runtimeMode,
+          source.modelSettings,
         ),
         providerAccountId: accountId,
       };
       const tab = newTab(session.id);
       setSessions((current) => [...current, session]);
-      appendTab(tab, active.cwd);
+      appendTab(tab, source.cwd);
       setActiveTabId(tab.id);
       setComposerFocused(true);
     },
-    [active, appendTab],
+    [appendTab],
+  );
+
+  const onSelectProviderAccount = useCallback(
+    (provider: ProviderAccountProvider, accountId: string) => {
+      if (!active || active.harness !== provider) return;
+      onProviderAccountChange(active.id, accountId);
+    },
+    [active, onProviderAccountChange],
   );
 
   const onOpenWhatsNew = useCallback((version: string) => {
@@ -14128,6 +14147,7 @@ function Workspace({
     onUsageLimitResumeAtReset,
     onUsageLimitDismiss,
     onUsageLimitAccountChange,
+    onProviderAccountChange,
     onInboxCardDismiss,
     onLinkedWorkItemUpdateCardDismiss,
     onNoteCardDismiss,
@@ -15066,7 +15086,8 @@ function Workspace({
               ) : null}
               {searchViewOpen ||
               inboxViewOpen ||
-              recordsViewOpen ||
+              // Task Manager and Session Manager keep the bottom bar (fork, L-93).
+              (recordsViewOpen && recordKind === "notes") ||
               automationsViewOpen ||
               settingsOpen ||
               monoCovers ? null : (

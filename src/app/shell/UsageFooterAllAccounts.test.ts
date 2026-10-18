@@ -222,6 +222,43 @@ describe("UsageFooter all accounts usage", () => {
     expect(chips()[0]?.textContent).not.toContain("wk");
   });
 
+  it("keeps each provider's accounts together, with a divider between groups", async () => {
+    saveAllAccountsUsage(true);
+    saveProviderAccount({
+      id: "account-work",
+      provider: "claude",
+      label: "Work",
+    });
+    // A Codex chat is in use, but Codex still comes after every Claude account.
+    await act(async () =>
+      root.render(
+        createElement(UsageFooter, {
+          providers: ["claude", "codex"],
+          session: { harness: "codex" },
+        }),
+      ),
+    );
+
+    const strip = document.querySelector('[aria-label="Usage for every account"]');
+    const order = [...(strip?.children ?? [])].map((child) =>
+      child.getAttribute("data-testid") === "usage-group-divider"
+        ? "|"
+        : child.getAttribute("aria-label"),
+    );
+    expect(order.slice(0, 4)).toEqual([
+      "Claude Code Default account usage details",
+      "Claude Code Work usage details",
+      "|",
+      "Codex Default account usage details",
+    ]);
+    // Only the open chat's account is highlighted.
+    const inUse = [...document.querySelectorAll('[aria-current="true"]')];
+    expect(inUse.map((chip) => chip.getAttribute("aria-label"))).toEqual([
+      "Codex Default account usage details",
+    ]);
+    expect(inUse[0]?.className).toContain("bg-selection");
+  });
+
   it("opens the +N popover with the collapsed accounts", async () => {
     saveAllAccountsUsage(true);
     saveProviderAccount({
