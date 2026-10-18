@@ -340,6 +340,10 @@ type Props = {
   onQueuedMessageEditingChange?: (messageId?: string) => void;
   onSteerQueuedMessage?: (messageId: string) => void;
   onResumeQueue?: () => void;
+  usageLimitContinue?: {
+    accounts: { id: string; label: string }[];
+    onContinue: (accountId: string) => void;
+  };
   onUsageLimitResume?: () => void;
   onUsageLimitResumeAtReset?: (enabled: boolean) => void;
   onUsageLimitDismiss?: () => void;
@@ -469,6 +473,7 @@ export function Composer({
   onQueuedMessageEditingChange,
   onSteerQueuedMessage,
   onResumeQueue,
+  usageLimitContinue,
   onUsageLimitResume,
   onUsageLimitResumeAtReset,
   onUsageLimitDismiss,
@@ -2011,6 +2016,8 @@ export function Composer({
       {usageLimit ? (
         <UsageLimitNotice
           limit={usageLimit}
+          continueAccounts={usageLimitContinue?.accounts}
+          onContinueOnAccount={usageLimitContinue?.onContinue}
           onResume={onUsageLimitResume}
           onResumeAtReset={onUsageLimitResumeAtReset}
           onDismiss={onUsageLimitDismiss}

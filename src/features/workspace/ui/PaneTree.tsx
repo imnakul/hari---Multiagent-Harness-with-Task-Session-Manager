@@ -157,6 +157,7 @@ type Shared = Pick<
   ) => void;
   onQuestionInteraction?: (sessionId: string, requestId: number) => void;
   onProviderAccountChange?: (sessionId: string, accountId: string) => void;
+  onContinueOnAccount?: (sessionId: string, accountId: string) => Promise<void>;
   onOpenFile: (path: string) => void;
   editorNavigation?: EditorNavigationTarget | null;
   onOpenDiff: (
@@ -278,6 +279,7 @@ function PaneTreeComponent({
   onFormReply,
   onQuestionInteraction,
   onProviderAccountChange,
+  onContinueOnAccount,
   onOpenFile,
   editorNavigation,
   onOpenDiff,
@@ -580,6 +582,7 @@ function PaneTreeComponent({
                   onFormReply={onFormReply}
                   onQuestionInteraction={onQuestionInteraction}
                   onProviderAccountChange={onProviderAccountChange}
+                  onContinueOnAccount={onContinueOnAccount}
                   onOpenFile={onOpenFile}
                   onOpenDiff={onOpenDiff}
                   onOpenPlan={onOpenPlan}

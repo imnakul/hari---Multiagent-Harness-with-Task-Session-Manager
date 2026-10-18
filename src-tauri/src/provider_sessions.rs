@@ -932,5 +932,112 @@ pub fn provider_sessions_history(
     read_history_at(&root, &provider, &parts[2], end, HISTORY_CHUNK_BYTES)
 }
 
+/// Claude's project folder name for a working directory: every non-alphanumeric char becomes `-`.
+fn claude_project_slug(cwd: &str) -> String {
+    cwd.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
+fn copy_dir_plain(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(from).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        let target = to.join(entry.file_name());
+        if kind.is_dir() {
+            copy_dir_plain(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), &target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies one Claude chat (transcript plus its same-named folder) from one config root to another
+/// so the other account can `--resume` the identical session. Copy only; the source is untouched.
+pub(crate) fn copy_claude_session_at(
+    from_root: &Path,
+    to_root: &Path,
+    session_id: &str,
+    cwd: &str,
+) -> Result<(), String> {
+    if uuid::Uuid::parse_str(session_id).is_err() || session_id.len() != 36 {
+        return Err("Invalid Claude session id".into());
+    }
+    let from_projects = std::fs::canonicalize(from_root.join("projects"))
+        .map_err(|_| "The source account has no saved Claude chats".to_string())?;
+    let to_root_real = std::fs::canonicalize(to_root).map_err(|_| {
+        "The target account has no Claude profile folder yet; sign in to it first".to_string()
+    })?;
+    if std::fs::canonicalize(from_root).ok().as_deref() == Some(to_root_real.as_path()) {
+        return Err("The source and target accounts are the same".into());
+    }
+    let file_name = format!("{session_id}.jsonl");
+    let preferred = from_projects.join(claude_project_slug(cwd));
+    let slug_dir = if preferred.join(&file_name).is_file() {
+        preferred
+    } else {
+        std::fs::read_dir(&from_projects)
+            .map_err(|e| e.to_string())?
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .find(|p| p.join(&file_name).is_file())
+            .ok_or("This chat was not found in the source account")?
+    };
+    let source = std::fs::canonicalize(slug_dir.join(&file_name)).map_err(|e| e.to_string())?;
+    if !source.starts_with(&from_projects) {
+        return Err("The chat file is outside the source account's projects folder".into());
+    }
+    let slug = slug_dir.file_name().ok_or("Invalid project folder")?;
+    let target_dir = to_root_real.join("projects").join(slug);
+    let target = target_dir.join(&file_name);
+    if target.exists() {
+        let same = std::fs::read(&source).map_err(|e| e.to_string())?
+            == std::fs::read(&target).map_err(|e| e.to_string())?;
+        return if same {
+            Ok(())
+        } else {
+            Err("The target account already has a different version of this chat".into())
+        };
+    }
+    std::fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+    let tag = uuid::Uuid::new_v4();
+    // The sibling folder goes first so the transcript's presence means the copy is complete.
+    let side_from = slug_dir.join(session_id);
+    let side_to = target_dir.join(session_id);
+    if side_from.is_dir() && !side_to.exists() {
+        let tmp = target_dir.join(format!("{session_id}.tmp-{tag}"));
+        let result = copy_dir_plain(&side_from, &tmp)
+            .and_then(|()| std::fs::rename(&tmp, &side_to).map_err(|e| e.to_string()));
+        if let Err(error) = result {
+            let _ = std::fs::remove_dir_all(&tmp);
+            return Err(error);
+        }
+    }
+    let tmp_file = target_dir.join(format!("{file_name}.tmp-{tag}"));
+    let result = std::fs::copy(&source, &tmp_file)
+        .map_err(|e| e.to_string())
+        .and_then(|_| std::fs::rename(&tmp_file, &target).map_err(|e| e.to_string()));
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&tmp_file);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn claude_copy_session(
+    app: AppHandle,
+    from_account: String,
+    to_account: String,
+    session_id: String,
+    cwd: String,
+) -> Result<(), String> {
+    let from = root_for(&app, &Provider::Claude, &from_account)?;
+    let to = root_for(&app, &Provider::Claude, &to_account)?;
+    copy_claude_session_at(&from, &to, &session_id, &cwd)
+}
+
 #[cfg(test)]
 mod tests;

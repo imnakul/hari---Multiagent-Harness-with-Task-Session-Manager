@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Clock, Gauge, Play, X } from "../../../shared/ui/icons";
 import type { UsageLimit } from "../model/session";
 import { formatUsageLimitReset } from "../model/usageLimit";
+import { continueCostNote } from "../../providers/model/continueOnAccount";
 
 const BUTTON =
   "flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 hover:bg-content/10 hover:text-content";
@@ -11,6 +12,8 @@ export function UsageLimitNotice({
   onResume,
   onResumeAtReset,
   onDismiss,
+  continueAccounts,
+  onContinueOnAccount,
   variant = "composer",
   providerName,
   modelPicker,
@@ -19,6 +22,9 @@ export function UsageLimitNotice({
   onResume?: () => void;
   onResumeAtReset?: (enabled: boolean) => void;
   onDismiss?: () => void;
+  /** Other Claude accounts this chat's history can move to (fork L-102). */
+  continueAccounts?: { id: string; label: string }[];
+  onContinueOnAccount?: (accountId: string) => void;
   variant?: "composer" | "mono";
   providerName?: string;
   modelPicker?: ReactNode;
@@ -66,6 +72,12 @@ export function UsageLimitNotice({
         )}
         {variant === "mono" ? null : modelPicker}
         {variant === "mono" ? null : (
+          <ContinueOnAccountControls
+            accounts={continueAccounts}
+            onContinue={onContinueOnAccount}
+          />
+        )}
+        {variant === "mono" ? null : (
           <ResumeControls
             limit={limit}
             waiting={waiting}
@@ -110,6 +122,46 @@ export function UsageLimitNotice({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ContinueOnAccountControls({
+  accounts,
+  onContinue,
+}: {
+  accounts?: { id: string; label: string }[];
+  onContinue?: (accountId: string) => void;
+}) {
+  if (!accounts?.length || !onContinue) return null;
+  if (accounts.length === 1) {
+    const [account] = accounts;
+    return (
+      <button
+        type="button"
+        title={continueCostNote(account.label)}
+        onClick={() => onContinue(account.id)}
+        className={BUTTON}
+      >
+        Continue on {account.label}
+      </button>
+    );
+  }
+  return (
+    <select
+      aria-label="Continue on another account"
+      value=""
+      onChange={(event) => {
+        if (event.target.value) onContinue(event.target.value);
+      }}
+      className="h-6 shrink-0 rounded-md bg-transparent px-1 hover:bg-content/10"
+    >
+      <option value="">Continue on…</option>
+      {accounts.map((account) => (
+        <option key={account.id} value={account.id}>
+          {account.label}
+        </option>
+      ))}
+    </select>
   );
 }
 

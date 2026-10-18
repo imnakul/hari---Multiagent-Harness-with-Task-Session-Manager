@@ -1,3 +1,4 @@
+import { continueCostNote } from "../../providers/model/continueOnAccount";
 import {
   useLayoutEffect,
   useMemo,
@@ -52,6 +53,9 @@ type Props = {
   onLoadMore: () => void;
   onOpen: (row: ProviderConversation) => void;
   onArchive: (row: ProviderConversation, archived: boolean) => void;
+  /** Other accounts a Claude row can be resumed on (fork L-102). */
+  resumeOnAccounts?: readonly { id: string; label: string }[];
+  onResumeOn?: (row: ProviderConversation, accountId: string) => void;
   onDismissActionError: () => void;
   /** Cloud tasks MonoCode launched for this provider. */
   cloudRecords?: readonly CloudSession[];
@@ -96,6 +100,8 @@ export function ProviderConversationList({
   onLoadMore,
   onOpen,
   onArchive,
+  resumeOnAccounts = [],
+  onResumeOn,
   onDismissActionError,
   cloudRecords = [],
   onOpenCloud,
@@ -134,6 +140,18 @@ export function ProviderConversationList({
   const menuItems: ExplorerMenuItem[] = menuRow
     ? [
         { kind: "item", id: "open", label: "Open" },
+        ...(onResumeOn && menuRow.provider === "claude"
+          ? resumeOnAccounts
+              .filter((account) => account.id !== menuRow.providerAccountId)
+              .map(
+                (account): ExplorerMenuItem => ({
+                  kind: "item",
+                  id: `resume-on:${account.id}`,
+                  label: `Resume on ${account.label}`,
+                  description: continueCostNote(account.label),
+                }),
+              )
+          : []),
         { kind: "sep" },
         {
           kind: "item",
@@ -385,6 +403,8 @@ export function ProviderConversationList({
           onPick={(id) => {
             setMenu(null);
             if (id === "open") onOpen(menuRow);
+            else if (id.startsWith("resume-on:"))
+              onResumeOn?.(menuRow, id.slice("resume-on:".length));
             else if (id === "archive") onArchive(menuRow, !menuRow.archived);
           }}
           onClose={() => setMenu(null)}

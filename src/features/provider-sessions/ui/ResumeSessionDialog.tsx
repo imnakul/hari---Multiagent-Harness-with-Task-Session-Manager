@@ -29,6 +29,10 @@ import { PROVIDER_LABEL, folderName } from "../model/conversationSummary";
 import { ProviderConversationStore } from "../model/conversationStore";
 import { ProviderConversationList } from "./ProviderConversationList";
 import { loadRecents } from "../../projects/model/recents";
+import {
+  continueAccountTargets,
+  copyClaudeSession,
+} from "../../providers/model/continueOnAccount";
 
 type Props = {
   providers: readonly NativeProvider[];
@@ -163,6 +167,44 @@ export function ResumeSessionDialog({
     setError(null);
     try {
       await onResume(row);
+      onClose();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+      setOpeningKey(null);
+    }
+  };
+  /** Fork L-102: copy the chat to another account's folder, then resume it there. */
+  const resumeOn = async (
+    row: ProviderConversation,
+    targetId: string,
+  ): Promise<void> => {
+    if (submitting.current) return;
+    if (
+      row.provider !== "claude" ||
+      !accounts.some((account) => account.id === targetId)
+    ) {
+      setError("Choose an available Claude account first.");
+      return;
+    }
+    submitting.current = true;
+    setBusy(true);
+    setOpeningKey(row.key);
+    setError(null);
+    try {
+      await copyClaudeSession({
+        fromAccount: row.providerAccountId,
+        toAccount: targetId,
+        sessionId: row.nativeId,
+        cwd: row.cwd,
+      });
+      const target = await resolveNativeSession(
+        { provider: "claude", nativeId: row.nativeId },
+        targetId,
+      );
+      await onResume(target);
       onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -339,6 +381,12 @@ export function ResumeSessionDialog({
               }}
               onArchive={(row, archived) => {
                 void archive(row, archived);
+              }}
+              resumeOnAccounts={
+                provider === "claude" ? continueAccountTargets("") : []
+              }
+              onResumeOn={(row, targetId) => {
+                void resumeOn(row, targetId);
               }}
             />
           </div>

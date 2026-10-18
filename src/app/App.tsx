@@ -478,6 +478,14 @@ import {
 } from "../features/provider-sessions/model/remoteControl";
 import { useEnabledNativeProviders } from "../features/provider-sessions/ui/useProviderConversations";
 import { ResumeSessionDialog } from "../features/provider-sessions/ui/ResumeSessionDialog";
+import { ContinueOnAccountDialog } from "../features/providers/ui/ContinueOnAccountDialog";
+import {
+  canContinueOnAccount,
+  continueBlockedReason,
+  continuedMarker,
+  copyClaudeSession,
+} from "../features/providers/model/continueOnAccount";
+import { hasInteractiveClaude } from "../integrations/harness/providers/claude/claudeInteractive";
 import { emptyProviderListState } from "../features/provider-sessions/model/conversationStore";
 import { CloudSessionDialog } from "../features/provider-sessions/ui/CloudSessionDialog";
 import { useCloudRecords } from "../features/provider-sessions/ui/useCloudRecords";
@@ -494,6 +502,7 @@ import { shouldGenerateSessionTitle } from "../features/sessions/model/sessionTi
 import {
   DEFAULT_PROVIDER_ACCOUNT_ID,
   providerAccountExists,
+  providerAccountLabel,
   selectedProviderAccountId,
   supportsProviderAccounts,
   type ProviderAccountProvider,
@@ -2887,7 +2896,35 @@ function Workspace({
     [insertBesideActive],
   );
 
+  const openNewChatOnAccount = useCallback(
+    (source: Session, accountId: string) => {
+      // Provider thread ids are account-owned. Keep the current conversation
+      // pinned to its account and open a clean one for the selected profile.
+      const session = {
+        ...newSession(
+          source.harness,
+          source.cwd,
+          source.model,
+          source.runtimeMode,
+          source.modelSettings,
+        ),
+        providerAccountId: accountId,
+      };
+      const tab = newTab(session.id);
+      setSessions((current) => [...current, session]);
+      appendTab(tab, source.cwd);
+      setActiveTabId(tab.id);
+      setComposerFocused(true);
+    },
+    [appendTab],
+  );
+
   /** Footer chips and the model picker (fork, L-96) share this switch. */
+  const [continueOffer, setContinueOffer] = useState<{
+    sessionId: string;
+    accountId: string;
+  } | null>(null);
+
   const onProviderAccountChange = useCallback(
     (sessionId: string, accountId: string) => {
       const source = sessionsRef.current.find(
@@ -2915,25 +2952,72 @@ function Workspace({
         return;
       }
 
-      // Provider thread ids are account-owned. Keep the current conversation
-      // pinned to its account and open a clean one for the selected profile.
-      const session = {
-        ...newSession(
-          source.harness,
-          source.cwd,
-          source.model,
-          source.runtimeMode,
-          source.modelSettings,
-        ),
-        providerAccountId: accountId,
-      };
-      const tab = newTab(session.id);
-      setSessions((current) => [...current, session]);
-      appendTab(tab, source.cwd);
-      setActiveTabId(tab.id);
-      setComposerFocused(true);
+      // Fork feature L-102: a Claude chat with a native transcript can carry
+      // its history to the other account instead of starting empty.
+      if (canContinueOnAccount(source)) {
+        setContinueOffer({ sessionId: source.id, accountId });
+        return;
+      }
+      openNewChatOnAccount(source, accountId);
     },
-    [appendTab],
+    [openNewChatOnAccount],
+  );
+
+  const continueBlockedFor = useCallback(
+    (session: Session): string | null =>
+      continueBlockedReason(session, hasInteractiveClaude(session.id)),
+    [],
+  );
+
+  /** Copies the native transcript to the target account and re-points the chat. */
+  const continueOnAccount = useCallback(
+    async (sessionId: string, accountId: string): Promise<void> => {
+      const source = sessionsRef.current.find(
+        (session) => session.id === sessionId,
+      );
+      if (!source || !canContinueOnAccount(source) || !source.providerSessionId)
+        throw new Error("This chat cannot be continued on another account.");
+      const blocked = continueBlockedFor(source);
+      if (blocked) throw new Error(blocked);
+      const fromAccount =
+        source.providerAccountId ??
+        selectedProviderAccountId("claude", source.cwd);
+      await copyClaudeSession({
+        fromAccount,
+        toAccount: accountId,
+        sessionId: source.providerSessionId,
+        cwd: source.cwd,
+      });
+      const label = providerAccountLabel("claude", accountId);
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === sessionId
+            ? {
+                ...session,
+                providerAccountId: accountId,
+                usageLimit: undefined,
+                blocks: [...session.blocks, continuedMarker(label)],
+              }
+            : session,
+        ),
+      );
+    },
+    [continueBlockedFor],
+  );
+
+  /** Usage-limit button: copy, switch, and say plainly when it is refused. */
+  const continueOnAccountWithNotice = useCallback(
+    async (sessionId: string, accountId: string): Promise<void> => {
+      try {
+        await continueOnAccount(sessionId, accountId);
+      } catch (reason) {
+        void message(
+          reason instanceof Error ? reason.message : String(reason),
+          { title: "MonoCode", kind: "warning" },
+        );
+      }
+    },
+    [continueOnAccount],
   );
 
   const onSelectProviderAccount = useCallback(
@@ -14154,6 +14238,7 @@ function Workspace({
     onUsageLimitDismiss,
     onUsageLimitAccountChange,
     onProviderAccountChange,
+    onContinueOnAccount: continueOnAccountWithNotice,
     onInboxCardDismiss,
     onLinkedWorkItemUpdateCardDismiss,
     onNoteCardDismiss,
@@ -14381,6 +14466,35 @@ function Workspace({
         >
           {compactTitleBar ? workspaceTitleBar : null}
           <SavePromptDialogHost />
+          {continueOffer
+            ? (() => {
+                const offered = sessions.find(
+                  (session) => session.id === continueOffer.sessionId,
+                );
+                if (!offered) return null;
+                return (
+                  <ContinueOnAccountDialog
+                    accountLabel={providerAccountLabel(
+                      "claude",
+                      continueOffer.accountId,
+                    )}
+                    blockedReason={continueBlockedFor(offered)}
+                    onContinue={async () => {
+                      await continueOnAccount(
+                        continueOffer.sessionId,
+                        continueOffer.accountId,
+                      );
+                      setContinueOffer(null);
+                    }}
+                    onNewChat={() => {
+                      setContinueOffer(null);
+                      openNewChatOnAccount(offered, continueOffer.accountId);
+                    }}
+                    onClose={() => setContinueOffer(null)}
+                  />
+                );
+              })()
+            : null}
           {resumeSessionOpen ? (
             <ResumeSessionDialog
               providers={enabledNativeProviders}

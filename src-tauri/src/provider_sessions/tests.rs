@@ -546,3 +546,76 @@ fn find_project_filter_matches_windows_slashes_without_relaxing_unix_identity() 
     );
     assert!(filter_conversations(rows, None, Some("e:/developing/other")).is_empty());
 }
+
+const CONTINUE_ID: &str = "11111111-2222-4333-8444-555555555555";
+
+fn continue_fixture(root: &Path) -> PathBuf {
+    let dir = root.join("projects").join("-repo");
+    fs::create_dir_all(dir.join(CONTINUE_ID).join("subagents")).unwrap();
+    fs::write(dir.join(format!("{CONTINUE_ID}.jsonl")), "history\n").unwrap();
+    fs::write(
+        dir.join(CONTINUE_ID).join("subagents").join("a.jsonl"),
+        "sub\n",
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn continue_copies_transcript_and_sibling_folder_under_same_slug() {
+    let (from, _c) = setup();
+    let (to, _c2) = setup();
+    let src = continue_fixture(from.path());
+    copy_claude_session_at(from.path(), to.path(), CONTINUE_ID, "/repo").unwrap();
+    let dst = to.path().join("projects").join("-repo");
+    assert_eq!(
+        fs::read(dst.join(format!("{CONTINUE_ID}.jsonl"))).unwrap(),
+        fs::read(src.join(format!("{CONTINUE_ID}.jsonl"))).unwrap()
+    );
+    assert_eq!(
+        fs::read_to_string(dst.join(CONTINUE_ID).join("subagents").join("a.jsonl")).unwrap(),
+        "sub\n"
+    );
+    assert!(src.join(format!("{CONTINUE_ID}.jsonl")).is_file());
+    assert!(fs::read_dir(&dst).unwrap().all(|e| !e
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .contains(".tmp-")));
+}
+
+#[test]
+fn continue_reuses_identical_and_refuses_different_target() {
+    let (from, _c) = setup();
+    let (to, _c2) = setup();
+    continue_fixture(from.path());
+    copy_claude_session_at(from.path(), to.path(), CONTINUE_ID, "/repo").unwrap();
+    copy_claude_session_at(from.path(), to.path(), CONTINUE_ID, "/repo").unwrap();
+    let target = to
+        .path()
+        .join("projects")
+        .join("-repo")
+        .join(format!("{CONTINUE_ID}.jsonl"));
+    fs::write(&target, "diverged\n").unwrap();
+    let err = copy_claude_session_at(from.path(), to.path(), CONTINUE_ID, "/repo").unwrap_err();
+    assert!(err.contains("different version"));
+    assert_eq!(fs::read_to_string(&target).unwrap(), "diverged\n");
+}
+
+#[test]
+fn continue_rejects_bad_ids_and_missing_sources() {
+    let (from, _c) = setup();
+    let (to, _c2) = setup();
+    continue_fixture(from.path());
+    for bad in [
+        "../x",
+        "not-a-uuid",
+        "",
+        "{11111111-2222-4333-8444-555555555555}",
+    ] {
+        assert!(copy_claude_session_at(from.path(), to.path(), bad, "/repo").is_err());
+    }
+    let other = "99999999-2222-4333-8444-555555555555";
+    assert!(copy_claude_session_at(from.path(), to.path(), other, "/repo").is_err());
+    assert!(copy_claude_session_at(from.path(), from.path(), CONTINUE_ID, "/repo").is_err());
+}

@@ -3,6 +3,10 @@ import {
   selectedProviderAccountId,
   supportsProviderAccounts,
 } from "../../providers/model/providerAccounts";
+import {
+  canContinueOnAccount,
+  continueAccountTargets,
+} from "../../providers/model/continueOnAccount";
 import type { RemoteControlControls } from "../../provider-sessions/ui/RemoteControlButton";
 import { editableSessionTodo } from "../../session-board/sessionTodos";
 import { composeSessionTodo } from "../../session-board/ui/SessionManagerCapture";
@@ -227,6 +231,7 @@ export type SessionPaneProps = {
   onUsageLimitAccountChange?: (sessionId: string, accountId: string) => void;
   /** Model picker account choice (fork, L-96). */
   onProviderAccountChange?: (sessionId: string, accountId: string) => void;
+  onContinueOnAccount?: (sessionId: string, accountId: string) => Promise<void>;
   onInboxCardDismiss?: (sessionId: string) => void;
   onLinkedWorkItemUpdateCardDismiss?: (sessionId: string) => void;
   onNoteCardDismiss?: (sessionId: string) => void;
@@ -380,6 +385,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
   onUsageLimitDismiss,
   onUsageLimitAccountChange,
   onProviderAccountChange,
+  onContinueOnAccount,
   onInboxCardDismiss,
   onLinkedWorkItemUpdateCardDismiss,
   onNoteCardDismiss,
@@ -946,6 +952,18 @@ const LocalSessionPane = memo(function LocalSessionPane({
       }
       onResumeQueue={() => onResumeQueue(session.id)}
       usageLimit={session.usageLimit}
+      usageLimitContinue={
+        onContinueOnAccount && canContinueOnAccount(session)
+          ? {
+              accounts: continueAccountTargets(
+                session.providerAccountId ??
+                  selectedProviderAccountId("claude", session.cwd),
+              ),
+              onContinue: (accountId) =>
+                void onContinueOnAccount(session.id, accountId),
+            }
+          : undefined
+      }
       onUsageLimitResume={() => onUsageLimitResume(session.id)}
       onUsageLimitResumeAtReset={(enabled) =>
         onUsageLimitResumeAtReset(session.id, enabled)

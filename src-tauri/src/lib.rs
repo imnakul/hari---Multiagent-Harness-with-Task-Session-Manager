@@ -630,6 +630,7 @@ pub fn run() {
             provider_sessions::provider_sessions_unbind,
             provider_sessions::provider_sessions_validate_source,
             provider_sessions::provider_sessions_history,
+            provider_sessions::claude_copy_session,
             debug_inspector::debug_inspector_local_evidence,
             debug_inspector::debug_inspector_session_identity,
             provider_sessions::provider_cloud_save,

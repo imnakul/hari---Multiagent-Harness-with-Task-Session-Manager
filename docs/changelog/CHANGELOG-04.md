@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 15:48 IST — Continue a Claude chat on another account (L-102)
+- Type: feature
+- What: A Claude chat can move to another Claude account with its full history. Picking another account in the model picker or footer chip now asks "Continue here" or "New chat"; the usage-limit notice has **Continue on <account>**; Resume session rows have **Resume on <account>**. The chat's native transcript is copied to the other account's folder and resumed by the same session ID. Every place states the one-time uncached cost.
+- Why: User request — a usage limit on one account should not force a fresh chat or a lossy summary. Probe first: a copied chat resumed on a different account and answered from its history.
+- Files: [provider_sessions.rs](../../src-tauri/src/provider_sessions.rs) (`copy_claude_session_at`, `claude_copy_session`), [lib.rs](../../src-tauri/src/lib.rs), [continueOnAccount.ts](../../src/features/providers/model/continueOnAccount.ts), [ContinueOnAccountDialog.tsx](../../src/features/providers/ui/ContinueOnAccountDialog.tsx), [App.tsx](../../src/app/App.tsx), [UsageLimitNotice.tsx](../../src/features/sessions/ui/UsageLimitNotice.tsx), [Composer.tsx](../../src/features/sessions/ui/Composer.tsx), [SessionPane.tsx](../../src/features/sessions/ui/SessionPane.tsx), [PaneTree.tsx](../../src/features/workspace/ui/PaneTree.tsx), [ProviderConversationList.tsx](../../src/features/provider-sessions/ui/ProviderConversationList.tsx), [ResumeSessionDialog.tsx](../../src/features/provider-sessions/ui/ResumeSessionDialog.tsx), spec [claude-continue-on-account.md](../specs/claude-continue-on-account.md)
+- Commit: (filled after commit)
+- Verified: tsc ✅ tests ✅ (6,979 passed, 2 skipped) cargo test --lib ✅ (762) rustfmt ✅ (touched files; Debug Inspector drift left) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-18 14:37 IST — Process monitor partial totals and Interactive trust-dialog message (L-103, L-104)
 - Type: fix
 - What: The bottom bar no longer shows "unavailable" for RAM when one chat's processes cannot be read; rows and totals now add up what can be read, and the tooltip says when the total is partial. When an Interactive Claude chat is stopped by a native dialog (for example the "trust this folder" question a newly added account asks), the error now says so instead of "could not recognize Claude's empty input prompt".
