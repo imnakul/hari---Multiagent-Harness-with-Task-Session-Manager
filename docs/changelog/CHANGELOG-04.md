@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 16:18 IST — Same-version Windows build with continue on account (0.10.0-local2-upstream-sync)
+- Type: chore
+- What: New Windows installer, same version number, adding continue a Claude chat on another account with the resume and switch-back fixes (L-102), process monitor partial totals (L-103) and the Interactive dialog message (L-104).
+- Why: User request — build the new changes.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-continue.exe` (12,443,031 bytes, SHA-256 6BB902A14B80B6F9FEF13CBF96A1AB11B237A22C580F0612EA23E9F5513CDF69, NotSigned)
+- Commit: built from 216217ed
+- Verified: build ✅ tsc ✅ tests ✅ (6,980 passed, 2 skipped) cargo test --lib ✅ (763); desktop check manual
+
 ## 2026-10-18 16:10 IST — Continue on account: resume after switching, and switching back (L-102)
 - Type: fix
 - What: After moving a Claude chat to another account, the next message now really continues the copied conversation. Before, in the same app run, a Structured chat would quietly start an empty conversation and an Interactive chat would refuse with "bound to a different project or account". Switching the chat back to the first account also works now: the older copy there is brought up to date instead of being refused as "a different version". A copy that went further on its own is still never overwritten.
