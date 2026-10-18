@@ -5,7 +5,7 @@
 - What: After moving a Claude chat to another account, the next message now really continues the copied conversation. Before, in the same app run, a Structured chat would quietly start an empty conversation and an Interactive chat would refuse with "bound to a different project or account". Switching the chat back to the first account also works now: the older copy there is brought up to date instead of being refused as "a different version". A copy that went further on its own is still never overwritten.
 - Why: Review of L-102 found the in-memory resume bindings kept the old account, and the conflict rule refused every round trip.
 - Files: [provider_sessions.rs](../../src-tauri/src/provider_sessions.rs) (`copy_claude_session_at`, `add_missing_files`), [tests.rs](../../src-tauri/src/provider_sessions/tests.rs), [continueOnAccount.ts](../../src/features/providers/model/continueOnAccount.ts) (`continueClaudeSession`), [continueOnAccount.test.ts](../../src/features/providers/model/continueOnAccount.test.ts), [App.tsx](../../src/app/App.tsx) (`continueOnAccount`)
-- Commit: uncommitted
+- Commit: 835e5561
 - Verified: tsc ✅ tests ✅ (6,980 passed, 2 skipped) cargo test --lib ✅ (763) rustfmt ✅ (touched files) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-18 15:48 IST — Continue a Claude chat on another account (L-102)
