@@ -60,6 +60,7 @@ import { HarnessIcon } from "./HarnessIcon";
 import { Popover } from "../../../shared/ui/Popover";
 import { MOD } from "../../../platform/tauri/platform";
 import { keybindingPressed } from "../../settings/model/settings";
+import { composerPillClass } from "./composerControls";
 import "./ModelPicker.css";
 
 /**
@@ -919,11 +920,7 @@ export function ModelPicker({
               ? `-mx-1.5 flex h-7 shrink-0 items-center gap-2 rounded-md px-1.5 text-[12px] text-content/85 ${
                   open ? "bg-content/8" : "hover:bg-content/6"
                 }`
-              : `flex h-6.5 shrink-0 items-center gap-1 rounded-md px-1.5 ${
-                  open
-                    ? "bg-selection text-content"
-                    : "bg-selection text-content hover:bg-selection-hover"
-                }`
+              : composerPillClass(open, "shrink-0")
         }
       >
         <HarnessIcon
@@ -1414,11 +1411,7 @@ function controlClass(variant: Variant, open = false): string {
     ? `-mx-1.5 flex h-7 min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 text-[12px] text-content/85 ${
         open ? "bg-content/8" : "hover:bg-content/6"
       }`
-    : `flex h-6.5 max-w-28 items-center gap-1 rounded-md px-1.5 ${
-        open
-          ? "bg-selection text-content"
-          : "bg-selection text-content hover:bg-selection-hover"
-      }`;
+    : composerPillClass(open, "max-w-28");
 }
 
 /**

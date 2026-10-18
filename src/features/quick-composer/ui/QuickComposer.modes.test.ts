@@ -284,6 +284,30 @@ it("embedded hosts with a start handler get Save to Draft and Start, Ctrl+Enter 
   );
 });
 
+it("embedded hosts rely on the modal's close button, the floating one keeps its own", async () => {
+  const close = (): HTMLButtonElement =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Close composer"]')!;
+  expect(close().hidden).toBe(false);
+  await render({
+    key: "embedded-close",
+    initialLaunch: { prompt: "", cwd: "/tmp/project", harness: "codex", model: "test", reveal: false },
+    onSubmitLaunch: async () => {},
+    onDismiss: () => {},
+  });
+  expect(close().hidden).toBe(true);
+});
+
+it("toolbar pickers use the chat composer's pill inside a scrolling toolbar", async () => {
+  const model = container.querySelector<HTMLButtonElement>('button[title^="Model ("]')!;
+  expect(model.textContent).toContain("Test model");
+  expect(model.className).toContain("h-6.5");
+  expect(model.className).toContain("bg-selection");
+  expect(model.className).toContain("shrink-0");
+  expect(model.closest(".composer-toolbar")).not.toBeNull();
+  // Start and Save to Draft stay outside the scrolling area, always visible.
+  expect(button("Start").closest(".composer-toolbar")).toBeNull();
+});
+
 it("typing ! in Session mode shows the saved prompt picker and Enter inserts it", async () => {
   input("Please !");
   await act(async () => {

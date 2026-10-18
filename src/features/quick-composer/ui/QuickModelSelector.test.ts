@@ -197,3 +197,29 @@ it("resets reasoning and fast mode to saved user defaults", () => {
     context: "256k",
   });
 });
+
+it("offers Claude's Structured and Interactive modes, other providers do not", () => {
+  const group = container.querySelector('[role="group"][aria-label="Claude Code execution"]')!;
+  const interactive = [...group.querySelectorAll("button")].find(
+    (button) => button.textContent === "Interactive",
+  )!;
+  expect(interactive.getAttribute("aria-pressed")).toBe("false");
+  act(() => interactive.click());
+  expect(onSettingsChange).toHaveBeenCalledWith({
+    effort: "low",
+    claudeExecution: "interactive",
+  });
+  act(() =>
+    root.render(
+      createElement(QuickModelSelector, {
+        model: grok,
+        values: {},
+        availableHarnesses: ["claude", "grok"],
+        onChange,
+        onSettingsChange,
+        onClose,
+      }),
+    ),
+  );
+  expect(container.querySelector('[aria-label="Claude Code execution"]')).toBeNull();
+});

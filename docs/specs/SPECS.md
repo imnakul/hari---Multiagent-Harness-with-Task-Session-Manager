@@ -78,6 +78,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-10-19 01:59 | [Progress — Quick Composer matches the chat composer (L-110)](quick-composer-consistency.md) | Floating window applies UI font/size/workspace theme; footer reuses the chat composer pill and scrolling toolbar; Add Draft dialog uses the lg modal with one close button. Desktop check manual. |
 
 ## Done
 

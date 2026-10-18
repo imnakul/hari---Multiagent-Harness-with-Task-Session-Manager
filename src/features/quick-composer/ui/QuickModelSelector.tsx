@@ -337,6 +337,27 @@ export function QuickModelSelector({
             </p>
           )}
         </div>
+        {model.harness === "claude" ? (
+          <div
+            role="group"
+            aria-label="Claude Code execution"
+            className="flex shrink-0 gap-1 border-t border-stroke p-2"
+          >
+            {(["structured", "interactive"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={(values.claudeExecution ?? "structured") === mode}
+                onClick={() =>
+                  onSettingsChange({ ...values, claudeExecution: mode })
+                }
+                className={`flex-1 rounded-md px-2 py-1.5 text-[12px] ${(values.claudeExecution ?? "structured") === mode ? "bg-selection text-content" : "text-content/60 hover:bg-content/5"}`}
+              >
+                {mode === "interactive" ? "Interactive" : "Structured"}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {effort && effort.options.length > 0 ? (
           <div className="shrink-0 border-t border-stroke px-4 pb-3 pt-2">
             <div className="mb-1 grid grid-cols-[28px_1fr_28px] items-center">

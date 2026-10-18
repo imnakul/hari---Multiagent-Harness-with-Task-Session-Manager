@@ -52,10 +52,12 @@ export function SessionTodoComposer({
   return (
     <Modal
       title={title ?? (editing ? "Edit Draft" : "Add Draft to Sessions")}
+      description={description}
       onClose={close}
+      // At least the floating composer's 680px, so its toolbar fits as it does there.
+      size="lg"
       fitViewport
     >
-      <p className="px-4 py-2 text-[12px] text-content/50">{description}</p>
       <div className="p-3" aria-busy={busy}>
         <QuickComposer
           onShown={onShown}

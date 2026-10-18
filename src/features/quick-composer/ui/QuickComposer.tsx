@@ -78,6 +78,7 @@ import { AttachmentChip } from "../../sessions/ui/AttachmentChip";
 import { quickLaunchAttachments } from "../model/quickAttachments";
 import { useQuickAttachments } from "./useQuickAttachments";
 import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
+import { composerPillClass } from "../../sessions/ui/composerControls";
 import { QuickModelSelector } from "./QuickModelSelector";
 import { QuickPermissionIcon, QuickPermissions } from "./QuickPermissions";
 import { SavedPromptMenu } from "../../prompts/ui/SavedPromptMenu";
@@ -138,9 +139,10 @@ const KIND_OPTIONS: readonly SegmentedOption<QuickComposerKind>[] = [
   { id: "session", label: "Session", icon: MessageMultiple },
 ];
 
-/** Toolbar pickers (project, model): one height and icon size everywhere. */
-const CONTROL_CLASS =
-  "flex h-7 min-w-0 max-w-[40%] items-center gap-1.5 rounded-md px-2 text-[12px] disabled:opacity-50";
+/** Toolbar pickers (project, model, permissions) use the chat composer's pill. */
+const controlClass = (open: boolean): string =>
+  composerPillClass(open, "max-w-52 shrink-0 disabled:opacity-50");
+const CHEVRON_CLASS = "size-3 shrink-0 text-content/50";
 const PRIMARY_BUTTON_CLASS =
   "h-7 rounded-md bg-accent px-3 text-[12px] font-medium text-white transition-opacity disabled:opacity-40";
 const SECONDARY_BUTTON_CLASS =
@@ -786,7 +788,7 @@ export function QuickComposer({
         if (picker) closePicker();
         else dismiss();
       }}
-      className={`relative flex max-h-[520px] flex-col overflow-clip rounded-[16px] border text-content ${
+      className={`@container relative flex max-h-[520px] flex-col overflow-clip rounded-[16px] border text-content ${
         embedded
           ? // Inside a modal: the modal already draws the glass.
             "border-content/8 bg-content/3"
@@ -869,6 +871,7 @@ export function QuickComposer({
         ) : null}
         <button
           type="button"
+          hidden={embedded}
           aria-label="Close composer"
           title="Close (Esc)"
           onClick={dismiss}
@@ -896,7 +899,7 @@ export function QuickComposer({
           ref={highlightRef}
           aria-hidden
           style={{ textIndent: indent }}
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word px-4 pt-2 pb-2.5 text-[14px] leading-[22px] text-content"
+          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 text-content"
         >
           {showMode && leadingMode ? (
             <>
@@ -952,7 +955,7 @@ export function QuickComposer({
               : undefined
           }
           spellCheck
-          className="composer-field scrollbar-none relative block w-full resize-none bg-transparent px-4 pt-2 pb-2.5 text-[14px] leading-[22px] outline-none select-text"
+          className="composer-field scrollbar-none relative block w-full resize-none bg-transparent px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 outline-none select-text"
         />
       </div>
       {taskMode ? (
@@ -1027,6 +1030,8 @@ export function QuickComposer({
         </p>
       ) : null}
       <div className="flex shrink-0 items-center gap-1 border-t border-stroke px-2.5 py-2">
+        <div className="composer-toolbar flex min-w-0 flex-1 items-center">
+        <div className="flex shrink-0 items-center gap-1">
         {!taskMode ? (
           <WorkInPicker
             started={false}
@@ -1070,7 +1075,7 @@ export function QuickComposer({
           disabled={!taskMode && projects.length === 0}
           title={`Project (${MOD}P)`}
           aria-expanded={picker === "project"}
-          className={`${CONTROL_CLASS} ${picker === "project" ? "bg-selection-emphasis text-content" : "text-content/70 hover:bg-selection-hover hover:text-content"}`}
+          className={controlClass(picker === "project")}
         >
           {projectPath ? (
             <QuickProjectIcon
@@ -1079,8 +1084,8 @@ export function QuickComposer({
               className="size-3.5 shrink-0"
             />
           ) : null}
-          <span className="truncate">{projectLabel}</span>
-          <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+          <span className="min-w-0 truncate text-[11px]">{projectLabel}</span>
+          <ChevronDown className={`${CHEVRON_CLASS} ${picker === "project" ? "rotate-180" : ""}`} strokeWidth={1.75} />
         </button>
         {!taskMode ? (
           <button
@@ -1089,14 +1094,14 @@ export function QuickComposer({
             onClick={() => openPicker("model")}
             title={`Model (${MOD}.)`}
             aria-expanded={picker === "model"}
-            className={`${CONTROL_CLASS} ${picker === "model" ? "bg-selection-emphasis text-content" : "text-content/70 hover:bg-selection-hover hover:text-content"}`}
+            className={controlClass(picker === "model")}
           >
             <HarnessIcon
               harness={model.harness}
-              className="size-3.5 shrink-0"
+              className="size-4 shrink-0"
             />
-            <span className="truncate">{model.name}</span>
-            <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+            <span className="min-w-0 truncate text-[11px]">{model.name}</span>
+            <ChevronDown className={`${CHEVRON_CLASS} ${picker === "model" ? "rotate-180" : ""}`} strokeWidth={1.75} />
           </button>
         ) : null}
         {!taskMode && choice.harness === "antigravity-cli" ? (
@@ -1121,16 +1126,18 @@ export function QuickComposer({
             onClick={() => openPicker("permissions")}
             title="Permissions"
             aria-expanded={picker === "permissions"}
-            className={`${CONTROL_CLASS} ${picker === "permissions" ? "bg-selection-emphasis text-content" : "text-content/70 hover:bg-selection-hover hover:text-content"}`}
+            className={controlClass(picker === "permissions")}
           >
             <QuickPermissionIcon
               mode={runtimeMode}
               className="size-3.5 shrink-0"
             />
-            <span className="truncate">{runtimeModeLabel(runtimeMode, choice.harness)}</span>
-            <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+            <span className="min-w-0 truncate text-[11px]">{runtimeModeLabel(runtimeMode, choice.harness)}</span>
+            <ChevronDown className={`${CHEVRON_CLASS} ${picker === "permissions" ? "rotate-180" : ""}`} strokeWidth={1.75} />
           </button>
         ) : null}
+        </div>
+        </div>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-2 text-[11px] text-content/45">
           {attachments.loading && !taskMode ? (
             <span role="status">Adding attachment…</span>
@@ -1143,7 +1150,7 @@ export function QuickComposer({
               {error}
             </span>
           ) : (
-            <span className="mr-1 hidden items-center gap-1 sm:flex">
+            <span className="mr-1 hidden items-center gap-1 @min-[600px]:flex">
               <Kbd>↵</Kbd>
               {taskMode ? "save" : canStart ? "start" : "save"}
               {!taskMode && canStart ? (

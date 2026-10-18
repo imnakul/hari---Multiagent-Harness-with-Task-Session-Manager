@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 02:05 IST — Quick Composer and Add Draft dialog match the chat composer (L-110)
+- Type: fix
+- What: The floating Quick Composer now uses your UI font, font size and workspace theme instead of the system font. Its model, project and permission controls look like the chat composer's, and when space is short the toolbar scrolls sideways instead of squashing them (the model name no longer shrinks to "G…"). The Add Draft to Sessions / Edit Draft / Work on… dialog is wider, so Start is no longer cut off. It also has a single close button. The floating window now loads the Geist and Inter fonts like the main window. For Claude models, its model menu has the Structured / Interactive switch, so a new session or draft can start in Interactive mode.
+- Why: User report with screenshots — the composer in the Add Draft dialog was unreadable and unusable, and the floating composer used the wrong font and mismatched controls.
+- Files: [main.tsx](../../src/features/quick-composer/main.tsx), [QuickComposer.tsx](../../src/features/quick-composer/ui/QuickComposer.tsx), [composerControls.ts](../../src/features/sessions/ui/composerControls.ts), [ModelPicker.tsx](../../src/features/sessions/ui/ModelPicker.tsx), [AccessPicker.tsx](../../src/features/sessions/ui/AccessPicker.tsx), [SessionTodoComposer.tsx](../../src/features/session-board/ui/SessionTodoComposer.tsx), [QuickModelSelector.tsx](../../src/features/quick-composer/ui/QuickModelSelector.tsx), [quick-composer.html](../../quick-composer.html), [QuickComposer.modes.test.ts](../../src/features/quick-composer/ui/QuickComposer.modes.test.ts), [QuickModelSelector.test.ts](../../src/features/quick-composer/ui/QuickModelSelector.test.ts), [spec](../specs/quick-composer-consistency.md)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,438 passed, 2 skipped; the 3 new tests fail without the fix) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 01:23 IST — Interactive chat recovers after a failed send (L-109)
 - Type: fix
 - What: After one failed Interactive send, every later send was refused straight away with the same error until Claude was stopped. Now a Claude API error (such as Overloaded) only ends that turn, so you can send again; after any other failure, Return to chat in the native terminal clears it once the prompt is empty; and a repeat send says how to recover. A late Stop signal from an earlier turn can no longer abort a prompt while it is being pasted.
