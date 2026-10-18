@@ -170,8 +170,8 @@ it("refreshes an open popover every three seconds, groups titles, and uses exist
   });
   expect(mocks.invoke).toHaveBeenCalledTimes(before + 1);
   await act(async () =>
-    [...container.querySelectorAll("button")]
-      .find((b) => b.textContent === "Stop")!
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Stop My chat"]')!
       .click(),
   );
   expect(onStop).toHaveBeenCalledWith("chat");
@@ -227,11 +227,49 @@ it("shows the app row without Stop and adds it to the chip total", async () => {
   await act(async () => chip.click());
   expect(container.textContent).toContain("MonoCode app");
   expect(container.textContent).toContain("App and web view · 4 processes");
-  const stops = [...container.querySelectorAll("button")].filter(
-    (b) => b.textContent === "Stop",
-  );
+  const stops = container.querySelectorAll('button[aria-label^="Stop "]');
   // Only the chat row is stoppable.
   expect(stops).toHaveLength(1);
+});
+it("shows GPU per row and in the chip once every part has a reading", async () => {
+  mocks.invoke.mockResolvedValue(
+    stats([{ ...row, gpu: 0 }], { ...app, gpu: 3.25 }),
+  );
+  saveProcessMonitor(true);
+  await act(async () =>
+    root.render(
+      createElement(ProcessMonitor, { sessions: [session], onStop: vi.fn() }),
+    ),
+  );
+  const chip = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Process monitor"]',
+  )!;
+  expect(chip.textContent).toBe("CPU 4.0% · 110 MiB · GPU 3.3%");
+  await act(async () => chip.click());
+  expect(container.textContent).toContain("GPU 3.3%");
+  expect(container.textContent).toContain("GPU 0.0%");
+});
+it("keeps Stop as an icon that appears only on row hover or keyboard focus", async () => {
+  saveProcessMonitor(true);
+  await act(async () =>
+    root.render(
+      createElement(ProcessMonitor, { sessions: [session], onStop: vi.fn() }),
+    ),
+  );
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Process monitor"]')!
+      .click(),
+  );
+  const stop = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Stop My chat"]',
+  )!;
+  expect(stop.textContent).toBe("");
+  expect(stop.querySelector("svg")).not.toBeNull();
+  expect(stop.className).toContain("opacity-0");
+  expect(stop.className).toContain("group-hover:opacity-100");
+  expect(stop.className).toContain("focus-visible:opacity-100");
+  expect(stop.closest(".group")).not.toBeNull();
 });
 it("keeps a partial app reading and waits for the first CPU delta", async () => {
   mocks.invoke.mockResolvedValue(
@@ -293,9 +331,9 @@ it("expands app and chat rows into read-only process lists that survive refreshe
   expect(
     [...appList.querySelectorAll("li")].map((li) => li.textContent),
   ).toEqual([
-    "monocode.exePID 71.0% · 60 MiB",
-    "Web view (main)PID 80.5% · 40 MiB",
-    "Web view helperPID 9unavailable · unavailable",
+    "monocode.exePID 7CPU 1.0%RAM 60 MiB—GPU not measured",
+    "Web view (main)PID 8CPU 0.5%RAM 40 MiB—GPU not measured",
+    "Web view helperPID 9—CPU unavailable—Memory unavailable—GPU not measured",
   ]);
   expect(
     container.querySelector('[aria-label="Processes for My chat"]')!
@@ -307,9 +345,7 @@ it("expands app and chat rows into read-only process lists that survive refreshe
   expect(container.querySelectorAll("ul")).toHaveLength(2);
   // Process lists add no Stop buttons.
   expect(
-    [...container.querySelectorAll("button")].filter(
-      (b) => b.textContent === "Stop",
-    ),
+    container.querySelectorAll('button[aria-label^="Stop "]'),
   ).toHaveLength(1);
   await act(async () =>
     container

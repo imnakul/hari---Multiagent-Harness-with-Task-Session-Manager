@@ -590,7 +590,7 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     id: "process-monitor",
     section: "experimentation",
     label: "Process monitor",
-    keywords: "CPU memory resource manager processes stop idle",
+    keywords: "CPU memory GPU resource manager processes stop idle",
   },
   {
     id: "interactive-idle",

@@ -10,6 +10,8 @@ export type ProcessDetail = {
   depth: number;
   cpu: number | null;
   memory: number | null;
+  /** GPU %, Windows only; null while measuring or where the OS has no counter. */
+  gpu?: number | null;
 };
 export type OwnedProcess = {
   root: {
@@ -21,6 +23,7 @@ export type OwnedProcess = {
   };
   cpu: number | null;
   memory: number | null;
+  gpu?: number | null;
   processes: number;
   status: "live" | "unavailable" | "exited";
   children: ProcessDetail[];
@@ -31,6 +34,7 @@ export type AppProcess = {
   /** Null until a second sample, or when no app process could be read. */
   cpu: number | null;
   memory: number | null;
+  gpu?: number | null;
   processes: number;
   /** Processes counted but not readable; `cpu`/`memory` sum the rest. */
   unreadable: number;
@@ -41,7 +45,7 @@ export type ProcessMonitorStats = { app: AppProcess; owned: OwnedProcess[] };
 export function processTotals(
   app: AppProcess,
   rows: OwnedProcess[],
-): { cpu: number | null; memory: number | null } {
+): { cpu: number | null; memory: number | null; gpu: number | null } {
   const live = rows.filter((r) => r.status !== "exited");
   const parts = [app, ...live];
   return {
@@ -50,6 +54,13 @@ export function processTotals(
       : null,
     memory: parts.every((p) => p.memory != null)
       ? parts.reduce((n, p) => n + (p.memory ?? 0), 0)
+      : null,
+    // Summed like Task Manager's per-process column, so cap at a full GPU.
+    gpu: parts.every((p) => p.gpu != null)
+      ? Math.min(
+          100,
+          parts.reduce((n, p) => n + (p.gpu ?? 0), 0),
+        )
       : null,
   };
 }
@@ -99,6 +110,9 @@ export function processMemory(bytes: number | null): string {
   return bytes >= 1024 ** 3
     ? `${(bytes / 1024 ** 3).toFixed(1)} GiB`
     : `${Math.round(bytes / 1024 ** 2)} MiB`;
+}
+export function processPercent(value: number): string {
+  return `${value.toFixed(1)}%`;
 }
 export function processIdleAge(ms: number): string {
   return ms < 1000

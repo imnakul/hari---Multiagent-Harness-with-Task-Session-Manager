@@ -24,6 +24,7 @@ import {
   processIdleCandidate,
   processLabel,
   processMemory,
+  processPercent,
   processSessionId,
   processTotals,
   retainExitedProcesses,
@@ -32,7 +33,7 @@ import {
   type ProcessDetail,
   type ProcessMonitorStats,
 } from "./processMonitorModel";
-import { ChevronRight } from "../../shared/ui/icons";
+import { ChevronRight, Loader, Square } from "../../shared/ui/icons";
 
 type Props = {
   sessions: Session[];
@@ -174,7 +175,8 @@ function EnabledProcessMonitor({
     }
   };
   const totals = app ? processTotals(app, rows ?? []) : null;
-  const cpu = totals?.cpu == null ? "…" : `${totals.cpu.toFixed(1)}%`;
+  const cpu = totals?.cpu == null ? "…" : processPercent(totals.cpu);
+  const gpu = totals?.gpu == null ? "" : ` · GPU ${processPercent(totals.gpu)}`;
   const groups = new Map<string, OwnedProcess[]>();
   for (const row of rows ?? []) {
     const project =
@@ -195,13 +197,13 @@ function EnabledProcessMonitor({
         aria-expanded={open}
         aria-label="Process monitor"
         className="shrink-0 rounded px-1.5 py-0.5 text-content/65 hover:bg-content/10"
-        title="MonoCode and the chats and terminals it started; CPU as a share of machine capacity"
+        title="MonoCode and the chats and terminals it started; CPU and GPU as a share of machine capacity"
       >
         {error
           ? "Processes unavailable"
           : rows == null || !totals
             ? "Processes loading…"
-            : `CPU ${cpu} · ${processMemory(totals.memory)}`}
+            : `CPU ${cpu} · ${processMemory(totals.memory)}${gpu}`}
       </button>
       {open ? (
         <Popover
@@ -241,6 +243,15 @@ function EnabledProcessMonitor({
             ) : null}
             {rows == null ? <p role="status">Loading process stats…</p> : null}
             {app ? (
+              <div
+                aria-hidden
+                className="flex justify-end gap-2 text-content/40"
+              >
+                <UsageHeader />
+                <span className="size-6 shrink-0" />
+              </div>
+            ) : null}
+            {app ? (
               <div className="mb-3">
                 <div className="flex items-center gap-2 py-2">
                   <DisclosureButton
@@ -258,14 +269,13 @@ function EnabledProcessMonitor({
                         : ""}
                     </div>
                   </div>
-                  <span className="shrink-0 text-content/65">
-                    {app.cpu == null
-                      ? app.memory == null
-                        ? "CPU unavailable"
-                        : "Measuring CPU…"
-                      : `${app.cpu.toFixed(1)}%`}{" "}
-                    · {processMemory(app.memory)}
-                  </span>
+                  <UsageCells
+                    cpu={app.cpu}
+                    memory={app.memory}
+                    gpu={app.gpu}
+                    measuring={app.memory != null}
+                  />
+                  <span aria-hidden className="size-6 shrink-0" />
                 </div>
                 {expanded.has(`app:${app.pid}`) ? (
                   <ProcessList
@@ -295,7 +305,7 @@ function EnabledProcessMonitor({
                     row.status !== "exited" && row.children.length > 0;
                   return (
                     <div key={key} className="border-t border-content/10">
-                      <div className="flex items-center gap-2 py-2">
+                      <div className="group flex items-center gap-2 py-2">
                         {listable ? (
                           <DisclosureButton
                             label={title}
@@ -321,29 +331,40 @@ function EnabledProcessMonitor({
                           </div>
                         </div>
                         {row.status === "exited" ? (
-                          <span>Exited</span>
+                          <span className="shrink-0 text-content/50">Exited</span>
                         ) : (
-                          <span className="shrink-0 text-content/65">
-                            {row.cpu == null
-                              ? row.status === "unavailable"
-                                ? "CPU unavailable"
-                                : "Measuring CPU…"
-                              : `${row.cpu.toFixed(1)}%`}{" "}
-                            · {processMemory(row.memory)}
-                          </span>
+                          <UsageCells
+                            cpu={row.cpu}
+                            memory={row.memory}
+                            gpu={row.gpu}
+                            measuring={row.status !== "unavailable"}
+                          />
                         )}
-                        <button
-                          type="button"
-                          disabled={
-                            row.status === "exited" || stopping.has(row.root.id)
-                          }
-                          className="rounded px-2 py-1 hover:bg-content/10 disabled:opacity-40"
-                          onClick={() => {
-                            void stop(row, false);
-                          }}
-                        >
-                          {stopping.has(row.root.id) ? "Stopping…" : "Stop"}
-                        </button>
+                        {row.status === "exited" ? (
+                          <span aria-hidden className="size-6 shrink-0" />
+                        ) : stopping.has(row.root.id) ? (
+                          <span
+                            role="status"
+                            aria-label={`Stopping ${title}`}
+                            className="grid size-6 shrink-0 place-items-center text-content/60"
+                          >
+                            <Loader aria-hidden className="size-3.5 animate-spin" />
+                          </span>
+                        ) : (
+                          // Hidden until the row is hovered or the button has
+                          // keyboard focus, so Stop is never one stray click away.
+                          <button
+                            type="button"
+                            aria-label={`Stop ${title}`}
+                            title="Stop"
+                            className="grid size-6 shrink-0 place-items-center rounded text-content/60 opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400 focus-visible:opacity-100 motion-reduce:transition-none"
+                            onClick={() => {
+                              void stop(row, false);
+                            }}
+                          >
+                            <Square aria-hidden className="size-3 fill-current" />
+                          </button>
+                        )}
                       </div>
                       {listable && expanded.has(key) ? (
                         <ProcessList
@@ -359,8 +380,10 @@ function EnabledProcessMonitor({
             ))}
             <p className="text-content/40">
               Includes child processes. CPU is measured across all logical
-              processors. Idle time is since process activity; bulk stop also
-              checks chat state.
+              processors. GPU is the busiest graphics engine, as in Task
+              Manager; terminals draw in the web view, so their GPU work shows
+              on the MonoCode app row. Idle time is since process activity;
+              bulk stop also checks chat state.
             </p>
           </div>
         </Popover>
@@ -393,6 +416,82 @@ function DisclosureButton({
   );
 }
 
+const CPU_CELL = "w-14 shrink-0 text-right";
+const MEMORY_CELL = "w-16 shrink-0 text-right";
+const GPU_CELL = "w-14 shrink-0 text-right";
+
+function UsageHeader(): ReactElement {
+  return (
+    <span className="flex shrink-0">
+      <span className={CPU_CELL}>CPU</span>
+      <span className={MEMORY_CELL}>RAM</span>
+      <span className={GPU_CELL}>GPU</span>
+    </span>
+  );
+}
+
+/**
+ * CPU, RAM and GPU in fixed columns. `measuring` separates a first sample
+ * (CPU needs two) from a process the OS would not let us read.
+ */
+function UsageCells({
+  cpu,
+  memory,
+  gpu,
+  measuring,
+}: {
+  cpu: number | null;
+  memory: number | null;
+  gpu?: number | null;
+  measuring: boolean;
+}): ReactElement {
+  return (
+    <span className="flex shrink-0 tabular-nums text-content/65">
+      <span className={CPU_CELL}>
+        {cpu == null ? (
+          <Unknown label={measuring ? "Measuring CPU…" : "CPU unavailable"} />
+        ) : (
+          <>
+            <span className="sr-only">CPU </span>
+            {processPercent(cpu)}
+          </>
+        )}
+      </span>
+      <span className={MEMORY_CELL}>
+        {memory == null ? (
+          <Unknown label="Memory unavailable" />
+        ) : (
+          <>
+            <span className="sr-only">RAM </span>
+            {processMemory(memory)}
+          </>
+        )}
+      </span>
+      <span className={GPU_CELL}>
+        {gpu == null ? (
+          <Unknown label="GPU not measured" />
+        ) : (
+          <>
+            <span className="sr-only">GPU </span>
+            {processPercent(gpu)}
+          </>
+        )}
+      </span>
+    </span>
+  );
+}
+
+function Unknown({ label }: { label: string }): ReactElement {
+  return (
+    <>
+      <span aria-hidden title={label}>
+        —
+      </span>
+      <span className="sr-only">{label}</span>
+    </>
+  );
+}
+
 /** Read-only: stopping single processes could crash the web view or confuse a chat. */
 function ProcessList({
   label,
@@ -421,14 +520,13 @@ function ProcessList({
           <span className="shrink-0 tabular-nums text-content/50">
             PID {item.pid}
           </span>
-          <span className="w-36 shrink-0 text-right tabular-nums">
-            {item.cpu == null
-              ? item.memory == null
-                ? "unavailable"
-                : "Measuring…"
-              : `${item.cpu.toFixed(1)}%`}{" "}
-            · {processMemory(item.memory)}
-          </span>
+          <UsageCells
+            cpu={item.cpu}
+            memory={item.memory}
+            gpu={item.gpu}
+            measuring={item.memory != null}
+          />
+          <span aria-hidden className="size-6 shrink-0" />
         </li>
       ))}
     </ul>

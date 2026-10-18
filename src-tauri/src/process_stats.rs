@@ -1,4 +1,5 @@
 //! Owned-process registry bridge. No arbitrary PID input and no background sampler.
+use crate::process_gpu::GpuSampler;
 use crate::process_metrics::{self, CpuHistory};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -16,7 +17,19 @@ pub(crate) struct ProcessRoot {
 }
 
 #[derive(Default)]
-pub struct ProcessStats(Mutex<CpuHistory>);
+pub struct ProcessStats {
+    cpu: Mutex<CpuHistory>,
+    gpu: Mutex<GpuSampler>,
+}
+
+/// GPU % by PID, or `None` while measuring or on platforms without counters.
+type GpuReadings = Option<HashMap<u32, f64>>;
+
+/// Sum for a set of processes; a process missing from the counters uses no GPU.
+fn gpu_total(ids: &[u32], gpu: &GpuReadings) -> Option<f64> {
+    gpu.as_ref()
+        .map(|by_pid| ids.iter().filter_map(|id| by_pid.get(id)).sum::<f64>().min(100.0))
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +37,7 @@ pub struct ProcessRow {
     root: ProcessRoot,
     cpu: Option<f64>,
     memory: Option<u64>,
+    gpu: Option<f64>,
     processes: usize,
     status: &'static str,
     children: Vec<ProcessDetail>,
@@ -39,6 +53,7 @@ pub struct ProcessDetail {
     depth: usize,
     cpu: Option<f64>,
     memory: Option<u64>,
+    gpu: Option<f64>,
 }
 
 /// MonoCode's own process tree (host plus WebView2 or WebKit helpers), minus the
@@ -50,6 +65,7 @@ pub struct AppUsage {
     pid: u32,
     cpu: Option<f64>,
     memory: Option<u64>,
+    gpu: Option<f64>,
     processes: usize,
     unreadable: usize,
     children: Vec<ProcessDetail>,
@@ -76,6 +92,7 @@ fn details(
     ids: &[u32],
     samples: &[process_metrics::Sample],
     cpu: &HashMap<u32, Option<f64>>,
+    gpu: &GpuReadings,
 ) -> Vec<ProcessDetail> {
     let by_pid: HashMap<u32, &process_metrics::Sample> = samples
         .iter()
@@ -104,6 +121,7 @@ fn details(
             depth,
             cpu: cpu.get(&pid).copied().flatten(),
             memory: s.memory,
+            gpu: gpu_total(&[pid], gpu),
         });
         if let Some(children) = kids.get(&pid) {
             stack.extend(children.iter().rev().map(|c| (*c, depth + 1)));
@@ -117,6 +135,7 @@ fn app_usage(
     trees: &HashMap<u32, Vec<u32>>,
     samples: &[process_metrics::Sample],
     cpu: &HashMap<u32, Option<f64>>,
+    gpu: &GpuReadings,
 ) -> AppUsage {
     let ids = trees.get(&pid).map(Vec::as_slice).unwrap_or_default();
     let rows: Vec<_> = samples.iter().filter(|s| ids.contains(&s.pid)).collect();
@@ -130,8 +149,9 @@ fn app_usage(
         // Absent until a second sample gives a readable process a CPU delta.
         cpu: (!readings.is_empty()).then(|| readings.iter().sum()),
         memory: (!memory.is_empty()).then(|| memory.iter().sum()),
+        gpu: gpu_total(ids, gpu),
         processes: ids.len(),
-        children: details(pid, ids, samples, cpu),
+        children: details(pid, ids, samples, cpu, gpu),
         unreadable: rows
             .iter()
             .filter(|s| s.cpu_ns.is_none() || s.memory.is_none())
@@ -154,7 +174,8 @@ pub fn process_monitor_stats(
     pids.push(app_pid);
     let samples = process_metrics::owned_snapshot(&pids)?;
     let trees = process_metrics::tree(&pids, &samples);
-    let cpu = stats.0.lock().unwrap_or_else(|e| e.into_inner()).sample(
+    let gpu = stats.gpu.lock().unwrap_or_else(|e| e.into_inner()).sample();
+    let cpu = stats.cpu.lock().unwrap_or_else(|e| e.into_inner()).sample(
         &samples,
         std::time::Instant::now(),
         std::thread::available_parallelism()
@@ -175,11 +196,12 @@ pub fn process_monitor_stats(
             let unavailable = rows
                 .iter()
                 .any(|r| r.cpu_ns.is_none() || r.memory.is_none());
-            let children = details(root.pid, &ids, &samples, &cpu);
+            let children = details(root.pid, &ids, &samples, &cpu, &gpu);
             ProcessRow {
                 root,
                 cpu: total_cpu,
                 memory,
+                gpu: gpu_total(&ids, &gpu),
                 processes: ids.len(),
                 children,
                 status: if !alive {
@@ -193,7 +215,7 @@ pub fn process_monitor_stats(
         })
         .collect();
     Ok(ProcessMonitorStats {
-        app: app_usage(app_pid, &trees, &samples, &cpu),
+        app: app_usage(app_pid, &trees, &samples, &cpu, &gpu),
         owned,
     })
 }
@@ -226,11 +248,15 @@ mod tests {
         ];
         let trees = process_metrics::tree(&[4, 1], &samples);
         let cpu = HashMap::from([(1, Some(1.5)), (2, Some(2.0)), (3, None), (4, Some(9.0))]);
-        let usage = app_usage(1, &trees, &samples, &cpu);
+        // The chat's GPU (pid 4) stays on its own row; pid 3 has no GPU instance.
+        let gpu = Some(HashMap::from([(1, 2.0), (2, 5.5), (4, 40.0)]));
+        let usage = app_usage(1, &trees, &samples, &cpu, &gpu);
         assert_eq!(
             (usage.cpu, usage.memory, usage.processes, usage.unreadable),
             (Some(3.5), Some(200), 3, 1)
         );
+        assert_eq!(usage.gpu, Some(7.5));
+        assert_eq!(usage.children[2].gpu, Some(0.0));
         let listed: Vec<_> = usage.children.iter().map(|d| (d.pid, d.depth)).collect();
         assert_eq!(listed, vec![(1, 0), (2, 1), (3, 2)]);
         assert_eq!(
@@ -243,10 +269,10 @@ mod tests {
     fn app_usage_waits_for_a_cpu_delta() {
         let samples = vec![sample(1, 0, true)];
         let trees = process_metrics::tree(&[1], &samples);
-        let usage = app_usage(1, &trees, &samples, &HashMap::from([(1, None)]));
+        let usage = app_usage(1, &trees, &samples, &HashMap::from([(1, None)]), &None);
         assert_eq!(
-            (usage.cpu, usage.memory, usage.unreadable),
-            (None, Some(100), 0)
+            (usage.cpu, usage.memory, usage.gpu, usage.unreadable),
+            (None, Some(100), None, 0)
         );
     }
 
@@ -261,11 +287,11 @@ mod tests {
         ];
         let ids = [10, 11, 12, 13];
         let cpu = HashMap::from([(10, Some(1.0)), (13, Some(0.5))]);
-        let listed = details(10, &ids, &samples, &cpu);
+        let listed = details(10, &ids, &samples, &cpu, &None);
         let order: Vec<_> = listed.iter().map(|d| (d.pid, d.depth)).collect();
         assert_eq!(order, vec![(10, 0), (12, 1), (11, 1), (13, 2)]);
         assert_eq!(listed[3].name, "p13.exe");
         assert_eq!((listed[3].parent, listed[3].cpu), (11, Some(0.5)));
-        assert!(details(99, &[], &samples, &cpu).is_empty());
+        assert!(details(99, &[], &samples, &cpu, &None).is_empty());
     }
 }

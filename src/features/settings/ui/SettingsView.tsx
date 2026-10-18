@@ -959,7 +959,7 @@ function ExperimentationPage(): ReactElement {
       <Row
         id="process-monitor"
         label="Process monitor"
-        description="Show CPU and memory for MonoCode-owned process trees in the bottom bar. Sampling runs only while enabled."
+        description="Show CPU, memory and GPU for MonoCode-owned process trees in the bottom bar. Sampling runs only while enabled."
       >
         <Toggle
           label="Process monitor"

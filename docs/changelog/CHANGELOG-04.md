@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 12:28 IST — Process monitor GPU column and hover Stop icon (L-101)
+- Type: feature
+- What: The process monitor now shows CPU | RAM | GPU in lined-up columns for every row, and the bottom-bar chip adds GPU. The Stop button is now just a stop icon that appears when you point at a row (or reach it with Tab).
+- Why: User request — GPU use was visible in Task Manager but not in the monitor, and always-visible Stop buttons were noisy.
+- Files: [process_gpu.rs](../../src-tauri/src/process_gpu.rs), [process_stats.rs](../../src-tauri/src/process_stats.rs), [Cargo.toml](../../src-tauri/Cargo.toml), [lib.rs](../../src-tauri/src/lib.rs), [ProcessMonitor.tsx](../../src/app/shell/ProcessMonitor.tsx), [processMonitorModel.ts](../../src/app/shell/processMonitorModel.ts), [ProcessMonitor.test.ts](../../src/app/shell/ProcessMonitor.test.ts), [settings.ts](../../src/features/settings/model/settings.ts), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx); spec [process-monitor-gpu-column.md](../specs/process-monitor-gpu-column.md)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,964 passed, 2 skipped) Rust process tests ✅ (9) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-18 12:06 IST — Interactive Claude follow-ups queue instead of interrupting the turn (L-100)
 - Type: fix
 - What: In Interactive CLI mode, a message sent while Claude is working now waits in the queue and goes out when the turn ends. Before, it tried to steer the running turn, Interactive Claude refused, and the refusal stopped the turn and left the message in the composer.

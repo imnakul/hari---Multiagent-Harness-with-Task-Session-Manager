@@ -41,6 +41,7 @@ mod notes;
 mod notifications;
 mod pasteboard;
 mod pi_usage;
+mod process_gpu;
 mod process_metrics;
 mod process_stats;
 mod project_logo;
