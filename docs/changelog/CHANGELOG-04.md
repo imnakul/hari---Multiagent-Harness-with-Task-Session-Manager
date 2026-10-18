@@ -1,12 +1,20 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 11:44 IST — Same-version Windows build with merged fixes (0.10.0-local2-upstream-sync)
+- Type: chore
+- What: New Windows installer, same version number, with L-93 to L-98, the native paste closing-ID fix, the no-native-suggestions Interactive fix and the explicit all-accounts refresh.
+- Why: User request — test the merged fixes without a version bump.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-fixes.exe` (12,389,237 bytes, SHA-256 077AC18B1AA14627EB41C8CEF6611AD325B2D8102DB8549CAFF990A9ED1A3A6F)
+- Commit: built from 6fe2add6
+- Verified: build ✅; desktop check manual (restart open chats so they pick up the suggestion setting)
+
 ## 2026-10-18 11:31 IST — Refresh one account from its usage card (L-98)
 - Type: feature
 - What: Opening a usage chip in the bottom bar now shows a Refresh icon next to the title. It re-reads only that account; while it runs the icon turns into the usual "Updating" spinner. The Refresh button at the end of the bar still refreshes everything.
 - Why: User request — refresh a single account without waiting for all of them.
 - Files: [UsageProviderChip.tsx (lines 173–176, 474–485)](../../src/app/shell/UsageProviderChip.tsx:474), [AccountUsageStrip.tsx](../../src/app/shell/AccountUsageStrip.tsx), [UsageFooter.tsx](../../src/app/shell/UsageFooter.tsx), [UsageProviderChip.test.ts](../../src/app/shell/UsageProviderChip.test.ts)
-- Commit: uncommitted
-- Verified: see final checks below
+- Commit: 6fe2add6
+- Verified: tsc ✅ tests ✅ (6,954 passed, 2 skipped) lint — (no ESLint config) build ✅; desktop check manual
 
 ## 2026-10-18 00:40 IST — Same-version Windows test build (0.10.0-local2-upstream-sync)
 - Type: chore
