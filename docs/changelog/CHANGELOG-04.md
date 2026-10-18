@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 22:17 IST — Interactive send after a native dialog, and no repeated turn on reopen (L-106, L-107)
+- Type: fix
+- What: After you answer a question in Claude's native terminal (for example "trust this folder"), sending from chat now works without clicking Return to chat, as long as the terminal prompt is empty and idle. A half-typed draft still blocks sending. Also, reopening an Interactive chat no longer shows a long prompt and its reply a second time.
+- Why: Bug reports — the Teacher chat on imnakul refused to send with "The native terminal currently has input" after the trust question, and this chat repeated a prompt and reply after switching back to it.
+- Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractiveTerminal.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.ts), [claudeInteractivePrompt.ts](../../src/integrations/harness/providers/claude/claudeInteractivePrompt.ts), [history.ts](../../src/features/provider-sessions/model/history.ts), tests in `claudeInteractive.test.ts` and `history.test.ts`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,431 passed, 2 skipped; the new tests fail without the fix) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-18 21:12 IST — Windows build of upstream 0.14.0 with the named-chat prompt fix (0.14.0-local1-upstream-sync)
 - Type: chore
 - What: New Windows installer from `nakul/windows-support-upstream-0.14.0`: the upstream 0.14.0 integration with all fork features, plus the Interactive prompt fix for named chats (L-105).

@@ -37,7 +37,10 @@ import {
   type InteractiveTerminal,
   type InteractiveReadiness,
 } from "./claudeInteractiveTerminal";
-import { interactivePromptMatches } from "./claudeInteractivePrompt";
+import {
+  INTERACTIVE_ATTACHMENTS_HEADER,
+  interactivePromptMatches,
+} from "./claudeInteractivePrompt";
 
 type Binding = { nativeId: string; cwd: string; accountId?: string };
 type Pending = {
@@ -99,6 +102,7 @@ type Live = {
   lastReply?: string[];
 };
 const bindings = new Map<string, Binding>();
+const RECLAIM_AFTER_INPUT_MS = 1500;
 const lives = new Map<string, Live>();
 // Metadata only, bounded per window. Explicit Forget clears the session's report.
 const stoppedDiagnostics = new Map<string, InteractiveDiagnostics>();
@@ -816,6 +820,22 @@ export async function sendInteractiveClaude(
   }
   if (live.fault) throw faultError(live);
   checkEpoch(input.sessionId, epoch);
+  // Answering a native dialog (such as folder trust) leaves the terminal owning
+  // input. An idle, empty prompt holds no draft to clobber, so take input back.
+  // A fresh keystroke may not have echoed yet; only trust a screen drawn after it.
+  const screen = live.terminal.owner ? live.terminal.inspect() : undefined;
+  if (
+    screen?.reason === "ready" &&
+    (screen.inputAgeMs ?? Infinity) >= RECLAIM_AFTER_INPUT_MS &&
+    (screen.outputAgeMs ?? Infinity) < (screen.inputAgeMs ?? Infinity) &&
+    !live.pending &&
+    !live.external &&
+    !live.stopped &&
+    live.phase === "ready"
+  ) {
+    await live.terminal.reclaim();
+    checkEpoch(input.sessionId, epoch);
+  }
   if (
     live.pending ||
     live.external ||
@@ -879,7 +899,7 @@ export async function sendInteractiveClaude(
         "Claude changed state while saving attachments. No prompt was sent.",
       );
     text +=
-      "\n\nRead these attached files using your tools:\n" +
+      INTERACTIVE_ATTACHMENTS_HEADER +
       paths
         .map(
           (path, index) =>

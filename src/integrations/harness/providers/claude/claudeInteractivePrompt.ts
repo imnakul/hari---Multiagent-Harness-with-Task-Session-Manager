@@ -1,5 +1,22 @@
 type InputPart = { text: string; pasted: boolean };
 
+/** Separates a prompt from the attachment paths Interactive appends to it. */
+export const INTERACTIVE_ATTACHMENTS_HEADER =
+  "\n\nRead these attached files using your tools:\n";
+
+/**
+ * Interactive types a prompt's first letter and pastes the rest; the native
+ * transcript then stores it folded: `T\n\n<pasted_content id="x">\nhis is…\n</pasted_content id="x">`.
+ * Return the prompt as sent. Only that exact single-fold shape is unfolded.
+ */
+export function unfoldInteractivePaste(text: string): string {
+  const folded =
+    /^([^<]{0,8}?)\n{0,2}<pasted_content id="([A-Za-z0-9_-]{1,64})">\n([\s\S]*?)\n?<\/pasted_content(?: id="\2")?>\s*$/.exec(
+      text,
+    );
+  return folded ? folded[1] + folded[3] : text;
+}
+
 /** Mirror interactive_delivery::paste_payload without changing the submitted text. */
 function inputParts(text: string): InputPart[] {
   const offset = text.search(/[\p{Alphabetic}\p{Number}]/u);

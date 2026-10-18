@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(async () => ({ path: "/fake/claude" })),
   ready: vi.fn(() => true),
   owner: false,
+  inputAge: null as number | null,
   starts: [] as Record<string, unknown>[],
   hooks: [] as Record<string, unknown>[],
   lines: [] as string[],
@@ -48,7 +49,12 @@ vi.mock("./claudeInteractiveTerminal", () => ({
       inspect: () => ({
         reason: mocks.ready() ? "ready" : "prompt-mismatch",
         receivedBytes: 20,
+        outputAgeMs: 1000,
+        inputAgeMs: mocks.inputAge,
         inputOwner: mocks.owner,
+      }),
+      reclaim: vi.fn(async (): Promise<void> => {
+        mocks.owner = false;
       }),
       dispose: vi.fn(),
       writing: false,
@@ -107,6 +113,7 @@ beforeEach(() => {
   events = [];
   onAccepted = vi.fn();
   mocks.owner = false;
+  mocks.inputAge = null;
   mocks.sendError = false;
   mocks.seq = 0;
   mocks.starts = [];
@@ -438,11 +445,32 @@ describe("interactive turn delivery", () => {
     expect(String(await turn)).toContain("exited (code 7)");
     expect(mocks.sends).toHaveLength(0);
   });
-  it("requires explicit Return to chat after terminal ownership", async () => {
+  it("takes input back from an idle, empty native prompt and sends", async () => {
     mocks.owner = true;
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(mocks.owner).toBe(false);
+    expect(mocks.sends).toHaveLength(1);
+  });
+  it("does not take input back before a fresh keystroke has redrawn the prompt", async () => {
+    mocks.owner = true;
+    mocks.inputAge = 200;
     await expect(sendInteractiveClaude(input())).rejects.toThrow(
       "Return to chat",
     );
+    expect(mocks.owner).toBe(true);
+    expect(mocks.sends).toHaveLength(0);
+  });
+  it("still requires Return to chat while the native terminal holds a draft", async () => {
+    mocks.owner = true;
+    mocks.ready.mockReturnValue(false);
+    await expect(sendInteractiveClaude(input())).rejects.toThrow(
+      "Return to chat",
+    );
+    expect(mocks.owner).toBe(true);
     expect(mocks.sends).toHaveLength(0);
   });
   it("stops before native resume when model settings change", async () => {

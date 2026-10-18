@@ -540,6 +540,23 @@ describe("display blocks", () => {
     expect(shown.filter((block) => block.role === "user").map((block) => block.text)).toEqual(["Continue", "Different phone prompt", "Continue"]);
   });
 
+  it("does not repeat an Interactive prompt that Claude stored as a folded paste with attachments", () => {
+    const sent = "This is just not usable?\nLast time it failed.";
+    const native =
+      `T\n\n<pasted_content id="fa8f">\nhis is just not usable?\nLast time it failed.\n\n` +
+      `Read these attached files using your tools:\n"image.png": "C:\\\\a.png"\n</pasted_content id="fa8f">\n`;
+    const items = parseProviderHistory("claude", jsonl(
+      { type: "user", uuid: "u1", timestamp: new Date(104_600).toISOString(), message: { role: "user", content: native } },
+      { type: "assistant", uuid: "a1", timestamp: new Date(110_000).toISOString(), message: { role: "assistant", content: [{ type: "text", text: "Native copy of the reply" }] } },
+    ), "0");
+    expect(items[0].text).toBe(`${sent}\n\nRead these attached files using your tools:\n"image.png": "C:\\\\a.png"`);
+    const local: Block[] = [
+      { id: "u", role: "user", text: sent, startedAt: 100_000, durationMs: 100_000 },
+      { id: "r", role: "assistant", text: "Saved reply" },
+    ];
+    expect(reconcileNativeHistory(items, local)).toBe(local);
+  });
+
   it("deduplicates phone turns by native identity even without timestamps", () => {
     const local: Block[] = [{ id: "phone", role: "user", text: "Phone prompt", providerMessageId: "uuid" }, { id: "reply", role: "assistant", text: "Saved phone reply" }];
     const shown = reconcileNativeHistory([

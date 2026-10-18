@@ -5,6 +5,10 @@ import {
   resolveModel,
 } from "../../sessions/model/models";
 import type { NativeProvider } from "./providerSessions";
+import {
+  INTERACTIVE_ATTACHMENTS_HEADER,
+  unfoldInteractivePaste,
+} from "../../../integrations/harness/providers/claude/claudeInteractivePrompt";
 
 /** One display-only item from a provider's own transcript. */
 export type HistoryItem = {
@@ -289,7 +293,8 @@ function claudeItems(
           tools.push(block.name);
         // tool_result, thinking and images are not conversation text.
       }
-    const text = texts.join("\n\n").trim();
+    const joined = texts.join("\n\n").trim();
+    const text = role === "user" ? unfoldInteractivePaste(joined).trim() : joined;
     const identity = typeof rec.uuid === "string" ? { nativeId: rec.uuid } : {};
     const modelId =
       role === "assistant" && typeof message.model === "string"
@@ -492,7 +497,8 @@ export function reconcileNativeHistory(
             if (
               first.text !== localText &&
               !first.text.endsWith(`\n${localText}`) &&
-              !first.text.startsWith(`${localText}\n\n<monocode_app>`)
+              !first.text.startsWith(`${localText}\n\n<monocode_app>`) &&
+              !first.text.startsWith(`${localText}${INTERACTIVE_ATTACHMENTS_HEADER}`)
             )
               return false;
             // Require matching prompt text as well as time: two different prompts

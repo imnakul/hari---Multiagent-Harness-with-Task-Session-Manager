@@ -25,6 +25,8 @@ export type InteractiveReadiness = {
     | "ready";
   receivedBytes: number;
   outputAgeMs: number | null;
+  /** Time since the last key typed in the native terminal; null if none yet. */
+  inputAgeMs: number | null;
   pendingParses: number;
   replyFailures: number;
   started: boolean;
@@ -127,6 +129,7 @@ export async function createInteractiveTerminal(
   const ptyId = `claude-interactive:${id}`;
   let offset = 0;
   let lastWrite = Date.now();
+  let lastUserInput: number | null = null;
   let owner = false;
   let started = false;
   let pendingParses = 0;
@@ -164,6 +167,7 @@ export async function createInteractiveTerminal(
       });
       return;
     }
+    lastUserInput = Date.now();
     terminal.owner = true;
     changed();
     void invoke("claude_interactive_terminal", { sessionId: id, data }).catch(
@@ -313,6 +317,8 @@ export async function createInteractiveTerminal(
         reason,
         receivedBytes: offset,
         outputAgeMs: age,
+        inputAgeMs:
+          lastUserInput == null ? null : Math.max(0, Date.now() - lastUserInput),
         pendingParses,
         replyFailures,
         started,
