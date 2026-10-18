@@ -251,6 +251,26 @@ function fail(live: Live, message: string): void {
   if (!hadPending) emit(live, { type: "session.error", message });
 }
 
+/**
+ * Claude reported an API error (StopFailure) for the running turn. The turn is
+ * over and Claude is idle again, so end it with the error but leave no fault:
+ * the next send is a fresh prompt, as a Structured retry would be.
+ */
+function failTurn(live: Live, message: string): void {
+  // Acceptance precedes the API call, so an unaccepted prompt cannot have failed.
+  if (live.pending && !live.pending.accepted) return;
+  live.stopping = 0;
+  const pending = live.pending;
+  live.pending = undefined;
+  clearTimeout(pending?.timer);
+  if (pending) pending.reject(new HarnessNeedsAttentionError(message));
+  else emit(live, { type: "session.error", message });
+  if (live.external) {
+    live.onEvent({ type: "externalTurn.finished", turnId: live.external });
+    live.external = undefined;
+  }
+}
+
 function complete(live: Live): void {
   if (live.pending && !live.pending.accepted) {
     fail(
@@ -445,7 +465,7 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
         : undefined;
   }
   if (event === "StopFailure")
-    fail(
+    failTurn(
       live,
       `Claude stopped with an error: ${typeof row.error === "string" ? row.error : "review the native terminal"}`,
     );
@@ -790,7 +810,12 @@ export async function sendInteractiveClaude(
     throw error;
   });
   checkEpoch(input.sessionId, epoch);
-  if (live.fault) throw faultError(live);
+  if (live.fault)
+    throw live.terminal.stopped
+      ? faultError(live)
+      : new HarnessNeedsAttentionError(
+          `${live.fault} Open the model picker → Open native terminal, check it, then use Return to chat once its prompt is empty (or Stop Claude). No prompt was sent.`,
+        );
   const deadline = Date.now() + 20000;
   while (
     !live.stopped &&
@@ -997,6 +1022,26 @@ export async function replyInteractiveClaude(
       text: `Approval reply failed: ${String(error)}. Review the native terminal.`,
     });
   }
+}
+
+/**
+ * Return to chat is the user's confirmation that they reviewed the native
+ * terminal, so it also clears a fault left by an earlier send. Claude must be
+ * idle with no tracked turn and an empty prompt (`reclaim` checks the screen,
+ * the backend checks its phase). A pasted draft or a turn still running keeps
+ * it blocked, so an unconfirmed prompt is never resent without that review.
+ */
+export async function returnInteractiveClaudeToChat(id: string): Promise<void> {
+  const live = lives.get(id);
+  if (!live || live.stopped) throw new Error("Interactive Claude is not running.");
+  if (live.pending || live.external || live.phase !== "ready")
+    throw new Error(
+      "Wait for the native conversation to finish before returning to chat.",
+    );
+  await live.terminal.reclaim();
+  live.fault = undefined;
+  // Observation stops after a poll failure; returning restarts it.
+  wakePoll(live);
 }
 
 export async function releaseInteractiveApprovals(id: string): Promise<void> {

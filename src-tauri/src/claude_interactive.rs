@@ -416,13 +416,8 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
         state.activity = Some(Instant::now());
         observe_background(&mut state, &value);
         if value["agent_id"].is_null() {
-            match event {
-                "SessionStart" | "Stop" | "StopFailure" | "PostCompact" => {
-                    state.phase = "ready".into()
-                }
-                "UserPromptSubmit" | "PreCompact" | "PreToolUse" => state.phase = "busy".into(),
-                "SessionEnd" => state.phase = "ended".into(),
-                _ => {}
+            if let Some(phase) = root_hook_phase(&state.phase, event) {
+                state.phase = phase.into();
             }
             if let Some(path) = value["transcript_path"]
                 .as_str()
@@ -475,6 +470,19 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
 
 // Full Stop snapshots are verified on the supported CLI versions. Missing
 // coverage, scheduled jobs and unreported detached work veto automatic shutdown.
+/// Phase after a root (non-subagent) hook. A Stop-like hook during a composer
+/// send belongs to an earlier turn: the new prompt has no Enter yet, so it
+/// cannot have stopped, and marking the session ready would abort the paste.
+fn root_hook_phase(current: &str, event: &str) -> Option<&'static str> {
+    match event {
+        "SessionStart" | "Stop" | "StopFailure" | "PostCompact" if current == "sending" => None,
+        "SessionStart" | "Stop" | "StopFailure" | "PostCompact" => Some("ready"),
+        "UserPromptSubmit" | "PreCompact" | "PreToolUse" => Some("busy"),
+        "SessionEnd" => Some("ended"),
+        _ => None,
+    }
+}
+
 fn observe_background(state: &mut LiveState, value: &Value) {
     let event = value["hook_event_name"].as_str().unwrap_or("");
     let agent = value["agent_id"].as_str();
@@ -1249,5 +1257,17 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn an_earlier_stop_during_a_composer_send_does_not_abort_the_paste() {
+        for event in ["Stop", "StopFailure", "PostCompact", "SessionStart"] {
+            assert_eq!(root_hook_phase("sending", event), None);
+            assert_eq!(root_hook_phase("busy", event), Some("ready"));
+            assert_eq!(root_hook_phase("unconfirmed", event), Some("ready"));
+        }
+        assert_eq!(root_hook_phase("sending", "UserPromptSubmit"), Some("busy"));
+        assert_eq!(root_hook_phase("sending", "SessionEnd"), Some("ended"));
+        assert_eq!(root_hook_phase("ready", "Notification"), None);
     }
 }

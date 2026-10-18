@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 01:23 IST — Interactive chat recovers after a failed send (L-109)
+- Type: fix
+- What: After one failed Interactive send, every later send was refused straight away with the same error until Claude was stopped. Now a Claude API error (such as Overloaded) only ends that turn, so you can send again; after any other failure, Return to chat in the native terminal clears it once the prompt is empty; and a repeat send says how to recover. A late Stop signal from an earlier turn can no longer abort a prompt while it is being pasted.
+- Why: Review of Interactive mode after repeated stuck chats; the stuck state was confirmed with a test.
+- Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [ClaudeInteractiveTerminal.tsx](../../src/features/sessions/ui/ClaudeInteractiveTerminal.tsx), [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,435 passed, 2 skipped; the 3 new tests fail without the fix) cargo ✅ (claude_interactive 10 passed; full --lib 798 passed, 2 failed: fs::tests local_git_never_resolves_login_shell_path and read_only_git_cmd_path_adds_fixed_dirs_to_inherited_path, which fail the same without this change) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 01:05 IST — An old Stop no longer fails the next Interactive send (L-108)
 - Type: fix
 - What: In Interactive mode a chat could get stuck: every message failed within a second with "Claude stopped without confirming this prompt" and never reached the terminal. A leftover Stop signal from an earlier turn that had already ended was being applied to each new message. Now only a Stop that arrives after a message is sent can end it.

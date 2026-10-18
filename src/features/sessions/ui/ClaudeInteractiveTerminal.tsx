@@ -8,6 +8,7 @@ import {
 } from "../../../integrations/harness/providers/claude/claudeInteractiveTerminal";
 import {
   releaseInteractiveApprovals,
+  returnInteractiveClaudeToChat,
   interactiveClaudeDiagnostics,
   stopInteractiveClaude,
 } from "../../../integrations/harness/providers/claude/claudeInteractive";
@@ -82,8 +83,7 @@ export function ClaudeInteractiveTerminal({
               type="button"
               className="hover:text-accent"
               onClick={() => {
-                void terminal
-                  .reclaim()
+                void returnInteractiveClaudeToChat(sessionId)
                   .then(() => {
                     setError("");
                     onClose();

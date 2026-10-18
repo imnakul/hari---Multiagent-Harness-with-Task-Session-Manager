@@ -54,6 +54,8 @@ vi.mock("./claudeInteractiveTerminal", () => ({
         inputOwner: mocks.owner,
       }),
       reclaim: vi.fn(async (): Promise<void> => {
+        // Like the real terminal: only an empty, idle prompt hands input back.
+        if (!mocks.ready()) throw new Error("Return to the empty Claude prompt first");
         mocks.owner = false;
       }),
       dispose: vi.fn(),
@@ -71,6 +73,7 @@ const {
   replyInteractiveClaude,
   hasInteractiveClaude,
   interactiveClaudeDiagnostics,
+  returnInteractiveClaudeToChat,
   parkInteractiveClaude,
 } = await import("./claudeInteractive");
 
@@ -241,6 +244,35 @@ describe("interactive turn delivery", () => {
     await expect(sendInteractiveClaude(input())).rejects.toThrow("unconfirmed");
     expect(mocks.sends).toHaveLength(1);
     expect(onAccepted).not.toHaveBeenCalled();
+  });
+  it("sends again after Return to chat confirms the terminal was reviewed", async () => {
+    mocks.sendError = true;
+    await sendInteractiveClaude(input()).catch(() => undefined);
+    mocks.sendError = false;
+    // Before the review, a resend still names the way out and pastes nothing.
+    await expect(sendInteractiveClaude(input())).rejects.toThrow(
+      "Return to chat",
+    );
+    expect(mocks.sends).toHaveLength(1);
+    await returnInteractiveClaudeToChat("interactive-test");
+    const turn = sendInteractiveClaude(input({ text: "reviewed" }));
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(mocks.sends).toEqual(["first line\nsecond line", "reviewed"]);
+  });
+  it("Return to chat refuses while the prompt holds a draft", async () => {
+    mocks.sendError = true;
+    await sendInteractiveClaude(input()).catch(() => undefined);
+    mocks.ready.mockReturnValue(false);
+    await expect(
+      returnInteractiveClaudeToChat("interactive-test"),
+    ).rejects.toThrow();
+    mocks.ready.mockReturnValue(true);
+    mocks.sendError = false;
+    await expect(sendInteractiveClaude(input())).rejects.toThrow("unconfirmed");
+    expect(mocks.sends).toHaveLength(1);
   });
   it.each([
     "plain",
@@ -593,6 +625,21 @@ describe("interactive turn delivery", () => {
     await settle();
     expect(String(await turn)).toContain("API request failed");
     expect(mocks.sends).toHaveLength(1);
+  });
+  it("sends the next prompt after Claude reports an API error", async () => {
+    const failed = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    hook("StopFailure", { error: "Overloaded" });
+    await settle();
+    expect(await failed).toBeInstanceOf(HarnessNeedsAttentionError);
+    const retry = sendInteractiveClaude(input({ text: "retry" }));
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await retry;
+    expect(mocks.sends).toEqual(["first line\nsecond line", "retry"]);
   });
 });
 
