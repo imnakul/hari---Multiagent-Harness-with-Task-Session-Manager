@@ -1,12 +1,20 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 21:12 IST — Windows build of upstream 0.14.0 with the named-chat prompt fix (0.14.0-local1-upstream-sync)
+- Type: chore
+- What: New Windows installer from `nakul/windows-support-upstream-0.14.0`: the upstream 0.14.0 integration with all fork features, plus the Interactive prompt fix for named chats (L-105).
+- Why: User request — one build containing both 0.14.0 and the fix.
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local1-upstream-sync_x64-setup_2026-10-18-named-prompt.exe` (13,954,301 bytes, SHA-256 E531B848075BD6803151FC4527F9786013422EA028A86FC7E6B13CE4503C67FA, NotSigned)
+- Commit: built from 52003786 (version bump in `Cargo.toml`, `Cargo.lock`, `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`)
+- Verified: build ✅ tsc ✅ tests ✅ (7,428 passed, 2 skipped) cargo test --lib — (no Rust change since the integration's 813 pass); desktop check manual
+
 ## 2026-10-18 20:42 IST — Interactive Claude finds the prompt in a named chat on Windows (L-105)
 - Type: fix
 - What: An Interactive Claude chat that has a name, such as one continued on another account, shows that name in the input box's top border. On Windows MonoCode then failed to find the empty prompt and refused every message with "could not recognize Claude's empty input prompt". It now recognises a border with a name in it.
 - Why: Bug report — the chat continued on imnakul resumed with its history in the native terminal, but sending from chat failed.
 - Files: [claudeInteractiveTerminal.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.ts) (`isFrame`), [claudeInteractiveTerminal.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.test.ts)
-- Commit: uncommitted
-- Verified: on the 0.14.0 branch: tsc ✅ tests ✅ (7,428 passed, 2 skipped; new test fails without the fix) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
+- Commit: d2734c90
+- Verified: on the 0.14.0 branch: tsc ✅ tests ✅ (7,428 passed, 2 skipped; new test fails without the fix) cargo — (no Rust change) lint — (no ESLint config) build ✅ (0.14.0-local1-upstream-sync installer); desktop check manual
 
 ## 2026-10-18 — Integrate upstream main / 0.14.0 with local workflows
 - What: Merged pinned upstream `a90c558d` (0.14.0 plus post-tag main) above latest fork `b344c56b` on new `nakul/windows-support-upstream-0.14.0`. Applied all six approved choices: optional layout with local managers/footer, native opt-in resource/pressure/tool controls, safe Claude/Codex account continuation, protected Interactive/Remote Control idle behavior and unified Mono overview. Retained all 104 feature IDs; L-90 stays removed.
