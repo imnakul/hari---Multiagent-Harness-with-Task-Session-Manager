@@ -6,13 +6,18 @@ import {
   continueAccountTargets,
   continueBlockedReason,
   continueCostNote,
+  continueClaudeSession,
   continuedMarker,
   copyClaudeSession,
 } from "./continueOnAccount";
+import { bindHarnessSession } from "../../../integrations/harness/core/registry";
 import { saveProviderAccount } from "./providerAccounts";
 import type { Block } from "../../sessions/model/session";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("../../../integrations/harness/core/registry", () => ({
+  bindHarnessSession: vi.fn(),
+}));
 
 const ID = "11111111-2222-4333-8444-555555555555";
 const block: Block = { id: "b", role: "user", text: "hi" };
@@ -25,6 +30,7 @@ const chat = {
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset().mockResolvedValue(undefined);
+  vi.mocked(bindHarnessSession).mockReset();
   localStorage.clear();
 });
 
@@ -77,6 +83,38 @@ describe("continue a Claude chat on another account", () => {
     expect(invoke).toHaveBeenCalledTimes(1);
     vi.mocked(invoke).mockRejectedValueOnce("different version");
     await expect(copyClaudeSession(input)).rejects.toThrow("different version");
+  });
+
+  it("rebinds the chat to the target account after copying from its working copy", async () => {
+    const session = {
+      id: "chat-1",
+      providerSessionId: ID,
+      cwd: "/repo",
+      worktreeCwd: "/repo-wt",
+      blocks: [block],
+    };
+    await continueClaudeSession(session, "default", "account-1");
+    expect(invoke).toHaveBeenCalledWith("claude_copy_session", {
+      fromAccount: "default",
+      toAccount: "account-1",
+      sessionId: ID,
+      cwd: "/repo-wt",
+    });
+    expect(bindHarnessSession).toHaveBeenCalledWith(
+      "claude",
+      "chat-1",
+      ID,
+      "/repo-wt",
+      "account-1",
+      [block],
+    );
+    // A refused copy keeps the old binding, so the chat still resumes where it was.
+    vi.mocked(bindHarnessSession).mockClear();
+    vi.mocked(invoke).mockRejectedValueOnce("different version");
+    await expect(
+      continueClaudeSession(session, "default", "account-1"),
+    ).rejects.toThrow("different version");
+    expect(bindHarnessSession).not.toHaveBeenCalled();
   });
 
   it("records the switch and lists only the other accounts", () => {

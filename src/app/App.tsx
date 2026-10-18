@@ -483,7 +483,7 @@ import {
   canContinueOnAccount,
   continueBlockedReason,
   continuedMarker,
-  copyClaudeSession,
+  continueClaudeSession,
 } from "../features/providers/model/continueOnAccount";
 import { hasInteractiveClaude } from "../integrations/harness/providers/claude/claudeInteractive";
 import { emptyProviderListState } from "../features/provider-sessions/model/conversationStore";
@@ -2982,12 +2982,7 @@ function Workspace({
       const fromAccount =
         source.providerAccountId ??
         selectedProviderAccountId("claude", source.cwd);
-      await copyClaudeSession({
-        fromAccount,
-        toAccount: accountId,
-        sessionId: source.providerSessionId,
-        cwd: source.cwd,
-      });
+      await continueClaudeSession(source, fromAccount, accountId);
       const label = providerAccountLabel("claude", accountId);
       setSessions((current) =>
         current.map((session) =>

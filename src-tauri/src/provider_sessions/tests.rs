@@ -603,6 +603,52 @@ fn continue_reuses_identical_and_refuses_different_target() {
 }
 
 #[test]
+fn continue_back_updates_an_older_prefix_copy_and_adds_new_sibling_files() {
+    let (a, _c) = setup();
+    let (b, _c2) = setup();
+    let a_dir = continue_fixture(a.path());
+    copy_claude_session_at(a.path(), b.path(), CONTINUE_ID, "/repo").unwrap();
+    // The chat goes on under B, then switches back to A, whose copy is now a prefix.
+    let b_dir = b.path().join("projects").join("-repo");
+    let b_file = b_dir.join(format!("{CONTINUE_ID}.jsonl"));
+    fs::write(&b_file, "history\non b\n").unwrap();
+    fs::write(
+        b_dir.join(CONTINUE_ID).join("subagents").join("b.jsonl"),
+        "sub b\n",
+    )
+    .unwrap();
+    fs::write(
+        a_dir.join(CONTINUE_ID).join("subagents").join("a.jsonl"),
+        "kept\n",
+    )
+    .unwrap();
+    copy_claude_session_at(b.path(), a.path(), CONTINUE_ID, "/repo").unwrap();
+    let a_file = a_dir.join(format!("{CONTINUE_ID}.jsonl"));
+    assert_eq!(fs::read_to_string(&a_file).unwrap(), "history\non b\n");
+    let subagents = a_dir.join(CONTINUE_ID).join("subagents");
+    assert_eq!(
+        fs::read_to_string(subagents.join("b.jsonl")).unwrap(),
+        "sub b\n"
+    );
+    assert_eq!(
+        fs::read_to_string(subagents.join("a.jsonl")).unwrap(),
+        "kept\n"
+    );
+    assert!(fs::read_dir(&subagents)
+        .unwrap()
+        .chain(fs::read_dir(&a_dir).unwrap())
+        .all(|e| !e.unwrap().file_name().to_string_lossy().contains(".tmp-")));
+    // A longer target (the chat went further there) is never cut back.
+    fs::write(&a_file, "history\non b\nmore on a\n").unwrap();
+    let err = copy_claude_session_at(b.path(), a.path(), CONTINUE_ID, "/repo").unwrap_err();
+    assert!(err.contains("different version"));
+    assert_eq!(
+        fs::read_to_string(&a_file).unwrap(),
+        "history\non b\nmore on a\n"
+    );
+}
+
+#[test]
 fn continue_rejects_bad_ids_and_missing_sources() {
     let (from, _c) = setup();
     let (to, _c2) = setup();

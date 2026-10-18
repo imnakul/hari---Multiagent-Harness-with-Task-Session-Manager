@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { bindHarnessSession } from "../../../integrations/harness/core/registry";
 import { isRemoteProjectPath } from "../../projects/model/recents";
 import { providerAccounts } from "./providerAccounts";
-import type { Block, Session } from "../../sessions/model/session";
+import { sessionWorkCwd, type Block, type Session } from "../../sessions/model/session";
 
 /** Fork feature L-102: carry a Claude chat to another account by copying its native transcript. */
 export const REWIND_NOTE =
@@ -58,6 +59,25 @@ export async function copyClaudeSession(input: {
   } catch (reason) {
     throw reason instanceof Error ? reason : new Error(String(reason));
   }
+}
+
+/**
+ * Copies the chat's transcript to `toAccount`, then re-points the in-memory Claude resume and
+ * Interactive bindings at that account. Without the rebind the next send in this app run would
+ * see a binding for the old account: Structured would start an empty conversation and
+ * Interactive would refuse with "bound to a different project or account".
+ */
+export async function continueClaudeSession(
+  session: Pick<Session, "id" | "providerSessionId" | "cwd" | "worktreeCwd" | "blocks">,
+  fromAccount: string,
+  toAccount: string,
+): Promise<void> {
+  const providerSessionId = session.providerSessionId;
+  if (!providerSessionId) throw new Error("This chat has no Claude conversation to continue.");
+  // Claude runs in the working copy, so its transcript sits under that folder's slug.
+  const cwd = sessionWorkCwd(session);
+  await copyClaudeSession({ fromAccount, toAccount, sessionId: providerSessionId, cwd });
+  bindHarnessSession("claude", session.id, providerSessionId, cwd, toAccount, session.blocks);
 }
 
 export function continuedMarker(accountLabel: string): Block {

@@ -954,6 +954,31 @@ fn copy_dir_plain(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Copies files from `from` that `to` lacks (each via a temp name), never replacing existing ones.
+fn add_missing_files(from: &Path, to: &Path, tag: &uuid::Uuid) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(from).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        let target = to.join(entry.file_name());
+        if kind.is_dir() {
+            add_missing_files(&entry.path(), &target, tag)?;
+        } else if kind.is_file() && !target.exists() {
+            let mut tmp_name = entry.file_name();
+            tmp_name.push(format!(".tmp-{tag}"));
+            let tmp = to.join(tmp_name);
+            let result = std::fs::copy(entry.path(), &tmp)
+                .map_err(|e| e.to_string())
+                .and_then(|_| std::fs::rename(&tmp, &target).map_err(|e| e.to_string()));
+            if let Err(error) = result {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(error);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Copies one Claude chat (transcript plus its same-named folder) from one config root to another
 /// so the other account can `--resume` the identical session. Copy only; the source is untouched.
 pub(crate) fn copy_claude_session_at(
@@ -992,14 +1017,20 @@ pub(crate) fn copy_claude_session_at(
     let slug = slug_dir.file_name().ok_or("Invalid project folder")?;
     let target_dir = to_root_real.join("projects").join(slug);
     let target = target_dir.join(&file_name);
+    // Claude only appends to a transcript. A target that is an exact byte prefix of the source is
+    // an older copy of the same chat (switching back after continuing elsewhere), so it may be
+    // brought up to date. Any other difference means the chat went on separately there: refuse.
+    let mut write_transcript = true;
     if target.exists() {
-        let same = std::fs::read(&source).map_err(|e| e.to_string())?
-            == std::fs::read(&target).map_err(|e| e.to_string())?;
-        return if same {
-            Ok(())
-        } else {
-            Err("The target account already has a different version of this chat".into())
-        };
+        let source_bytes = std::fs::read(&source).map_err(|e| e.to_string())?;
+        let target_bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
+        if source_bytes == target_bytes {
+            write_transcript = false;
+        } else if !(source_bytes.len() > target_bytes.len()
+            && source_bytes.starts_with(&target_bytes))
+        {
+            return Err("The target account already has a different version of this chat".into());
+        }
     }
     std::fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
     let tag = uuid::Uuid::new_v4();
@@ -1014,6 +1045,12 @@ pub(crate) fn copy_claude_session_at(
             let _ = std::fs::remove_dir_all(&tmp);
             return Err(error);
         }
+    } else if side_from.is_dir() {
+        // Sub-agent and tool-output files have unique names; add the ones made since, keep the rest.
+        add_missing_files(&side_from, &side_to, &tag)?;
+    }
+    if !write_transcript {
+        return Ok(());
     }
     let tmp_file = target_dir.join(format!("{file_name}.tmp-{tag}"));
     let result = std::fs::copy(&source, &tmp_file)
