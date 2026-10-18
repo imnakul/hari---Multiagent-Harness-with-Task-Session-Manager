@@ -12,6 +12,7 @@ import {
   stopInteractiveClaude,
 } from "../../../integrations/harness/providers/claude/claudeInteractive";
 import "@xterm/xterm/css/xterm.css";
+import { attachGpuRenderer } from "../../terminal/model/gpuRenderer";
 
 /** Mounting/closing this view never spawns or kills the adapter's process. */
 export function ClaudeInteractiveTerminal({
@@ -35,6 +36,8 @@ export function ClaudeInteractiveTerminal({
     if (!terminal || !element) return;
     if (terminal.term.element) element.appendChild(terminal.term.element);
     else terminal.term.open(element);
+    // The process outlives this view, so its GPU context only lives while open.
+    const detachGpuRenderer = attachGpuRenderer(terminal.term, element);
     const fit = new FitAddon();
     terminal.term.loadAddon(fit);
     const observer = new ResizeObserver(() => {
@@ -49,6 +52,7 @@ export function ClaudeInteractiveTerminal({
     return () => {
       observer.disconnect();
       fit.dispose();
+      detachGpuRenderer();
       terminal.term.element?.remove();
     };
   }, [terminal]);

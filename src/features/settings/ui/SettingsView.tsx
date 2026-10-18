@@ -412,6 +412,7 @@ import {
   loadCollapsedProjectRailMode,
   loadComposerRunner,
   loadCompactModelLabels,
+  loadGpuTerminalRendering,
   loadProcessMonitor,
   saveProcessMonitor,
   loadInteractiveIdleMinutes,
@@ -443,6 +444,7 @@ import {
   saveCollapsedProjectRailMode,
   saveComposerRunner,
   saveCompactModelLabels,
+  saveGpuTerminalRendering,
   saveAiHelperSettings,
   saveDetailedContext,
   saveDiffViewer,
@@ -943,6 +945,10 @@ function ExperimentationPage(): ReactElement {
     setAllAccountsUsage(next);
   };
 
+  const [gpuTerminalRendering, setGpuTerminalRendering] = useState(
+    loadGpuTerminalRendering,
+  );
+
   const onCompactModelLabels = (next: boolean): void => {
     saveCompactModelLabels(next);
     setCompactModelLabels(next);
@@ -1033,6 +1039,20 @@ function ExperimentationPage(): ReactElement {
           label="Compact model labels"
           on={compactModelLabels}
           onChange={onCompactModelLabels}
+        />
+      </Row>
+      <Row
+        id="gpu-terminal-rendering"
+        label="GPU terminal rendering"
+        description="Draw visible terminals with the graphics card (WebGL) instead of the CPU, which helps during heavy output. Up to 8 terminals use it at once; if the GPU fails, a terminal quietly falls back to normal drawing."
+      >
+        <Toggle
+          label="GPU terminal rendering"
+          on={gpuTerminalRendering}
+          onChange={(next) => {
+            saveGpuTerminalRendering(next);
+            setGpuTerminalRendering(next);
+          }}
         />
       </Row>
     </>

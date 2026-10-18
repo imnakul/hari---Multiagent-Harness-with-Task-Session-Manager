@@ -35,6 +35,7 @@ import {
   type TerminalFitMode,
 } from "../model/terminalLayout";
 import { IS_MAC } from "../../../platform/tauri/platform";
+import { attachGpuRenderer } from "../model/gpuRenderer";
 import "@xterm/xterm/css/xterm.css";
 import { hasTerminalSpawned, isTerminalStarted, isTerminalWanted, markTerminalExited, requestTerminalStart, retryTerminalStart, startTerminal, subscribeTerminalLifecycle, terminalExitCode } from "../../sessions/model/terminalLifecycle";
 import { TYPOGRAPHY_CHANGE_EVENT, loadTerminalFontSize } from "../../settings/model/appearance";
@@ -243,6 +244,7 @@ function LiveTerminalView({ id, cwd, active, onMetaChange }: Props) {
       macOptionIsMeta: IS_MAC,
     });
     term.open(host);
+    const detachGpuRenderer = attachGpuRenderer(term, host);
     termRef.current = term;
     let closed = false;
     if (dead.current && markUnsupportedNotified(id)) {
@@ -552,6 +554,7 @@ function LiveTerminalView({ id, cwd, active, onMetaChange }: Props) {
           if (stoppingPtys.get(id) === stopping) stoppingPtys.delete(id);
         });
       stoppingPtys.set(id, stopping);
+      detachGpuRenderer();
       term.dispose();
       termRef.current = null;
       spawned.current = false;

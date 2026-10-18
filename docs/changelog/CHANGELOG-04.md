@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 11:55 IST — GPU terminal rendering in Experimentation (L-99)
+- Type: feature
+- What: New Experimentation switch, "GPU terminal rendering" (off by default). When on, terminals you can see are drawn by the graphics card instead of the CPU. Hidden terminals give the GPU back, at most 8 use it at once, and any terminal whose GPU drawing fails quietly goes back to normal drawing.
+- Why: User request — terminals were the biggest CPU users while the GPU sat idle.
+- Files: [gpuRenderer.ts](../../src/features/terminal/model/gpuRenderer.ts), [TerminalView.tsx](../../src/features/terminal/ui/TerminalView.tsx), [ClaudeInteractiveTerminal.tsx](../../src/features/sessions/ui/ClaudeInteractiveTerminal.tsx), [settings.ts](../../src/features/settings/model/settings.ts), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [gpuRenderer.test.ts](../../src/features/terminal/model/gpuRenderer.test.ts); new dependency `@xterm/addon-webgl` ^0.19.0 (MIT, official xterm.js addon, ~1.25M weekly downloads).
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,960 passed, 2 skipped) lint — (no ESLint config) build ✅ (addon is a separate 110 kB lazy chunk, 30 kB gzip); desktop check manual
+
 ## 2026-10-18 11:44 IST — Same-version Windows build with merged fixes (0.10.0-local2-upstream-sync)
 - Type: chore
 - What: New Windows installer, same version number, with L-93 to L-98, the native paste closing-ID fix, the no-native-suggestions Interactive fix and the explicit all-accounts refresh.

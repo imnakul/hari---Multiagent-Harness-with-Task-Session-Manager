@@ -610,6 +610,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     label: "Compact model labels",
     keywords: "sidebar thread cards current running provider model",
   },
+  {
+    id: "gpu-terminal-rendering",
+    section: "experimentation",
+    label: "GPU terminal rendering",
+    keywords: "webgl graphics hardware acceleration performance cpu xterm",
+  },
 ];
 
 export type SettingsSearchResult = {
@@ -1593,6 +1599,43 @@ export function subscribeCompactModelLabels(
       COMPACT_MODEL_LABELS_CHANGE_EVENT,
       onStoreChange,
     );
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+const GPU_TERMINAL_RENDERING_KEY = "monocode.gpuTerminalRendering";
+const GPU_TERMINAL_RENDERING_EVENT = "monocode:gpu-terminal-rendering-change";
+
+/** Off by default: WebGL terminals are experimental (fork, L-99). */
+export function loadGpuTerminalRendering(): boolean {
+  try {
+    return localStorage.getItem(GPU_TERMINAL_RENDERING_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveGpuTerminalRendering(value: boolean): void {
+  try {
+    localStorage.setItem(GPU_TERMINAL_RENDERING_KEY, value ? "1" : "0");
+  } catch {
+    // private mode / quota
+  }
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new Event(GPU_TERMINAL_RENDERING_EVENT));
+}
+
+export function subscribeGpuTerminalRendering(
+  onStoreChange: () => void,
+): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === GPU_TERMINAL_RENDERING_KEY) onStoreChange();
+  };
+  window.addEventListener(GPU_TERMINAL_RENDERING_EVENT, onStoreChange);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(GPU_TERMINAL_RENDERING_EVENT, onStoreChange);
     window.removeEventListener("storage", onStorage);
   };
 }
