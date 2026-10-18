@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 02:31 IST — Windows build with the Interactive and composer fixes (0.14.0-local2-upstream-sync)
+- Type: chore
+- What: New Windows installer with L-106 to L-110: Interactive send fixes and the Quick Composer / Add Draft dialog matching the chat composer. The installer file name no longer carries a setup date.
+- Why: User asked to commit and build a new version, without the setup-date in the name.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local2-upstream-sync_x64.exe` (13,955,096 bytes, SHA-256 6CE7ED28516961492647757F8F6603C043F329D012E59C2FBE976FB86F6AFCF2, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,438 passed, 2 skipped) cargo — (release build only) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-19 02:05 IST — Quick Composer and Add Draft dialog match the chat composer (L-110)
 - Type: fix
 - What: The floating Quick Composer now uses your UI font, font size and workspace theme instead of the system font. Its model, project and permission controls look like the chat composer's, and when space is short the toolbar scrolls sideways instead of squashing them (the model name no longer shrinks to "G…"). The Add Draft to Sessions / Edit Draft / Work on… dialog is wider, so Start is no longer cut off. It also has a single close button. The floating window now loads the Geist and Inter fonts like the main window. For Claude models, its model menu has the Structured / Interactive switch, so a new session or draft can start in Interactive mode.
