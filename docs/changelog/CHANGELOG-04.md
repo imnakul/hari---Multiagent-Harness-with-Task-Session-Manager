@@ -5,7 +5,7 @@
 - What: In Interactive mode a chat could get stuck: every message failed within a second with "Claude stopped without confirming this prompt" and never reached the terminal. A leftover Stop signal from an earlier turn that had already ended was being applied to each new message. Now only a Stop that arrives after a message is sent can end it.
 - Why: Bug report — this chat in MonoCode refused "Actually Build version…" again and again, with the native terminal sitting at an empty prompt.
 - Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts)
-- Commit: uncommitted
+- Commit: b7be077e
 - Verified: tsc ✅ tests ✅ (7,432 passed, 2 skipped; the new test fails without the fix) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-18 22:17 IST — Interactive send after a native dialog, and no repeated turn on reopen (L-106, L-107)
