@@ -6,6 +6,7 @@ import type {
   TurnIntent,
 } from "../../../features/sessions/model/session";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { transferProviderSession } from "./child";
 import type { GeneratedSessionTitle } from "../../../features/sessions/model/sessionTitle";
 import type { PrContent } from "../../../features/source-control/model/gitText";
 import { hasLiveCatalog } from "../../../features/sessions/model/models";
@@ -123,7 +124,11 @@ export type HarnessAdapter = {
   /** Optional LLM tab title for the first turn. */
   generateTitle?(input: TitleInput): Promise<GeneratedSessionTitle | null>;
   /** Optional LLM commit message from staged changes. */
-  generateCommitMessage?(cwd: string, signal?: AbortSignal, paths?: readonly string[]): Promise<string>;
+  generateCommitMessage?(
+    cwd: string,
+    signal?: AbortSignal,
+    paths?: readonly string[],
+  ): Promise<string>;
   /** Optional LLM pull request title/body from branch diff context. */
   generatePrContent?(
     cwd: string,
@@ -156,8 +161,30 @@ const adapters = new Map<HarnessId, HarnessAdapter>();
  * After a turn settles, keep the child warm for follow-ups, then park it.
  * Resume state stays, so the next prompt respawns instead of starting over.
  */
-export const HARNESS_IDLE_PARK_MS = 5 * 60_000;
-const idleParkTimers = new Map<string, ReturnType<typeof setTimeout>>();
+export const HARNESS_IDLE_PARK_MS = 3 * 60_000;
+
+/**
+ * Each warm child is a CLI process of a few hundred MB, plus its MCP servers.
+ * Past `limit` idle ones, the least recently settled is parked early, never
+ * one `keep` claims (the conversation on screen) unless the limit is zero.
+ * Running turns are not idle, so they never count.
+ */
+export type HarnessIdleParkPolicy = {
+  limit: () => number;
+  keep: (sessionId: string) => boolean;
+};
+
+let idleParkPolicy: HarnessIdleParkPolicy = {
+  limit: () => Number.POSITIVE_INFINITY,
+  keep: () => false,
+};
+let idleLimitCheck: ReturnType<typeof setTimeout> | undefined;
+
+/** Map order is settle order: the first entry has been idle longest. */
+const idleParkTimers = new Map<
+  string,
+  { harness: HarnessId; timer: ReturnType<typeof setTimeout> }
+>();
 const sessionOperationTails = new Map<string, Promise<void>>();
 const sessionSteerTails = new Map<string, Promise<void>>();
 const activeTurnSessions = new Set<string>();
@@ -210,32 +237,67 @@ function queueSteerOperation<T>(
 }
 
 function cancelIdlePark(sessionId: string): void {
-  const timer = idleParkTimers.get(sessionId);
-  if (timer) clearTimeout(timer);
+  const idle = idleParkTimers.get(sessionId);
+  if (idle) clearTimeout(idle.timer);
   idleParkTimers.delete(sessionId);
+}
+
+/** A native owner can become protected after settling, so every eviction rechecks. */
+function canGenericIdlePark(harness: HarnessId, sessionId: string): boolean {
+  const adapter = adapters.get(harness);
+  return adapter?.canIdlePark?.(sessionId) !== false &&
+    !(adapter?.isRemoteControlDesired?.(sessionId) ?? idleParkExempt.has(sessionId));
 }
 
 function scheduleIdlePark(harness: HarnessId, sessionId: string): void {
   cancelIdlePark(sessionId);
-  const adapter = adapters.get(harness);
-  if (adapter?.canIdlePark?.(sessionId) === false) return;
-  const adapterDesired = adapter?.isRemoteControlDesired?.(sessionId);
-  if (adapterDesired ?? idleParkExempt.has(sessionId)) return;
-  idleParkTimers.set(
-    sessionId,
-    setTimeout(() => {
+  if (!canGenericIdlePark(harness, sessionId)) return;
+  idleParkTimers.set(sessionId, {
+    harness,
+    timer: setTimeout(() => {
       idleParkTimers.delete(sessionId);
-      if (adapters.get(harness)?.canIdlePark?.(sessionId) === false) return;
+      if (!canGenericIdlePark(harness, sessionId)) return;
       void stopHarnessSession(harness, sessionId);
     }, HARNESS_IDLE_PARK_MS),
-  );
+  });
+  if (idleLimitCheck === undefined) idleLimitCheck = setTimeout(enforceHarnessIdleLimit, 0);
+}
+
+export function configureHarnessIdlePark(policy: HarnessIdleParkPolicy) {
+  idleParkPolicy = policy;
+}
+
+/** Park the longest-idle children past the limit; also run when it drops. */
+export function enforceHarnessIdleLimit(): void {
+  clearTimeout(idleLimitCheck);
+  idleLimitCheck = undefined;
+  const limit = Math.max(0, idleParkPolicy.limit());
+  const eligible = [...idleParkTimers].filter(([sessionId, { harness }]) => {
+    if (canGenericIdlePark(harness, sessionId)) return true;
+    cancelIdlePark(sessionId);
+    return false;
+  });
+  let excess = eligible.length - limit;
+  for (const [sessionId, { harness }] of eligible) {
+    if (excess <= 0) return;
+    if (sessionOperationTails.has(sessionId) || activeTurnSessions.has(sessionId)) continue;
+    if (limit > 0 && idleParkPolicy.keep(sessionId)) continue;
+    excess -= 1;
+    void stopHarnessSession(harness, sessionId);
+  }
 }
 
 /** Test seam. */
 export function resetHarnessIdlePark(): void {
-  for (const timer of idleParkTimers.values()) clearTimeout(timer);
+  for (const { timer } of idleParkTimers.values()) clearTimeout(timer);
   idleParkTimers.clear();
   idleParkExempt.clear();
+  clearTimeout(idleLimitCheck);
+  idleLimitCheck = undefined;
+  idleParkPolicy = {
+    limit: () => Number.POSITIVE_INFINITY,
+    keep: () => false,
+  };
 }
 
 export function registerHarness(adapter: HarnessAdapter): void {
@@ -545,6 +607,39 @@ export function bindHarnessSession(
     block.role === "tasks" && block.taskList ? [block.taskList] : [],
   );
   if (lists.length > 0) adapter.restoreTaskLists(threadId, lists);
+}
+
+/**
+ * Continue a provider conversation under another account of the same provider.
+ * The old process stops first so its transcript is complete, then the native
+ * transcript is copied to the new account and the thread resumes from it.
+ * Throws when the transcript cannot be carried, retaining the original resume binding.
+ */
+export async function transferHarnessSessionAccount(input: {
+  harness: "claude" | "codex";
+  threadId: string;
+  providerSessionId: string;
+  cwd: string;
+  fromAccountId?: string;
+  toAccountId: string;
+  blocks?: Block[];
+}): Promise<void> {
+  // Stop drains native output but retains the original resume binding if copy fails.
+  await stopHarnessSession(input.harness, input.threadId);
+  await transferProviderSession(
+    input.harness,
+    input.fromAccountId,
+    input.toAccountId,
+    input.providerSessionId,
+  );
+  bindHarnessSession(
+    input.harness,
+    input.threadId,
+    input.providerSessionId,
+    input.cwd,
+    input.toAccountId,
+    input.blocks,
+  );
 }
 
 /**

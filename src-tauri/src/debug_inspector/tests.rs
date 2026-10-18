@@ -20,7 +20,11 @@ fn saved_identity_reads_only_bounded_columns_without_parsing_or_changing_transcr
     assert!(!serialized.contains("private"));
     assert!(!serialized.contains("blocks"));
     let transcript: String = conn
-        .query_row("SELECT blocks_json FROM sessions WHERE id='chat'", [], |row| row.get(0))
+        .query_row(
+            "SELECT blocks_json FROM sessions WHERE id='chat'",
+            [],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(transcript, "private malformed transcript");
 }
@@ -40,8 +44,11 @@ fn saved_identity_rejects_missing_unsupported_and_oversized_metadata() {
     )
     .unwrap();
     assert!(session_identity(&conn, "chat").is_err());
-    conn.execute("UPDATE sessions SET harness='codex', provider_account_id=?1", ["x".repeat(81)])
-        .unwrap();
+    conn.execute(
+        "UPDATE sessions SET harness='codex', provider_account_id=?1",
+        ["x".repeat(81)],
+    )
+    .unwrap();
     assert!(session_identity(&conn, "chat").is_err());
     assert!(session_identity(&conn, "../credentials").is_err());
 }
@@ -73,7 +80,10 @@ const NATIVE_ID: &str = "native-session-1";
 const MESSAGE_ID: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 fn write_claude_transcript(root: &Path, relative: &str, contents: &str) -> PathBuf {
-    let path = root.join("projects").join(relative).join(format!("{NATIVE_ID}.jsonl"));
+    let path = root
+        .join("projects")
+        .join(relative)
+        .join(format!("{NATIVE_ID}.jsonl"));
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(&path, contents).unwrap();
     path
@@ -158,12 +168,15 @@ fn claude_usage_is_allowlisted_deduplicated_and_partial_lines_are_excluded() {
     contents.push_str(&claude_assistant(NATIVE_ID, MESSAGE_ID, 31));
     contents.push_str(&claude_assistant(NATIVE_ID, MESSAGE_ID, 999));
     contents.push_str("{malformed transcript row}\n");
-    contents.push_str(&claude_assistant(NATIVE_ID, "unfinished-message", 88).trim_end());
+    contents.push_str(claude_assistant(NATIVE_ID, "unfinished-message", 88).trim_end());
     write_claude_transcript(temp.path(), "project-a", &contents);
 
     let evidence = read_claude(temp.path(), NATIVE_ID).unwrap();
     assert_eq!(evidence.measurements.len(), 1);
-    assert_eq!(evidence.measurements[0].identity, format!("claude-message:{MESSAGE_ID}"));
+    assert_eq!(
+        evidence.measurements[0].identity,
+        format!("claude-message:{MESSAGE_ID}")
+    );
     assert_eq!(evidence.measurements[0].uncached_input, Some(999));
     assert_eq!(evidence.measurements[0].cache_read, Some(17));
     assert_eq!(evidence.measurements[0].cache_write, Some(11));
@@ -196,7 +209,10 @@ fn claude_result_snapshots_reconcile_by_uuid_and_unidentified_snapshots_are_labe
 
     let evidence = read_claude(temp.path(), NATIVE_ID).unwrap();
     assert_eq!(evidence.measurements.len(), 3);
-    assert_eq!(evidence.measurements[0].identity, format!("claude-sdk-result:{result_id}"));
+    assert_eq!(
+        evidence.measurements[0].identity,
+        format!("claude-sdk-result:{result_id}")
+    );
     assert_eq!(evidence.measurements[0].uncached_input, Some(999));
     assert!(evidence.measurements[1]
         .identity
@@ -220,11 +236,7 @@ fn claude_result_snapshots_reconcile_by_uuid_and_unidentified_snapshots_are_labe
 #[test]
 fn transcript_identity_must_match_and_must_be_present_in_the_header() {
     let wrong = TestDir::new();
-    write_claude_transcript(
-        wrong.path(),
-        "project-a",
-        &claude_header("another-session"),
-    );
+    write_claude_transcript(wrong.path(), "project-a", &claude_header("another-session"));
     assert!(read_claude(wrong.path(), NATIVE_ID)
         .unwrap_err()
         .contains("identity does not match"));
@@ -257,11 +269,7 @@ fn account_roots_are_isolated_and_duplicate_native_transcripts_fail_closed() {
     assert_eq!(first.measurements[0].uncached_input, Some(41));
     assert_eq!(second.measurements[0].uncached_input, Some(92));
 
-    write_claude_transcript(
-        first_account.path(),
-        "project-c",
-        &claude_header(NATIVE_ID),
-    );
+    write_claude_transcript(first_account.path(), "project-c", &claude_header(NATIVE_ID));
     assert!(read_claude(first_account.path(), NATIVE_ID)
         .unwrap_err()
         .contains("More than one"));
@@ -274,26 +282,26 @@ fn codex_cumulative_and_last_response_snapshots_remain_separate() {
     fs::create_dir_all(&sessions).unwrap();
     let path = sessions.join(format!("rollout-{NATIVE_ID}.jsonl"));
     let token_count_event = json!({
-            "type": "event_msg",
-            "timestamp": "2026-10-12T10:11:12Z",
-            "payload": {
-                "type": "token_count",
-                "info": {
-                    "total_token_usage": {
-                        "input_tokens": 120,
-                        "cached_input_tokens": 70,
-                        "output_tokens": 31,
-                        "reasoning_output_tokens": 9
-                    },
-                    "last_token_usage": {
-                        "input_tokens": 30,
-                        "cached_input_tokens": 20,
-                        "output_tokens": 11,
-                        "reasoning_output_tokens": 3
-                    }
+        "type": "event_msg",
+        "timestamp": "2026-10-12T10:11:12Z",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "total_token_usage": {
+                    "input_tokens": 120,
+                    "cached_input_tokens": 70,
+                    "output_tokens": 31,
+                    "reasoning_output_tokens": 9
+                },
+                "last_token_usage": {
+                    "input_tokens": 30,
+                    "cached_input_tokens": 20,
+                    "output_tokens": 11,
+                    "reasoning_output_tokens": 3
                 }
             }
-        });
+        }
+    });
     let transcript = format!(
         "{}\n{}\n{}\n",
         json!({
@@ -357,7 +365,10 @@ fn oversized_lines_and_large_files_stay_within_the_read_and_record_bounds() {
     assert_eq!(evidence.read_bytes, MAX_READ_BYTES as u64);
     assert!(evidence.truncated);
     assert!(evidence.malformed_lines >= 1);
-    assert!(evidence.limitations.iter().any(|item| item == "oversizedLineSkipped"));
+    assert!(evidence
+        .limitations
+        .iter()
+        .any(|item| item == "oversizedLineSkipped"));
     assert!(evidence.measurements.len() <= MAX_MEASUREMENTS);
 }
 
@@ -409,7 +420,11 @@ fn linked_project_directories_make_scan_inconclusive_even_with_a_candidate() {
     write_claude_transcript(outside.path(), "outside", &claude_header(NATIVE_ID));
     let projects = root.path().join("projects");
     fs::create_dir_all(&projects).unwrap();
-    symlink(outside.path().join("projects/outside"), projects.join("linked-project")).unwrap();
+    symlink(
+        outside.path().join("projects/outside"),
+        projects.join("linked-project"),
+    )
+    .unwrap();
 
     assert!(read_claude(root.path(), NATIVE_ID)
         .unwrap_err()

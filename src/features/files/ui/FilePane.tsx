@@ -20,7 +20,7 @@ import {
   type EditorPane,
   type FilePaneTab,
 } from "../../workspace/model/layout";
-import { isImagePath } from "../model/filePreview";
+import { isImagePath, isVideoPath } from "../model/filePreview";
 import type { TerminalMetaPatch } from "../../terminal/model/terminalTab";
 import type { EditorNavigationTarget } from "../../search/model/search";
 import { editorPathsEqual } from "../../search/model/search";
@@ -36,6 +36,7 @@ import { MarkdownPreview } from "../../sessions/ui/AgentMarkdown";
 import { BinaryFileView } from "./BinaryFileView";
 import { ReleaseNotesSurface } from "../../../app/ui/ReleaseNotesSurface";
 import { GitFileDiffView } from "../../sessions/ui/GitFileDiffView";
+import { WorkingTreeDiffSurface as WorkingTreeDiff } from "../../source-control/ui/workingTreeDiffSurface";
 import { isRemoteProjectPath } from "../../projects/model/recents";
 
 const CommitDiff = lazySurface(async () => {
@@ -58,16 +59,16 @@ const TerminalView = lazySurface(async () => {
   const module = await import("../../terminal/ui/TerminalView");
   return { default: module.TerminalView };
 });
-const WorkingTreeDiff = lazySurface(async () => {
-  const module = await import("../../source-control/ui/WorkingTreeDiff");
-  return { default: module.WorkingTreeDiff };
-});
 
 type Props = {
   pane: EditorPane;
   focused: boolean;
+  /** The containing workspace tab can stay mounted while hidden. */
+  visible?: boolean;
   /** The title bar already names a standalone file, so avoid repeating it. */
   showTabs?: boolean;
+  /** Shows the tabs but holds off mounting the files, as a pane slides in. */
+  deferBody?: boolean;
   dirtyFileIds: Set<string>;
   fileErrorCounts: Map<string, number>;
   sessions: Session[];
@@ -101,7 +102,9 @@ export { selectPaneSurface, type PaneSurfaceSelection };
 function FilePaneComponent({
   pane,
   focused,
+  visible = true,
   showTabs = true,
+  deferBody = false,
   dirtyFileIds,
   fileErrorCounts,
   sessions,
@@ -125,9 +128,6 @@ function FilePaneComponent({
     loadDiffViewer,
     loadDiffViewer,
   );
-  const activeFile = pane.files.find((file) => file.id === pane.activeFileId);
-  const surface = selectPaneSurface(activeFile, diffViewer);
-
   return (
     <div
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col"
@@ -147,45 +147,14 @@ function FilePaneComponent({
           onPaneDragStart={onPaneDragStart}
         />
       ) : null}
-      <div className="relative min-h-0 flex-1">
-        {surface.kind === "session-changes" ? (
-          <div className="absolute inset-0 h-full">
-            <SessionChangesDiff
-              cwd={surface.file.cwd}
-              sessionId={surface.file.sessionChanges.sessionId}
-              focusPath={surface.file.path}
-            />
-          </div>
-        ) : surface.kind === "commit" ? (
-          <div className="absolute inset-0 h-full">
-            <CommitDiff cwd={surface.file.cwd} sha={surface.file.commit.sha} />
-          </div>
-        ) : surface.kind === "git-diff" ? (
-          <div className="absolute inset-0 h-full">
-            <GitFileDiffView
-              cwd={surface.file.cwd}
-              path={surface.file.diff.path}
-              kind={surface.file.diff.kind}
-            />
-          </div>
-        ) : surface.kind === "working-tree-diff" ? (
-          <div className="absolute inset-0 h-full">
-            <WorkingTreeDiff
-              cwd={surface.file.cwd}
-              focusPath={surface.file.path}
-              focusKind={surface.file.focusKind ?? surface.file.changeKind}
-            />
-          </div>
-        ) : null}
-        {pane.files.map((file) => {
-          if (
-            isCommitTab(file) ||
+      <div data-pane-body="" className="relative min-h-0 flex-1">
+        {(deferBody ? [] : pane.files).map((file) => {
+          // Keep review state alive just like an editor; visibility suspends
+          // its rendering and background work until the tab is active again.
+          const active = visible && file.id === pane.activeFileId;
+          const unifiedReview =
             isChangesTab(file) ||
-            isSessionChangesTab(file) ||
-            isDiffTab(file) ||
-            (diffViewer === "unified" && isReviewTab(file))
-          )
-            return null;
+            (diffViewer === "unified" && isReviewTab(file));
           return (
             <div
               key={file.id}
@@ -196,13 +165,35 @@ function FilePaneComponent({
                   : "hidden"
               }
             >
-              {isAgentTab(file) ? (
+              {isSessionChangesTab(file) ? (
+                <SessionChangesDiff
+                  visible={active}
+                  cwd={file.cwd}
+                  sessionId={file.sessionChanges.sessionId}
+                  focusPath={file.path}
+                />
+              ) : isCommitTab(file) ? (
+                <CommitDiff
+                  cwd={file.cwd}
+                  sha={file.commit.sha}
+                  visible={active}
+                />
+              ) : isDiffTab(file) ? (
+                <GitFileDiffView cwd={file.cwd} path={file.diff.path} kind={file.diff.kind} visible={active} />
+              ) : unifiedReview ? (
+                <WorkingTreeDiff
+                  visible={active}
+                  cwd={file.cwd}
+                  focusPath={file.path}
+                  focusKind={file.changeKind}
+                />
+              ) : isAgentTab(file) ? (
                 <AgentTabView
                   title={file.path}
                   session={sessions.find(
                     (entry) => entry.id === file.agent.sessionId,
                   )}
-                  visible={file.id === pane.activeFileId}
+                  visible={visible && file.id === pane.activeFileId}
                   focused={focused && file.id === pane.activeFileId}
                   onOpenFile={onOpenFile}
                 />
@@ -230,8 +221,12 @@ function FilePaneComponent({
                     onTerminalMetaChange?.(file.id, patch)
                   }
                 />
-              ) : isImagePath(file.path) ? (
-                <BinaryFileView path={file.path} cwd={file.cwd} />
+              ) : isImagePath(file.path) || isVideoPath(file.path) ? (
+                <BinaryFileView
+                  path={file.path}
+                  cwd={file.cwd}
+                  visible={visible && file.id === pane.activeFileId}
+                />
               ) : (
                 <FileEditor
                   path={file.path}
@@ -265,7 +260,9 @@ export const FilePane = memo(FilePaneComponent, (previous, next) => {
   if (
     previous.pane !== next.pane ||
     previous.focused !== next.focused ||
+    previous.visible !== next.visible ||
     previous.showTabs !== next.showTabs ||
+    previous.deferBody !== next.deferBody ||
     previous.dirtyFileIds !== next.dirtyFileIds ||
     previous.fileErrorCounts !== next.fileErrorCounts ||
     previous.onFocus !== next.onFocus ||

@@ -56,6 +56,7 @@ vi.mock("@xterm/xterm", () => {
       active: { type: "normal" },
       onBufferChange: (): FakeDisposable => new FakeDisposable(),
     };
+    loadAddon(): void {}
     open(): void {}
     write(): void {}
     writeln(): void {}

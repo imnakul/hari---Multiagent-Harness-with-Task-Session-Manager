@@ -74,6 +74,29 @@ type UsageWindowEntry = {
   window: RateLimitWindow;
 };
 
+/** `inset` is the footer on the inset layout's outer glass: pill-shaped chips. */
+export type UsageChipVariant = "footer" | "inset" | "composer";
+
+export const USAGE_CHIP_CLASSES: Record<UsageChipVariant, string> = {
+  footer:
+    "-mx-1 inline-flex h-5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-1 text-content/55 transition-[background-color,color,transform] duration-150 ease-out hover:bg-content/10 hover:text-content focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97]",
+  inset:
+    "inline-flex h-5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-content/55 transition-[background-color,color,transform] duration-150 ease-out hover:bg-content/10 hover:text-content focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97]",
+  composer:
+    "inline-flex h-6.5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 text-content/55 transition-colors hover:bg-content/8 hover:text-content focus-visible:outline-2 focus-visible:outline-accent",
+};
+
+/** The refresh button beside the usage chips, per variant. */
+
+export const USAGE_REFRESH_CLASSES: Record<UsageChipVariant, string> = {
+  footer:
+    "grid size-4.5 shrink-0 place-items-center rounded-md text-content/40 hover:bg-content/10 hover:text-content disabled:opacity-50",
+  inset:
+    "-ml-1 grid size-5 shrink-0 place-items-center rounded-full text-content/40 hover:bg-content/10 hover:text-content disabled:opacity-50",
+  composer:
+    "grid size-6.5 shrink-0 place-items-center rounded-md text-content/40 transition-colors hover:bg-content/8 hover:text-content disabled:opacity-50",
+};
+
 type ResetActionState =
   "idle" | "confirming" | "using" | CodexRateLimitResetOutcome | "error";
 
@@ -94,6 +117,7 @@ export function UsageProviderChip({
   accountLabel,
   inlineWindow = "all",
   inUse = false,
+  variant = "footer",
 }: {
   limits: ProviderRateLimits;
   /**
@@ -121,6 +145,8 @@ export function UsageProviderChip({
   onReconnect?: () => Promise<void>;
   /** Forces a new read of this one account (fork, L-98). */
   onRefresh?: () => void;
+  /** `composer` matches the quiet tool buttons under a Mono's composer. */
+  variant?: UsageChipVariant;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -274,10 +300,10 @@ export function UsageProviderChip({
       <button
         ref={trigger}
         type="button"
-        className={`inline-flex h-5 min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap rounded transition-[background-color,color,transform] duration-150 ease-out focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.97] ${
+        className={`${USAGE_CHIP_CLASSES[variant]} ${
           inUse
             ? "bg-selection px-1.5 text-content hover:bg-selection-hover"
-            : "-mx-1 px-1 text-content/55 hover:bg-content/10 hover:text-content"
+            : ""
         }`}
         aria-label={detailsLabel}
         aria-current={inUse ? "true" : undefined}

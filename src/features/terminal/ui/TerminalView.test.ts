@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
+import { StrictMode, act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -7,6 +7,13 @@ import {
   resetTerminalLifecycle,
   startTerminal,
 } from "../../sessions/model/terminalLifecycle";
+import type { WebLinksAddon } from "@xterm/addon-web-links";
+import type { ILink, ITerminalOptions } from "@xterm/xterm";
+import { openUrl } from "@tauri-apps/plugin-opener";
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn(async () => {}),
+}));
 
 const pty = vi.hoisted(() => ({
   PTY_SUPPORTED: true,
@@ -25,7 +32,10 @@ const pty = vi.hoisted(() => ({
   getPtyStatus: vi.fn(async () => ({ foreground: null })),
 }));
 vi.mock("../../../platform/tauri/pty", () => pty);
-const xterm = vi.hoisted(() => ({ options: [] as { fontFamily?: string }[] }));
+const xterm = vi.hoisted(() => ({
+  options: [] as ITerminalOptions[],
+  loadAddon: vi.fn(),
+}));
 vi.mock("../model/terminalLayout", () => ({
   fitTerminal: () => null,
   applyTerminalChrome: () => {},
@@ -33,7 +43,7 @@ vi.mock("../model/terminalLayout", () => ({
 }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
-    constructor(options: { fontFamily?: string }) {
+    constructor(options: ITerminalOptions) {
       xterm.options.push(options);
     }
     cols = 80;
@@ -45,6 +55,8 @@ vi.mock("@xterm/xterm", () => ({
       onBufferChange: () => ({ dispose() {} }),
     };
     open() {}
+    /** Accept addon registration without activating addons in the terminal mock. */
+    loadAddon = xterm.loadAddon;
     focus() {}
     dispose() {}
     writeln() {}
@@ -75,6 +87,143 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
+});
+
+function setup() {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  return { host, root: createRoot(host) };
+}
+
+it("detects plain HTTP(S) URLs and opens them through the addon callback", async () => {
+  const { host, root } = setup();
+  startTerminal("plain-links");
+  const { Terminal } =
+    await vi.importActual<typeof import("@xterm/xterm")>("@xterm/xterm");
+  const terminal = new Terminal({ cols: 200, rows: 1 });
+  const registerLinkProvider = vi.spyOn(terminal, "registerLinkProvider");
+  let addon: WebLinksAddon | undefined;
+  try {
+    await act(async () => {
+      root.render(
+        createElement(TerminalView, {
+          id: "plain-links",
+          cwd: "/tmp",
+          active: true,
+        }),
+      );
+    });
+    expect(xterm.loadAddon).toHaveBeenCalledTimes(1);
+    addon = xterm.loadAddon.mock.calls[0][0] as WebLinksAddon;
+    addon.activate(terminal);
+    const urls = [
+      "http://example.com",
+      "https://example.com/path",
+      "HTTPS://example.com",
+    ];
+    const blocked = [
+      "file:///tmp/test",
+      "javascript:alert(1)",
+      "mailto:test@example.com",
+      "ftp://example.com",
+    ];
+    await new Promise<void>((resolve) => {
+      terminal.write([...urls, ...blocked].join(" "), resolve);
+    });
+    const provider = registerLinkProvider.mock.calls[0][0];
+    const links = await new Promise<ILink[] | undefined>((resolve) => {
+      provider.provideLinks(1, resolve);
+    });
+    expect(links?.map((link) => link.text)).toEqual(urls);
+    for (const link of links!) {
+      link.activate(new MouseEvent("click"), link.text);
+    }
+    expect(vi.mocked(openUrl).mock.calls).toEqual(urls.map((url) => [url]));
+    vi.mocked(openUrl).mockClear();
+    // Exercise the callback's guard even if a provider dispatches another scheme.
+    for (const uri of blocked) {
+      links![0].activate(new MouseEvent("click"), uri);
+    }
+    expect(openUrl).not.toHaveBeenCalled();
+  } finally {
+    addon?.dispose();
+    terminal.dispose();
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
+it("opens only HTTP(S) URLs dispatched by the OSC 8 link handler", async () => {
+  const { host, root } = setup();
+  startTerminal("osc-links");
+  try {
+    await act(async () => {
+      root.render(
+        createElement(TerminalView, {
+          id: "osc-links",
+          cwd: "/tmp",
+          active: true,
+        }),
+      );
+    });
+    const handler = xterm.options[0].linkHandler!;
+    const urls = [
+      "http://example.com",
+      "https://example.com/path",
+      "HTTPS://example.com",
+    ];
+    for (const uri of urls) {
+      handler.activate(new MouseEvent("click"), uri, undefined);
+    }
+    expect(vi.mocked(openUrl).mock.calls).toEqual(urls.map((url) => [url]));
+    vi.mocked(openUrl).mockClear();
+    for (const uri of [
+      "file:///tmp/test",
+      "javascript:alert(1)",
+      "mailto:test@example.com",
+      "ftp://example.com",
+    ]) {
+      handler.activate(new MouseEvent("click"), uri, undefined);
+    }
+    expect(openUrl).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
+it("does not let StrictMode cleanup kill the replacement shell", async () => {
+  const { host, root } = setup();
+  startTerminal("same-id");
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(TerminalView, {
+            id: "same-id",
+            cwd: "/tmp",
+            active: true,
+          }),
+        ),
+      );
+    });
+    expect(pty.spawnPty).toHaveBeenCalledTimes(1);
+    expect(pty.subscribePty).toHaveBeenCalledTimes(1);
+    expect(pty.killPty).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => {
+      forgetTerminal("same-id");
+      root.unmount();
+    });
+    host.remove();
+  }
+  expect(pty.killPty).toHaveBeenCalledTimes(1);
 });
 
 afterEach(async () => {

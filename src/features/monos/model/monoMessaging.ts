@@ -5,6 +5,7 @@ import {
 import { displayAttachments } from "../../sessions/model/attachments";
 import {
   appendQueuedMessage,
+  canDispatchQueuedHead,
   dequeueQueuedMessage,
 } from "../../sessions/model/messageQueue";
 import type {
@@ -99,6 +100,16 @@ export function monoMessageDeliveries(
           ...(message.error ? { error: message.error } : {}),
         },
       ]),
+  );
+}
+
+/** Ready reports deliver in the background; only waiting or failed ones need a queue row. */
+export function visibleMonoCompletionMessages(
+  session: Session,
+): QueuedMessage[] {
+  const ready = canDispatchQueuedHead(session);
+  return (session.queuedMessages ?? []).filter(
+    (message) => !!message.monoSessionCompletion && (!ready || !!message.error),
   );
 }
 

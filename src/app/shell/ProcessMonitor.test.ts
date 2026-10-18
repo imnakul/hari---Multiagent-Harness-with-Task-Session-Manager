@@ -125,6 +125,8 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+const statsCalls = (): number => mocks.invoke.mock.calls.filter(([command]) => command === "process_monitor_stats").length;
+
 it("performs no IPC or timers while off and stops sampling immediately when disabled", async () => {
   const onStop = vi.fn();
   await act(async () =>
@@ -136,20 +138,22 @@ it("performs no IPC or timers while off and stops sampling immediately when disa
   expect(mocks.invoke).not.toHaveBeenCalled();
   expect(container.textContent).toBe("");
   await act(async () => saveProcessMonitor(true));
-  expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  expect(statsCalls()).toBe(1);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(9999);
   });
-  expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  expect(statsCalls()).toBe(1);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(1);
   });
-  expect(mocks.invoke).toHaveBeenCalledTimes(2);
+  expect(statsCalls()).toBe(2);
   await act(async () => saveProcessMonitor(false));
+  const disabledCalls = mocks.invoke.mock.calls.length;
   await act(async () => {
     await vi.advanceTimersByTimeAsync(60000);
   });
-  expect(mocks.invoke).toHaveBeenCalledTimes(2);
+  expect(statsCalls()).toBe(2);
+  expect(mocks.invoke).toHaveBeenCalledTimes(disabledCalls);
 });
 it("refreshes an open popover every three seconds, groups titles, and uses existing Stop", async () => {
   saveProcessMonitor(true);
@@ -164,11 +168,11 @@ it("refreshes an open popover every three seconds, groups titles, and uses exist
   );
   expect(container.textContent).toContain("/repo");
   expect(container.textContent).toContain("My chat");
-  const before = mocks.invoke.mock.calls.length;
+  const before = statsCalls();
   await act(async () => {
     await vi.advanceTimersByTimeAsync(3000);
   });
-  expect(mocks.invoke).toHaveBeenCalledTimes(before + 1);
+  expect(statsCalls()).toBe(before + 1);
   await act(async () =>
     container
       .querySelector<HTMLButtonElement>('[aria-label="Stop My chat"]')!
@@ -380,4 +384,44 @@ it("expands app and chat rows into read-only process lists that survive refreshe
       7,
     ),
   ).toBe("Unnamed process");
+});
+
+it("shows pressure in the same opt-in process view and releases the pressure state when disabled", async () => {
+  saveProcessMonitor(true);
+  const onPressureChange = vi.fn();
+  mocks.invoke.mockImplementation(async (command: string) => command === "resource_usage"
+    ? { cpuPercent: 90, memoryPressure: 0 }
+    : stats([row]));
+  await act(async () => root.render(createElement(ProcessMonitor, {sessions: [session], onStop: vi.fn(), onPressureChange})));
+  await act(async () => { await vi.advanceTimersByTimeAsync(9000); });
+  expect(container.textContent).toContain("High usage");
+  expect(onPressureChange).toHaveBeenLastCalledWith(true);
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Process monitor"]')!.click());
+  expect(container.textContent).toContain("Resource pressure: CPU saturation");
+  expect(container.textContent).toContain("My chat");
+  await act(async () => saveProcessMonitor(false));
+  expect(onPressureChange).toHaveBeenLastCalledWith(false);
+  const calls = mocks.invoke.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+  expect(mocks.invoke).toHaveBeenCalledTimes(calls);
+});
+
+it("stops only a verified tool descendant and keeps the app and agent view-only in expanded lists", async () => {
+  saveProcessMonitor(true);
+  const native: OwnedProcess = {...row, root: {...row.root, identity: "42:100"}, processes: 2, children: [
+    {...row.children[0], identity: "42:100"},
+    {pid: 43, parent: 42, identity: "43:101", name: "build.exe", depth: 1, cpu: 1, memory: 1000},
+  ]};
+  mocks.invoke.mockImplementation(async (command: string) => command === "resource_usage" ? {cpuPercent: 0, memoryPressure: 0} : command === "process_stop_tool" ? undefined : stats([native]));
+  await act(async () => root.render(createElement(ProcessMonitor, {sessions: [session], onStop: vi.fn()})));
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Process monitor"]')!.click());
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Show processes for My chat"]')!.click());
+  const stop = container.querySelector<HTMLButtonElement>('[aria-label="Stop tool build.exe"]');
+  expect(stop).not.toBeNull();
+  expect(container.querySelector('[aria-label="Stop tool node.exe"]')).toBeNull();
+  await act(async () => stop!.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("process_stop_tool", {rootId: "chat", rootPid: 42, rootIdentity: "42:100", pid: 43, identity: "43:101"});
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Show processes for MonoCode app"]')!.click());
+  expect(container.querySelector('[aria-label="Stop tool monocode.exe"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Stop tool msedgewebview2.exe"]')).toBeNull();
 });

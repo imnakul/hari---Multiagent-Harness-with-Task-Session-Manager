@@ -62,6 +62,8 @@ export type ContextMeterProps = {
   onCompact?: () => boolean | void;
   /** Whether compaction is currently disabled. */
   compactDisabled?: boolean;
+  /** Known empty conversation, without a provider context reading. */
+  empty?: boolean;
 };
 
 function UsageBreakdownRows({
@@ -131,7 +133,12 @@ export const DETAILED_CONTEXT_METER_POPOVER_CLASS: string =
   "w-[320px] max-w-[calc(100vw-2rem)] max-h-[82vh] overflow-y-auto p-3.5 text-xs text-content select-none shadow-xl border border-content/10 bg-surface rounded-xl";
 
 /**
- * Circular gauge and comprehensive inspection popover for context window and costing.
+ * Circular gauge for how full the model context window is.
+ *
+ * Renders nothing until the harness reports both halves — Cursor's ACP stream
+ * carries no usage at all, and a ring guessing at a number is worse than no
+ * ring. A conversation with nothing in it yet is the exception: its context
+ * is known to be empty, so `empty` shows a bare ring.
  */
 export function ContextMeter({
   sessionId,
@@ -144,7 +151,8 @@ export function ContextMeter({
   cwd,
   blocks,
   onCompact,
-  compactDisabled,
+  compactDisabled = false,
+  empty = false,
 }: ContextMeterProps): React.JSX.Element | null {
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -420,6 +428,7 @@ export function ContextMeter({
             detail: "No context reading yet. It appears after the first reply.",
           };
 
+  if (empty && !hasData) return <span title="No context used yet" className="grid shrink-0"><MeterRing ratio={0} label="No context used yet" /></span>;
   if (!hasData && !sessionId) return null;
 
   return (
@@ -1141,5 +1150,44 @@ export function NativeContextDetails({
         </details>
       ) : null}
     </div>
+  );
+}
+
+function MeterRing({ ratio, label }: { ratio: number; label?: string }) {
+  return (
+    <svg
+      width={SIZE}
+      height={SIZE}
+      viewBox={`0 0 ${SIZE} ${SIZE}`}
+      className={ringClass(ratio)}
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      <circle
+        cx={SIZE / 2}
+        cy={SIZE / 2}
+        r={RADIUS}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={STROKE}
+        className="opacity-25"
+      />
+      {/* A round cap would leave a dot on an empty ring. */}
+      {ratio > 0 ? (
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={STROKE}
+          strokeLinecap="round"
+          strokeDasharray={CIRCUMFERENCE}
+          strokeDashoffset={CIRCUMFERENCE * (1 - ratio)}
+          transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+        />
+      ) : null}
+    </svg>
   );
 }

@@ -1,5 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 — Integrate upstream main / 0.14.0 with local workflows
+- What: Merged pinned upstream `a90c558d` (0.14.0 plus post-tag main) above latest fork `b344c56b` on new `nakul/windows-support-upstream-0.14.0`. Applied all six approved choices: optional layout with local managers/footer, native opt-in resource/pressure/tool controls, safe Claude/Codex account continuation, protected Interactive/Remote Control idle behavior and unified Mono overview. Retained all 104 feature IDs; L-90 stays removed.
+- Files: 54 conflict files combined rather than taking either side wholesale; integration repairs include sidebar project labels/server snapshots, queue/tool-detail persistence, terminal lifecycle, image resolution, settings visibility and the local-manager footer predicate. Details: `docs/specs/upstream-0.14.0-sync-plan.md` and `docs/notes/archive/upstream-merge-2026-10-18-014.md`; feature register and Windows learnings updated.
+- Verified: full web 7,427 passed / 2 opt-in skipped; TypeScript, Rust format/check/Clippy pass; full Rust 813 passed / 2 ignored; host 117 passed / 5 skipped; release-channel 8 passed; production/host builds and whitespace checks pass. Baseline/test-environment failures attributed in the intake record. Human Windows/provider checks remain separate; no installer built.
+- Commit: integration merge on `nakul/windows-support-upstream-0.14.0` (SHA in task handoff); publication requires an explicit instruction.
+
 ## 2026-10-18 16:18 IST — Same-version Windows build with continue on account (0.10.0-local2-upstream-sync)
 - Type: chore
 - What: New Windows installer, same version number, adding continue a Claude chat on another account with the resume and switch-back fixes (L-102), process monitor partial totals (L-103) and the Interactive dialog message (L-104).

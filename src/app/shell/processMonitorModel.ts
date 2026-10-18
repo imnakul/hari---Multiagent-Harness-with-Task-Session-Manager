@@ -4,6 +4,8 @@ import { sessionNeedsInput } from "../../features/sessions/model/session";
 /** One process inside a row, in tree order (`depth` 0 is the row's root). */
 export type ProcessDetail = {
   pid: number;
+  /** Native birth stamp; missing readings never authorize Stop. */
+  identity?: string | null;
   parent: number;
   /** Executable or command name; empty when the OS gives none. */
   name: string;
@@ -17,6 +19,7 @@ export type OwnedProcess = {
   root: {
     id: string;
     pid: number;
+    identity?: string | null;
     cwd: string;
     kind: "interactive" | "structured" | "terminal";
     idleMs: number;

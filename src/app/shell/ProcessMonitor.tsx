@@ -12,6 +12,7 @@ import {
 } from "../../features/settings/model/settings";
 import type { Session } from "../../features/sessions/model/session";
 import { Popover } from "../../shared/ui/Popover";
+import { useResourcePressure } from "../../features/notifications/ui/ResourcePressureNotice";
 import { killPty } from "../../platform/tauri/pty";
 import { killChild } from "../../integrations/harness/core/child";
 import {
@@ -39,6 +40,7 @@ type Props = {
   sessions: Session[];
   metadata?: Pick<Session, "id" | "title" | "cwd" | "worktreeCwd">[];
   onStop: (id: string) => Promise<unknown> | void;
+  onPressureChange?: (active: boolean) => void;
 };
 
 export function ProcessMonitor(props: Props): ReactElement | null {
@@ -55,7 +57,9 @@ function EnabledProcessMonitor({
   sessions,
   metadata = [],
   onStop,
+  onPressureChange,
 }: Props): ReactElement {
+  const pressure = useResourcePressure(onPressureChange);
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<OwnedProcess[] | null>(null);
   const [app, setApp] = useState<AppProcess | null>(null);
@@ -120,6 +124,19 @@ function EnabledProcessMonitor({
       refresh.current = () => undefined;
     };
   }, [open]);
+  const stopTool = async (row: OwnedProcess, item: ProcessDetail): Promise<void> => {
+    if (!row.root.identity || !item.identity || item.depth === 0) return;
+    const key = `tool:${row.root.id}:${item.pid}`;
+    setStopping((previous) => new Set(previous).add(key));
+    try {
+      await invoke("process_stop_tool", {rootId: row.root.id, rootPid: row.root.pid, rootIdentity: row.root.identity, pid: item.pid, identity: item.identity});
+    } catch (failure) {
+      setError(String(failure));
+    } finally {
+      setStopping((previous) => { const next = new Set(previous); next.delete(key); return next; });
+      refresh.current();
+    }
+  };
   const sessionFor = (row: OwnedProcess): Session | undefined =>
     sessions.find((s) => s.id === processSessionId(row));
   const metadataFor = (
@@ -196,13 +213,14 @@ function EnabledProcessMonitor({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-label="Process monitor"
-        className="shrink-0 rounded px-1.5 py-0.5 text-content/65 hover:bg-content/10"
+        className={`shrink-0 rounded px-1.5 py-0.5 hover:bg-content/10 ${pressure.active ? "text-amber-500" : "text-content/65"}`}
         title={`MonoCode and the chats and terminals it started; CPU and GPU as a share of machine capacity${
           totals?.partial
             ? ". Some processes could not be read, so totals count only the readable ones"
             : ""
         }`}
       >
+        {pressure.active ? "High usage · " : ""}
         {error
           ? "Processes unavailable"
           : rows == null || !totals
@@ -235,6 +253,7 @@ function EnabledProcessMonitor({
                 Stop all idle
               </button>
             </div>
+            {pressure.active ? <p role="status" className="mb-2 text-amber-500">Resource pressure: {pressure.reasons.join(", ")}. Stop a session or a running tool below to free resources.</p> : null}
             {error ? (
               <p role="status" className="mb-2 text-red-400">
                 Stats unavailable: {error}
@@ -375,6 +394,9 @@ function EnabledProcessMonitor({
                           label={title}
                           items={row.children}
                           appPid={app?.pid}
+                          root={row.status === "exited" ? undefined : row.root}
+                          stopping={stopping}
+                          onStopTool={(item) => void stopTool(row, item)}
                         />
                       ) : null}
                     </div>
@@ -496,15 +518,21 @@ function Unknown({ label }: { label: string }): ReactElement {
   );
 }
 
-/** Read-only: stopping single processes could crash the web view or confuse a chat. */
+/** App/root processes are view-only; verified owned tool descendants can be stopped. */
 function ProcessList({
   label,
   items,
   appPid,
+  root,
+  stopping,
+  onStopTool,
 }: {
   label: string;
   items: ProcessDetail[];
   appPid?: number;
+  root?: OwnedProcess["root"];
+  stopping?: ReadonlySet<string>;
+  onStopTool?: (item: ProcessDetail) => void;
 }): ReactElement {
   if (items.length === 0)
     return <p className="pb-2 pl-7 text-content/50">No process details.</p>;
@@ -513,7 +541,7 @@ function ProcessList({
       {items.map((item) => (
         <li
           key={item.pid}
-          className="flex items-center gap-2 py-0.5 text-content/65"
+          className="group/tool flex items-center gap-2 py-0.5 text-content/65"
           style={{ paddingLeft: `${Math.min(item.depth, 6) * 12}px` }}
         >
           <span className="min-w-0 flex-1 truncate" title={item.name}>
@@ -530,7 +558,7 @@ function ProcessList({
             gpu={item.gpu}
             measuring={item.memory != null}
           />
-          <span aria-hidden className="size-6 shrink-0" />
+          {root?.identity && item.identity && item.depth > 0 && onStopTool ? <button type="button" aria-label={`Stop tool ${item.name || item.pid}`} title="Stop this tool and its children" disabled={stopping?.has(`tool:${root.id}:${item.pid}`)} onClick={() => onStopTool(item)} className="grid size-6 shrink-0 place-items-center rounded text-content/60 opacity-0 hover:bg-red-500/15 hover:text-red-400 group-hover/tool:opacity-100 focus-visible:opacity-100 disabled:opacity-50"><Square aria-hidden className="size-3 fill-current" /></button> : <span aria-hidden className="size-6 shrink-0" />}
         </li>
       ))}
     </ul>

@@ -71,9 +71,12 @@ function localProjectImageUrl(url: string, cwd?: string): string | undefined {
 export function remarkWorkspaceFileLinks({
   cwd,
   imageDefinitions,
+  documentImages = false,
 }: {
   cwd?: string;
   imageDefinitions?: () => ReadonlyMap<string, string>;
+  /** Document images retain their source for document-relative, root-checked resolution. */
+  documentImages?: boolean;
 }) {
   return function transform(tree: MarkdownNode) {
     const definitions = new Map<string, string>();
@@ -92,7 +95,7 @@ export function remarkWorkspaceFileLinks({
 
     function visit(node: MarkdownNode) {
       if (node.type === "image" && node.url) {
-        node.url = localProjectImageUrl(node.url, cwd) ?? node.url;
+        if (!documentImages) node.url = localProjectImageUrl(node.url, cwd) ?? node.url;
       } else if (node.type === "imageReference") {
         const identifier = normalizedDefinitionId(
           node.identifier ?? node.label ?? "",
@@ -100,7 +103,7 @@ export function remarkWorkspaceFileLinks({
         const definition =
           definitions.get(identifier) ?? imageDefinitions?.().get(identifier);
         const imageUrl = definition
-          ? localProjectImageUrl(definition, cwd)
+          ? documentImages ? definition : localProjectImageUrl(definition, cwd)
           : undefined;
         if (imageUrl) {
           node.type = "image";

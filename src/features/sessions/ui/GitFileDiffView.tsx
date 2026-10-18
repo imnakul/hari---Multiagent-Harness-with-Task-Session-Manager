@@ -27,9 +27,10 @@ type Props = {
   cwd: string;
   path: string;
   kind?: "staged" | "unstaged";
+  visible?: boolean;
 };
 
-export function GitFileDiffView({ cwd, path, kind = "unstaged" }: Props) {
+export function GitFileDiffView({ cwd, path, kind = "unstaged", visible = true }: Props) {
   const [loaded, setLoaded] = useState<LoadedGitDiff | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -56,6 +57,7 @@ export function GitFileDiffView({ cwd, path, kind = "unstaged" }: Props) {
   loadedRef.current = loaded;
 
   useEffect(() => {
+    if (!visible) return;
     if (!cwd || !relative) {
       setLoaded(null);
       setLoading(false);
@@ -116,7 +118,7 @@ export function GitFileDiffView({ cwd, path, kind = "unstaged" }: Props) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [cwd, relative, kind, reloadKey]);
+  }, [cwd, relative, kind, reloadKey, visible]);
 
   const state = useMemo(
     () =>

@@ -10,9 +10,12 @@ import { SettingsView } from "./SettingsView";
 import { rememberNotificationProjects } from "../../notifications/model/notificationProjects";
 import {
   SETTINGS_INDEX,
+  CLASSIC_LAYOUT_HIDDEN_SETTINGS,
+  INSET_LAYOUT_HIDDEN_SETTINGS,
   SETTINGS_SECTIONS,
   type SettingsSectionId,
 } from "../model/settings";
+import { loadInsetLayout, saveInsetLayout } from "../model/appearance";
 import {
   providerAccounts,
   saveProviderAccount,
@@ -168,22 +171,21 @@ describe("settings pages", () => {
         `[role="switch"][aria-label="Show sessions started by ${monoLook(findMono(id)!).name} in sidebar"]`,
       )!;
     await render("monos");
-    expect(toggle(mono.id).getAttribute("aria-checked")).toBe("true");
-    expect(toggle(other.id).getAttribute("aria-checked")).toBe("true");
-    await act(async () => toggle(mono.id).click());
+    // Off until turned on: a Mono's sessions stay in its overview.
     expect(toggle(mono.id).getAttribute("aria-checked")).toBe("false");
-    expect(findMono(mono.id)?.showStartedSessionsInSidebar).toBe(false);
-    expect(toggle(other.id).getAttribute("aria-checked")).toBe("true");
+    expect(toggle(other.id).getAttribute("aria-checked")).toBe("false");
+    await act(async () => toggle(mono.id).click());
+    expect(toggle(mono.id).getAttribute("aria-checked")).toBe("true");
+    expect(findMono(mono.id)?.showStartedSessionsInSidebar).toBe(true);
+    expect(toggle(other.id).getAttribute("aria-checked")).toBe("false");
     await render("general");
     await render("monos");
-    expect(toggle(mono.id).getAttribute("aria-checked")).toBe("false");
-    await act(async () =>
-      updateMono(mono.id, (entry) => ({
-        ...entry,
-        showStartedSessionsInSidebar: true,
-      })),
-    );
     expect(toggle(mono.id).getAttribute("aria-checked")).toBe("true");
+    await act(async () => updateMono(mono.id, (entry) => ({
+      ...entry,
+      showStartedSessionsInSidebar: false,
+    })));
+    expect(toggle(mono.id).getAttribute("aria-checked")).toBe("false");
   });
 
   it("keeps account emails blurred until clicked and hides them when settings reopen", async () => {
@@ -831,6 +833,17 @@ describe("settings pages", () => {
     expect(resumeSession()).toBeUndefined();
   });
 
+  it("keeps local menu controls while hiding classic-only tint controls in the new layout", async () => {
+    saveInsetLayout(true);
+    await render("appearance");
+    const ids = renderedSettingIds();
+    expect(ids).toContain("workspace-theme");
+    expect(ids).toContain("inset-glass");
+    expect(ids).toContain("glass-strength");
+    expect(ids).toContain("menu-backdrop-blur");
+    for (const id of INSET_LAYOUT_HIDDEN_SETTINGS) expect(ids).not.toContain(id);
+  });
+
   // The search index is hand-maintained; this is what keeps it honest.
   it.each(
     [...new Set(SETTINGS_INDEX.map((entry) => entry.section))].map(
@@ -840,8 +853,11 @@ describe("settings pages", () => {
     "renders every indexed setting on the $section page",
     async ({ section }) => {
       await render(section);
+      const hidden = loadInsetLayout()
+        ? INSET_LAYOUT_HIDDEN_SETTINGS
+        : CLASSIC_LAYOUT_HIDDEN_SETTINGS;
       const expected = SETTINGS_INDEX.filter(
-        (entry) => entry.section === section,
+        (entry) => entry.section === section && !hidden.has(entry.id),
       )
         .filter(
           (entry) =>
@@ -1079,6 +1095,17 @@ describe("settings search", () => {
     expect(options()).toHaveLength(0);
     expect(input.value).toBe("");
     expect(onSelectSection).not.toHaveBeenCalled();
+  });
+
+  it("lists Escape stopping a session without a recorder", async () => {
+    await render("keybindings");
+    const row = [...container.querySelectorAll("span")].find(
+      (span) => span.textContent === "Session: Stop",
+    )?.parentElement;
+    expect(row?.textContent).toContain("Esc");
+    expect(
+      container.querySelector('[aria-label="Change Session: Stop shortcut"]'),
+    ).toBeNull();
   });
 
   it("records a custom keybinding from the key cell", async () => {

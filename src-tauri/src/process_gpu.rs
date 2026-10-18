@@ -6,6 +6,7 @@ use std::collections::HashMap;
 /// Task Manager's rule: add up a process's engines of the same type (3D, Copy,
 /// VideoDecode…), then report its busiest type, capped at 100%.
 /// Instance names look like `pid_1234_luid_0x0_0x1_phys_0_eng_0_engtype_3D`.
+#[cfg(any(windows, test))]
 pub(crate) fn gpu_by_pid(readings: &[(String, f64)]) -> HashMap<u32, f64> {
     let mut per_type: HashMap<(u32, &str), f64> = HashMap::new();
     for (name, value) in readings {

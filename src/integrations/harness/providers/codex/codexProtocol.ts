@@ -600,13 +600,64 @@ function mapTokenUsage(rec: Record<string, unknown>): MappedCodexNotification {
   const last = lastRaw ? parseCodexUsageRecord(lastRaw) : undefined;
   const total = totalRaw ? parseCodexUsageRecord(totalRaw) : undefined;
   const window = numberField(usage, "modelContextWindow");
-  const inputTokens = numberField(last, "inputTokens");
-  const cacheReadTokens = numberField(last, "cachedInputTokens");
-  const cacheWriteTokens = numberField(last, "cacheWriteInputTokens");
-  const outputTokens = numberField(last, "outputTokens");
+  const used = last?.totalTokens ?? 0;
+  return {
+    events: used > 0 || window > 0 ? [{
+      type: "context",
+      ...(used > 0 ? { used } : {}),
+      ...(window > 0 ? { window } : {}),
+    }] : [],
+    tokenUsage: {
+      threadId: stringField(rec, "threadId"),
+      turnId: stringField(rec, "turnId"),
+      last,
+      total,
+      modelContextWindow: window > 0 ? window : undefined,
+    },
+  };
+}
+
+/** What the current Codex turn has spent, summed request by request. */
+export type CodexTurnUsage = {
+  /** `total.totalTokens` of the last reading, to spot a repeated one. */
+  threadTotal?: number;
+  turn: Record<string, number>;
+};
+
+const CODEX_USAGE_KEYS = [
+  "inputTokens",
+  "cachedInputTokens",
+  "cacheWriteInputTokens",
+  "outputTokens",
+] as const;
+
+/**
+ * `last` in `thread/tokenUsage/updated` covers a single model request, and a
+ * turn with tool calls makes several. Codex also re-sends an unchanged reading
+ * with no new request behind it (after compaction, on a usage limit), so `last`
+ * is only added when the thread's `total` has moved.
+ */
+export function addCodexTurnUsage(
+  spent: CodexTurnUsage,
+  params: unknown,
+): TurnMetrics | null {
+  const usage = asRecord(asRecord(params)?.tokenUsage);
+  const last = asRecord(usage?.last);
+  if (!last) return null;
+  const threadTotal = numberField(asRecord(usage?.total), "totalTokens");
+  if (threadTotal > 0 && threadTotal === spent.threadTotal) return null;
+  spent.threadTotal = threadTotal;
+  for (const key of CODEX_USAGE_KEYS) {
+    if (key in last) {
+      spent.turn[key] = (spent.turn[key] ?? 0) + numberField(last, key);
+    }
+  }
+  const inputTokens = numberField(spent.turn, "inputTokens");
+  const cacheReadTokens = numberField(spent.turn, "cachedInputTokens");
+  const cacheWriteTokens = numberField(spent.turn, "cacheWriteInputTokens");
+  const outputTokens = numberField(spent.turn, "outputTokens");
   const cacheReported =
-    last != null &&
-    ("cachedInputTokens" in last || "cacheWriteInputTokens" in last);
+    "cachedInputTokens" in spent.turn || "cacheWriteInputTokens" in spent.turn;
   const metrics: TurnMetrics = {
     ...(inputTokens ? { inputTokens } : {}),
     ...(outputTokens ? { outputTokens } : {}),
@@ -619,31 +670,7 @@ function mapTokenUsage(rec: Record<string, unknown>): MappedCodexNotification {
         }
       : {}),
   };
-  const hasMetrics = Object.keys(metrics).length > 0;
-  const used = last?.totalTokens ?? 0;
-  const threadId = stringField(rec, "threadId");
-  const turnId = stringField(rec, "turnId");
-  const events: HarnessEvent[] = [];
-  if (used > 0 || window > 0) {
-    events.push({
-      type: "context",
-      ...(used > 0 ? { used } : {}),
-      ...(window > 0 ? { window } : {}),
-    });
-  }
-  if (hasMetrics) {
-    events.push({ type: "turn.metrics", ...metrics });
-  }
-  return {
-    events,
-    tokenUsage: {
-      threadId,
-      turnId,
-      last,
-      total,
-      modelContextWindow: window > 0 ? window : undefined,
-    },
-  };
+  return Object.keys(metrics).length > 0 ? metrics : null;
 }
 
 function mapTurnTerminal(

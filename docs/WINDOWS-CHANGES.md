@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 18 Oct 2026 | Verify native process identity before stopping a tool | resources, PID reuse |
 | 17 Oct 2026 | Reconcile folded native input with the original GUI turn | Claude Interactive, timing |
 | 17 Oct 2026 | Repaint omitted input after long native history | ConPTY, startup geometry |
 | 17 Oct 2026 | Keep literal request text outside a folded Claude paste | ConPTY, supervised input |
@@ -60,6 +61,21 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## Verify native process identity before stopping a tool
+
+During the 0.14.0 merge, upstream's per-tool resource action was combined with
+our native process monitor instead of routing the Windows UI through `/bin/ps`.
+`process_stop.rs` accepts only descendants of a currently registered harness/PTY
+root, verifies the root and selected tool's creation stamps, and rejects agent,
+app, unreadable, replaced or other-chat identities. Children stop first.
+On Windows it opens a query/terminate handle, checks `GetProcessTimes` on that
+same handle, then calls `TerminateProcess` before closing it. A PID-only check
+followed by opening a new handle would leave a PID-reuse race. No console or
+new crate is involved. Pure ownership/order tests and Linux checks pass; actual
+Windows process-tree/Stop behavior remains a human/native-CI follow-up. See
+[the merge record](notes/archive/upstream-merge-2026-10-18-014.md).
+
 
 ## 17 Oct 2026 - Reconcile folded native input with the original GUI turn
 

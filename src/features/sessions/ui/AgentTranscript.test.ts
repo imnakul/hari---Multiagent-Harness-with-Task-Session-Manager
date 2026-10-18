@@ -57,6 +57,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("AgentTranscript running turn clock", () => {
+  it("times a message sent mid-turn from the turn it joined", () => {
+    vi.spyOn(Date, "now").mockReturnValue(100_000);
+    try {
+      const markup = render(
+        [
+          { id: "user", role: "user", text: "Go", startedAt: 10_000 },
+          tool("first"),
+          { id: "steer", role: "user", text: "Also this", sentAt: 95_000 },
+          { id: "reply", role: "assistant", text: "On it", streaming: true },
+        ],
+        true,
+      );
+      // Started 90s ago; without the joined turn's start it read from mount.
+      expect(markup).toContain("Working for 1m 30s");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+
 describe("AgentTranscript collapsed work", () => {
   it("keeps an assistant-first phone shimmer and model on its own turn beside a queued local prompt", () => {
     const markup = render(

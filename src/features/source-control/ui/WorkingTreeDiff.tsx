@@ -12,7 +12,8 @@ import {
   type GitFileDiffKind,
 } from "../../../platform/tauri/fs";
 import { forEachConcurrent } from "../../../shared/lib/concurrent";
-import { buildUnifiedFile, type UnifiedFileDiff } from "../model/unifiedDiff";
+import type { UnifiedFileDiff } from "../model/unifiedDiff";
+import { prepareUnifiedDiff } from "../model/diffWorker";
 import {
   prioritizeWorkingTreeDiffEntries,
   workingTreeDiffEntries,
@@ -28,9 +29,11 @@ import {
 } from "../../sessions/ui/diffPathMatching";
 
 export { isMatchingDiffPath, normalizePathSeparators };
+import { pruneMap } from "../model/stableDiff";
 
 type Props = {
   cwd: string;
+  visible?: boolean;
   focusPath?: string;
   focusKind?: GitFileDiffKind;
 };
@@ -46,15 +49,24 @@ type LoadedDiff = {
 
 const DIFF_LOAD_CONCURRENCY = 4;
 
-export function WorkingTreeDiff({ cwd, focusPath, focusKind }: Props) {
+export function WorkingTreeDiff({
+  cwd,
+  focusPath,
+  focusKind,
+  visible = true,
+}: Props) {
   const [files, setFiles] = useState<GitChangedFile[] | null>(null);
   const [diffs, setDiffs] = useState<Map<string, LoadedDiff>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const diffsRef = useRef(diffs);
   diffsRef.current = diffs;
+  const loadedScope = useRef("");
+  const focusPathRef = useRef(focusPath);
+  focusPathRef.current = focusPath;
 
   useEffect(() => {
+    if (!visible) return;
     if (!cwd || cwd === "~") {
       setFiles([]);
       setDiffs(new Map());
@@ -63,21 +75,30 @@ export function WorkingTreeDiff({ cwd, focusPath, focusKind }: Props) {
 
     let disposed = false;
     let generation = 0;
-    setFiles(null);
-    setDiffs(new Map());
+    let controller = new AbortController();
+    const scope = `${cwd}\0${focusKind ?? ""}`;
+    if (loadedScope.current !== scope) {
+      loadedScope.current = scope;
+      setFiles(null);
+      setDiffs(new Map());
+    }
 
     const run = () => {
+      controller.abort();
+      controller = new AbortController();
+      const { signal } = controller;
       const current = ++generation;
       void gitDiffFiles(cwd)
         .then(async (index) => {
           if (disposed || current !== generation) return;
           setFiles(index.files);
-          setDiffs(new Map());
           setError(null);
           const entries = workingTreeDiffEntries(index.files, focusKind);
+          const retained = new Set(entries.map((entry) => entry.id));
+          setDiffs((existing) => pruneMap(existing, retained));
           const loadOrder = prioritizeWorkingTreeDiffEntries(
             entries,
-            focusPath,
+            focusPathRef.current,
             focusKind,
           );
           await forEachConcurrent(
@@ -91,17 +112,34 @@ export function WorkingTreeDiff({ cwd, focusPath, focusKind }: Props) {
                   entry.file.relative,
                   entry.kind,
                 );
-                const unified =
-                  !diff.binary && !diff.tooLarge
-                    ? buildUnifiedFile(diff.original, diff.current)
-                    : null;
-                loaded = {
-                  binary: diff.binary,
-                  tooLarge: diff.tooLarge,
-                  original: diff.original,
-                  current: diff.current,
-                  unified,
-                };
+                const previous = diffsRef.current.get(entry.id);
+                if (
+                  previous &&
+                  previous.original === diff.original &&
+                  previous.current === diff.current &&
+                  previous.binary === diff.binary &&
+                  previous.tooLarge === diff.tooLarge &&
+                  !previous.error
+                ) {
+                  loaded = previous;
+                } else {
+                  const unified =
+                    !diff.binary && !diff.tooLarge
+                      ? await prepareUnifiedDiff(
+                          diff.original,
+                          diff.current,
+                          signal,
+                          entry.file.path === focusPathRef.current ? 0 : 1,
+                        )
+                      : null;
+                  loaded = {
+                    binary: diff.binary,
+                    tooLarge: diff.tooLarge,
+                    original: diff.original,
+                    current: diff.current,
+                    unified,
+                  };
+                }
               } catch (caught: unknown) {
                 loaded = {
                   binary: false,
@@ -115,6 +153,7 @@ export function WorkingTreeDiff({ cwd, focusPath, focusKind }: Props) {
               }
               if (disposed || current !== generation) return;
               setDiffs((existing) => {
+                if (existing.get(entry.id) === loaded) return existing;
                 const next = new Map(existing);
                 next.set(entry.id, loaded);
                 return next;
@@ -147,12 +186,13 @@ export function WorkingTreeDiff({ cwd, focusPath, focusKind }: Props) {
     document.addEventListener("visibilitychange", onFocus);
     return () => {
       disposed = true;
+      controller.abort();
       if (refreshFrame) window.cancelAnimationFrame(refreshFrame);
       unsub();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [cwd, focusPath, focusKind]);
+  }, [cwd, focusKind, visible]);
   // A review opened from the Changes or Staged Changes section shows only that side.
   const entries = useMemo(
     () => workingTreeDiffEntries(files ?? [], focusKind),
@@ -301,6 +341,7 @@ export function WorkingTreeDiff({ cwd, focusPath, focusKind }: Props) {
   return (
     <UnifiedDiffView
       files={models}
+      visible={visible}
       fileCount={focusKind ? entries.length : files.length}
       focusId={focusId}
       busyId={busyId}

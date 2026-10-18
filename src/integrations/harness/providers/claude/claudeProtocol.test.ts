@@ -51,6 +51,7 @@ import {
   turnMetricsFromResult,
   isUsageLimitResult,
   usageLimitFromRateLimitEvent,
+  isReplayedTaskNotificationResult,
 } from "./claudeProtocol";
 
 function liveKey(
@@ -657,6 +658,23 @@ describe("usage limits", () => {
     ).toEqual({ resetsAt: 1_790_000_000_000 });
   });
 
+  it("does not stop the session when only fast mode's extra usage runs out", () => {
+    // Out of credits refuses fast mode until the monthly reset, while the plan
+    // still serves the session at standard speed.
+    expect(
+      usageLimitFromRateLimitEvent({
+        rate_limit_info: {
+          status: "rejected",
+          resetsAt: 1_793_491_200,
+          rateLimitType: "overage",
+          overageStatus: "rejected",
+          overageDisabledReason: "out_of_credits",
+          isUsingOverage: false,
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("ignores allowed windows and extra usage", () => {
     expect(
       usageLimitFromRateLimitEvent({
@@ -918,6 +936,22 @@ describe("list_models catalog", () => {
     // A generic "Default (recommended)" label is renamed to the concrete
     // model so the picker shows Opus 5.5, not a nameless slot.
     expect(models[0]?.name).toBe("Opus 5.5");
+  });
+
+  it("records the concrete model behind live-catalog aliases", () => {
+    const models = modelsFromClaudeListModels([
+      { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus" },
+      {
+        value: "claude-fable-5-1[1m]",
+        resolvedModel: "claude-fable-5-1",
+        displayName: "Fable 5.1",
+      },
+    ]);
+
+    expect(models.map((model) => model.aliasTarget)).toEqual([
+      "claude-opus-5-5",
+      undefined,
+    ]);
   });
 
   it("adds resolved versions to generic live-catalog alias labels", () => {
@@ -1485,5 +1519,20 @@ describe("applyClaudeTaskTool", () => {
       false,
     );
     expect(tasks.size).toBe(0);
+  });
+});
+
+describe("isReplayedTaskNotificationResult", () => {
+  it("matches only a zero-turn result woken by a task notification", () => {
+    const origin = { kind: "task-notification" };
+    expect(
+      isReplayedTaskNotificationResult({ type: "result", num_turns: 0, origin }),
+    ).toBe(true);
+    expect(
+      isReplayedTaskNotificationResult({ type: "result", num_turns: 1, origin }),
+    ).toBe(false);
+    expect(
+      isReplayedTaskNotificationResult({ type: "result", num_turns: 0 }),
+    ).toBe(false);
   });
 });

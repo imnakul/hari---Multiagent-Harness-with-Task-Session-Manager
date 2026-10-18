@@ -70,6 +70,7 @@ vi.mock("@xterm/xterm", () => {
       active: { type: "normal" },
       onBufferChange: (): FakeDisposable => new FakeDisposable(),
     };
+    loadAddon(): void {}
     open(): void {}
     write(): void {}
     writeln(): void {}
@@ -271,6 +272,7 @@ describe("TerminalView lazy startup", () => {
     renderView("closing-1");
     const gate = deferredSpawn();
     act(() => startButton()?.click());
+    await flush();
     expect(pty.spawnPty).toHaveBeenCalledTimes(1);
     act(() => {
       forgetTerminal("closing-1");

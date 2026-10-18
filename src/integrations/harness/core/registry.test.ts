@@ -1,3 +1,4 @@
+import * as childBridge from "./child";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   resetHarnessModelOverlays,
@@ -7,12 +8,15 @@ import type { HarnessId } from "../../../features/sessions/model/session";
 import {
   HARNESS_IDLE_PARK_MS,
   bindHarnessSession,
+  transferHarnessSessionAccount,
   canCompactHarnessContext,
   canHarnessRemoteControl,
   canRunHarnessTextPrompt,
   runHarnessTextPrompt,
   canRewindHarnessLastTurn,
   compactHarnessContext,
+  configureHarnessIdlePark,
+  enforceHarnessIdleLimit,
   isLiveHarness,
   listHarnesses,
   refreshHarnessCatalogs,
@@ -510,6 +514,136 @@ describe("harness registry", () => {
     expect(setDesired).toHaveBeenCalledWith("saved-rc", true, "Saved chat");
     expect(setRemoteControl).not.toHaveBeenCalled();
   });
+  describe("idle limit", () => {
+    const turn = (sessionId: string) =>
+      sendHarnessTurn({
+        harness: "cursor",
+        sessionId,
+        cwd: "/tmp",
+        model: "cursor:composer-2.5",
+        text: "hi",
+        runtimeMode: "supervised",
+        onEvent: () => undefined,
+      });
+
+    it("parks the longest-idle child once too many are warm", async () => {
+      vi.useFakeTimers();
+      const stopSession = vi.fn(async () => undefined);
+      registerHarness(stub("cursor", { stopSession }));
+      configureHarnessIdlePark({ limit: () => 2, keep: () => false });
+
+      for (const id of ["s1", "s2", "s3"]) await turn(id);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stopSession.mock.calls).toEqual([["s1"]]);
+
+      // The rest still park on the idle timer.
+      await vi.advanceTimersByTimeAsync(HARNESS_IDLE_PARK_MS);
+      expect(stopSession.mock.calls.flat().sort()).toEqual(["s1", "s2", "s3"]);
+    });
+
+    it("spares the conversation on screen and never counts a running turn", async () => {
+      vi.useFakeTimers();
+      const stopSession = vi.fn(async () => undefined);
+      let finishRunning!: () => void;
+      registerHarness(
+        stub("cursor", {
+          stopSession,
+          async sendTurn(input) {
+            if (input.sessionId !== "running") return;
+            await new Promise<void>((resolve) => {
+              finishRunning = resolve;
+            });
+          },
+        }),
+      );
+      configureHarnessIdlePark({
+        limit: () => 1,
+        keep: (id) => id === "viewed",
+      });
+
+      const running = turn("running");
+      await turn("viewed");
+      await turn("other");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stopSession.mock.calls).toEqual([["other"]]);
+
+      finishRunning();
+      await running;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stopSession.mock.calls).toEqual([["other"], ["running"]]);
+    });
+
+    it("parks every idle child at a limit of zero, including the one on screen", async () => {
+      vi.useFakeTimers();
+      const stopSession = vi.fn(async () => undefined);
+      registerHarness(stub("cursor", { stopSession }));
+      configureHarnessIdlePark({ limit: () => 0, keep: () => true });
+
+      await turn("viewed");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stopSession).toHaveBeenCalledWith("viewed");
+    });
+
+    it("never counts protected Interactive or Remote Control owners toward the idle cap", async () => {
+      vi.useFakeTimers();
+      const stopSession = vi.fn(async () => undefined);
+      registerHarness(stub("cursor", {stopSession, canIdlePark: (id) => id !== "interactive", isRemoteControlDesired: (id) => id === "phone"}));
+      configureHarnessIdlePark({limit: () => 0, keep: () => false});
+      for (const id of ["interactive", "phone", "ordinary"]) await turn(id);
+      await vi.advanceTimersByTimeAsync(HARNESS_IDLE_PARK_MS + 1);
+      expect(stopSession.mock.calls).toEqual([["ordinary"]]);
+    });
+
+    it("rechecks native ownership and phone state when enforcing a previously scheduled cap", async () => {
+      vi.useFakeTimers();
+      const stopSession = vi.fn(async () => undefined);
+      let protectedNow = false;
+      registerHarness(stub("cursor", {stopSession, canIdlePark: (id) => !(protectedNow && id === "interactive"), isRemoteControlDesired: (id) => protectedNow && id === "phone"}));
+      configureHarnessIdlePark({limit: () => 3, keep: () => false});
+      await turn("interactive"); await turn("phone"); await turn("ordinary");
+      protectedNow = true;
+      configureHarnessIdlePark({limit: () => 0, keep: () => false});
+      enforceHarnessIdleLimit();
+      await vi.advanceTimersByTimeAsync(HARNESS_IDLE_PARK_MS + 1);
+      expect(stopSession.mock.calls).toEqual([["ordinary"]]);
+    });
+
+    it("applies a lowered limit straight away", async () => {
+      vi.useFakeTimers();
+      const stopSession = vi.fn(async () => undefined);
+      registerHarness(stub("cursor", { stopSession }));
+      let limit = 3;
+      configureHarnessIdlePark({ limit: () => limit, keep: () => false });
+
+      for (const id of ["s1", "s2", "s3"]) await turn(id);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stopSession).not.toHaveBeenCalled();
+
+      limit = 1;
+      enforceHarnessIdleLimit();
+      expect(stopSession.mock.calls).toEqual([["s1"], ["s2"]]);
+    });
+  });
+  it("retains the old resume binding when native account copying fails and binds the new account only after success", async () => {
+    const stopSession = vi.fn(async () => undefined);
+    const forgetSession = vi.fn(async () => undefined);
+    const bindSession = vi.fn();
+    registerHarness(stub("codex", {stopSession, forgetSession, bindSession}));
+    bindHarnessSession("codex", "chat", "native-id", "/repo", "old");
+    const transfer = vi.spyOn(childBridge, "transferProviderSession").mockRejectedValueOnce(new Error("copy failed"));
+    const input = {harness: "codex" as const, threadId: "chat", providerSessionId: "native-id", cwd: "/repo", fromAccountId: "old", toAccountId: "new"};
+    try {
+      await expect(transferHarnessSessionAccount(input)).rejects.toThrow("copy failed");
+      expect(stopSession).toHaveBeenCalledWith("chat");
+      expect(forgetSession).not.toHaveBeenCalled();
+      expect(bindSession).toHaveBeenCalledTimes(1);
+      expect(bindSession).toHaveBeenLastCalledWith("chat", "native-id", "/repo", "old");
+      transfer.mockResolvedValueOnce(undefined);
+      await transferHarnessSessionAccount(input);
+      expect(bindSession).toHaveBeenLastCalledWith("chat", "native-id", "/repo", "new");
+    } finally { transfer.mockRestore(); }
+  });
+
   it("serializes provider-state operations per session", async () => {
     const order: string[] = [];
     let releaseFirst!: () => void;

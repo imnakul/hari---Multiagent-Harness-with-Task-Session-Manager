@@ -69,7 +69,9 @@ describe("child bridge", () => {
     mocks.listen.mockImplementation(
       (name: string, handler: (event: { payload: never }) => void) => {
         mocks.handlers.set(name, handler);
-        return name === "harness-stdout" ? pending.promise : Promise.resolve(vi.fn());
+        return name === "harness-stdout"
+          ? pending.promise
+          : Promise.resolve(vi.fn());
       },
     );
     const child = await loadChild();
@@ -291,6 +293,38 @@ describe("child bridge", () => {
     child.watchSse("mine", (data) => events.push(data));
     expect(lines).toEqual(["early"]);
     expect(events).toEqual(["early-event"]);
+    release();
+  });
+
+  it("unpacks batched stdout and SSE in order, as if sent line by line", async () => {
+    installResolvedListeners();
+    const child = await loadChild();
+    const release = await child.acquireHarnessBridge();
+    const emit = (name: string, payload: unknown) =>
+      mocks.handlers.get(name)?.({ payload: payload as never });
+    mocks.invoke.mockResolvedValue(42);
+
+    await child.spawnChild("mine", "agent", [], "/tmp");
+    await child.openHarnessSse("mine", "http://127.0.0.1:1/event");
+    emit("harness-stdout", { sessionId: "mine", lines: ["early1", "early2"] });
+    const lines: string[] = [];
+    child.watchChild(
+      "mine",
+      (line) => {
+        lines.push(line);
+        if (line === "b") child.unwatchChild("mine");
+      },
+      vi.fn(),
+    );
+    expect(lines).toEqual(["early1", "early2"]);
+    // Retiring the child mid-batch drops the rest, like later single events.
+    emit("harness-stdout", { sessionId: "mine", lines: ["a", "b", "c"] });
+    expect(lines).toEqual(["early1", "early2", "a", "b"]);
+
+    const events: string[] = [];
+    child.watchSse("mine", (data) => events.push(data));
+    emit("harness-sse", { sessionId: "mine", events: ["e1", "e2"] });
+    expect(events).toEqual(["e1", "e2"]);
     release();
   });
 

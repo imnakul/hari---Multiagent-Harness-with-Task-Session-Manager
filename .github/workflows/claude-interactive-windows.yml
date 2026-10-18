@@ -2,7 +2,7 @@ name: Claude Interactive Windows
 
 on:
   push:
-    branches: [nakul/windows-support-upstream-0.10.0]
+    branches: [nakul/windows-support-upstream-0.10.0, nakul/windows-support-upstream-0.14.0]
     paths:
       - .github/workflows/claude-interactive-windows.yml
       - scripts/interactive-pty-host/**

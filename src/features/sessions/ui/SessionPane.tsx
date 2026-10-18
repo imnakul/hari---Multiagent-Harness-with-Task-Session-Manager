@@ -11,6 +11,7 @@ import type { RemoteControlControls } from "../../provider-sessions/ui/RemoteCon
 import { editableSessionTodo } from "../../session-board/sessionTodos";
 import { composeSessionTodo } from "../../session-board/ui/SessionManagerCapture";
 import { GripVertical, X } from "../../../shared/ui/icons";
+import { useSessionSnapshot } from "../model/sessionStateStore";
 import {
   memo,
   useCallback,
@@ -32,6 +33,7 @@ import {
 import { DiscussionEmpty } from "./DiscussionEmpty";
 import { LinkedWorkItemUpdateNotice } from "../../inbox/ui/LinkedWorkItemUpdateNotice";
 import { SessionReview } from "./SessionReview";
+import { sessionEditPaths } from "../model/checkpointEdits";
 import { PromptOutline } from "./PromptOutline";
 import {
   latestTurnProcessedUsage,
@@ -95,11 +97,17 @@ import {
 } from "../../monos/model/mono";
 import { MonoHeader } from "../../monos/ui/MonoHeader";
 import { MonoComposer } from "../../monos/ui/MonoComposer";
+import type { LaunchedSessionView } from "../../monos/model/monoSpawnedSessions";
+import { ModelControlPills, ModelPicker } from "./ModelPicker";
+import { ContextMeter } from "./ContextMeter";
+import { UsageChips } from "../../../app/shell/UsageFooter";
+import type { RateLimitProvider } from "../../providers/model/rateLimits";
 import { MonoUsageLimitNotice } from "../../monos/ui/MonoUsageLimitNotice";
 import { QuestionForm } from "./QuestionForm";
 import {
   monoMessageDeliveries,
   monoPendingTranscriptBlocks,
+  visibleMonoCompletionMessages,
 } from "../../monos/model/monoMessaging";
 import { MessageQueue } from "./MessageQueue";
 import { useMonoTranscript } from "../../monos/hooks/useMonoTranscript";
@@ -169,12 +177,21 @@ export type SessionPaneProps = {
     blocks: Block[],
   ) => void;
   monoActivityTurnId?: string;
-  onShowMonoSessions?: (
+  onShowMonoSessions?: (sessionId: string, turnId: string, blocks: Block[]) => void;
+  monoSessionsTurnId?: string;
+  /** Open a session a Mono's turn launched, in the Mono's sidebar. */
+  onOpenMonoSession?: (
     sessionId: string,
     turnId: string,
     blocks: Block[],
+    launchedId: string,
   ) => void;
-  monoSessionsTurnId?: string;
+  /** Live status of the sessions this Mono launched, by id. */
+  monoLaunchedSessions?: ReadonlyMap<string, LaunchedSessionView>;
+  /** The launched session open in the Mono's sidebar. */
+  openMonoSessionId?: string;
+  /** Shows plan usage by a Mono's composer; off where a footer shows it. */
+  monoComposerUsage?: boolean;
   recents: RecentProject[];
   hideProjectPicker?: boolean;
   onFocus: (sessionId: string) => void;
@@ -322,7 +339,9 @@ type Props = SessionPaneProps & {
   allowedModelHarnesses?: readonly HarnessId[];
 };
 
-export const SessionPane = memo(function SessionPane(props: SessionPaneProps) {
+export const SessionPane = memo(function SessionPane(input: SessionPaneProps) {
+  const session = useSessionSnapshot(input.session, input.visible);
+  const props = session === input.session ? input : { ...input, session };
   // Sessions in a project on another machine render this same pane, backed by
   // the host instead of this computer's session runtime.
   if (isRemoteProjectPath(props.session.cwd))
@@ -403,9 +422,13 @@ const LocalSessionPane = memo(function LocalSessionPane({
   onOpenDiff,
   onCommitChanges,
   onShowMonoActivity,
-  monoActivityTurnId,
   onShowMonoSessions,
   monoSessionsTurnId,
+  monoActivityTurnId,
+  onOpenMonoSession,
+  monoLaunchedSessions,
+  openMonoSessionId,
+  monoComposerUsage = true,
   onOpenPlan,
   onBuildPlan,
   onSecondOpinion,
@@ -511,6 +534,10 @@ const LocalSessionPane = memo(function LocalSessionPane({
       : undefined;
   const editLastTurnSupported =
     !remote && !monoForSession(session.id) && canEditLastTurn(session);
+  const editedPaths = useMemo(
+    () => (session.busy ? undefined : sessionEditPaths(session.blocks)),
+    [session.blocks, session.busy],
+  );
   const messageDeliveries = useMemo(
     () => monoMessageDeliveries(session),
     [session.queuedMessages, session.queueStatus],
@@ -785,6 +812,12 @@ const LocalSessionPane = memo(function LocalSessionPane({
     return () => window.removeEventListener(ADD_TO_CHAT_EVENT, onAdd);
   }, [addSelectionToChat, addToChatTarget]);
   const workCwd = sessionWorkCwd(session);
+  const reviewHidden =
+    remote ||
+    !!session.inboxAsk ||
+    !!session.worktreeRemoved ||
+    monoTranscript.viewingOlderPage ||
+    !!draftBlock;
   const showDeckProjectPicker = isEmpty && !looksLikeProject(session.cwd);
   // The agent's input always sits at the bottom, like a chat.
   const dockComposer =
@@ -969,6 +1002,12 @@ const LocalSessionPane = memo(function LocalSessionPane({
         onUsageLimitResumeAtReset(session.id, enabled)
       }
       onUsageLimitDismiss={() => onUsageLimitDismiss(session.id)}
+      providerAccountId={session.providerAccountId}
+      onUsageLimitAccountChange={
+        onUsageLimitAccountChange
+          ? (accountId) => onUsageLimitAccountChange(session.id, accountId)
+          : undefined
+      }
       onOpenFile={onOpenFile}
       busy={!!session.busy}
       editLastTurnSupported={editLastTurnSupported}
@@ -1020,6 +1059,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
       ) : null}
       {inSplit ? (
         <div
+          data-split-header=""
           className={`flex h-9 shrink-0 touch-none items-center gap-1.5 border-b border-stroke px-2 select-none ${
             onPaneDragStart ? "cursor-grab active:cursor-grabbing" : ""
           }`}
@@ -1102,7 +1142,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
           ) : null}
           <div
             ref={transcriptScope}
-            className={`@container relative min-h-0 flex-1${
+            className={`relative min-h-0 flex-1${
               dockComposer && !agent ? " transcript-composer-fade" : ""
             }`}
           >
@@ -1182,6 +1222,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
                           ? monoTranscript.blocks
                           : history.transcriptBlocks
                     }
+                    sessionId={remoteSession ? undefined : session.id}
                     historicalBlockIds={monoTranscript.historicalBlockIds}
                     initialTurns={agent ? MONO_PAGE_TURNS : undefined}
                     pageSize={agent ? MONO_PAGE_TURNS : undefined}
@@ -1219,13 +1260,21 @@ const LocalSessionPane = memo(function LocalSessionPane({
                         : undefined
                     }
                     activeWorkTurnId={monoActivityTurnId}
-                    onShowSessions={
-                      agent && onShowMonoSessions
-                        ? (turnId, blocks) =>
-                            onShowMonoSessions(session.id, turnId, blocks)
+                    onShowSessions={agent && onShowMonoSessions ? (turnId, blocks) => onShowMonoSessions(session.id, turnId, blocks) : undefined}
+                    activeSessionsTurnId={monoSessionsTurnId}
+                    onOpenSession={
+                      agent && onOpenMonoSession
+                        ? (turnId, blocks, launchedId) =>
+                            onOpenMonoSession(
+                              session.id,
+                              turnId,
+                              blocks,
+                              launchedId,
+                            )
                         : undefined
                     }
-                    activeSessionsTurnId={monoSessionsTurnId}
+                    launchedSessions={monoLaunchedSessions}
+                    openSessionId={openMonoSessionId}
                     // A Mono's turn keeps copy, save as note and the time.
                     daySeparators={!!agent}
                     hideTurnMetrics={!!agent}
@@ -1338,13 +1387,10 @@ const LocalSessionPane = memo(function LocalSessionPane({
                         : undefined
                     }
                     latestTurnAccessory={
-                      remote ||
-                      session.inboxAsk ||
-                      session.worktreeRemoved ||
-                      monoTranscript.viewingOlderPage ||
-                      draftBlock ? undefined : (
+                      reviewHidden || agent ? undefined : (
                         <SessionReview
                           sessionId={session.id}
+                          editedPaths={editedPaths}
                           cwd={workCwd}
                           enabled={visible}
                           busy={!!session.busy}
@@ -1414,9 +1460,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
               {agent ? (
                 <>
                   <MessageQueue
-                    messages={(session.queuedMessages ?? []).filter(
-                      (message) => !!message.monoSessionCompletion,
-                    )}
+                    messages={visibleMonoCompletionMessages(session)}
                     status={session.queueStatus}
                     sendingId={session.sendingQueuedMessageId}
                     onDelete={(messageId) =>
@@ -1471,6 +1515,68 @@ const LocalSessionPane = memo(function LocalSessionPane({
                     onSubmit={(text, attachments) =>
                       onSubmit(session.id, text, attachments)
                     }
+                    // The plan's usage, as the session footer shows it,
+                    // which a Mono in full view covers. Its account moves
+                    // with the usage-limit notice, not here. A narrow chat
+                    // drops it first, then shows the model controls as icons.
+                    tools={
+                      monoComposerUsage ? (
+                        <div className="flex shrink-0 items-center gap-0.5 text-[11px] text-content/55 @max-md:hidden">
+                          <UsageChips
+                            providers={monoUsageProviders(session.harness)}
+                            session={{
+                              id: session.id,
+                              harness: session.harness,
+                              model: session.model,
+                              providerAccountId: session.providerAccountId,
+                            }}
+                            project={session.cwd}
+                            accountPicker={false}
+                            variant="composer"
+                          />
+                        </div>
+                      ) : undefined
+                    }
+                    controls={
+                      <>
+                        <ModelPicker
+                          harness={session.harness}
+                          model={session.model}
+                          values={session.modelSettings}
+                          allowedHarnesses={allowedModelHarnesses}
+                          project={workCwd}
+                          hideSettings
+                          hotkeys={focused && !btw.open}
+                          variant="text"
+                          labelClassName="@max-sm:hidden"
+                          onChange={(harness, model) =>
+                            onModelChange(session.id, harness, model)
+                          }
+                          onSettingsChange={(settings) =>
+                            onModelSettingsChange(session.id, settings)
+                          }
+                        />
+                        <ModelControlPills
+                          harness={session.harness}
+                          model={session.model}
+                          values={session.modelSettings}
+                          variant="text"
+                          labelClassName="@max-sm:hidden"
+                          onSettingsChange={(settings) =>
+                            onModelSettingsChange(session.id, settings)
+                          }
+                        />
+                        {/* A Mono is one long conversation; this is how full
+                            its current thread is. It rotates threads itself,
+                            so there is nothing to compact here. */}
+                        <div className="grid size-6.5 place-items-center rounded-md transition-colors hover:bg-content/8">
+                          <ContextMeter
+                            usage={session.context}
+                            empty={isEmpty}
+                          />
+                        </div>
+                      </>
+                    }
                   />
                 </>
               ) : (
@@ -1496,3 +1602,13 @@ const LocalSessionPane = memo(function LocalSessionPane({
     </div>
   );
 });
+
+/** The providers whose plan usage a Mono on `harness` shows by its composer. */
+function monoUsageProviders(harness: HarnessId): RateLimitProvider[] {
+  return harness === "claude" ||
+    harness === "codex" ||
+    harness === "opencode" ||
+    harness === "devin"
+    ? [harness]
+    : [];
+}

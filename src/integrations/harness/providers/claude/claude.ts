@@ -56,6 +56,7 @@ import {
   isAgentTaskType,
   isClaudeUltracodeEffort,
   isRemoteControlConsentError,
+  isReplayedTaskNotificationResult,
   isSubagentMessage,
   isTerminalAgentTaskStatus,
   isTodoTool,
@@ -1798,6 +1799,11 @@ function settleInlineAgentTask(live: Live, toolUseId: string): void {
 
 function handleResult(live: Live, rec: Record<string, unknown>): void {
   if (isSubagentMessage(rec)) return;
+  if (isReplayedTaskNotificationResult(rec)) {
+    // A limit reported for the replay must not carry over to the real turn.
+    live.usageLimit = null;
+    return;
+  }
   emitClaudeEvent(live, { type: "diagnostic.measurement", measurement:
     { ...claudeMeasurement(asRecord(rec.usage), stringField(rec, "uuid") ?? "sdk-result", "sdk-result"), costUsd: finiteCount(rec.total_cost_usd) } });
   if (live.forkPending) {

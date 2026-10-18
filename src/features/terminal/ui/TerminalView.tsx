@@ -1,4 +1,6 @@
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   useEffect,
   useRef,
@@ -157,6 +159,15 @@ function oscColors() {
   };
 }
 
+/**
+ * Open an HTTP(S) terminal link in the default browser, ignoring other schemes
+ * and opener failures.
+ */
+function openTerminalLink(uri: string) {
+  if (!/^https?:\/\//i.test(uri)) return;
+  void openUrl(uri).catch(() => undefined);
+}
+
 export function TerminalView({ id, cwd, active, onMetaChange }: Props) {
   const started = useSyncExternalStore(
     subscribeTerminalLifecycle,
@@ -237,12 +248,15 @@ function LiveTerminalView({ id, cwd, active, onMetaChange }: Props) {
       fontSize: loadTerminalFontSize(),
       lineHeight: 1,
       letterSpacing: 0,
-      scrollback: 5000,
+      // About 12 bytes per cell, retained for every open terminal.
+      scrollback: 2000,
       allowTransparency: true,
       smoothScrollDuration: 0,
       theme: terminalTheme(isLightScheme()),
       macOptionIsMeta: IS_MAC,
+      linkHandler: { activate: (_event, uri) => openTerminalLink(uri) },
     });
+    term.loadAddon(new WebLinksAddon((_event, uri) => openTerminalLink(uri)));
     term.open(host);
     const detachGpuRenderer = attachGpuRenderer(term, host);
     termRef.current = term;
@@ -346,7 +360,7 @@ function LiveTerminalView({ id, cwd, active, onMetaChange }: Props) {
     // A terminal that was explicitly closed waits for its prior kill to finish
     // before the replacement view subscribes or starts the same id again.
     const previousStop = stoppingPtys.get(id);
-    const starting = previousStop ? previousStop.then(start) : start();
+    const starting = (previousStop ?? Promise.resolve()).then(start);
     currentAttemptRef.current = starting;
     starting
       .then(() => {

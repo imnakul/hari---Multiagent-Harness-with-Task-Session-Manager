@@ -78,6 +78,66 @@ impl CpuHistory {
     }
 }
 
+/// A process birth stamp is metadata, never a reusable authorization by PID alone.
+pub(crate) fn sample_identity(sample: &Sample) -> Option<String> {
+    (sample.birth > 0).then(|| format!("{}:{}", sample.pid, sample.birth))
+}
+
+pub(crate) fn identity(pid: u32) -> Option<String> {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, FILETIME},
+            System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+        };
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+        let mut times: [FILETIME; 4] = std::mem::zeroed();
+        let ok = GetProcessTimes(
+            handle,
+            &mut times[0],
+            &mut times[1],
+            &mut times[2],
+            &mut times[3],
+        );
+        CloseHandle(handle);
+        if ok == 0 {
+            return None;
+        }
+        let birth = ((times[0].dwHighDateTime as u64) << 32) | times[0].dwLowDateTime as u64;
+        (birth > 0).then(|| format!("{pid}:{birth}"))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let raw = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        sample_identity(&linux_stat(pid, &raw)?)
+    }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let mut info: libc::proc_bsdinfo = std::mem::zeroed();
+        let size = std::mem::size_of_val(&info) as i32;
+        if libc::proc_pidinfo(
+            pid as i32,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            (&mut info as *mut libc::proc_bsdinfo).cast(),
+            size,
+        ) != size
+        {
+            return None;
+        }
+        let birth = info.pbi_start_tvsec.saturating_mul(1_000_000) + info.pbi_start_tvusec;
+        (birth > 0).then(|| format!("{pid}:{birth}"))
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
 #[cfg(windows)]
 pub(crate) fn snapshot() -> Result<Vec<Sample>, String> {
     use windows_sys::Win32::{

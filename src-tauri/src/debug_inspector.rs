@@ -57,7 +57,8 @@ fn session_identity(conn: &Connection, session_id: &str) -> Result<SessionIdenti
         )
         .optional()
         .map_err(|_| "Could not read saved session identity".to_string())?;
-    let (harness, native_id, account_id) = row.ok_or("No supported native identity for this chat")?;
+    let (harness, native_id, account_id) =
+        row.ok_or("No supported native identity for this chat")?;
     let provider = match harness.as_str() {
         "claude" => Provider::Claude,
         "codex" => Provider::Codex,
@@ -222,11 +223,9 @@ fn read_local_evidence(
     let canonical_root = fs::canonicalize(root)
         .map_err(|_| "The selected provider account directory is unavailable".to_string())?;
     let scan = scan_for_transcript(&canonical_root, &provider, &native_id)?;
-    let path = scan
-        .candidate
-        .ok_or_else(|| {
-            "No matching native transcript was found in this provider account".to_string()
-        })?;
+    let path = scan.candidate.ok_or_else(|| {
+        "No matching native transcript was found in this provider account".to_string()
+    })?;
     let read = read_bounded_file(&path)?;
     let mut truncated = read.truncated;
 
@@ -237,7 +236,9 @@ fn read_local_evidence(
             return Err("The transcript does not contain a supported native identity header".into())
         }
         HeaderIdentity::Mismatch => {
-            return Err("The transcript identity does not match the requested native session".into())
+            return Err(
+                "The transcript identity does not match the requested native session".into(),
+            )
         }
     }
 
@@ -475,8 +476,8 @@ fn read_bounded_file(path: &Path) -> Result<BoundedRead, String> {
     }
     let file_bytes = before.len();
     let mut read_bytes = 0u64;
-    let mut head_length = usize::try_from(file_bytes.min(MAX_READ_BYTES as u64))
-        .unwrap_or(MAX_READ_BYTES);
+    let mut head_length =
+        usize::try_from(file_bytes.min(MAX_READ_BYTES as u64)).unwrap_or(MAX_READ_BYTES);
     let mut tail = None;
 
     if file_bytes > MAX_READ_BYTES as u64 {
@@ -708,7 +709,10 @@ fn trim_ascii(mut bytes: &[u8]) -> &[u8] {
 }
 
 fn parse_claude_record(native_id: &str, value: &Value, stats: &mut ParseStats) -> bool {
-    let kind = value.get("type").and_then(Value::as_str).unwrap_or_default();
+    let kind = value
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if !matches!(kind, "assistant" | "result") {
         return true;
     }
@@ -765,7 +769,10 @@ fn parse_claude_record(native_id: &str, value: &Value, stats: &mut ParseStats) -
     let result_identity = trusted_result_id.as_ref().map_or_else(
         || {
             stats.limitations.insert("sdkResultIdentityMissing");
-            format!("claude-sdk-result-unidentified-{}", stats.claude_results + 1)
+            format!(
+                "claude-sdk-result-unidentified-{}",
+                stats.claude_results + 1
+            )
         },
         |uuid| format!("claude-sdk-result:{uuid}"),
     );
@@ -809,12 +816,10 @@ fn measurement_from_claude_usage(
     let cache_read = safe_count(usage.get("cache_read_input_tokens"));
     let cache_write = safe_count(usage.get("cache_creation_input_tokens"));
     let cache_creation = usage.get("cache_creation");
-    let cache_write_5m = safe_count(
-        cache_creation.and_then(|value| value.get("ephemeral_5m_input_tokens")),
-    );
-    let cache_write_1h = safe_count(
-        cache_creation.and_then(|value| value.get("ephemeral_1h_input_tokens")),
-    );
+    let cache_write_5m =
+        safe_count(cache_creation.and_then(|value| value.get("ephemeral_5m_input_tokens")));
+    let cache_write_1h =
+        safe_count(cache_creation.and_then(|value| value.get("ephemeral_1h_input_tokens")));
     if uncached_input.is_none()
         && output.is_none()
         && cache_read.is_none()
@@ -856,7 +861,11 @@ fn parse_codex_record(value: &Value, stats: &mut ParseStats) -> bool {
     };
     let timestamp = safe_timestamp(value.get("timestamp").and_then(Value::as_str));
     for (usage_key, scope, suffix) in [
-        ("total_token_usage", MeasurementScope::SessionCumulative, "total"),
+        (
+            "total_token_usage",
+            MeasurementScope::SessionCumulative,
+            "total",
+        ),
         ("last_token_usage", MeasurementScope::LastResponse, "last"),
     ] {
         let Some(usage) = info.get(usage_key) else {
@@ -968,9 +977,9 @@ fn safe_timestamp(timestamp: Option<&str>) -> Option<String> {
     let timestamp = timestamp?;
     (!timestamp.is_empty()
         && timestamp.len() <= 64
-        && timestamp.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || b"-+:.TZ".contains(&byte)
-        }))
+        && timestamp
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-+:.TZ".contains(&byte)))
     .then(|| timestamp.to_string())
 }
 

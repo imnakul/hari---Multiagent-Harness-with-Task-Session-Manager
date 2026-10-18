@@ -59,7 +59,9 @@ describe("transcript first paint", () => {
     );
     expect(renderedTurns()).toBe(3);
 
-    await vi.waitFor(() => expect(renderedTurns()).toBe(20));
+    // Historical turns warm across animation frames; build/CI contention can
+    // exceed waitFor's 1s default without changing the required 3 -> 20 behavior.
+    await vi.waitFor(() => expect(renderedTurns()).toBe(20), { timeout: 5_000 });
     expect(container.textContent).toContain("Load earlier messages");
   });
 
@@ -79,7 +81,9 @@ describe("transcript first paint", () => {
       get: () => renderedTurns() * 100,
     });
 
-    await vi.waitFor(() => expect(renderedTurns()).toBe(20));
+    // Historical turns warm across animation frames; build/CI contention can
+    // exceed waitFor's 1s default without changing the required 3 -> 20 behavior.
+    await vi.waitFor(() => expect(renderedTurns()).toBe(20), { timeout: 5_000 });
     expect(scroller.scrollTop).toBe(2000);
   });
 

@@ -11,6 +11,7 @@ use tauri::State;
 pub(crate) struct ProcessRoot {
     pub id: String,
     pub pid: u32,
+    pub identity: Option<String>,
     pub cwd: String,
     pub kind: String,
     pub idle_ms: u64,
@@ -52,6 +53,7 @@ pub struct ProcessRow {
 #[serde(rename_all = "camelCase")]
 pub struct ProcessDetail {
     pid: u32,
+    identity: Option<String>,
     parent: u32,
     name: String,
     depth: usize,
@@ -120,6 +122,7 @@ fn details(
         }
         out.push(ProcessDetail {
             pid,
+            identity: process_metrics::sample_identity(s),
             parent: s.parent,
             name: s.name.clone(),
             depth,
@@ -281,14 +284,14 @@ mod tests {
 
     #[test]
     fn readable_totals_skip_unreadable_processes_instead_of_blanking() {
-        let samples = vec![sample(4, 1, true), sample(5, 4, false), sample(6, 4, true)];
+        let samples = [sample(4, 1, true), sample(5, 4, false), sample(6, 4, true)];
         let rows: Vec<_> = samples.iter().collect();
         let cpu = HashMap::from([(4, Some(2.0)), (5, None), (6, Some(0.5))]);
         assert_eq!(
             readable_totals(&[4, 5, 6], &rows, &cpu),
             (Some(2.5), Some(200))
         );
-        let none = vec![sample(7, 1, false)];
+        let none = [sample(7, 1, false)];
         let rows: Vec<_> = none.iter().collect();
         assert_eq!(
             readable_totals(&[7], &rows, &HashMap::from([(7, None)])),
