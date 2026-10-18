@@ -245,8 +245,11 @@ export async function createInteractiveTerminal(
         // on a status row. Inspect the entire unique framed input line instead.
         // A draft (including text before that painted caret) must remain blocked.
         const candidates: { row: number; column: number }[] = [];
+        // A named chat (a resumed or continued one) draws its name inside the top
+        // border: "──── Process monitor ─". Accept one such label, nothing else.
         const isFrame = (line: string): boolean =>
-          /^[─━]{8,}$/.test(line.trim()) && line.trim().length >= term.cols - 2;
+          /^[─━]{8,}(?: [^─━]+ [─━]+)?$/.test(line.trim()) &&
+          line.trim().length >= term.cols - 2;
         for (let y = 1; y < term.rows - 1; y++) {
           const absolute = buffer.baseY + y;
           const line = buffer.getLine(absolute)?.translateToString(true) ?? "";

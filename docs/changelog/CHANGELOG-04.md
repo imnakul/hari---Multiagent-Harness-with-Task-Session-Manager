@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 20:42 IST — Interactive Claude finds the prompt in a named chat on Windows (L-105)
+- Type: fix
+- What: An Interactive Claude chat that has a name, such as one continued on another account, shows that name in the input box's top border. On Windows MonoCode then failed to find the empty prompt and refused every message with "could not recognize Claude's empty input prompt". It now recognises a border with a name in it.
+- Why: Bug report — the chat continued on imnakul resumed with its history in the native terminal, but sending from chat failed.
+- Files: [claudeInteractiveTerminal.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.ts) (`isFrame`), [claudeInteractiveTerminal.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.test.ts)
+- Commit: uncommitted
+- Verified: on the 0.14.0 branch: tsc ✅ tests ✅ (7,428 passed, 2 skipped; new test fails without the fix) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-18 — Integrate upstream main / 0.14.0 with local workflows
 - What: Merged pinned upstream `a90c558d` (0.14.0 plus post-tag main) above latest fork `b344c56b` on new `nakul/windows-support-upstream-0.14.0`. Applied all six approved choices: optional layout with local managers/footer, native opt-in resource/pressure/tool controls, safe Claude/Codex account continuation, protected Interactive/Remote Control idle behavior and unified Mono overview. Retained all 104 feature IDs; L-90 stays removed.
 - Files: 54 conflict files combined rather than taking either side wholesale; integration repairs include sidebar project labels/server snapshots, queue/tool-detail persistence, terminal lifecycle, image resolution, settings visibility and the local-manager footer predicate. Details: `docs/specs/upstream-0.14.0-sync-plan.md` and `docs/notes/archive/upstream-merge-2026-10-18-014.md`; feature register and Windows learnings updated.
@@ -10,7 +18,7 @@
 - Type: chore
 - What: New Windows installer, same version number, adding continue a Claude chat on another account with the resume and switch-back fixes (L-102), process monitor partial totals (L-103) and the Interactive dialog message (L-104).
 - Why: User request — build the new changes.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-continue.exe` (12,443,031 bytes, SHA-256 6BB902A14B80B6F9FEF13CBF96A1AB11B237A22C580F0612EA23E9F5513CDF69, NotSigned)
+- Files: `E:\Developing\Installable versions\MonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-continue.exe` (12,443,031 bytes, SHA-256 6BB902A14B80B6F9FEF13CBF96A1AB11B237A22C580F0612EA23E9F5513CDF69, NotSigned)
 - Commit: built from 216217ed
 - Verified: build ✅ tsc ✅ tests ✅ (6,980 passed, 2 skipped) cargo test --lib ✅ (763); desktop check manual
 
@@ -74,7 +82,7 @@
 - Type: chore
 - What: New Windows installer, same version number, with L-93 to L-98, the native paste closing-ID fix, the no-native-suggestions Interactive fix and the explicit all-accounts refresh.
 - Why: User request — test the merged fixes without a version bump.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-fixes.exe` (12,389,237 bytes, SHA-256 077AC18B1AA14627EB41C8CEF6611AD325B2D8102DB8549CAFF990A9ED1A3A6F)
+- Files: `E:\Developing\Installable versions\MonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-fixes.exe` (12,389,237 bytes, SHA-256 077AC18B1AA14627EB41C8CEF6611AD325B2D8102DB8549CAFF990A9ED1A3A6F)
 - Commit: built from 6fe2add6
 - Verified: build ✅; desktop check manual (restart open chats so they pick up the suggestion setting)
 
@@ -90,7 +98,7 @@
 - Type: chore
 - What: Built a new Windows installer without changing the version, so it includes L-93 to L-97 (bottom bar in Tasks, one-row task header, in-use account highlight, account choice in the model picker, Antigravity quotas inline). About shows the same version as the 2026-10-17 build, so tell them apart by hash.
 - Why: User request, to test the changes before a versioned release.
-- Files: E:DevelopingInstallable versionsMonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-accounts.exe; 12,391,496 bytes; SHA-256 872B802A4207E681BA26B3D7344EC6455BE72D13C4FEBF18DDE9773307DA37D4. Built from HEAD c4288b21 plus uncommitted changes. The 2026-10-17 installer (12,387,402 bytes) is unchanged in the same folder.
+- Files: E:\Developing\Installable versions\MonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-accounts.exe; 12,391,496 bytes; SHA-256 872B802A4207E681BA26B3D7344EC6455BE72D13C4FEBF18DDE9773307DA37D4. Built from HEAD c4288b21 plus uncommitted changes. The 2026-10-17 installer (12,387,402 bytes) is unchanged in the same folder.
 - Commit: uncommitted
 - Verified: unsigned NSIS build ✅ (npm run build:windows); installed check manual
 

@@ -133,6 +133,24 @@ describe("real VT parser input gate", () => {
     });
     expect(terminal.ready()).toBe(false);
   });
+  it("finds the Windows prompt when a named chat draws its name in the top border", async () => {
+    mocks.windows = true;
+    const terminal = await createInteractiveTerminal("named-frame", vi.fn());
+    cleanup = terminal.dispose;
+    const label = " Process monitor and idle shutdown ─";
+    const titled = "─".repeat(120 - label.length) + label;
+    const border = "─".repeat(120);
+    const at = conpty.empty.indexOf(border);
+    expect(at).toBeGreaterThan(-1);
+    const named =
+      conpty.empty.slice(0, at) + titled + conpty.empty.slice(at + border.length);
+    mocks.data?.(new TextEncoder().encode(named), 0);
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(terminal.inspect()).toMatchObject({ promptSource: "conpty-frame" });
+    expect(terminal.ready()).toBe(true);
+  });
   it("flags a folder trust question drawn above the cursor row", async () => {
     mocks.windows = true;
     const terminal = await createInteractiveTerminal("trust", vi.fn());
