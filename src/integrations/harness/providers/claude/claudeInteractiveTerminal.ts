@@ -7,7 +7,10 @@ import {
   subscribePty,
   writePty,
 } from "../../../../platform/tauri/pty";
-import { interactivePromptChecks } from "./claudeInteractiveProtocol";
+import {
+  interactivePromptChecks,
+  showsNativeDialog,
+} from "./claudeInteractiveProtocol";
 
 export type InteractiveReadiness = {
   reason:
@@ -32,6 +35,11 @@ export type InteractiveReadiness = {
   cursorY: number;
   promptSource: "cursor" | "conpty-frame";
   checks: ReturnType<typeof interactivePromptChecks>;
+  /**
+   * Dialog text anywhere in the visible screen. Diagnostic only: it explains a
+   * prompt mismatch (a dialog drawn above the cursor row) without changing readiness.
+   */
+  dialogOnScreen: boolean;
 };
 
 export type InteractiveTerminal = {
@@ -312,6 +320,13 @@ export async function createInteractiveTerminal(
         cursorY: buffer.cursorY,
         promptSource,
         checks,
+        dialogOnScreen: showsNativeDialog(
+          Array.from(
+            { length: term.rows },
+            (_, y) =>
+              buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? "",
+          ).join("\n"),
+        ),
       };
     },
     reclaim: async (): Promise<void> => {

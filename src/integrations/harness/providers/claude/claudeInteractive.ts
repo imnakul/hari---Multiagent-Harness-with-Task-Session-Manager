@@ -841,8 +841,8 @@ export async function sendInteractiveClaude(
           ? "Claude started, but no terminal output reached MonoCode."
           : reason === "settling" || reason === "parsing"
             ? "Claude's terminal output did not settle before the startup timeout."
-            : reason === "native-dialog"
-              ? "Claude is showing a native menu or setup dialog."
+            : reason === "native-dialog" || snapshot.terminal.dialogOnScreen
+              ? "Claude is showing a native menu or setup dialog (a new account first asks whether to trust this folder)."
               : "MonoCode could not recognize Claude's empty input prompt.";
     throw new HarnessNeedsAttentionError(
       `${explanation} Open the model picker → Open native terminal. Use Return to chat once its prompt is empty; if it is already empty, Copy diagnostics there. No prompt was sent.`,

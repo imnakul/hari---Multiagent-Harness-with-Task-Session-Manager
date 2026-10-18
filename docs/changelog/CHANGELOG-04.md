@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 14:37 IST — Process monitor partial totals and Interactive trust-dialog message (L-103, L-104)
+- Type: fix
+- What: The bottom bar no longer shows "unavailable" for RAM when one chat's processes cannot be read; rows and totals now add up what can be read, and the tooltip says when the total is partial. When an Interactive Claude chat is stopped by a native dialog (for example the "trust this folder" question a newly added account asks), the error now says so instead of "could not recognize Claude's empty input prompt".
+- Why: User report — chip showed "CPU · unavailable" with a Codex row of "—", and a worker chat on the imnakul account failed to send. Causes: one unreadable helper blanked the row and the chip's all-or-nothing totals; the imnakul config had never trusted this folder, and the trust question was drawn above the row the check reads.
+- Files: [process_stats.rs](../../src-tauri/src/process_stats.rs), [processMonitorModel.ts](../../src/app/shell/processMonitorModel.ts), [ProcessMonitor.tsx](../../src/app/shell/ProcessMonitor.tsx), [ProcessMonitor.test.ts](../../src/app/shell/ProcessMonitor.test.ts), [claudeInteractiveProtocol.ts](../../src/integrations/harness/providers/claude/claudeInteractiveProtocol.ts), [claudeInteractiveTerminal.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.ts), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractiveTerminal.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,966 passed, 2 skipped) cargo test --lib ✅ (759) rustfmt ✅ lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-18 12:44 IST — Same-version Windows build with GPU monitor and queue fix (0.10.0-local2-upstream-sync)
 - Type: chore
 - What: New Windows installer, same version number, with GPU terminal rendering (L-99), Interactive follow-ups queueing (L-100) and the process monitor GPU column with hover Stop icon (L-101). `nakul/windows-support` fast-forwarded to this commit and both branches pushed to nakul-fork.

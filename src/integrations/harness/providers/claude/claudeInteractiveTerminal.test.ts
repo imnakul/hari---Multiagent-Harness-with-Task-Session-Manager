@@ -133,6 +133,22 @@ describe("real VT parser input gate", () => {
     });
     expect(terminal.ready()).toBe(false);
   });
+  it("flags a folder trust question drawn above the cursor row", async () => {
+    mocks.windows = true;
+    const terminal = await createInteractiveTerminal("trust", vi.fn());
+    cleanup = terminal.dispose;
+    mocks.data?.(
+      new TextEncoder().encode(
+        `\x1b[2J\x1b[2;1HDo you trust the files in this folder?\x1b[4;1H❯ 1. Yes, I trust this folder\x1b[5;1H  2. No, exit\x1b[7;1HEnter to confirm · Esc to exit\x1b[40;1H`,
+      ),
+      0,
+    );
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(terminal.inspect().dialogOnScreen).toBe(true);
+    expect(terminal.ready()).toBe(false);
+  });
   it.each(["default", "empty", "resumed"] as const)(
     "checks the complete captured ConPTY %s input while its output cursor is elsewhere",
     async (stage) => {

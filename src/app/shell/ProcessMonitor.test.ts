@@ -249,6 +249,25 @@ it("shows GPU per row and in the chip once every part has a reading", async () =
   expect(container.textContent).toContain("GPU 3.3%");
   expect(container.textContent).toContain("GPU 0.0%");
 });
+it("totals only readable parts when a chat cannot be read", async () => {
+  mocks.invoke.mockResolvedValue(
+    stats(
+      [{ ...row, cpu: null, memory: null, gpu: 0, status: "unavailable" }],
+      { ...app, gpu: 0.7 },
+    ),
+  );
+  saveProcessMonitor(true);
+  await act(async () =>
+    root.render(
+      createElement(ProcessMonitor, { sessions: [session], onStop: vi.fn() }),
+    ),
+  );
+  const chip = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Process monitor"]',
+  )!;
+  expect(chip.textContent).toBe("CPU 1.5% · 100 MiB · GPU 0.7%");
+  expect(chip.title).toContain("totals count only the readable ones");
+});
 it("keeps Stop as an icon that appears only on row hover or keyboard focus", async () => {
   saveProcessMonitor(true);
   await act(async () =>

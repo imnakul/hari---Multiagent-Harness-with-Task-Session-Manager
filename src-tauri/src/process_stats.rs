@@ -134,6 +134,25 @@ fn details(
     out
 }
 
+/// CPU and memory summed over the readable processes of one tree. A protected or
+/// just-exited helper must not blank the whole tree, so each total is `None` only
+/// when no process in it has a reading (CPU also waits for a second sample).
+fn readable_totals(
+    ids: &[u32],
+    rows: &[&process_metrics::Sample],
+    cpu: &HashMap<u32, Option<f64>>,
+) -> (Option<f64>, Option<u64>) {
+    let readings: Vec<f64> = ids
+        .iter()
+        .filter_map(|id| cpu.get(id).copied().flatten())
+        .collect();
+    let memory: Vec<u64> = rows.iter().filter_map(|s| s.memory).collect();
+    (
+        (!readings.is_empty()).then(|| readings.iter().sum()),
+        (!memory.is_empty()).then(|| memory.iter().sum()),
+    )
+}
+
 fn app_usage(
     pid: u32,
     trees: &HashMap<u32, Vec<u32>>,
@@ -143,16 +162,11 @@ fn app_usage(
 ) -> AppUsage {
     let ids = trees.get(&pid).map(Vec::as_slice).unwrap_or_default();
     let rows: Vec<_> = samples.iter().filter(|s| ids.contains(&s.pid)).collect();
-    let readings: Vec<f64> = ids
-        .iter()
-        .filter_map(|id| cpu.get(id).copied().flatten())
-        .collect();
-    let memory: Vec<u64> = rows.iter().filter_map(|s| s.memory).collect();
+    let (cpu_total, memory) = readable_totals(ids, &rows, cpu);
     AppUsage {
         pid,
-        // Absent until a second sample gives a readable process a CPU delta.
-        cpu: (!readings.is_empty()).then(|| readings.iter().sum()),
-        memory: (!memory.is_empty()).then(|| memory.iter().sum()),
+        cpu: cpu_total,
+        memory,
         gpu: gpu_total(ids, gpu),
         processes: ids.len(),
         children: details(pid, ids, samples, cpu, gpu),
@@ -192,11 +206,7 @@ pub fn process_monitor_stats(
             let ids = trees.get(&root.pid).cloned().unwrap_or_default();
             let alive = samples.iter().any(|s| s.pid == root.pid);
             let rows: Vec<_> = samples.iter().filter(|s| ids.contains(&s.pid)).collect();
-            let memory = rows.iter().map(|s| s.memory).sum::<Option<u64>>();
-            let total_cpu = ids
-                .iter()
-                .map(|id| cpu.get(id).copied().flatten())
-                .sum::<Option<f64>>();
+            let (total_cpu, memory) = readable_totals(&ids, &rows, &cpu);
             let unavailable = rows
                 .iter()
                 .any(|r| r.cpu_ns.is_none() || r.memory.is_none());
@@ -265,6 +275,23 @@ mod tests {
         assert_eq!(listed, vec![(1, 0), (2, 1), (3, 2)]);
         assert_eq!(
             (usage.children[2].cpu, usage.children[2].memory),
+            (None, None)
+        );
+    }
+
+    #[test]
+    fn readable_totals_skip_unreadable_processes_instead_of_blanking() {
+        let samples = vec![sample(4, 1, true), sample(5, 4, false), sample(6, 4, true)];
+        let rows: Vec<_> = samples.iter().collect();
+        let cpu = HashMap::from([(4, Some(2.0)), (5, None), (6, Some(0.5))]);
+        assert_eq!(
+            readable_totals(&[4, 5, 6], &rows, &cpu),
+            (Some(2.5), Some(200))
+        );
+        let none = vec![sample(7, 1, false)];
+        let rows: Vec<_> = none.iter().collect();
+        assert_eq!(
+            readable_totals(&[7], &rows, &HashMap::from([(7, None)])),
             (None, None)
         );
     }

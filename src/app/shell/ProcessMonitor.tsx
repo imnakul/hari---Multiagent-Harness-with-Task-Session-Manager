@@ -197,7 +197,11 @@ function EnabledProcessMonitor({
         aria-expanded={open}
         aria-label="Process monitor"
         className="shrink-0 rounded px-1.5 py-0.5 text-content/65 hover:bg-content/10"
-        title="MonoCode and the chats and terminals it started; CPU and GPU as a share of machine capacity"
+        title={`MonoCode and the chats and terminals it started; CPU and GPU as a share of machine capacity${
+          totals?.partial
+            ? ". Some processes could not be read, so totals count only the readable ones"
+            : ""
+        }`}
       >
         {error
           ? "Processes unavailable"

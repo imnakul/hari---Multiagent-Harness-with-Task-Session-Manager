@@ -41,27 +41,38 @@ export type AppProcess = {
   children: ProcessDetail[];
 };
 export type ProcessMonitorStats = { app: AppProcess; owned: OwnedProcess[] };
-/** Chip total: app plus live owned rows; null when any part is not known yet. */
+/**
+ * Bottom-bar totals over the app and every live row. Each total sums the parts that
+ * have a reading, so one unreadable chat cannot blank the chip; a total is `null`
+ * only when no part has a reading. `partial` is true when any part was skipped.
+ */
 export function processTotals(
   app: AppProcess,
   rows: OwnedProcess[],
-): { cpu: number | null; memory: number | null; gpu: number | null } {
+): {
+  cpu: number | null;
+  memory: number | null;
+  gpu: number | null;
+  partial: boolean;
+} {
   const live = rows.filter((r) => r.status !== "exited");
   const parts = [app, ...live];
+  const sum = (values: (number | null | undefined)[]): number | null => {
+    const known = values.filter((v): v is number => v != null);
+    return known.length ? known.reduce((n, v) => n + v, 0) : null;
+  };
+  const gpu = sum(parts.map((p) => p.gpu));
   return {
-    cpu: parts.every((p) => p.cpu != null)
-      ? parts.reduce((n, p) => n + (p.cpu ?? 0), 0)
-      : null,
-    memory: parts.every((p) => p.memory != null)
-      ? parts.reduce((n, p) => n + (p.memory ?? 0), 0)
-      : null,
+    cpu: sum(parts.map((p) => p.cpu)),
+    memory: sum(parts.map((p) => p.memory)),
     // Summed like Task Manager's per-process column, so cap at a full GPU.
-    gpu: parts.every((p) => p.gpu != null)
-      ? Math.min(
-          100,
-          parts.reduce((n, p) => n + (p.gpu ?? 0), 0),
-        )
-      : null,
+    gpu: gpu == null ? null : Math.min(100, gpu),
+    partial: parts.some(
+      (p) =>
+        p.cpu == null ||
+        p.memory == null ||
+        ("status" in p && p.status === "unavailable"),
+    ),
   };
 }
 export function processSessionId(row: OwnedProcess): string {

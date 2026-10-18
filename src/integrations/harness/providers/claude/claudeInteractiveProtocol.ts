@@ -31,6 +31,16 @@ export type PromptScreen = {
   screen: string;
 };
 
+/**
+ * Footer and question text of Claude's native menus and setup dialogs, including
+ * the folder trust question a new account asks before its first chat.
+ */
+export function showsNativeDialog(text: string): boolean {
+  return /enter to (?:confirm|select)|esc to (?:cancel|close|interrupt|exit)|select (?:a |the )?model|do you (?:want|trust)|trust this|trust the files|type to search|choose the text style|select login method/i.test(
+    text,
+  );
+}
+
 export function interactivePromptChecks(screen: PromptScreen): {
   cursorAtPrompt: boolean;
   emptyDraft: boolean;
@@ -46,10 +56,7 @@ export function interactivePromptChecks(screen: PromptScreen): {
       /^Try\s+["“][^\r\n]*["”]\s*$/.test(screen.after.trim()),
     frameAbove: /[─━]{8}/.test(screen.above),
     frameBelow: /[─━]{8}/.test(screen.below),
-    dialogFree:
-      !/enter to (?:confirm|select)|esc to (?:cancel|close|interrupt)|select (?:a |the )?model|do you (?:want|trust)|trust this|type to search/i.test(
-        screen.screen,
-      ),
+    dialogFree: !showsNativeDialog(screen.screen),
   };
 }
 
