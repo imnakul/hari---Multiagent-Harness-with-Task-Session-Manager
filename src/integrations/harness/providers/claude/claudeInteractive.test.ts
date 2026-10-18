@@ -658,6 +658,19 @@ describe("interactive observation and parking", () => {
       interactiveClaudeDiagnostics("interactive-test")?.current.externalTurn,
     ).toBe(false);
   });
+  it("does not let an earlier Stop with no turn to finish fail the next prompt", async () => {
+    await idle();
+    // A Stop arriving after its turn already failed or finished has nothing to
+    // complete. It must not end a prompt sent later, before its paste lands.
+    finish();
+    await vi.advanceTimersByTimeAsync(3000);
+    const turn = sendInteractiveClaude(input({ text: "next" }));
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events.some((event) => event.type === "session.error")).toBe(false);
+  });
   it("suppresses ordinary idle notifications and preserves genuine attention", async () => {
     await idle();
     hook("Notification", {

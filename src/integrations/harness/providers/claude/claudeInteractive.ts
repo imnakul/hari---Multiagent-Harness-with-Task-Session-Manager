@@ -46,6 +46,8 @@ type Binding = { nativeId: string; cwd: string; accountId?: string };
 type Pending = {
   text: string;
   accepted: boolean;
+  /** A Stop seen after this prompt was queued; earlier Stops cannot end it. */
+  sawStop?: boolean;
   compact?: boolean;
   resolve: () => void;
   reject: (error: Error) => void;
@@ -436,6 +438,7 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
   }
   if (event === "Stop" || event === "PostCompact") {
     live.stopping = 1;
+    if (live.pending) live.pending.sawStop = true;
     live.stopText =
       event === "Stop" && typeof row.last_assistant_message === "string"
         ? row.last_assistant_message.trim() || undefined
@@ -543,7 +546,7 @@ async function poll(live: Live): Promise<void> {
       if (
         live.stopping >= 3 &&
         live.phase === "ready" &&
-        (live.pending || live.external) &&
+        (live.pending ? live.pending.sawStop : live.external) &&
         finalReplyRendered
       ) {
         live.stopping = 0;
