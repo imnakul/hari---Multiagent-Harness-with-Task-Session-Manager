@@ -545,6 +545,7 @@ export function UsageFooter({
       remainingQuota={remainingQuota}
       presentation={{ harness: "antigravity-cli", label: "Antigravity CLI", sourceLabel: "Quota and credits from the CLI’s saved account" }}
       inUse={cliInUse}
+      onRefresh={() => void loadRateLimits("antigravity-cli", cliAccountKey, true)}
     />
   );
   const refreshButton = (
@@ -593,6 +594,7 @@ export function UsageFooter({
                 onManageAccounts ? () => onManageAccounts("claude") : undefined
               }
               onReconnect={reconnectClaude}
+              onRefresh={() => void loadRateLimits("claude", claudeAccountId, true)}
               inUse={session?.harness === "claude"}
             />
           ) : null}
@@ -611,6 +613,7 @@ export function UsageFooter({
               }
               onConsumeReset={consumeCodexReset}
               onReconnect={reconnectCodex}
+              onRefresh={() => void loadRateLimits("codex", codexAccountId, true)}
               inUse={session?.harness === "codex"}
             />
           ) : null}
@@ -622,6 +625,7 @@ export function UsageFooter({
               project={project}
               remainingQuota={remainingQuota}
               inUse={session?.harness === "opencode"}
+              onRefresh={() => void loadRateLimits("opencode", "default", true)}
             />
           ) : null}
           {wantDevin ? (
@@ -631,6 +635,7 @@ export function UsageFooter({
               now={now}
               project={project}
               onReconnect={reconnectDevin}
+              onRefresh={() => void loadRateLimits("devin", "default", true)}
               inUse={session?.harness === "devin"}
             />
           ) : null}
@@ -642,6 +647,9 @@ export function UsageFooter({
               remainingQuota={remainingQuota}
               onReconnect={reconnectProvider}
               onConsumeReset={consumeCodexResetFor}
+              onRefresh={(provider, accountId) =>
+                void loadRateLimits(provider, accountId, true)
+              }
               inUseKey={inUseKey}
               // Antigravity CLI is its own group after the profile accounts.
               trailing={wantCli ? cliChip : null}

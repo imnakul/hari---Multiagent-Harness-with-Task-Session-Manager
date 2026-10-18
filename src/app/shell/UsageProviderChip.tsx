@@ -88,6 +88,7 @@ export function UsageProviderChip({
   onManageAccounts,
   onConsumeReset,
   onReconnect,
+  onRefresh,
   remainingQuota = false,
   presentation,
   accountLabel,
@@ -118,6 +119,8 @@ export function UsageProviderChip({
   onManageAccounts?: () => void;
   onConsumeReset?: (creditId?: string) => Promise<CodexRateLimitResetOutcome>;
   onReconnect?: () => Promise<void>;
+  /** Forces a new read of this one account (fork, L-98). */
+  onRefresh?: () => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -167,9 +170,10 @@ export function UsageProviderChip({
         )
   ).join(" · ");
   const providerLabel = presentation?.label ?? HARNESS_TITLE[limits.provider];
-  const detailsLabel = accountLabel
-    ? `${providerLabel} ${accountLabel} usage details`
-    : `${providerLabel} usage details`;
+  const usageLabel = accountLabel
+    ? `${providerLabel} ${accountLabel} usage`
+    : `${providerLabel} usage`;
+  const detailsLabel = `${usageLabel} details`;
   const iconHarness = presentation?.harness ?? limits.provider;
   const activeAccount = accounts.find((account) => account.id === accountId);
   const canManageAccounts = Boolean(onSelectAccount && onAddAccount);
@@ -470,6 +474,16 @@ export function UsageProviderChip({
                     />
                     Updating
                   </span>
+                ) : onRefresh ? (
+                  <button
+                    type="button"
+                    className="grid size-6 shrink-0 place-items-center rounded-md text-content/40 transition-colors hover:bg-content/10 hover:text-content focus-visible:outline-2 focus-visible:outline-accent motion-safe:active:scale-95"
+                    aria-label={`Refresh ${usageLabel}`}
+                    title="Refresh this usage"
+                    onClick={onRefresh}
+                  >
+                    <RefreshCw className="size-3" strokeWidth={1.75} aria-hidden />
+                  </button>
                 ) : null}
               </div>
 

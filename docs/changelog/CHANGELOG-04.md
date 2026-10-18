@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 11:31 IST — Refresh one account from its usage card (L-98)
+- Type: feature
+- What: Opening a usage chip in the bottom bar now shows a Refresh icon next to the title. It re-reads only that account; while it runs the icon turns into the usual "Updating" spinner. The Refresh button at the end of the bar still refreshes everything.
+- Why: User request — refresh a single account without waiting for all of them.
+- Files: [UsageProviderChip.tsx (lines 173–176, 474–485)](../../src/app/shell/UsageProviderChip.tsx:474), [AccountUsageStrip.tsx](../../src/app/shell/AccountUsageStrip.tsx), [UsageFooter.tsx](../../src/app/shell/UsageFooter.tsx), [UsageProviderChip.test.ts](../../src/app/shell/UsageProviderChip.test.ts)
+- Commit: uncommitted
+- Verified: see final checks below
+
 ## 2026-10-18 00:40 IST — Same-version Windows test build (0.10.0-local2-upstream-sync)
 - Type: chore
 - What: Built a new Windows installer without changing the version, so it includes L-93 to L-97 (bottom bar in Tasks, one-row task header, in-use account highlight, account choice in the model picker, Antigravity quotas inline). About shows the same version as the 2026-10-17 build, so tell them apart by hash.

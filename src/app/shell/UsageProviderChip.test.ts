@@ -181,6 +181,35 @@ describe("UsageProviderChip", () => {
     );
   });
 
+  it("refreshes only this account from its details, and shows progress while reading", async () => {
+    const onRefresh = vi.fn();
+    const render = (limits: ProviderRateLimits) =>
+      act(() =>
+        root.render(
+          createElement(UsageProviderChip, {
+            limits,
+            now,
+            accountLabel: "work",
+            onRefresh,
+          }),
+        ),
+      );
+    render(codexLimits());
+    await act(async () => button("Codex work usage details").click());
+
+    await act(async () => button("Refresh Codex work usage").click());
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+    render({ ...codexLimits(), status: "fetching" });
+    expect(
+      document.querySelector('[aria-label="Refresh Codex work usage"]'),
+    ).toBeNull();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Updating",
+    );
+  });
+
   it("keeps the compact quota setting separate from remaining meters", async () => {
     act(() =>
       root.render(

@@ -42,6 +42,7 @@ export function AccountUsageStrip({
   now,
   remainingQuota,
   onReconnect,
+  onRefresh,
   onConsumeReset,
   inUseKey,
   trailing,
@@ -60,6 +61,8 @@ export function AccountUsageStrip({
     accountId: string,
     creditId?: string,
   ) => Promise<CodexRateLimitResetOutcome>;
+  /** Forces a new read of one account from its chip details. */
+  onRefresh?: (provider: AccountChipEntry["provider"], accountId: string) => void;
   /** `provider:accountId` of the account the open chat runs on. */
   inUseKey?: string;
   trailing?: ReactNode;
@@ -116,6 +119,11 @@ export function AccountUsageStrip({
             inlineWindow="shortest"
             inUse={entry.key === inUseKey}
             onReconnect={() => onReconnect(entry.provider, entry.account.id)}
+            onRefresh={
+              onRefresh
+                ? () => onRefresh(entry.provider, entry.account.id)
+                : undefined
+            }
             onConsumeReset={
               entry.provider === "codex"
                 ? (creditId) => onConsumeReset(entry.account.id, creditId)
