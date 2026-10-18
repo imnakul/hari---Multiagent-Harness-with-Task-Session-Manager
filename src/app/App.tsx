@@ -302,7 +302,6 @@ import {
   cancelHarnessTurn,
   canCompactHarnessContext,
   canRewindHarnessLastTurn,
-  canSteerHarness,
   compactHarnessContext,
   rewindHarnessLastTurn,
   forgetHarnessSession,
@@ -895,6 +894,10 @@ import {
   type NativeForkRequest,
 } from "../integrations/harness/core/types";
 import { settleQueuedSteerCancellations } from "../features/sessions/model/messageQueue";
+import {
+  canSteerSession,
+  isInteractiveClaudeSession,
+} from "../features/sessions/model/steerSupport";
 import { isProviderFailureText } from "../features/sessions/model/plan";
 import { QueueDurabilityScheduler } from "../features/sessions/model/queueDurability";
 import {
@@ -8093,7 +8096,7 @@ function Workspace({
         if (
           !message ||
           !canSteerQueuedHead(current) ||
-          !canSteerHarness(current.harness) ||
+          !canSteerSession(current) ||
           operatorCommand.matched
         )
           return false;
@@ -8176,12 +8179,15 @@ function Workspace({
           return false;
         }
         const steerable =
-          isLiveHarness(current.harness) && canSteerHarness(current.harness);
+          isLiveHarness(current.harness) && canSteerSession(current);
         const followUpBehavior =
           current.worktreePreparing ||
           intent === "plan" ||
           intent === "orchestrate" ||
-          operatorCommand.matched
+          operatorCommand.matched ||
+          // Interactive Claude rejects steers, which would fail the running
+          // turn, so its follow-ups always wait in the queue (fork, L-100).
+          isInteractiveClaudeSession(current)
             ? "queue"
             : // The agent has yielded and only background work is left, which
               // may never end (a dev server). Queuing would park the message
@@ -10217,7 +10223,7 @@ function Workspace({
           canDispatchQueuedHead(session) ||
           (monoForSession(session.id) &&
             canSteerQueuedHead(session) &&
-            canSteerHarness(session.harness) &&
+            canSteerSession(session) &&
             !consumeOperatorCommand(queued[0].text).matched)
         ) ||
         queueDispatchingRef.current.has(session.id)
@@ -10244,7 +10250,7 @@ function Workspace({
               canDispatchQueuedHead(latest) ||
               (monoForSession(latest.id) &&
                 canSteerQueuedHead(latest) &&
-                canSteerHarness(latest.harness) &&
+                canSteerSession(latest) &&
                 !consumeOperatorCommand(head.text).matched)
             )
           ) {
@@ -10419,7 +10425,7 @@ function Workspace({
       // next turn. In both cases, cancellation must settle before auto-flush.
       if (
         session.busy &&
-        (!canSteerHarness(session.harness) || message.intent === "plan")
+        (!canSteerSession(session) || message.intent === "plan")
       ) {
         const gen = (turnGen.current.get(sessionId) ?? 0) + 1;
         turnGen.current.set(sessionId, gen);
@@ -12178,7 +12184,7 @@ function Workspace({
           );
         if (
           !isLiveHarness(session.harness) ||
-          !canSteerHarness(session.harness)
+          !canSteerSession(session)
         )
           throw new Error(
             `${session.harness} cannot take guidance mid-turn. Wait for the turn to finish, then use message.`,

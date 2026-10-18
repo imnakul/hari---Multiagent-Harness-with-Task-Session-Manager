@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 12:06 IST — Interactive Claude follow-ups queue instead of interrupting the turn (L-100)
+- Type: fix
+- What: In Interactive CLI mode, a message sent while Claude is working now waits in the queue and goes out when the turn ends. Before, it tried to steer the running turn, Interactive Claude refused, and the refusal stopped the turn and left the message in the composer.
+- Why: User report — "it didn't went to queue, also, it interrupted the working session". Cause: steer support was checked for the Claude provider as a whole, not for Interactive sessions, so Monos (and sessions with background tasks) steered by default.
+- Files: [steerSupport.ts](../../src/features/sessions/model/steerSupport.ts), [App.tsx](../../src/app/App.tsx), [steerSupport.test.ts](../../src/features/sessions/model/steerSupport.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (6,962 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-18 11:55 IST — GPU terminal rendering in Experimentation (L-99)
 - Type: feature
 - What: New Experimentation switch, "GPU terminal rendering" (off by default). When on, terminals you can see are drawn by the graphics card instead of the CPU. Hidden terminals give the GPU back, at most 8 use it at once, and any terminal whose GPU drawing fails quietly goes back to normal drawing.
