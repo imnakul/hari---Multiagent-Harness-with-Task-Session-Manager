@@ -27,8 +27,12 @@ type GpuReadings = Option<HashMap<u32, f64>>;
 
 /// Sum for a set of processes; a process missing from the counters uses no GPU.
 fn gpu_total(ids: &[u32], gpu: &GpuReadings) -> Option<f64> {
-    gpu.as_ref()
-        .map(|by_pid| ids.iter().filter_map(|id| by_pid.get(id)).sum::<f64>().min(100.0))
+    gpu.as_ref().map(|by_pid| {
+        ids.iter()
+            .filter_map(|id| by_pid.get(id))
+            .sum::<f64>()
+            .min(100.0)
+    })
 }
 
 #[derive(Serialize)]
