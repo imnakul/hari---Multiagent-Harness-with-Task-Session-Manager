@@ -1,11 +1,19 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-18 12:44 IST — Same-version Windows build with GPU monitor and queue fix (0.10.0-local2-upstream-sync)
+- Type: chore
+- What: New Windows installer, same version number, with GPU terminal rendering (L-99), Interactive follow-ups queueing (L-100) and the process monitor GPU column with hover Stop icon (L-101). `nakul/windows-support` fast-forwarded to this commit and both branches pushed to nakul-fork.
+- Why: User request — commit, push and build after confirming CPU, queue and steer now work.
+- Files: `E:\Developing\Installable versions\MonoCode_0.10.0-local2-upstream-sync_x64-setup_2026-10-18-gpu.exe` (12,418,042 bytes, SHA-256 BC6A192C49724C92BEF50BDEA172D96C2B458A06C0C078A1C372A4E28CAA19DA, NotSigned)
+- Commit: built from 76634f4d
+- Verified: build ✅ tsc ✅ tests ✅ (6,964 passed, 2 skipped); cargo fmt clean for L-101 files (existing Debug Inspector drift unchanged); desktop check manual
+
 ## 2026-10-18 12:28 IST — Process monitor GPU column and hover Stop icon (L-101)
 - Type: feature
 - What: The process monitor now shows CPU | RAM | GPU in lined-up columns for every row, and the bottom-bar chip adds GPU. The Stop button is now just a stop icon that appears when you point at a row (or reach it with Tab).
 - Why: User request — GPU use was visible in Task Manager but not in the monitor, and always-visible Stop buttons were noisy.
 - Files: [process_gpu.rs](../../src-tauri/src/process_gpu.rs), [process_stats.rs](../../src-tauri/src/process_stats.rs), [Cargo.toml](../../src-tauri/Cargo.toml), [lib.rs](../../src-tauri/src/lib.rs), [ProcessMonitor.tsx](../../src/app/shell/ProcessMonitor.tsx), [processMonitorModel.ts](../../src/app/shell/processMonitorModel.ts), [ProcessMonitor.test.ts](../../src/app/shell/ProcessMonitor.test.ts), [settings.ts](../../src/features/settings/model/settings.ts), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx); spec [process-monitor-gpu-column.md](../specs/process-monitor-gpu-column.md)
-- Commit: uncommitted
+- Commit: 3f0458c6 (+ 76634f4d rustfmt)
 - Verified: tsc ✅ tests ✅ (6,964 passed, 2 skipped) Rust process tests ✅ (9) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-18 12:06 IST — Interactive Claude follow-ups queue instead of interrupting the turn (L-100)
@@ -13,7 +21,7 @@
 - What: In Interactive CLI mode, a message sent while Claude is working now waits in the queue and goes out when the turn ends. Before, it tried to steer the running turn, Interactive Claude refused, and the refusal stopped the turn and left the message in the composer.
 - Why: User report — "it didn't went to queue, also, it interrupted the working session". Cause: steer support was checked for the Claude provider as a whole, not for Interactive sessions, so Monos (and sessions with background tasks) steered by default.
 - Files: [steerSupport.ts](../../src/features/sessions/model/steerSupport.ts), [App.tsx](../../src/app/App.tsx), [steerSupport.test.ts](../../src/features/sessions/model/steerSupport.test.ts)
-- Commit: uncommitted
+- Commit: dbe57e32
 - Verified: tsc ✅ tests ✅ (6,962 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-18 11:55 IST — GPU terminal rendering in Experimentation (L-99)
@@ -21,7 +29,7 @@
 - What: New Experimentation switch, "GPU terminal rendering" (off by default). When on, terminals you can see are drawn by the graphics card instead of the CPU. Hidden terminals give the GPU back, at most 8 use it at once, and any terminal whose GPU drawing fails quietly goes back to normal drawing.
 - Why: User request — terminals were the biggest CPU users while the GPU sat idle.
 - Files: [gpuRenderer.ts](../../src/features/terminal/model/gpuRenderer.ts), [TerminalView.tsx](../../src/features/terminal/ui/TerminalView.tsx), [ClaudeInteractiveTerminal.tsx](../../src/features/sessions/ui/ClaudeInteractiveTerminal.tsx), [settings.ts](../../src/features/settings/model/settings.ts), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [gpuRenderer.test.ts](../../src/features/terminal/model/gpuRenderer.test.ts); new dependency `@xterm/addon-webgl` ^0.19.0 (MIT, official xterm.js addon, ~1.25M weekly downloads).
-- Commit: uncommitted
+- Commit: 4568b20e
 - Verified: tsc ✅ tests ✅ (6,960 passed, 2 skipped) lint — (no ESLint config) build ✅ (addon is a separate 110 kB lazy chunk, 30 kB gzip); desktop check manual
 
 ## 2026-10-18 11:44 IST — Same-version Windows build with merged fixes (0.10.0-local2-upstream-sync)
