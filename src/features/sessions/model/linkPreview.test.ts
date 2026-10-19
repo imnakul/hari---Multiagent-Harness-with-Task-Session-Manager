@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseStandaloneHttpUrl, parseUserMessageLink } from "./linkPreview";
+import {
+  collectWebLinks,
+  parseStandaloneHttpUrl,
+  parseUserMessageLink,
+} from "./linkPreview";
 
 describe("parseStandaloneHttpUrl", () => {
   it("normalizes a standalone web URL for display", () => {
@@ -87,5 +91,49 @@ describe("parseUserMessageLink", () => {
 
   it("returns null when there is no valid web URL", () => {
     expect(parseUserMessageLink("Nothing to preview here")).toBeNull();
+  });
+});
+
+describe("collectWebLinks", () => {
+  const urls = (markdown: string, limit = 3) =>
+    collectWebLinks(markdown, limit).map((link) => link.url);
+
+  it("finds bare and Markdown links in order, without trailing punctuation", () => {
+    expect(
+      urls(
+        "See https://example.com/a, then [the docs](https://docs.example.com/start).",
+      ),
+    ).toEqual(["https://example.com/a", "https://docs.example.com/start"]);
+  });
+
+  it("keeps a URL used as its own link text once", () => {
+    expect(urls("[https://example.com/x](https://example.com/x)")).toEqual([
+      "https://example.com/x",
+    ]);
+  });
+
+  it("skips URLs in code blocks and inline code", () => {
+    const markdown = [
+      "Run `curl https://api.example.com/v1` first.",
+      "",
+      "```sh",
+      "open https://code.example.com",
+      "```",
+      "",
+      "Read https://example.org/guide.",
+    ].join("\n");
+    expect(urls(markdown)).toEqual(["https://example.org/guide"]);
+  });
+
+  it("stops at the limit and drops duplicates", () => {
+    expect(
+      urls(
+        "https://a.example https://a.example https://b.example https://c.example https://d.example",
+      ),
+    ).toEqual(["https://a.example/", "https://b.example/", "https://c.example/"]);
+  });
+
+  it("ignores links with credentials", () => {
+    expect(urls("https://user:pass@example.com/private")).toEqual([]);
   });
 });

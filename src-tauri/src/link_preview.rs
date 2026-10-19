@@ -10,13 +10,19 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(7);
 const MAX_REDIRECTS: usize = 5;
 const MAX_PAGE_BYTES: usize = 512 * 1024;
 const MAX_ICON_BYTES: usize = 256 * 1024;
+const MAX_IMAGE_BYTES: usize = 1024 * 1024;
 const USER_AGENT: &str = "Mozilla/5.0 (compatible; MonoCode-LinkPreview/1.0)";
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkPreviewMetadata {
     title: Option<String>,
     favicon_data_url: Option<String>,
+    description: Option<String>,
+    site_name: Option<String>,
+    /// Only fetched when the caller asks for it; the webview shrinks it to a
+    /// thumbnail before keeping it.
+    image_data_url: Option<String>,
 }
 
 struct FetchedResource {
@@ -28,24 +34,38 @@ struct FetchedResource {
 /// Fetch metadata in the native host so the webview's deliberately narrow CSP
 /// can remain intact. Every hop is checked before a request is made.
 #[tauri::command]
-pub async fn fetch_link_preview(url: String) -> Result<LinkPreviewMetadata, String> {
-    tauri::async_runtime::spawn_blocking(move || fetch_link_preview_sync(&url))
+pub async fn fetch_link_preview(
+    url: String,
+    include_image: Option<bool>,
+) -> Result<LinkPreviewMetadata, String> {
+    let include_image = include_image.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || fetch_link_preview_sync(&url, include_image))
         .await
         .map_err(|error| error.to_string())?
 }
 
-fn fetch_link_preview_sync(raw: &str) -> Result<LinkPreviewMetadata, String> {
+fn fetch_link_preview_sync(raw: &str, include_image: bool) -> Result<LinkPreviewMetadata, String> {
     let url = parse_public_url(raw)?;
     let page = fetch_resource(url, "text/html,application/xhtml+xml;q=0.9", MAX_PAGE_BYTES)?;
     if !is_html(&page.content_type) {
-        return Ok(LinkPreviewMetadata {
-            title: None,
-            favicon_data_url: None,
-        });
+        return Ok(LinkPreviewMetadata::default());
     }
 
     let html = String::from_utf8_lossy(&page.bytes);
     let title = document_title(&html);
+    let description = meta_content(
+        &html,
+        &["og:description", "twitter:description", "description"],
+    );
+    let site_name = meta_content(&html, &["og:site_name", "application-name"]);
+    let image_data_url = if include_image {
+        document_image_href(&html)
+            .and_then(|href| page.final_url.join(&href).ok())
+            .filter(is_http_url)
+            .and_then(fetch_image_data_url)
+    } else {
+        None
+    };
     let default_icon = page
         .final_url
         .join("/favicon.ico")
@@ -61,7 +81,19 @@ fn fetch_link_preview_sync(raw: &str) -> Result<LinkPreviewMetadata, String> {
     Ok(LinkPreviewMetadata {
         title,
         favicon_data_url,
+        description,
+        site_name,
+        image_data_url,
     })
+}
+
+/// A page's preview image, accepted only as a raster format the card can show.
+fn fetch_image_data_url(url: Url) -> Option<String> {
+    let image = fetch_resource(url, "image/*", MAX_IMAGE_BYTES).ok()?;
+    let mime = image_mime(image.content_type.as_deref(), &image.bytes)
+        .filter(|mime| *mime != "image/x-icon")?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(image.bytes);
+    Some(format!("data:{mime};base64,{encoded}"))
 }
 
 fn fetch_icon_data_url(url: Url) -> Option<String> {
@@ -277,19 +309,44 @@ fn image_mime(content_type: Option<&str>, bytes: &[u8]) -> Option<&'static str> 
     }
 }
 
-fn document_title(html: &str) -> Option<String> {
-    for key in ["og:title", "twitter:title"] {
-        for tag in opening_tags(html, "meta") {
+/// The first non-empty `content` of a `<meta>` named by one of `keys`, tried
+/// in order, as cleaned text.
+fn meta_content(html: &str, keys: &[&str]) -> Option<String> {
+    meta_value(html, keys).and_then(clean_text)
+}
+
+fn meta_value(html: &str, keys: &[&str]) -> Option<String> {
+    let tags = opening_tags(html, "meta");
+    keys.iter().find_map(|key| {
+        tags.iter().find_map(|tag| {
             let marker = attribute(tag, "property").or_else(|| attribute(tag, "name"));
-            if marker
+            marker
                 .as_deref()
                 .is_some_and(|value| value.eq_ignore_ascii_case(key))
-            {
-                if let Some(value) = attribute(tag, "content").and_then(clean_text) {
-                    return Some(value);
-                }
-            }
-        }
+                .then(|| attribute(tag, "content"))
+                .flatten()
+                .filter(|value| !value.trim().is_empty())
+        })
+    })
+}
+
+fn document_image_href(html: &str) -> Option<String> {
+    meta_value(
+        html,
+        &[
+            "og:image:secure_url",
+            "og:image",
+            "og:image:url",
+            "twitter:image",
+            "twitter:image:src",
+        ],
+    )
+    .map(|href| href.trim().to_string())
+}
+
+fn document_title(html: &str) -> Option<String> {
+    if let Some(title) = meta_content(html, &["og:title", "twitter:title"]) {
+        return Some(title);
     }
 
     let lower = html.to_ascii_lowercase();
@@ -486,6 +543,31 @@ mod tests {
             document_icon_href(html).as_deref(),
             Some("/assets/icon.png")
         );
+    }
+
+    #[test]
+    fn reads_description_site_name_and_preview_image() {
+        let html = r#"
+          <meta name="description" content="Plain description">
+          <meta property="og:description" content="Social &amp; richer">
+          <meta property="og:site_name" content="Example">
+          <meta content="" property="og:image:secure_url">
+          <meta property="og:image" content=" /cards/og.png ">
+        "#;
+        assert_eq!(
+            meta_content(
+                html,
+                &["og:description", "twitter:description", "description"]
+            )
+            .as_deref(),
+            Some("Social & richer")
+        );
+        assert_eq!(
+            meta_content(html, &["og:site_name"]).as_deref(),
+            Some("Example")
+        );
+        assert_eq!(document_image_href(html).as_deref(), Some("/cards/og.png"));
+        assert_eq!(document_image_href("<title>x</title>"), None);
     }
 
     #[test]

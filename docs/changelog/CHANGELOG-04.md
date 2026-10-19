@@ -1,10 +1,19 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 22:28 IST — Link previews setting and rich link cards (L-119)
+- Type: feature
+- What: Settings → Chat → Link previews chooses Off, On hover (default) or Always. Link cards now show the page's picture, title, description and site name. Always also puts up to three small cards under each finished reply, loaded only as you scroll to them. Pictures are shrunk to small thumbnails and kept in memory only (the last 100 links), so nothing fills your disk.
+- Why: User asked for a hover/always toggle and rich previews for normal pages (no special X/Twitter handling), sized appropriately and without storage growth.
+- Files: [link_preview.rs](../../src-tauri/src/link_preview.rs), [linkPreview.ts](../../src/features/sessions/model/linkPreview.ts), [linkPreviewSettings.ts](../../src/features/settings/model/linkPreviewSettings.ts), [ChatHoverPreviews.tsx](../../src/features/sessions/ui/ChatHoverPreviews.tsx), [AgentMarkdown.tsx](../../src/features/sessions/ui/AgentMarkdown.tsx), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [settings.ts](../../src/features/settings/model/settings.ts)
+- Commit: see git log (feat(sessions): link preview setting and rich link cards)
+- Decision: [chat-link-previews.md](../specs/chat-link-previews.md)
+- Verified: tsc ✅ tests ✅ (7,479 passed, 2 skipped) cargo ✅ (link_preview, 5 passed) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 21:59 IST — Windows build with L-116 to L-118 (0.14.0-local6)
 - Type: chore
 - What: New Windows installer with accent-coloured chat links, Interactive chats that keep rendering after a pasted image, and images, videos, a full-size image viewer, image copy and link and image hover previews in every chat.
 - Why: User asked to commit, push and build after L-116 to L-118.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local6_x64.exe` (13,987,754 bytes, SHA-256 B587BB20F66A40E732C41E9C4C863822C4011B0DCCF0700C108C49B43E48609E, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local6-media-previews-pasted-image-fix_x64.exe` (13,987,754 bytes, SHA-256 B587BB20F66A40E732C41E9C4C863822C4011B0DCCF0700C108C49B43E48609E, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
 - Commit: see git log (chore(release): 0.14.0-local6)
 - Verified: tsc ✅ tests ✅ (7,466 passed, 2 skipped) cargo ✅ (claude_ tests) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
 

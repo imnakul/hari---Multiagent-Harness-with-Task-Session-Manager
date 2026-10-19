@@ -70,8 +70,10 @@ import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
   ImagePathHoverPreview,
+  InlineLinkPreviews,
   WebLinkHoverPreview,
 } from "./ChatHoverPreviews";
+import { useLinkPreviewMode } from "../../settings/model/linkPreviewSettings";
 import { isImagePath } from "../../files/model/filePreview";
 import {
   rehypeHoldImageSources,
@@ -328,6 +330,7 @@ function MarkdownLink({
   const file = href ? resolveWorkspaceFileReference(href, cwd) : undefined;
   const label = textContent(children);
   const localMedia = useContext(LocalMediaContext);
+  const linkPreviewMode = useLinkPreviewMode();
   if (allowRemoteMedia && href && isInboxMediaUrl(href)) {
     return <InboxMedia src={href} alt={label} />;
   }
@@ -372,8 +375,14 @@ function MarkdownLink({
       />
     );
   }
-  // Chats only: title-and-icon card for web links, fetched on hover.
-  if (localMedia && !file && href && /^https?:\/\//i.test(href))
+  // Chats only: a page card for web links, fetched on hover (L-119 setting).
+  if (
+    localMedia &&
+    linkPreviewMode !== "off" &&
+    !file &&
+    href &&
+    /^https?:\/\//i.test(href)
+  )
     return <WebLinkHoverPreview url={href}>{link}</WebLinkHoverPreview>;
   return link;
 }
@@ -888,6 +897,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   const pace = useContext(TranscriptPacing);
   const pacingEnabled = usePacedReveal();
   const pacedReveal = pace && pacingEnabled && pacedRevealPreferred();
+  const linkPreviewMode = useLinkPreviewMode();
   // Both hooks keep their identity when the preference changes during a reply.
   const smooth = usePacedText(
     text,
@@ -1033,6 +1043,12 @@ export const AgentMarkdown = memo(function AgentMarkdown({
                 </Streamdown>
               </MarkdownCommit.Provider></MarkdownTableContext.Provider>
             </div>
+            {localMedia &&
+            linkPreviewMode === "always" &&
+            !streaming &&
+            !paced.revealing ? (
+              <InlineLinkPreviews markdown={text} />
+            ) : null}
             {fileMenu ? (
               <ExplorerMenu
                 x={fileMenu.x}

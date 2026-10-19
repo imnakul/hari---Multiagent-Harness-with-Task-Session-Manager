@@ -484,6 +484,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "streaming pacing immediate latency performance animation",
   },
   {
+    id: "link-previews",
+    section: "chat",
+    label: "Link previews",
+    keywords: "url web page card image title description hover always off rich",
+  },
+  {
     id: "follow-up",
     section: "chat",
     label: "Follow-up behavior",
