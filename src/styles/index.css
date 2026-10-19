@@ -4518,6 +4518,25 @@ html.layout-inset .dialog-scrim {
   background: rgb(0 0 0 / 0.35);
 }
 
+/* Composer dialogs (Add Draft, Add MCP server) match the floating Quick
+   Composer card: its 45% base tint over blurred content and a light scrim, so
+   the page behind is not darkened twice. Light theme stays near-opaque. */
+.dialog-scrim-composer {
+  background: rgb(0 0 0 / 0.12);
+}
+
+html.theme-light .dialog-scrim-composer {
+  background: rgb(0 0 0 / 0.08);
+}
+
+.modal-surface-composer {
+  background: color-mix(in srgb, var(--color-background-base) 45%, transparent);
+}
+
+html.theme-light .modal-surface-composer {
+  background: color-mix(in srgb, var(--color-background-base) 82%, transparent);
+}
+
 html.layout-inset.theme-light .dialog-scrim {
   background: rgb(0 0 0 / 0.2);
 }

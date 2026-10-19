@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 10:01 IST — Antigravity CLI in Add MCP server, lighter glass for composer dialogs (L-111)
+- Type: fix
+- What: Add MCP server now offers Antigravity CLI and saves to the same files the MCP list reads. The Add MCP server and Add Draft dialogs use the floating Quick Composer's lighter glass and a light backdrop instead of the dark dialog fill.
+- Why: User reported Antigravity CLI missing from the Provider list and both dialogs looking too dark next to the Quick Composer.
+- Files: [mcp.rs](../../src-tauri/src/mcp.rs), [McpSettings.tsx](../../src/features/settings/ui/McpSettings.tsx), [Modal.tsx](../../src/shared/ui/Modal.tsx), [index.css](../../src/styles/index.css), [SessionTodoComposer.tsx](../../src/features/session-board/ui/SessionTodoComposer.tsx)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,440 passed, 2 skipped; 3 new) cargo ✅ (mcp:: 38 passed, 2 new) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 02:31 IST — Windows build with the Interactive and composer fixes (0.14.0-local2-upstream-sync)
 - Type: chore
 - What: New Windows installer with L-106 to L-110: Interactive send fixes and the Quick Composer / Add Draft dialog matching the chat composer. The installer file name no longer carries a setup date.

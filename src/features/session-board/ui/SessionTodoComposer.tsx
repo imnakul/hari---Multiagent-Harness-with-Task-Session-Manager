@@ -57,6 +57,7 @@ export function SessionTodoComposer({
       // At least the floating composer's 680px, so its toolbar fits as it does there.
       size="lg"
       fitViewport
+      glass="composer"
     >
       <div className="p-3" aria-busy={busy}>
         <QuickComposer

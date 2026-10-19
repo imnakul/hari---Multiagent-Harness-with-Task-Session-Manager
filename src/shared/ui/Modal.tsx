@@ -34,6 +34,11 @@ type Props = {
   className?: string;
   /** Keep taller dialogs inside the viewport, scrolling their content. */
   fitViewport?: boolean;
+  /**
+   * "composer": the floating Quick Composer's lighter glass (its tint, a light
+   * scrim) for composer-like dialogs; "default" keeps the standard dialog fill.
+   */
+  glass?: "default" | "composer";
   children: ReactNode;
 };
 
@@ -46,6 +51,7 @@ export function ModalPanel({
   minimalHeader = false,
   className,
   fitViewport = false,
+  glass = "default",
   children,
 }: Props) {
   const popupHost = useContext(NativePopupHost);
@@ -95,7 +101,13 @@ export function ModalPanel({
         onMouseDown={(event) => event.stopPropagation()}
         className={`relative isolate flex flex-col overflow-hidden rounded-2xl border border-content/7 shadow-2xl ${fitViewport ? "max-h-[calc(100dvh-32px)]" : ""} ${className ?? ""}`}
       >
-        <GlassBackdrop className="modal-surface bg-background-base dark:bg-background-base/55" />
+        <GlassBackdrop
+          className={
+            glass === "composer"
+              ? "modal-surface-composer"
+              : "modal-surface bg-background-base dark:bg-background-base/55"
+          }
+        />
         <div className="modal-panel relative z-[1] flex min-h-0 flex-1 flex-col">
           <header
             className={
@@ -150,7 +162,7 @@ export function Modal(props: Props) {
   return createPortal(
     <div className="fixed inset-0" style={{ zIndex: LAYER.dialog }}>
       <div
-        className="modal-backdrop dialog-scrim absolute inset-0 z-0 bg-black/40"
+        className={`modal-backdrop absolute inset-0 z-0 ${props.glass === "composer" ? "dialog-scrim-composer" : "dialog-scrim bg-black/40"}`}
         onMouseDown={props.onClose}
       />
       <ModalPanel {...props} />

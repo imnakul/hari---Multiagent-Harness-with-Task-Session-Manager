@@ -37,4 +37,14 @@ describe("ModalPanel", () => {
     expect(markup).toContain("Authentication required");
     expect(markup).toContain("Provider login");
   });
+
+  it("uses the Quick Composer glass only when asked", () => {
+    const panel = (glass?: "composer") =>
+      renderToStaticMarkup(
+        createElement(ModalPanel, { title: "Add", onClose: vi.fn(), glass, children: "Body" }),
+      );
+    expect(panel("composer")).toContain("modal-surface-composer");
+    expect(panel("composer")).not.toContain("bg-background-base");
+    expect(panel()).toContain("modal-surface bg-background-base");
+  });
 });

@@ -527,6 +527,30 @@ it("adds a standard mcpServers entry to the selected provider and project", asyn
   expect(invoke).toHaveBeenLastCalledWith("claude_mcp_list", { cwd: "/other" });
 });
 
+it("offers Antigravity CLI when adding a server", async () => {
+  await act(async () =>
+    root.render(createElement(McpSettings, { cwd: "/repo", recents: [] })),
+  );
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Add MCP server"]')!
+      .click(),
+  );
+  await act(async () =>
+    document.body
+      .querySelector<HTMLButtonElement>('[aria-label="Provider: Claude Code"]')!
+      .click(),
+  );
+  const antigravity = [
+    ...document.body.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+  ].find((button) => button.textContent === "Antigravity CLI");
+  expect(antigravity).toBeDefined();
+  await act(async () => antigravity!.click());
+  expect(
+    document.body.querySelector('[aria-label="Scope: Project"]'),
+  ).not.toBeNull();
+});
+
 it("navigates provider choices with arrow keys", async () => {
   await act(async () =>
     root.render(createElement(McpSettings, { cwd: "/repo" })),

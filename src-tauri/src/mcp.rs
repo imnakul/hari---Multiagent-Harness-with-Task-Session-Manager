@@ -77,12 +77,22 @@ fn server_from_json(provider: &str, name: &str, config: &str) -> Result<(String,
             object.insert("args".into(), serde_json::json!(args));
         }
     }
+    if provider == "antigravity-cli" {
+        // Antigravity CLI reads remote servers from `serverUrl`; accept the
+        // common `url` spelling from other providers' snippets.
+        let object = server.as_object_mut().unwrap();
+        if !object.contains_key("serverUrl") {
+            if let Some(url) = object.remove("url") {
+                object.insert("serverUrl".into(), url);
+            }
+        }
+    }
     let command = server
         .get("command")
         .and_then(Value::as_str)
         .is_some_and(|s| !s.is_empty());
     let url = server
-        .get("url")
+        .get(if provider == "antigravity-cli" { "serverUrl" } else { "url" })
         .and_then(Value::as_str)
         .is_some_and(|s| !s.is_empty());
     if command == url {
@@ -109,10 +119,15 @@ pub async fn mcp_add(
             return Err("Project directory does not exist".into());
         }
         match provider.as_str() {
-            "cursor" | "claude_desktop" => {
+            "cursor" | "claude_desktop" | "antigravity-cli" => {
                 let path = match (provider.as_str(), scope.as_str()) {
                     ("cursor", "user") => Path::new(&home).join(".cursor/mcp.json"),
                     ("cursor", "project") => project.join(".cursor/mcp.json"),
+                    // The same CLI files discovery reads (see `discover`).
+                    ("antigravity-cli", "user") => {
+                        Path::new(&home).join(".gemini/config/mcp_config.json")
+                    }
+                    ("antigravity-cli", "project") => project.join(".agents/mcp_config.json"),
                     ("claude_desktop", "user") => claude_desktop_config(Path::new(&home)),
                     _ => return Err("Unsupported scope for this provider".into()),
                 };
@@ -798,6 +813,49 @@ mod tests {
             r#"{"mcpServers":{"docs":{"command":"npx"}}}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn antigravity_cli_remote_servers_use_server_url() {
+        let (_, server) = server_from_json(
+            "antigravity-cli",
+            "docs",
+            r#"{"url":"https://example.test/mcp","headers":{"Auth":"keep"}}"#,
+        )
+        .unwrap();
+        assert_eq!(server["serverUrl"], "https://example.test/mcp");
+        assert!(server.get("url").is_none());
+        assert_eq!(server["headers"]["Auth"], "keep");
+        let (_, native) = server_from_json(
+            "antigravity-cli",
+            "docs",
+            r#"{"serverUrl":"https://example.test/mcp"}"#,
+        )
+        .unwrap();
+        assert_eq!(native["serverUrl"], "https://example.test/mcp");
+        assert!(server_from_json("antigravity-cli", "docs", r#"{"disabled":false}"#).is_err());
+        // Other providers keep their own `url` field.
+        let (_, cursor) =
+            server_from_json("cursor", "docs", r#"{"url":"https://example.test/mcp"}"#).unwrap();
+        assert_eq!(cursor["url"], "https://example.test/mcp");
+    }
+
+    #[test]
+    fn adds_antigravity_cli_server_where_discovery_reads_it() {
+        let root = std::env::temp_dir().join(format!("monocode-mcp-agy-{}", uuid::Uuid::new_v4()));
+        let path = root.join(".agents/mcp_config.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"mcpServers":{"old":{"command":"node","disabled":true}}}"#)
+            .unwrap();
+        let (name, server) =
+            server_from_json("antigravity-cli", "", r#"{"mcpServers":{"new":{"command":"npx"}}}"#)
+                .unwrap();
+        write_json_server(&path, &name, server).unwrap();
+        let mut rows = Vec::new();
+        add_json_file(&mut rows, "antigravity-cli", "project", &path, "mcpServers");
+        let names: Vec<_> = rows.iter().map(|row| (row.name.as_str(), row.enabled)).collect();
+        assert_eq!(names, [("new", true), ("old", false)]);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
