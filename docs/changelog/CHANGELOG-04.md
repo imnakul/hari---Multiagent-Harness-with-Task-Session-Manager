@@ -1,11 +1,19 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 11:18 IST — Windows build with L-113 (0.14.0-local4)
+- Type: chore
+- What: New Windows installer where Interactive sends wait for Claude's prompt to show the message before pressing Enter.
+- Why: User asked to commit and build the L-113 fix.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local4_x64.exe` (13,965,146 bytes, SHA-256 1496A158BAC918D88D69D85EED1DDB05B0CE27B272842C9DBF9C1B714670FE8C, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Commit: see git log (chore(release): 0.14.0-local4)
+- Verified: tsc ✅ tests ✅ (7,449 passed, 2 skipped) cargo — (release build only) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-19 11:00 IST — Interactive sends wait for Claude's prompt to show the message (L-113)
 - Type: fix
 - What: Sending to a Claude Interactive chat right after it opened or resumed often did nothing: Claude threw the typed text away while it was still starting, and MonoCode pressed Enter on an empty prompt. MonoCode now checks Claude's input box on screen and presses Enter only once the message is there, retypes it once if Claude visibly cleared it, and otherwise says plainly that nothing was sent so you can send it again.
 - Why: User still saw "Prompt delivery is unconfirmed" after L-112.
 - Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [lib.rs](../../src-tauri/src/lib.rs), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractiveTerminal.ts](../../src/integrations/harness/providers/claude/claudeInteractiveTerminal.ts), [claudeInteractiveProtocol.ts](../../src/integrations/harness/providers/claude/claudeInteractiveProtocol.ts), and their tests
-- Commit: uncommitted
+- Commit: c16e8b4d
 - Verified: tsc ✅ tests ✅ (7,449 passed, 2 skipped) cargo ✅ (claude_interactive:: 12 passed, 1 new) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-19 10:21 IST — Windows build with L-111 and L-112 (0.14.0-local3-upstream-sync)
