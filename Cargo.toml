@@ -4,7 +4,7 @@ members = ["src-tauri"]
 exclude = ["vendor/portable-pty"]
 
 [workspace.package]
-version = "0.14.0-local6"
+version = "0.14.0-local7"
 edition = "2021"
 license = "MIT"
 

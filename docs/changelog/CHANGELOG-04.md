@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 22:45 IST — Windows build with L-119 (0.14.0-local7)
+- Type: chore
+- What: New Windows installer with the Link previews setting (Off, On hover, Always) and rich link cards showing the page's picture, title and description.
+- Why: User asked to commit, push and build after L-119.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local7-link-preview-cards_x64.exe` (14,017,793 bytes, SHA-256 C921933E30ECC3AFBFED8416DBCE06FA052BC9BB3D787B7464D9A894D3736D0F, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Commit: see git log (chore(release): 0.14.0-local7)
+- Verified: tsc ✅ tests ✅ (7,479 passed, 2 skipped) cargo ✅ (link_preview) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-19 22:28 IST — Link previews setting and rich link cards (L-119)
 - Type: feature
 - What: Settings → Chat → Link previews chooses Off, On hover (default) or Always. Link cards now show the page's picture, title, description and site name. Always also puts up to three small cards under each finished reply, loaded only as you scroll to them. Pictures are shrunk to small thumbnails and kept in memory only (the last 100 links), so nothing fills your disk.
