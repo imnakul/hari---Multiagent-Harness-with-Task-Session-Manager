@@ -275,6 +275,7 @@ describe("interactive turn delivery", () => {
         submissionId: "submission-1",
         text: "Tabbed    line\nsecond line",
       },
+      trustFolder: true,
     });
     expect(mocks.sends).toEqual([]);
     expect(mocks.submits).toEqual([]);
@@ -299,6 +300,22 @@ describe("interactive turn delivery", () => {
       expect(mocks.sends).toEqual([text]);
     },
   );
+  it("leaves the folder trust dialog to Claude when the setting is off", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) =>
+        key === "monocode.interactiveFolderTrust" ? "false" : null,
+    });
+    try {
+      const turn = sendInteractiveClaude(input());
+      await waitFor(() => onAccepted.mock.calls.length === 1);
+      finish();
+      await vi.advanceTimersByTimeAsync(1000);
+      await turn;
+      expect(mocks.starts[0].trustFolder).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("names a waiting startup dialog when Claude never submits the launch prompt", async () => {
     mocks.silentSend = true;
     const turn = sendInteractiveClaude(input()).catch(

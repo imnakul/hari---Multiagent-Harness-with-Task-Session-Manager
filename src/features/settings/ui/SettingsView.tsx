@@ -439,6 +439,8 @@ import {
   saveProcessMonitor,
   loadInteractiveIdleMinutes,
   saveInteractiveIdleMinutes,
+  loadInteractiveFolderTrust,
+  saveInteractiveFolderTrust,
   loadDetailedContext,
   loadDiffViewer,
   loadFileTabMode,
@@ -997,6 +999,9 @@ function ExperimentationPage(): ReactElement {
   const [interactiveIdle, setInteractiveIdle] = useState(() =>
     String(loadInteractiveIdleMinutes()),
   );
+  const [interactiveFolderTrust, setInteractiveFolderTrust] = useState(
+    loadInteractiveFolderTrust,
+  );
   const [detailedContext, setDetailedContext] = useState(loadDetailedContext);
   const [remainingQuota, setRemainingQuota] = useState(loadRemainingQuota);
   const [allAccountsUsage, setAllAccountsUsage] = useState(
@@ -1072,6 +1077,20 @@ function ExperimentationPage(): ReactElement {
             );
             saveInteractiveIdleMinutes(next);
             setInteractiveIdle(String(next));
+          }}
+        />
+      </Row>
+      <Row
+        id="interactive-folder-trust"
+        label="Trust chat folders for Claude Interactive"
+        description="Before Claude Interactive starts, mark the chat's folder as trusted in Claude's own settings, so Claude never stops at its hidden “Do you trust this folder?” question. Turn off to have Claude ask in the native terminal instead."
+      >
+        <Toggle
+          label="Trust chat folders for Claude Interactive"
+          on={interactiveFolderTrust}
+          onChange={(next) => {
+            saveInteractiveFolderTrust(next);
+            setInteractiveFolderTrust(next);
           }}
         />
       </Row>

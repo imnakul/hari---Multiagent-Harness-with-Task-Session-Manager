@@ -127,6 +127,9 @@ pub struct StartInput {
     /// The send that started this launch, passed as Claude's prompt argument
     /// so it is submitted by Claude itself once its input is ready.
     prompt: Option<LaunchPrompt>,
+    /// Record the folder as trusted in Claude's config before launch (L-115).
+    #[serde(default)]
+    trust_folder: bool,
 }
 
 #[derive(Deserialize)]
@@ -262,6 +265,11 @@ pub fn claude_interactive_start(
     )?;
     let account_dir =
         crate::harness::provider_account_dir(&app, "claude", input.account_id.as_deref())?;
+    // The GUI cannot answer Claude's folder trust dialog, so answer it in
+    // Claude's own config first, as Orca does. Any miss means Claude asks.
+    if input.trust_folder {
+        crate::claude_folder_trust::grant_for_launch(account_dir.as_deref(), Path::new(&input.cwd));
+    }
     let source_id = input
         .fork
         .as_ref()

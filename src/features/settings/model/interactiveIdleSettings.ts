@@ -21,3 +21,25 @@ export function saveInteractiveIdleMinutes(value: number): void {
     /* unavailable storage */
   }
 }
+
+const FOLDER_TRUST_KEY = "monocode.interactiveFolderTrust";
+
+/**
+ * Whether Claude Interactive records the chat folder as trusted in Claude's
+ * own config before launch (L-115), so the hidden terminal never stops at the
+ * trust dialog. On by default, as in Orca.
+ */
+export function loadInteractiveFolderTrust(): boolean {
+  try {
+    return localStorage.getItem(FOLDER_TRUST_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+export function saveInteractiveFolderTrust(on: boolean): void {
+  try {
+    localStorage.setItem(FOLDER_TRUST_KEY, String(on));
+  } catch {
+    /* unavailable storage */
+  }
+}

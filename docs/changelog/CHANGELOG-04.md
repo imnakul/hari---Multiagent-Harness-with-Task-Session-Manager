@@ -1,11 +1,19 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 12:07 IST — Claude Interactive pre-trusts the chat folder (L-115)
+- Type: feature
+- What: On a new account or in a new folder, Claude first asks "Do you trust the files in this folder?" in its hidden terminal, so the first message waited until MonoCode said to open the native terminal. MonoCode now records that answer in Claude's own settings before starting it, the way Orca does, so the question never comes up. It never creates or breaks Claude's settings file and never touches one it cannot read; if anything is in the way, Claude simply asks as before. Settings → Experimentation → "Trust chat folders for Claude Interactive" turns it off (on by default).
+- Why: User asked to adopt Orca's folder-trust handling after the L-114 review.
+- Files: [claude_folder_trust.rs](../../src-tauri/src/claude_folder_trust.rs) (new), [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [lib.rs](../../src-tauri/src/lib.rs), [interactiveIdleSettings.ts](../../src/features/settings/model/interactiveIdleSettings.ts), [settings.ts](../../src/features/settings/model/settings.ts), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts); [spec](../specs/claude-folder-pretrust.md)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,465 passed, 2 skipped) cargo ✅ (claude_folder_trust:: 5 new, claude_ tests pass) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 11:50 IST — First Interactive message goes on Claude's command line (L-114)
 - Type: fix
 - What: The first message after opening or resuming a Claude Interactive chat was often lost, because Claude throws away anything typed while it is still starting. MonoCode now hands that message to Claude when it starts it (the way Orca does), so Claude sends it itself once ready. Later messages are typed in as before, with the L-113 on-screen check. Messages that Claude could mistake for a command (one word, or starting with "-" or "/"), messages with attachments, and /compact are still typed in.
 - Why: User approved Orca's approach after the race was reproduced outside MonoCode.
 - Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractiveProtocol.ts](../../src/integrations/harness/providers/claude/claudeInteractiveProtocol.ts), and their tests incl. [claudeInteractiveBridge.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveBridge.test.ts)
-- Commit: uncommitted
+- Commit: 0c63df04
 - Verified: tsc ✅ tests ✅ (7,464 passed, 2 skipped) cargo ✅ (claude_interactive:: 13 passed, 1 new) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-19 11:18 IST — Windows build with L-113 (0.14.0-local4)

@@ -9,6 +9,7 @@ mod azure_devops;
 mod background_work;
 mod chat_background;
 mod checkpoint;
+mod claude_folder_trust;
 mod claude_interactive;
 mod codex_mono_store;
 mod control;

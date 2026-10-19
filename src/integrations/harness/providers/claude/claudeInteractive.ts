@@ -11,7 +11,10 @@ import {
   type CompactContextInput,
 } from "../../core/types";
 import { nativeModelId } from "../../../../features/sessions/model/models";
-import { loadInteractiveIdleMinutes } from "../../../../features/settings/model/interactiveIdleSettings";
+import {
+  loadInteractiveFolderTrust,
+  loadInteractiveIdleMinutes,
+} from "../../../../features/settings/model/interactiveIdleSettings";
 import {
   questionsFromUnknown,
   type UserQuestionReply,
@@ -779,6 +782,7 @@ async function ensureLive(
         prompt: launch
           ? { submissionId: launch.submissionId, text: launch.text }
           : undefined,
+        trustFolder: loadInteractiveFolderTrust(),
       },
     });
     checkEpoch(input.sessionId, epoch);

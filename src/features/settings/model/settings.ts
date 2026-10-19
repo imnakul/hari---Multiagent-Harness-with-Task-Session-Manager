@@ -631,6 +631,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "Claude terminal parking resume minutes",
   },
   {
+    id: "interactive-folder-trust",
+    section: "experimentation",
+    label: "Trust chat folders for Claude Interactive",
+    keywords: "Claude trust folder dialog workspace project permission",
+  },
+  {
     id: "all-accounts-usage",
     section: "experimentation",
     label: "All accounts usage",
@@ -1752,7 +1758,9 @@ export function subscribeProcessMonitor(onChange: () => void): () => void {
   };
 }
 export {
+  loadInteractiveFolderTrust,
   loadInteractiveIdleMinutes,
+  saveInteractiveFolderTrust,
   saveInteractiveIdleMinutes,
 } from "./interactiveIdleSettings";
 
