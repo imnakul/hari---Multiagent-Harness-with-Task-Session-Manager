@@ -10,6 +10,17 @@ export function isInteractiveClaudeSession(session: SteerTarget): boolean {
 }
 
 /**
+ * True while Interactive Claude works on a turn the app did not send, such as
+ * a background continuation. The session is not busy then, but Claude refuses
+ * new input until it is idle, so follow-ups must queue (fork, L-121).
+ */
+export function isInteractiveClaudeWorkingElsewhere(
+  session: SteerTarget & Pick<Session, "externalTurnId">,
+): boolean {
+  return !!session.externalTurnId && isInteractiveClaudeSession(session);
+}
+
+/**
  * True when this session's running turn accepts a follow-up mid-turn.
  *
  * Steer support is a harness capability, but Interactive Claude rejects

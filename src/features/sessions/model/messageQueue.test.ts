@@ -162,6 +162,22 @@ describe("canDispatchQueuedHead", () => {
     );
   });
 
+  it("holds while Interactive Claude works on a turn the app did not send", () => {
+    const interactive = { claudeExecution: "interactive" };
+    // Claude refuses input until idle, so the head waits for that turn to end.
+    expect(
+      canDispatchQueuedHead(
+        chat({ modelSettings: interactive, externalTurnId: "interactive:1" }),
+      ),
+    ).toBe(false);
+    expect(canDispatchQueuedHead(chat({ modelSettings: interactive }))).toBe(
+      true,
+    );
+    expect(canDispatchQueuedHead(chat({ externalTurnId: "phone:1" }))).toBe(
+      true,
+    );
+  });
+
   it("holds while the last turn is stopped at a usage limit", () => {
     expect(
       canDispatchQueuedHead(chat({ usageLimit: { resetsAt: 1_000 } })),

@@ -1,5 +1,6 @@
 import { isProviderFailureText } from "./plan";
 import { isPreparingHandoff } from "./handoff";
+import { isInteractiveClaudeWorkingElsewhere } from "./steerSupport";
 import {
   promoteLastAssistantToPlan,
   stopStreaming,
@@ -129,10 +130,11 @@ export function dequeueQueuedMessage(
 
 /**
  * True when the idle session can send its queued head as a new turn.
- * Busy / paused / resuming / usage-limited / steering / held / preparing-handoff / editing-the-head all wait.
+ * Busy / Interactive Claude working elsewhere / paused / resuming / usage-limited / steering / held / preparing-handoff / editing-the-head all wait.
  */
 export function canDispatchQueuedHead(session: Session): boolean {
-  if (session.busy) return false;
+  if (session.busy || isInteractiveClaudeWorkingElsewhere(session))
+    return false;
   if (session.worktreePreparing || session.worktreeRemoved) return false;
   if (session.usageLimit) return false;
   if (

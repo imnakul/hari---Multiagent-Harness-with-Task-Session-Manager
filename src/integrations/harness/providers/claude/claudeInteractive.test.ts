@@ -916,6 +916,47 @@ describe("interactive observation and parking", () => {
       text: "Late final reply",
     });
   });
+  it("keeps the prompt's turn open through an auto-compact mid-turn", async () => {
+    let finished = false;
+    const turn = sendInteractiveClaude(input()).then(() => {
+      finished = true;
+    });
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    // Claude compacts on its own as the prompt lands, then keeps working.
+    hook("PreCompact", { trigger: "auto" });
+    hook("PostCompact", { trigger: "auto" });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(finished).toBe(false);
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "after-compact",
+        message: { content: [{ type: "text", text: "Reply after compact" }] },
+      }),
+    );
+    hook("Stop", {
+      last_assistant_message: "Reply after compact",
+      background_tasks: [],
+      session_crons: [],
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events.filter((e) => e.type === "externalTurn.started")).toEqual([]);
+    expect(events).toContainEqual({
+      type: "message.delta",
+      text: "Reply after compact",
+    });
+  });
+  it("still ends a /compact turn on PostCompact", async () => {
+    await running();
+    const turn = sendInteractiveClaude(input({ text: "/compact" }));
+    await waitFor(() => mocks.sends.length === 1);
+    hook("PreCompact", { trigger: "manual" });
+    hook("PostCompact", { trigger: "manual" });
+    await vi.advanceTimersByTimeAsync(3000);
+    await turn;
+    expect(events.some((event) => event.type === "session.error")).toBe(false);
+  });
   async function idle(): Promise<void> {
     const turn = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);

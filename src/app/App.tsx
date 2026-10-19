@@ -973,6 +973,7 @@ import { settleQueuedSteerCancellations } from "../features/sessions/model/messa
 import {
   canSteerSession,
   isInteractiveClaudeSession,
+  isInteractiveClaudeWorkingElsewhere,
 } from "../features/sessions/model/steerSupport";
 import { isProviderFailureText } from "../features/sessions/model/plan";
 import { QueueDurabilityScheduler } from "../features/sessions/model/queueDurability";
@@ -8693,7 +8694,10 @@ function Workspace({
         });
       }
 
-      if (current.busy && !pendingSwitch) {
+      if (
+        (current.busy || isInteractiveClaudeWorkingElsewhere(current)) &&
+        !pendingSwitch
+      ) {
         if (
           operatorCommand.matched &&
           options?.queuedMessageId &&

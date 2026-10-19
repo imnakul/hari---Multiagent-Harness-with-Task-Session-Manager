@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { canSteerSession, isInteractiveClaudeSession } from "./steerSupport";
+import {
+  canSteerSession,
+  isInteractiveClaudeSession,
+  isInteractiveClaudeWorkingElsewhere,
+} from "./steerSupport";
 
 vi.mock("../../../integrations/harness/core/registry", () => ({
   canSteerHarness: (harness: string) => harness !== "fx",
@@ -12,6 +16,17 @@ describe("canSteerSession", () => {
     const session = { harness: "claude" as const, modelSettings: interactive };
     expect(isInteractiveClaudeSession(session)).toBe(true);
     expect(canSteerSession(session)).toBe(false);
+  });
+
+  it("treats an Interactive Claude turn the app did not send as working, so sends queue", () => {
+    const session = { harness: "claude" as const, modelSettings: interactive };
+    expect(isInteractiveClaudeWorkingElsewhere(session)).toBe(false);
+    expect(
+      isInteractiveClaudeWorkingElsewhere({ ...session, externalTurnId: "interactive:1" }),
+    ).toBe(true);
+    expect(
+      isInteractiveClaudeWorkingElsewhere({ harness: "claude", externalTurnId: "phone:1" }),
+    ).toBe(false);
   });
 
   it("keeps harness steer support for headless Claude and other providers", () => {

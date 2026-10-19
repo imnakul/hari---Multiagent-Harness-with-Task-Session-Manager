@@ -461,7 +461,12 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     clearTimeout(live.pending.timer);
     live.pending.onAccepted?.();
   }
-  if (event === "Stop" || event === "PostCompact") {
+  // PostCompact ends only a /compact turn. An auto-compact fires it mid-turn,
+  // and Claude keeps working after it (fork, L-121).
+  if (
+    event === "Stop" ||
+    (event === "PostCompact" && live.pending?.compact)
+  ) {
     live.stopping = 1;
     if (live.pending) live.pending.sawStop = true;
     live.stopText =

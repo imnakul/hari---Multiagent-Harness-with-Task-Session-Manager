@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-20 01:52 IST — Interactive Claude: auto-compact no longer ends the turn, and mid-work sends queue (L-121)
+- Type: fix
+- What: In an Interactive Claude chat, when Claude compacts its memory on its own as a message lands, the turn stays open until Claude really finishes. A message sent while Claude is still working on its own now waits in the queue and goes out once Claude is idle, instead of being refused.
+- Why: The user's message with two images showed "Ran for 4s" with no reply while Claude kept working for minutes; the next message was sent straight away and Claude refused it ("has not reached an idle conversation state"). The transcript showed an auto-compact right at that prompt, and the app treated its end hook (`PostCompact`) like the end of the turn.
+- Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [steerSupport.ts](../../src/features/sessions/model/steerSupport.ts), [messageQueue.ts](../../src/features/sessions/model/messageQueue.ts), [App.tsx](../../src/app/App.tsx), tests in claudeInteractive.test.ts, messageQueue.test.ts, steerSupport.test.ts
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,486 passed, 2 skipped; the auto-compact test fails on the old code) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-20 01:25 IST — Windows build with the task editor + button (0.14.0-local9)
 - Type: chore
 - What: New Windows installer where the task editor has a + button before Focus today, and Ctrl+Enter creates the next task without an Add more toggle.
@@ -13,7 +21,7 @@
 - What: The task editor has an icon-only + button just before Focus today, filled so it looks different from copy and delete. It saves the task and starts the next one, and so does plain Ctrl+Enter (Ctrl+Shift+Enter still works). There is no Add more toggle. The header stays on one row without the "Task" label.
 - Why: L-94 (2026-10-17) removed the editor's New task button and the shortcut, but the user still uses them to add several tasks in a row. A first restore at 00:58 also brought back Add more; the user asked for just the + button and Ctrl+Enter.
 - Files: [TaskEditor.tsx](../../src/features/tasks/ui/TaskEditor.tsx), [TasksView.test.ts](../../src/features/tasks/ui/TasksView.test.ts)
-- Commit: uncommitted
+- Commit: 503a0e27
 - Verified: tsc ✅ tests ✅ (7,482 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-20 00:38 IST — Windows build with L-120 (0.14.0-local8)
