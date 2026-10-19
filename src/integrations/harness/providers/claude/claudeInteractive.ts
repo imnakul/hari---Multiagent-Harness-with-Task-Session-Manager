@@ -27,6 +27,7 @@ import {
   toolTitle,
 } from "./claudeProtocol";
 import {
+  composerShowsPaste,
   interactiveTranscriptEvents,
   interactiveTaskNotification,
   newTranscriptState,
@@ -954,22 +955,51 @@ export async function sendInteractiveClaude(
   wakePoll(live);
   // Attach a rejection handler before IPC: hook polling can fail while it awaits.
   void done.catch(() => undefined);
+  const submissionId = input.diagnostic?.submissionId ?? crypto.randomUUID();
+  const submit = (action: "enter" | "repaste" | "abort"): Promise<void> =>
+    invoke("claude_interactive_submit", {
+      sessionId: input.sessionId,
+      submissionId,
+      action,
+    });
+  let outcome: PasteOutcome = "unknown";
   try {
+    const pastedAt = Date.now();
     await invoke("claude_interactive_send", {
       sessionId: input.sessionId,
-      submissionId: input.diagnostic?.submissionId ?? crypto.randomUUID(),
+      submissionId,
       text,
     });
-    if (!pending.accepted && live.pending === pending) {
-      pending.timer = setTimeout(() => {
-        if (live.pending === pending && !pending.accepted)
-          fail(
-            live,
-            "Prompt delivery is unconfirmed. Review the native terminal; this message will not be resent automatically.",
-          );
-      }, 15000);
+    outcome = await awaitPasteShown(live, pending, text, pastedAt, () =>
+      submit("repaste"),
+    );
+    if (outcome === "dropped") {
+      await submit("abort");
+      live.pending = undefined;
+      pending.reject(
+        new HarnessNeedsAttentionError(
+          "Claude did not receive this message: its prompt stayed empty, so nothing was sent. Send it again.",
+        ),
+      );
+    } else if (outcome === "unknown") {
+      fail(
+        live,
+        "Prompt delivery is unconfirmed: Claude's prompt never showed the message, so Enter was not pressed. Review the native terminal before resending.",
+      );
+    } else if (outcome === "shown") {
+      await submit("enter");
+      if (!pending.accepted && live.pending === pending) {
+        pending.timer = setTimeout(() => {
+          if (live.pending === pending && !pending.accepted)
+            fail(
+              live,
+              "Prompt delivery is unconfirmed. Review the native terminal; this message will not be resent automatically.",
+            );
+        }, 15000);
+      }
     }
   } catch (error) {
+    outcome = "unknown";
     fail(
       live,
       `Prompt delivery is unconfirmed: ${String(error)}. Review the native terminal before resending.`,
@@ -977,7 +1007,100 @@ export async function sendInteractiveClaude(
   } finally {
     live.terminal.writing = false;
   }
+  if (outcome === "shown") await retryEnter(live, pending, text, submit);
   await done;
+}
+
+/** Longest wait for Claude to draw a paste; a resumed chat can stall seconds after it mounts. */
+const PASTE_SHOWN_TIMEOUT_MS = 20_000;
+/** Output this long after a paste is Claude's own drawing, not ConPTY's instant echo. */
+const PASTE_ECHO_MS = 500;
+/** A screen quiet this long has finished drawing what Claude received. */
+const SCREEN_QUIET_MS = 1500;
+/** Press Enter again while the paste still sits in the prompt this long after a press. */
+const ENTER_RETRY_MS = 3000;
+
+type PasteOutcome = "shown" | "accepted" | "dropped" | "unknown";
+
+/**
+ * Wait until Claude's prompt box shows the paste. Output bytes prove nothing:
+ * ConPTY echoes at once, and Claude 2.1.303 discards input that arrives while
+ * its startup screen takes over the terminal. A prompt Claude redrew empty after
+ * the paste means nothing reached it, so paste once more, then report "dropped".
+ * A prompt that is not redrawn (Claude stalled) is never repasted.
+ */
+async function awaitPasteShown(
+  live: Live,
+  pending: Pending,
+  text: string,
+  pastedAt: number,
+  repaste: () => Promise<void>,
+): Promise<PasteOutcome> {
+  let repasted = false;
+  for (;;) {
+    if (live.pending !== pending || pending.accepted) return "accepted";
+    if (live.stopped || live.terminal.stopped || live.terminal.owner)
+      return "unknown";
+    const screen = live.terminal.inspect();
+    const draft = live.terminal.composer();
+    const age = screen.pendingParses ? 0 : (screen.outputAgeMs ?? 0);
+    const redrawn =
+      screen.outputAgeMs != null &&
+      Date.now() - screen.outputAgeMs >= pastedAt + PASTE_ECHO_MS;
+    if (draft != null && composerShowsPaste(draft, text) && age >= 300)
+      return "shown";
+    if (draft === "" && redrawn && age >= SCREEN_QUIET_MS) {
+      if (repasted) return "dropped";
+      repasted = true;
+      pastedAt = Date.now();
+      await repaste();
+      continue;
+    }
+    if (Date.now() - pastedAt >= PASTE_SHOWN_TIMEOUT_MS) return "unknown";
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/**
+ * Claude can miss an Enter during a post-startup stall and keep the paste as a
+ * draft. While it still shows the paste unsubmitted, press Enter again (twice at
+ * most); once submitted the prompt is empty and a stray Enter does nothing.
+ */
+async function retryEnter(
+  live: Live,
+  pending: Pending,
+  text: string,
+  submit: (action: "enter") => Promise<void>,
+): Promise<void> {
+  let enteredAt = Date.now();
+  for (let enters = 1; enters < 3; ) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    if (
+      live.pending !== pending ||
+      pending.accepted ||
+      live.stopped ||
+      live.terminal.stopped ||
+      live.terminal.owner
+    )
+      return;
+    const screen = live.terminal.inspect();
+    const draft = live.terminal.composer();
+    if (
+      Date.now() - enteredAt < ENTER_RETRY_MS ||
+      screen.pendingParses ||
+      (screen.outputAgeMs ?? 0) < 1000 ||
+      draft == null ||
+      !composerShowsPaste(draft, text)
+    )
+      continue;
+    try {
+      await submit("enter");
+    } catch {
+      return; // Claude acknowledged meanwhile, or the user took the terminal.
+    }
+    enters++;
+    enteredAt = Date.now();
+  }
 }
 
 export async function replyInteractiveClaude(

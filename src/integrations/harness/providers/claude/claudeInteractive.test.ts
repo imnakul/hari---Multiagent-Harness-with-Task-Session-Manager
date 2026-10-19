@@ -23,6 +23,12 @@ const mocks = vi.hoisted(() => ({
   sendError: false,
   /** Send succeeds but Claude never fires UserPromptSubmit. */
   silentSend: false,
+  /** Pastes Claude discards (it shows an empty prompt instead). */
+  dropPastes: 0,
+  /** Claude's input box as MonoCode reads it from the screen. */
+  draft: "" as string | null,
+  submits: [] as string[],
+  outputAge: 1000,
   /** Backend phase reported by poll instead of the hook-derived one. */
   phase: undefined as string | undefined,
   seq: 0,
@@ -50,10 +56,11 @@ vi.mock("./claudeInteractiveTerminal", () => ({
         mocks.owner = value;
       },
       ready: mocks.ready,
+      composer: () => mocks.draft,
       inspect: () => ({
         reason: mocks.ready() ? "ready" : "prompt-mismatch",
         receivedBytes: 20,
-        outputAgeMs: 1000,
+        outputAgeMs: mocks.outputAge,
         inputAgeMs: mocks.inputAge,
         inputOwner: mocks.owner,
       }),
@@ -123,6 +130,10 @@ beforeEach(() => {
   mocks.inputAge = null;
   mocks.sendError = false;
   mocks.silentSend = false;
+  mocks.dropPastes = 0;
+  mocks.draft = "";
+  mocks.submits = [];
+  mocks.outputAge = 1000;
   mocks.phase = undefined;
   mocks.seq = 0;
   mocks.starts = [];
@@ -157,8 +168,17 @@ beforeEach(() => {
       if (command === "claude_interactive_send") {
         mocks.sends.push(String(args.text));
         if (mocks.sendError) throw new Error("IPC disconnected after write");
-        if (mocks.silentSend) return undefined;
-        hook("UserPromptSubmit", { prompt: args.text });
+        mocks.draft = mocks.dropPastes-- > 0 ? "" : String(args.text);
+      }
+      if (command === "claude_interactive_submit") {
+        mocks.submits.push(String(args.action));
+        const pasted = mocks.sends.at(-1)!;
+        if (args.action === "repaste")
+          mocks.draft = mocks.dropPastes-- > 0 ? "" : pasted;
+        if (args.action === "enter" && mocks.draft && !mocks.silentSend) {
+          mocks.draft = "";
+          hook("UserPromptSubmit", { prompt: pasted });
+        }
       }
       if (command === "claude_interactive_park") return mocks.parked;
       if (command === "claude_interactive_attachments")
@@ -294,6 +314,60 @@ describe("interactive turn delivery", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await next;
     expect(mocks.sends).toEqual(["first line\nsecond line", "again"]);
+  });
+  it("presses Enter only once Claude's prompt shows the paste", async () => {
+    mocks.dropPastes = 1;
+    mocks.outputAge = 0; // Claude is still drawing (or stalled): wait, never repaste.
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => mocks.sends.length === 1);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(mocks.submits).toEqual([]);
+    mocks.draft = "first line\n  second line"; // The stall ends with the paste drawn.
+    mocks.outputAge = 1000;
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    expect(mocks.submits).toEqual(["enter"]);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+  });
+  it("pastes once more when Claude redraws an empty prompt after dropping the paste", async () => {
+    mocks.dropPastes = 1;
+    mocks.outputAge = 2000;
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    expect(mocks.submits).toEqual(["repaste", "enter"]);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events.some((event) => event.type === "session.error")).toBe(false);
+  });
+  it("reports a twice-dropped paste as not sent and keeps chat usable", async () => {
+    mocks.dropPastes = 2;
+    mocks.outputAge = 2000;
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(String(await turn)).toContain("nothing was sent");
+    expect(mocks.submits).toEqual(["repaste", "abort"]);
+    expect(onAccepted).not.toHaveBeenCalled();
+    // No fault and no Return to chat: the next send goes straight through.
+    const next = sendInteractiveClaude(input({ text: "again" }));
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next;
+    expect(mocks.sends).toEqual(["first line\nsecond line", "again"]);
+  });
+  it("presses Enter again, twice at most, while the paste stays unsubmitted", async () => {
+    mocks.silentSend = true;
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(16000);
+    expect(String(await turn)).toContain("unconfirmed");
+    expect(mocks.submits).toEqual(["enter", "enter", "enter"]);
+    expect(mocks.sends).toHaveLength(1);
   });
   it("Return to chat refuses while the prompt holds a draft", async () => {
     mocks.sendError = true;

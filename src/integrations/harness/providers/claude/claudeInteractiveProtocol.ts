@@ -53,11 +53,31 @@ export function interactivePromptChecks(screen: PromptScreen): {
     emptyDraft:
       !screen.after.trim() ||
       screen.afterIsDim ||
-      /^Try\s+["“][^\r\n]*["”]\s*$/.test(screen.after.trim()),
+      isPromptPlaceholder(screen.after),
     frameAbove: /[─━]{8}/.test(screen.above),
     frameBelow: /[─━]{8}/.test(screen.below),
     dialogFree: !showsNativeDialog(screen.screen),
   };
+}
+
+/** Claude's suggestion hint in an empty prompt, e.g. `Try "fix lint errors"`. */
+export function isPromptPlaceholder(text: string): boolean {
+  return /^Try\s+["“][^\r\n]*["”]\s*$/.test(text.trim());
+}
+
+/**
+ * Whether Claude's prompt box shows the pasted `text`. Sending required an
+ * empty prompt with chat owning input, so any draft is this paste, except the
+ * one letter typed outside the bracketed paste (`paste_payload` in Rust): that
+ * letter alone means Claude dropped the paste. Long pastes fold into a
+ * "[Pasted text #1 +N lines]" label, so the draft is not compared to `text`.
+ */
+export function composerShowsPaste(draft: string, text: string): boolean {
+  const squash = (value: string): string => value.replace(/\s+/g, "");
+  const shown = squash(draft);
+  if (!shown || isPromptPlaceholder(draft)) return false;
+  const typed = text === "/compact" ? "" : (/[\p{L}\p{N}]/u.exec(text)?.[0] ?? "");
+  return shown !== typed || squash(text) === typed;
 }
 
 /** Fail closed on unfamiliar screens, drafts and native selection dialogs. */

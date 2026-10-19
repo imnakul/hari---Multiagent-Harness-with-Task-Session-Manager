@@ -619,6 +619,7 @@ pub fn run() {
             harness::harness_stop_confirmed,
             claude_interactive::claude_interactive_poll,
             claude_interactive::claude_interactive_send,
+            claude_interactive::claude_interactive_submit,
             claude_interactive::claude_interactive_reply,
             claude_interactive::claude_interactive_terminal,
             claude_interactive::claude_interactive_stop,

@@ -1,6 +1,7 @@
 import fixture from "./fixtures/interactive-cli-2.1.301.json";
 import { describe, expect, it } from "vitest";
 import {
+  composerShowsPaste,
   interactiveTranscriptEvents,
   isClaudeInteractive,
   isEmptyInteractivePrompt,
@@ -159,5 +160,21 @@ describe("native JSONL rendering", () => {
     expect(() => interactiveTranscriptEvents("{broken", state)).toThrow(
       "invalid complete JSONL",
     );
+  });
+});
+
+describe("composerShowsPaste", () => {
+  it("accepts any drawn paste but not the lone typed letter or a hint", () => {
+    const text = "Reply with just OK";
+    expect(composerShowsPaste("Reply with just OK", text)).toBe(true);
+    expect(composerShowsPaste("Reply with\n  just OK", text)).toBe(true);
+    expect(composerShowsPaste("R[Pasted text #1 +4 lines]", text)).toBe(true);
+    // The letter typed outside the bracketed paste arrived; the paste did not.
+    expect(composerShowsPaste("R", text)).toBe(false);
+    expect(composerShowsPaste("", text)).toBe(false);
+    expect(composerShowsPaste('Try "fix lint errors"', text)).toBe(false);
+    expect(composerShowsPaste("Q", "Q")).toBe(true);
+    expect(composerShowsPaste("/compact", "/compact")).toBe(true);
+    expect(composerShowsPaste("ह", "\n\t!हैलो")).toBe(false);
   });
 });

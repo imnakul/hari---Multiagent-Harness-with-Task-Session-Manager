@@ -576,8 +576,15 @@ it
           if (command === "claude_interactive_send") {
             sends.push(String(args.text));
             await rpc("paste", { data: String(args.text) });
-            await rpc("paste-settle");
-            return rpc("write", { data: "\r" });
+            return rpc("paste-settle");
+          }
+          if (command === "claude_interactive_submit") {
+            if (args.action === "enter") return rpc("write", { data: "\r" });
+            if (args.action === "repaste") {
+              await rpc("paste", { data: sends.at(-1)! });
+              return rpc("paste-settle");
+            }
+            return undefined;
           }
           if (command === "claude_interactive_terminal") {
             nativeInput.push(String(args.data));

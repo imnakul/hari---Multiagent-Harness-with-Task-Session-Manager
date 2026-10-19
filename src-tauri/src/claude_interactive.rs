@@ -41,7 +41,21 @@ struct LiveState {
     skip_fork_history: bool,
     background_coverage: bool,
     untracked_work: bool,
+    paste: Option<PendingPaste>,
 }
+
+/// A paste written by `claude_interactive_send` that has no Enter yet. The GUI
+/// confirms on screen that Claude shows it before `claude_interactive_submit`.
+struct PendingPaste {
+    submission_id: String,
+    payload: String,
+    repasted: bool,
+    enters: u8,
+}
+
+/// Enter presses allowed per paste: the first plus two retries while Claude
+/// still shows the paste unsubmitted (Enter on an emptied prompt is a no-op).
+const MAX_ENTERS: u8 = 3;
 
 impl Live {
     fn event(&self, mut value: Value) -> u64 {
@@ -882,7 +896,7 @@ pub fn claude_interactive_send(
                 "The native CLI is not at an available chat prompt. Review its terminal.".into(),
             );
         }
-        if state.submissions.len() >= 10000 || !state.submissions.insert(submission_id) {
+        if state.submissions.len() >= 10000 || !state.submissions.insert(submission_id.clone()) {
             return Err(
                 "Submission already attempted or session delivery ledger full; review the terminal"
                     .into(),
@@ -891,37 +905,124 @@ pub fn claude_interactive_send(
         state.activity = Some(Instant::now());
         state.phase = "sending".into();
         state.writing = true;
+        state.paste = None;
     }
+    let payload = crate::interactive_delivery::paste_payload(&text);
     // A write error is uncertain: retain the ledger and never retry either part.
-    let result = (|| {
-        let pty_host = app.state::<crate::pty::PtyHost>();
-        let id = pty_id(&session_id);
-        let baseline = pty_host.paste_output(&id)?.0;
-        let payload = crate::interactive_delivery::paste_payload(&text);
-        let bytes = payload.len();
-        crate::pty::pty_write(app.state(), id.clone(), payload)?;
-        crate::interactive_delivery::wait_for_paste(bytes, baseline, || {
-            let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
-            if state.phase != "sending"
-                || state.terminal_owner
-                || !live.running.load(Ordering::Acquire)
-            {
-                return Err("Native input ownership changed after paste; no Enter was sent".into());
-            }
-            drop(state);
-            pty_host.paste_output(&id)
-        })?;
-        let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
-        if state.phase != "sending" || state.terminal_owner || !live.running.load(Ordering::Acquire)
-        {
-            return Err("Input was pasted but not submitted. Review the native terminal; do not resend automatically.".into());
-        }
-        crate::pty::pty_write(app.state(), pty_id(&session_id), "\r".into())
-    })();
+    let result = write_paste(&app, &live, &session_id, &payload);
     let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
     state.writing = false;
     if result.is_err() && state.phase == "sending" {
         state.phase = "unconfirmed".into();
+    } else if result.is_ok() {
+        state.paste = Some(PendingPaste {
+            submission_id,
+            payload,
+            repasted: false,
+            enters: 0,
+        });
+    }
+    result
+}
+
+/// Paste and wait for the native output to settle. No Enter: output alone does
+/// not prove Claude kept the paste (ConPTY echoes bytes at once, and Claude
+/// 2.1.303 discards input that arrives while its startup screen takes over).
+fn write_paste(
+    app: &AppHandle,
+    live: &Live,
+    session_id: &str,
+    payload: &str,
+) -> Result<(), String> {
+    let pty_host = app.state::<crate::pty::PtyHost>();
+    let id = pty_id(session_id);
+    let baseline = pty_host.paste_output(&id)?.0;
+    crate::pty::pty_write(app.state(), id.clone(), payload.into())?;
+    crate::interactive_delivery::wait_for_paste(payload.len(), baseline, || {
+        let state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.phase != "sending" || state.terminal_owner || !live.running.load(Ordering::Acquire)
+        {
+            return Err("Native input ownership changed after paste; no Enter was sent".into());
+        }
+        drop(state);
+        pty_host.paste_output(&id)
+    })
+}
+
+/// The follow-up the GUI chose after reading Claude's prompt on screen.
+#[derive(Debug, PartialEq)]
+enum SubmitStep {
+    /// Write these bytes: Enter, or the paste again.
+    Write(String),
+    /// The prompt is still empty: nothing reached Claude, so it is idle again.
+    Abandoned,
+}
+
+/// Decide a paste follow-up from backend state alone. "enter" may repeat while
+/// Claude shows the paste unsubmitted; "repaste" and "abort" are only for a
+/// prompt the GUI saw empty, so neither is allowed once Enter was pressed.
+fn submit_step(
+    state: &mut LiveState,
+    submission_id: &str,
+    action: &str,
+) -> Result<SubmitStep, String> {
+    let sending = state.phase == "sending" && !state.terminal_owner && !state.writing;
+    let paste = state
+        .paste
+        .as_mut()
+        .filter(|paste| sending && paste.submission_id == submission_id)
+        .ok_or("This prompt is no longer waiting to be submitted")?;
+    match action {
+        "enter" if paste.enters < MAX_ENTERS => {
+            paste.enters += 1;
+            Ok(SubmitStep::Write("\r".into()))
+        }
+        "repaste" if paste.enters == 0 && !paste.repasted => {
+            paste.repasted = true;
+            Ok(SubmitStep::Write(paste.payload.clone()))
+        }
+        "abort" if paste.enters == 0 => {
+            state.paste = None;
+            state.phase = "ready".into();
+            Ok(SubmitStep::Abandoned)
+        }
+        _ => Err("That submit step is not allowed for this prompt".into()),
+    }
+}
+
+#[tauri::command(async)]
+pub fn claude_interactive_submit(
+    app: AppHandle,
+    host: State<'_, InteractiveHost>,
+    session_id: String,
+    submission_id: String,
+    action: String,
+) -> Result<(), String> {
+    let live = host.get(&session_id)?;
+    let step = {
+        let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+        if !live.running.load(Ordering::Acquire) {
+            return Err("Interactive Claude is not running".into());
+        }
+        let step = submit_step(&mut state, &submission_id, &action)?;
+        state.activity = Some(Instant::now());
+        if action == "repaste" {
+            state.writing = true;
+        }
+        step
+    };
+    let SubmitStep::Write(data) = step else {
+        return Ok(());
+    };
+    if action != "repaste" {
+        return crate::pty::pty_write(app.state(), pty_id(&session_id), data);
+    }
+    let result = write_paste(&app, &live, &session_id, &data);
+    let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+    state.writing = false;
+    if result.is_err() && state.phase == "sending" {
+        state.phase = "unconfirmed".into();
+        state.paste = None;
     }
     result
 }
@@ -1004,6 +1105,7 @@ fn hand_back_to_chat(state: &mut LiveState) -> Result<(), String> {
     }
     state.phase = "ready".into();
     state.terminal_owner = false;
+    state.paste = None;
     Ok(())
 }
 
@@ -1091,6 +1193,57 @@ mod tests {
         state.replies.clear();
         hand_back_to_chat(&mut state).unwrap();
         assert_eq!(state.phase, "ready");
+    }
+
+    #[test]
+    fn submit_steps_follow_the_screen_but_never_repaste_after_enter() {
+        let paste = || PendingPaste {
+            submission_id: "a".into(),
+            payload: "R\x1b[200~eply\x1b[201~".into(),
+            repasted: false,
+            enters: 0,
+        };
+        let mut state = LiveState {
+            phase: "sending".into(),
+            paste: Some(paste()),
+            ..Default::default()
+        };
+        assert!(
+            submit_step(&mut state, "b", "enter").is_err(),
+            "other prompt"
+        );
+        assert_eq!(
+            submit_step(&mut state, "a", "repaste"),
+            Ok(SubmitStep::Write("R\x1b[200~eply\x1b[201~".into()))
+        );
+        assert!(
+            submit_step(&mut state, "a", "repaste").is_err(),
+            "only once"
+        );
+        for _ in 0..MAX_ENTERS {
+            assert_eq!(
+                submit_step(&mut state, "a", "enter"),
+                Ok(SubmitStep::Write("\r".into()))
+            );
+        }
+        assert!(submit_step(&mut state, "a", "enter").is_err(), "bounded");
+        assert!(submit_step(&mut state, "a", "abort").is_err(), "Enter sent");
+        state.paste = Some(paste());
+        state.terminal_owner = true;
+        assert!(
+            submit_step(&mut state, "a", "enter").is_err(),
+            "user typing"
+        );
+        state.terminal_owner = false;
+        state.phase = "busy".into();
+        assert!(submit_step(&mut state, "a", "enter").is_err(), "submitted");
+        state.phase = "sending".into();
+        assert_eq!(
+            submit_step(&mut state, "a", "abort"),
+            Ok(SubmitStep::Abandoned)
+        );
+        assert_eq!(state.phase, "ready");
+        assert!(state.paste.is_none());
     }
 
     #[test]

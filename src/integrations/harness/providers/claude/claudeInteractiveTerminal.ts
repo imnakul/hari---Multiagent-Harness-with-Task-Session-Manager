@@ -9,6 +9,7 @@ import {
 } from "../../../../platform/tauri/pty";
 import {
   interactivePromptChecks,
+  isPromptPlaceholder,
   showsNativeDialog,
 } from "./claudeInteractiveProtocol";
 
@@ -52,6 +53,11 @@ export type InteractiveTerminal = {
   started: () => Promise<void>;
   ready: () => boolean;
   inspect: () => InteractiveReadiness;
+  /**
+   * Text inside Claude's framed input box as drawn on screen ("" when empty),
+   * or null when no single box is visible. Dim placeholder hints are skipped.
+   */
+  composer: () => string | null;
   repaint?: () => Promise<void>;
   reclaim: () => Promise<void>;
   resize: (cols: number, rows: number) => Promise<void>;
@@ -135,7 +141,12 @@ export async function createInteractiveTerminal(
   let pendingParses = 0;
   let replyFailures = 0;
   let repainted = false;
-  const accept = (data: Uint8Array, start: number): void => {
+  // Claude's input box border; a named chat (a resumed or continued one) draws
+  // its name inside the top border: "──── Process monitor ─". Accept one label.
+  const isFrame = (line: string): boolean =>
+    /^[─━]{8,}(?: [^─━]+ [─━]+)?$/.test(line.trim()) &&
+    line.trim().length >= term.cols - 2;
+  const accept =(data: Uint8Array, start: number): void => {
     if (start > offset) return; // Replay fills gaps; never parse a broken VT stream.
     const skip = Math.max(0, offset - start);
     if (skip >= data.length) return;
@@ -249,11 +260,6 @@ export async function createInteractiveTerminal(
         // on a status row. Inspect the entire unique framed input line instead.
         // A draft (including text before that painted caret) must remain blocked.
         const candidates: { row: number; column: number }[] = [];
-        // A named chat (a resumed or continued one) draws its name inside the top
-        // border: "──── Process monitor ─". Accept one such label, nothing else.
-        const isFrame = (line: string): boolean =>
-          /^[─━]{8,}(?: [^─━]+ [─━]+)?$/.test(line.trim()) &&
-          line.trim().length >= term.cols - 2;
         for (let y = 1; y < term.rows - 1; y++) {
           const absolute = buffer.baseY + y;
           const line = buffer.getLine(absolute)?.translateToString(true) ?? "";
@@ -337,6 +343,29 @@ export async function createInteractiveTerminal(
           ).join("\n"),
         ),
       };
+    },
+    composer: (): string | null => {
+      const buffer = term.buffer.active;
+      const text = (y: number): string =>
+        buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? "";
+      const boxes: string[] = [];
+      for (let y = 1; y < term.rows - 1; y++) {
+        if (!/^\s*❯/.test(text(y)) || !isFrame(text(y - 1))) continue;
+        const rows: string[] = [];
+        for (let row = y; row < term.rows && !isFrame(text(row)); row++) {
+          const line = buffer.getLine(buffer.baseY + row);
+          let chars = "";
+          for (let x = 0; x < term.cols; x++) {
+            const cell = line?.getCell(x);
+            if (cell?.getWidth() === 0) continue; // Second half of a wide glyph.
+            chars += cell?.isDim() ? " " : cell?.getChars() || " ";
+          }
+          rows.push(chars.trimEnd());
+        }
+        const draft = rows.join("\n").replace(/^\s*❯\s?/, "").trim();
+        boxes.push(isPromptPlaceholder(draft) ? "" : draft);
+      }
+      return boxes.length === 1 ? boxes[0] : null;
     },
     reclaim: async (): Promise<void> => {
       if (!terminal.ready())

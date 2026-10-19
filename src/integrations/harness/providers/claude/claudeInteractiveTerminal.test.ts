@@ -113,6 +113,53 @@ describe("real VT parser input gate", () => {
       expect(terminal.ready()).toBe(false);
     },
   );
+  it.each([false, true])(
+    "reads Claude's input box as drawn, not raw output bytes (Windows %s)",
+    async (windows) => {
+      mocks.windows = windows;
+      const terminal = await createInteractiveTerminal("composer", vi.fn());
+      cleanup = terminal.dispose;
+      const border = "─".repeat(120);
+      const box = (rows: string): string =>
+        `\x1b[2J\x1b[3;1H${border}\r\n${rows}\r\n${border}\x1b[40;1H? for shortcuts`;
+      let offset = 0;
+      const draw = async (screen: string): Promise<string | null> => {
+        const bytes = new TextEncoder().encode(screen);
+        mocks.data?.(bytes, offset);
+        offset += bytes.length;
+        await new Promise<void>((resolve) => terminal.term.write("", resolve));
+        return terminal.composer();
+      };
+      expect(await draw(box("❯ "))).toBe("");
+      expect(await draw(box('❯ \x1b[2mTry "fix lint errors"\x1b[m'))).toBe("");
+      expect(await draw(box('❯ Try "fix lint errors"'))).toBe("");
+      expect(await draw(box("❯ Reply with just OK"))).toBe("Reply with just OK");
+      expect(
+        await draw(box("❯ R[Pasted text #1 +4 lines]\r\n  and more")),
+      ).toBe("R[Pasted text #1 +4 lines]\n  and more");
+      expect(await draw(box("❯ नमस्ते 你好"))).toBe("नमस्ते 你好");
+      // Two boxes (or none) are ambiguous: delivery must not guess.
+      expect(
+        await draw(`${box("❯ one")}\x1b[20;1H${border}\r\n❯ two\r\n${border}`),
+      ).toBeNull();
+      expect(await draw("\x1b[2J\x1b[1;1HLoading…")).toBeNull();
+    },
+  );
+  it("reads the input box on a captured ConPTY screen", async () => {
+    mocks.windows = true;
+    const terminal = await createInteractiveTerminal("composer-real", vi.fn());
+    cleanup = terminal.dispose;
+    const empty = new TextEncoder().encode(conpty.empty);
+    mocks.data?.(empty, 0);
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    expect(terminal.composer()).toBe("");
+    mocks.data?.(
+      new TextEncoder().encode("\x1b[38;1H\x1b[2K❯ Radhe Radhe\x1b[40;120H"),
+      empty.length,
+    );
+    await new Promise<void>((resolve) => terminal.term.write("", resolve));
+    expect(terminal.composer()).toBe("Radhe Radhe");
+  });
   it("checks menu footers throughout a classic renderer's remaining viewport", async () => {
     mocks.windows = true;
     const terminal = await createInteractiveTerminal("classic-menu", vi.fn());
