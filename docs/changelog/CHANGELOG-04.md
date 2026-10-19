@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 21:53 IST — Media, image viewer and hover previews in every chat (L-118)
+- Type: feature
+- What: Image and video paths in replies now show the media in every chat, not only Mono chats. Click an image to see it full size (Esc closes); hover it for Copy and Open file buttons. Hovering a web link in a reply shows its page title and icon, and hovering an image path written as code shows a small thumbnail.
+- Why: User asked for media in normal chats, a full-size viewer, a copy button, and hover previews.
+- Files: [AgentTranscript.tsx](../../src/features/sessions/ui/AgentTranscript.tsx), [LocalMedia.tsx](../../src/features/sessions/ui/LocalMedia.tsx), [ChatHoverPreviews.tsx](../../src/features/sessions/ui/ChatHoverPreviews.tsx), [AgentMarkdown.tsx](../../src/features/sessions/ui/AgentMarkdown.tsx), [clipboard.ts](../../src/platform/tauri/clipboard.ts)
+- Commit: see git log (feat(sessions): media and hover previews in every chat)
+- Verified: tsc ✅ tests ✅ (7,466 passed, 2 skipped) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 21:31 IST — Interactive chat survives a pasted image (L-117)
 - Type: fix
 - What: After sending a pasted image in a Claude Interactive chat, the chat stopped showing Claude's reply ("Interactive observation stopped … exceeds the interactive read limit") even though Claude kept working in the terminal, and Return to chat then refused with "Wait for the native conversation to finish". The app now reads the large image record, drops the image bytes it never shows, and keeps rendering; Return to chat also works after any such stop once Claude is idle.

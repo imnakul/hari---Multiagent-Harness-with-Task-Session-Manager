@@ -69,6 +69,11 @@ import { MarkdownTable, MarkdownTableContext } from "./MarkdownTable";
 import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
+  ImagePathHoverPreview,
+  WebLinkHoverPreview,
+} from "./ChatHoverPreviews";
+import { isImagePath } from "../../files/model/filePreview";
+import {
   rehypeHoldImageSources,
   rehypeRestoreImageSources,
 } from "./documentImageSources";
@@ -367,6 +372,9 @@ function MarkdownLink({
       />
     );
   }
+  // Chats only: title-and-icon card for web links, fetched on hover.
+  if (localMedia && !file && href && /^https?:\/\//i.test(href))
+    return <WebLinkHoverPreview url={href}>{link}</WebLinkHoverPreview>;
   return link;
 }
 
@@ -387,6 +395,7 @@ function MarkdownCode({
     const text = textContent(children);
     const fileName = inlineFileName(text);
     const { cwd, onOpenFile, onFileContextMenu } = useContext(FileOpenContext);
+    const localMedia = useContext(LocalMediaContext);
     const file = fileName
       ? resolveWorkspaceFileReference(text, cwd)
       : undefined;
@@ -394,7 +403,7 @@ function MarkdownCode({
       file && onOpenFile
         ? () => onOpenFile(file.path, file.navigation)
         : undefined;
-    return (
+    const chip = (
       <code
         {...props}
         dir="ltr"
@@ -427,6 +436,11 @@ function MarkdownCode({
         ) : null}
         {children}
       </code>
+    );
+    return localMedia && file && isImagePath(file.path) ? (
+      <ImagePathHoverPreview path={file.path}>{chip}</ImagePathHoverPreview>
+    ) : (
+      chip
     );
   }
 

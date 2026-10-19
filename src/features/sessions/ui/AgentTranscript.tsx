@@ -1518,7 +1518,7 @@ function AgentTranscriptComponent({
                 }
                 layout={transcriptLayout}
                 bubbleTail={!!agentMascot}
-                localMedia={isMonoChat}
+                localMedia
                 compactFollowUp={isCompactFollowUp(item, itemIndex)}
                 stackedOnPrevious={
                   itemIndex === 0

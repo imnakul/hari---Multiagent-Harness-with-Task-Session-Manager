@@ -188,6 +188,33 @@ export async function copyText(text: string): Promise<void> {
 }
 
 /**
+ * Puts an image on the clipboard. WebView2 and WebKit only accept PNG, so
+ * other formats are redrawn to PNG first; the first frame of an animation
+ * is what gets copied.
+ */
+export async function copyImage(image: Blob): Promise<void> {
+  const png = image.type === "image/png" ? image : await toPng(image);
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+}
+
+async function toPng(image: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(image);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not draw the image");
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      (png) => (png ? resolve(png) : reject(new Error("Could not convert the image"))),
+      "image/png",
+    ),
+  );
+}
+
+/**
  * True when the clipboard text is a file reference rather than prose, so a
  * file-manager copy is not mistaken for a text paste.
  *
