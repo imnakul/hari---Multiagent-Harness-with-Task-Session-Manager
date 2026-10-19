@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 21:59 IST — Windows build with L-116 to L-118 (0.14.0-local6)
+- Type: chore
+- What: New Windows installer with accent-coloured chat links, Interactive chats that keep rendering after a pasted image, and images, videos, a full-size image viewer, image copy and link and image hover previews in every chat.
+- Why: User asked to commit, push and build after L-116 to L-118.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local6_x64.exe` (13,987,754 bytes, SHA-256 B587BB20F66A40E732C41E9C4C863822C4011B0DCCF0700C108C49B43E48609E, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Commit: see git log (chore(release): 0.14.0-local6)
+- Verified: tsc ✅ tests ✅ (7,466 passed, 2 skipped) cargo ✅ (claude_ tests) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-19 21:53 IST — Media, image viewer and hover previews in every chat (L-118)
 - Type: feature
 - What: Image and video paths in replies now show the media in every chat, not only Mono chats. Click an image to see it full size (Esc closes); hover it for Copy and Open file buttons. Hovering a web link in a reply shows its page title and icon, and hovering an image path written as code shows a small thumbnail.
