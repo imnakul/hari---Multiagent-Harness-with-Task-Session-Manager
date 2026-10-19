@@ -13,6 +13,8 @@ const host = vi.hoisted(() => ({
   lines: [] as string[],
   starts: [] as Record<string, unknown>[],
   sends: [] as string[],
+  /** Prompts Claude submitted, whether pasted or passed at launch. */
+  prompts: [] as string[],
   nativeInput: [] as string[],
   replies: [] as string[],
   terminalOwner: false,
@@ -82,6 +84,23 @@ function output(data: string): void {
     },
   });
 }
+/** Claude submits `text` and the recorded reply follows. */
+function answer(text: string): void {
+  host.prompts.push(text);
+  host.hooks.push({
+    hook_event_name: "UserPromptSubmit",
+    bridgeId: ++host.sequence,
+    prompt: text,
+  });
+  const row = structuredClone(fixture.transcript[1]);
+  row.uuid = `assistant-${host.prompts.length}`;
+  host.lines.push(JSON.stringify(row));
+  output(fixture.completed.slice(fixture.startup.length));
+  host.hooks.push({
+    hook_event_name: "Stop",
+    bridgeId: ++host.sequence,
+  });
+}
 async function waitFor(condition: () => boolean, budget = 1000): Promise<void> {
   await vi.dynamicImportSettled();
   for (let spent = 0; spent < budget && !condition(); spent += 50)
@@ -96,6 +115,7 @@ beforeEach(() => {
   host.lines = [];
   host.starts = [];
   host.sends = [];
+  host.prompts = [];
   host.nativeInput = [];
   host.replies = [];
   host.running = false;
@@ -112,13 +132,18 @@ beforeEach(() => {
           case "control_authorize_turn":
           case "control_turn_finished":
             return;
-          case "claude_interactive_start":
+          case "claude_interactive_start": {
             host.running = true;
             host.terminalOwner = false;
             host.output = "";
-            host.starts.push(args.input as Record<string, unknown>);
+            const start = args.input as Record<string, unknown>;
+            host.starts.push(start);
             output(host.startup);
+            // A launch prompt is submitted by Claude itself once it is ready.
+            const prompt = start.prompt as { text: string } | undefined;
+            if (prompt) answer(prompt.text);
             return;
+          }
           case "pty_write":
             host.replies.push(String(args.data));
             return;
@@ -152,19 +177,7 @@ beforeEach(() => {
             if (!host.running || host.terminalOwner)
               throw new Error("Native input is unavailable");
             host.sends.push(String(args.text));
-            host.hooks.push({
-              hook_event_name: "UserPromptSubmit",
-              bridgeId: ++host.sequence,
-              prompt: args.text,
-            });
-            const row = structuredClone(fixture.transcript[1]);
-            row.uuid = `assistant-${host.sends.length}`;
-            host.lines.push(JSON.stringify(row));
-            output(fixture.completed.slice(fixture.startup.length));
-            host.hooks.push({
-              hook_event_name: "Stop",
-              bridgeId: ++host.sequence,
-            });
+            answer(String(args.text));
             return;
           }
           case "claude_interactive_stop":
@@ -242,13 +255,15 @@ it("retains the terminal and failure report when the native process exits", asyn
 it("sends two GUI turns without mounting a terminal or losing input to focus reports", async () => {
   for (const text of ["Radhe Radhe", "Second line\nAnother line"]) {
     const turn = sendInteractiveClaude(input(text));
-    await waitFor(() => host.sends.includes(text));
+    await waitFor(() => host.prompts.includes(text));
     await vi.advanceTimersByTimeAsync(1000);
     await turn;
     expect(interactiveTerminalFor(id)?.term.element).toBeUndefined();
     expect(interactiveTerminalFor(id)?.owner).toBe(false);
   }
-  expect(host.sends).toEqual(["Radhe Radhe", "Second line\nAnother line"]);
+  // The first message rides Claude's launch; the second is pasted.
+  expect(host.starts[0].prompt).toMatchObject({ text: "Radhe Radhe" });
+  expect(host.sends).toEqual(["Second line\nAnother line"]);
   expect(host.nativeInput).toEqual([]);
   expect(host.replies).toContain("\x1b[O");
   expect(accepted).toHaveBeenCalledTimes(2);
@@ -289,7 +304,11 @@ it("receives fresh PTY output immediately after Stop and native resume", async (
     await waitFor(() => accepted.mock.calls.length === 2, 800);
     await vi.advanceTimersByTimeAsync(1000);
     await resumed;
-    expect(host.starts[1]).toMatchObject({ nativeId, resume: true });
+    expect(host.starts[1]).toMatchObject({
+      nativeId,
+      resume: true,
+      prompt: { text: "After restart" },
+    });
   } finally {
     await stopInteractiveClaude(id);
     await settled;

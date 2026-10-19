@@ -112,6 +112,21 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   for (let i = 0; i < 12 && !predicate(); i++) await settle();
   expect(predicate()).toBe(true);
 }
+/**
+ * Start Claude with a one-word send, which still pastes, so the test's send
+ * pastes into a running Claude (a send that starts Claude passes its prompt
+ * on the launch command instead).
+ */
+async function running(): Promise<void> {
+  const turn = sendInteractiveClaude(input({ text: "warmup" }));
+  await waitFor(() => onAccepted.mock.calls.length === 1);
+  finish();
+  await vi.advanceTimersByTimeAsync(1000);
+  await turn;
+  mocks.sends = [];
+  mocks.submits = [];
+  onAccepted.mockClear();
+}
 function hook(
   hook_event_name: string,
   extra: Record<string, unknown> = {},
@@ -149,8 +164,13 @@ beforeEach(() => {
   mocks.invoke.mockImplementation(
     async (command: string, args: Record<string, unknown>) => {
       if (command === "claude_interactive_start") {
-        mocks.starts.push(args.input as Record<string, unknown>);
+        const start = args.input as Record<string, unknown>;
+        mocks.starts.push(start);
         // Real CLI 2.1.301 does not emit an HTTP SessionStart hook.
+        // A launch prompt is submitted by Claude itself once its input is ready.
+        const prompt = start.prompt as { text: string } | undefined;
+        if (prompt && !mocks.silentSend)
+          hook("UserPromptSubmit", { prompt: prompt.text });
       }
       if (command === "claude_interactive_poll") {
         const rows = mocks.hooks.splice(0);
@@ -238,9 +258,66 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(0);
   });
 
+  it("passes the first message on Claude's command line instead of pasting it", async () => {
+    const turn = sendInteractiveClaude(
+      input({
+        text: "Tabbed\tline\nsecond line",
+        diagnostic: { submissionId: "submission-1" },
+      }),
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(mocks.starts[0]).toMatchObject({
+      resume: false,
+      prompt: {
+        submissionId: "submission-1",
+        text: "Tabbed    line\nsecond line",
+      },
+    });
+    expect(mocks.sends).toEqual([]);
+    expect(mocks.submits).toEqual([]);
+    // Claude is running now, so the next message pastes.
+    const next = sendInteractiveClaude(input({ text: "follow up" }));
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next;
+    expect(mocks.starts).toHaveLength(1);
+    expect(mocks.sends).toEqual(["follow up"]);
+  });
+  it.each(["hello", "--help me"])(
+    "pastes a first message Claude could read as an option or subcommand (%s)",
+    async (text) => {
+      const turn = sendInteractiveClaude(input({ text }));
+      await waitFor(() => onAccepted.mock.calls.length === 1);
+      finish();
+      await vi.advanceTimersByTimeAsync(1000);
+      await turn;
+      expect(mocks.starts[0].prompt).toBeUndefined();
+      expect(mocks.sends).toEqual([text]);
+    },
+  );
+  it("names a waiting startup dialog when Claude never submits the launch prompt", async () => {
+    mocks.silentSend = true;
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(44_000);
+    expect(onAccepted).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
+    const error = await turn;
+    expect(error).toBeInstanceOf(HarnessNeedsAttentionError);
+    expect(String(error)).toContain("trust this folder");
+    expect(String(error)).toContain("do not resend");
+    expect(mocks.sends).toEqual([]);
+    expect(hasInteractiveClaude("interactive-test")).toBe(true);
+  });
   it.each(["first line\nsecond line", "Tabbed\tline\n\tIndented"])(
     "submits multiline input once and confirms native tab expansion (%s)",
     async (text) => {
+      await running();
       const turn = sendInteractiveClaude(input({ text }));
       await waitFor(() => mocks.sends.length === 1);
       await settle();
@@ -261,6 +338,7 @@ describe("interactive turn delivery", () => {
     },
   );
   it("does not retry an uncertain write, even when another send is attempted", async () => {
+    await running();
     mocks.sendError = true;
     const turn = sendInteractiveClaude(input()).catch(
       (error: unknown) => error,
@@ -274,6 +352,7 @@ describe("interactive turn delivery", () => {
     expect(onAccepted).not.toHaveBeenCalled();
   });
   it("sends again after Return to chat confirms the terminal was reviewed", async () => {
+    await running();
     mocks.sendError = true;
     await sendInteractiveClaude(input()).catch(() => undefined);
     mocks.sendError = false;
@@ -291,6 +370,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toEqual(["first line\nsecond line", "reviewed"]);
   });
   it("Return to chat recovers a send Claude never acknowledged", async () => {
+    await running();
     mocks.silentSend = true;
     const turn = sendInteractiveClaude(input()).catch(
       (error: unknown) => error,
@@ -316,6 +396,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toEqual(["first line\nsecond line", "again"]);
   });
   it("presses Enter only once Claude's prompt shows the paste", async () => {
+    await running();
     mocks.dropPastes = 1;
     mocks.outputAge = 0; // Claude is still drawing (or stalled): wait, never repaste.
     const turn = sendInteractiveClaude(input());
@@ -331,6 +412,7 @@ describe("interactive turn delivery", () => {
     await turn;
   });
   it("pastes once more when Claude redraws an empty prompt after dropping the paste", async () => {
+    await running();
     mocks.dropPastes = 1;
     mocks.outputAge = 2000;
     const turn = sendInteractiveClaude(input());
@@ -342,6 +424,7 @@ describe("interactive turn delivery", () => {
     expect(events.some((event) => event.type === "session.error")).toBe(false);
   });
   it("reports a twice-dropped paste as not sent and keeps chat usable", async () => {
+    await running();
     mocks.dropPastes = 2;
     mocks.outputAge = 2000;
     const turn = sendInteractiveClaude(input()).catch(
@@ -360,6 +443,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toEqual(["first line\nsecond line", "again"]);
   });
   it("presses Enter again, twice at most, while the paste stays unsubmitted", async () => {
+    await running();
     mocks.silentSend = true;
     const turn = sendInteractiveClaude(input()).catch(
       (error: unknown) => error,
@@ -370,6 +454,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(1);
   });
   it("Return to chat refuses while the prompt holds a draft", async () => {
+    await running();
     mocks.sendError = true;
     await sendInteractiveClaude(input()).catch(() => undefined);
     mocks.ready.mockReturnValue(false);
@@ -389,6 +474,7 @@ describe("interactive turn delivery", () => {
   ] as const)(
     "keeps a folded paste in its original GUI turn and times the complete response (%s)",
     async (format) => {
+      await running();
       vi.setSystemTime(1_000);
       const text =
         "Students list page\nCheck the pagination controls and ranking.\nSee the attached screenshot.";
@@ -505,6 +591,7 @@ describe("interactive turn delivery", () => {
     },
   );
   it("still refuses a native paste whose expanded body differs from the pending prompt", async () => {
+    await running();
     const text = "create a branch\nDiscuss first";
     const original = mocks.invoke.getMockImplementation()!;
     mocks.invoke.mockImplementation(
@@ -530,6 +617,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toEqual([text]);
   });
   it("does not submit into a menu or terminal draft", async () => {
+    await running();
     mocks.ready.mockReturnValue(false);
     const turn = sendInteractiveClaude(input()).catch(
       (error: unknown) => error,
@@ -585,6 +673,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(0);
   });
   it("takes input back from an idle, empty native prompt and sends", async () => {
+    await running();
     mocks.owner = true;
     const turn = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);
@@ -595,6 +684,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(1);
   });
   it("does not take input back before a fresh keystroke has redrawn the prompt", async () => {
+    await running();
     mocks.owner = true;
     mocks.inputAge = 200;
     await expect(sendInteractiveClaude(input())).rejects.toThrow(
@@ -604,6 +694,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(0);
   });
   it("still requires Return to chat while the native terminal holds a draft", async () => {
+    await running();
     mocks.owner = true;
     mocks.ready.mockReturnValue(false);
     await expect(sendInteractiveClaude(input())).rejects.toThrow(
@@ -620,7 +711,7 @@ describe("interactive turn delivery", () => {
     await first;
     const nativeId = mocks.starts[0].nativeId;
     const second = sendInteractiveClaude(input({ model: "claude:opus-5-5" }));
-    await waitFor(() => mocks.sends.length === 2);
+    await waitFor(() => onAccepted.mock.calls.length === 2);
     finish();
     await vi.advanceTimersByTimeAsync(1000);
     await second;
@@ -628,7 +719,9 @@ describe("interactive turn delivery", () => {
       resume: true,
       nativeId,
       model: "claude-opus-5-5",
+      prompt: { text: "first line\nsecond line" },
     });
+    expect(mocks.sends).toEqual([]);
     const calls = mocks.invoke.mock.calls.map(([command]) => command);
     expect(calls.indexOf("claude_interactive_stop")).toBeLessThan(
       calls.lastIndexOf("claude_interactive_start"),
@@ -654,6 +747,7 @@ describe("interactive turn delivery", () => {
     expect(String(await failure)).toContain("stopped");
   });
   it("routes approvals by hook request identity and never sends chat as an answer", async () => {
+    await running();
     const turn = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);
     hook("PermissionRequest", {
@@ -684,6 +778,7 @@ describe("interactive turn delivery", () => {
     await turn;
   });
   it("answers AskUserQuestion through its PreToolUse hook without terminal text injection", async () => {
+    await running();
     const turn = sendInteractiveClaude(input());
     await waitFor(() => onAccepted.mock.calls.length === 1);
     hook("PreToolUse", {
@@ -724,6 +819,7 @@ describe("interactive turn delivery", () => {
     await turn;
   });
   it("ends a failed native turn without treating it as a successful reply", async () => {
+    await running();
     const turn = sendInteractiveClaude(input()).catch(
       (error: unknown) => error,
     );
@@ -734,6 +830,7 @@ describe("interactive turn delivery", () => {
     expect(mocks.sends).toHaveLength(1);
   });
   it("sends the next prompt after Claude reports an API error", async () => {
+    await running();
     const failed = sendInteractiveClaude(input()).catch(
       (error: unknown) => error,
     );
@@ -984,6 +1081,7 @@ describe("interactive observation and parking", () => {
   });
   it("does not restart for model changes or compact while background work owns context", async () => {
     await idle();
+    const sent = mocks.sends.length;
     hook("SubagentStart", { agent_id: "still-working" });
     await vi.advanceTimersByTimeAsync(1600);
     const stops = mocks.invoke.mock.calls.filter(
@@ -1000,7 +1098,7 @@ describe("interactive observation and parking", () => {
         ([cmd]) => cmd === "claude_interactive_stop",
       ),
     ).toHaveLength(stops);
-    expect(mocks.sends).toHaveLength(1);
+    expect(mocks.sends).toHaveLength(sent);
   });
   it("rejects a historical fork before launch so the existing copied-context fallback can run", async () => {
     await expect(

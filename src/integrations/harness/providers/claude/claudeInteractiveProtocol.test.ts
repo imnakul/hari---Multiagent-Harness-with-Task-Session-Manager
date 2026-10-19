@@ -1,6 +1,7 @@
 import fixture from "./fixtures/interactive-cli-2.1.301.json";
 import { describe, expect, it } from "vitest";
 import {
+  canLaunchWithPrompt,
   composerShowsPaste,
   interactiveTranscriptEvents,
   isClaudeInteractive,
@@ -21,6 +22,27 @@ const screen: PromptScreen = {
   below: "────────────────────",
   screen: "? for shortcuts",
 };
+
+describe("canLaunchWithPrompt", () => {
+  it("accepts ordinary messages, matching validate_launch_prompt in Rust", () => {
+    expect(canLaunchWithPrompt("first line\nsecond line")).toBe(true);
+    expect(canLaunchWithPrompt('Fix the "login" bug, please')).toBe(true);
+  });
+  it.each([
+    "",
+    "   ",
+    "purge",
+    "-p say hi",
+    "  --help me",
+    "/clear the screen",
+    "tab\there",
+    "escape \u001b[2J now",
+    "carriage\r\nreturn",
+    "word ".repeat(4000),
+  ])("keeps the paste path for %j", (text) => {
+    expect(canLaunchWithPrompt(text)).toBe(false);
+  });
+});
 
 describe("interactive input safety", () => {
   it("requires a framed, empty native input at the cursor", () => {

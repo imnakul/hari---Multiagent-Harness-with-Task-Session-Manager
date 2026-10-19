@@ -124,6 +124,35 @@ pub struct StartInput {
     permission_mode: String,
     fast: bool,
     fork: Option<ForkInput>,
+    /// The send that started this launch, passed as Claude's prompt argument
+    /// so it is submitted by Claude itself once its input is ready.
+    prompt: Option<LaunchPrompt>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchPrompt {
+    submission_id: String,
+    text: String,
+}
+
+/// Longest launch prompt, in UTF-16 units: the whole Windows command line is capped at 32,767.
+const MAX_LAUNCH_PROMPT: usize = 16 * 1024;
+
+/// A prompt argument must not be read as anything else. A leading "-" is an
+/// option and "/" a slash command; a single word can name a subcommand (such as
+/// `purge`, which deletes project state), so those stay on the paste path.
+fn validate_launch_prompt(text: &str) -> Result<(), String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty()
+        || text.encode_utf16().count() > MAX_LAUNCH_PROMPT
+        || trimmed.starts_with(['-', '/'])
+        || !trimmed.contains(char::is_whitespace)
+        || text.chars().any(|c| c.is_control() && c != '\n')
+    {
+        return Err("This message cannot be passed to Claude at launch".into());
+    }
+    Ok(())
 }
 
 fn validate_start(input: &StartInput) -> Result<(), String> {
@@ -136,6 +165,12 @@ fn validate_start(input: &StartInput) -> Result<(), String> {
         }
         if fork.fork_point.is_some() {
             return Err("Interactive Claude forks the full native history; a selected historical turn needs copied context".into());
+        }
+    }
+    if let Some(prompt) = &input.prompt {
+        validate_launch_prompt(&prompt.text)?;
+        if prompt.submission_id.is_empty() {
+            return Err("Launch prompt needs a submission ID".into());
         }
     }
     if input.session_id.is_empty() || !Path::new(&input.cwd).is_dir() {
@@ -324,6 +359,9 @@ pub fn claude_interactive_start(
     if let Some(effort) = input.effort {
         args.extend(["--effort".into(), effort]);
     }
+    if let Some(prompt) = &input.prompt {
+        args.push(prompt.text.clone());
+    }
     let mut env = vec![("PATH".into(), crate::harness::gui_search_path())];
     let mut remove_env = vec!["CLAUDECODE".into()];
     if let Some(dir) = account_dir {
@@ -368,8 +406,17 @@ pub fn claude_interactive_start(
     }
     // HTTP SessionStart is not emitted by all supported CLI versions. Process
     // launch authorizes the backend gate; the frontend must additionally verify
-    // the framed, empty native prompt before sending any input.
-    live.state.lock().unwrap_or_else(|e| e.into_inner()).phase = "ready".into();
+    // the framed, empty native prompt before sending any input. A launch prompt
+    // is already on its way: Claude submits it, so the send is in flight.
+    {
+        let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(prompt) = input.prompt {
+            state.submissions.insert(prompt.submission_id);
+            state.phase = "sending".into();
+        } else {
+            state.phase = "ready".into();
+        }
+    }
     thread::spawn(move || {
         while live.running.load(Ordering::Acquire) {
             if let Ok(Some(request)) = server.recv_timeout(Duration::from_millis(100)) {
@@ -1130,6 +1177,27 @@ pub fn claude_interactive_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_prompt_rejects_text_claude_could_read_as_an_option_or_command() {
+        assert!(validate_launch_prompt("first line\nsecond line").is_ok());
+        assert!(validate_launch_prompt("Fix the \"login\" bug, please").is_ok());
+        for text in [
+            "",
+            "   ",
+            "purge",
+            "-p say hi",
+            "  --help me",
+            "/clear the screen",
+            "tab\there",
+            "escape \u{1b}[2J now",
+            "carriage\r\nreturn",
+        ] {
+            assert!(validate_launch_prompt(text).is_err(), "{text:?}");
+        }
+        let long = "word ".repeat(MAX_LAUNCH_PROMPT / 5 + 1);
+        assert!(validate_launch_prompt(&long).is_err());
+    }
 
     #[test]
     fn attachments_persist_decoded_text_and_reject_unsupported_or_binary_files() {

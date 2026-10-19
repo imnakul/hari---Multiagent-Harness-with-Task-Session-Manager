@@ -60,6 +60,28 @@ export function interactivePromptChecks(screen: PromptScreen): {
   };
 }
 
+/** Longest launch prompt, in UTF-16 units; Windows caps a whole command line at 32,767. */
+export const MAX_LAUNCH_PROMPT = 16 * 1024;
+
+/**
+ * Whether `text` can be Claude's prompt argument when a send starts Claude.
+ * Claude then submits it itself once its input is ready, so it cannot be lost
+ * to the startup window where typed input is discarded. Mirrors
+ * `validate_launch_prompt` in Rust: a leading "-" would be read as an option and
+ * "/" as a slash command, and a single word can name a subcommand (`purge`
+ * deletes project state), so those keep the paste path.
+ */
+export function canLaunchWithPrompt(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    trimmed.length > 0 &&
+    text.length <= MAX_LAUNCH_PROMPT &&
+    !/^[-/]/.test(trimmed) &&
+    /\s/.test(trimmed) &&
+    !/[\x00-\x09\x0b-\x1f\x7f-\x9f]/.test(text)
+  );
+}
+
 /** Claude's suggestion hint in an empty prompt, e.g. `Try "fix lint errors"`. */
 export function isPromptPlaceholder(text: string): boolean {
   return /^Try\s+["“][^\r\n]*["”]\s*$/.test(text.trim());

@@ -27,6 +27,7 @@ import {
   toolTitle,
 } from "./claudeProtocol";
 import {
+  canLaunchWithPrompt,
   composerShowsPaste,
   interactiveTranscriptEvents,
   interactiveTaskNotification,
@@ -629,7 +630,20 @@ function launchKey(input: SendTurnInput): string {
   ]);
 }
 
-async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
+/** A send that starts Claude: its prompt rides the launch command instead of a paste. */
+type LaunchPrompt = { text: string; submissionId: string; pending: Pending };
+
+/**
+ * Reuse or start the session's Claude. When this call starts Claude and a
+ * `launch` prompt is given, it becomes Claude's prompt argument and
+ * `live.pending` before any hook can arrive; `launched` says the send is
+ * already in flight and must not be pasted as well.
+ */
+async function ensureLive(
+  input: SendTurnInput,
+  epoch: number,
+  launch?: LaunchPrompt,
+): Promise<{ live: Live; launched: boolean }> {
   await parking.get(input.sessionId);
   checkEpoch(input.sessionId, epoch);
   let live = lives.get(input.sessionId);
@@ -660,7 +674,7 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
   }
   if (live) {
     live.onEvent = input.onEvent;
-    return live;
+    return { live, launched: false };
   }
   if (hasHeadlessChildBackend() || !isTauri())
     throw new Error(
@@ -730,6 +744,8 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
   };
   lives.set(input.sessionId, live);
   stoppedDiagnostics.delete(input.sessionId);
+  // Set before Claude starts: its UserPromptSubmit hook can be the first event.
+  if (launch) live.pending = launch.pending;
   try {
     const effort = input.modelSettings?.effort;
     if (
@@ -760,6 +776,9 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
           input.intent === "plan"
             ? "plan"
             : runtimeModeToPermission(input.runtimeMode),
+        prompt: launch
+          ? { submissionId: launch.submissionId, text: launch.text }
+          : undefined,
       },
     });
     checkEpoch(input.sessionId, epoch);
@@ -773,7 +792,7 @@ async function ensureLive(input: SendTurnInput, epoch: number): Promise<Live> {
       state: "interactive-pty-cli",
     });
     void poll(live);
-    return live;
+    return { live, launched: !!launch };
   } catch (error) {
     await stopInteractiveClaude(input.sessionId);
     throw error;
@@ -803,13 +822,40 @@ export async function sendInteractiveClaude(
       "Use the native terminal for slash commands and control characters. No prompt was sent.",
     );
   }
-  const live = await ensureLive(input, epoch).catch((error: unknown) => {
+  const submissionId = input.diagnostic?.submissionId ?? crypto.randomUUID();
+  // Claude discards input typed while it starts, so a send that starts Claude
+  // hands it the prompt as a launch argument (as Orca does) when it can.
+  const launchText = input.text.replace(/	/g, "    ");
+  const launch =
+    !input.attachments?.length &&
+    input.text.trim() !== "/compact" &&
+    canLaunchWithPrompt(launchText)
+      ? newTurn(launchText, false, input.onAccepted)
+      : undefined;
+  const { live, launched } = await ensureLive(
+    input,
+    epoch,
+    launch && { text: launchText, submissionId, pending: launch.pending },
+  ).catch((error: unknown) => {
     if (input.fork)
       throw new NativeForkError(
         `Native Interactive fork failed before sending: ${String(error)}`,
       );
     throw error;
   });
+  if (launched && launch) {
+    const { pending } = launch;
+    wakePoll(live);
+    pending.timer = setTimeout(() => {
+      if (live.pending === pending && !pending.accepted)
+        fail(
+          live,
+          "Claude has not picked up this message yet. Open the model picker → Open native terminal: a dialog may be waiting (a new account first asks whether to trust this folder). Once it is answered Claude sends the message itself, so do not resend it.",
+        );
+    }, LAUNCH_ACCEPT_TIMEOUT_MS);
+    await launch.done;
+    return;
+  }
   checkEpoch(input.sessionId, epoch);
   if (live.fault)
     throw live.terminal.stopped
@@ -937,25 +983,9 @@ export async function sendInteractiveClaude(
         .join("\n");
   }
   live.terminal.writing = true;
-  let resolveTurn: () => void = () => undefined;
-  let rejectTurn: (error: Error) => void = () => undefined;
-  const done = new Promise<void>((resolve, reject) => {
-    resolveTurn = resolve;
-    rejectTurn = reject;
-  });
-  const pending: Pending = {
-    text,
-    compact,
-    accepted: false,
-    resolve: resolveTurn,
-    reject: rejectTurn,
-    onAccepted: input.onAccepted,
-  };
+  const { pending, done } = newTurn(text, compact, input.onAccepted);
   live.pending = pending;
   wakePoll(live);
-  // Attach a rejection handler before IPC: hook polling can fail while it awaits.
-  void done.catch(() => undefined);
-  const submissionId = input.diagnostic?.submissionId ?? crypto.randomUUID();
   const submit = (action: "enter" | "repaste" | "abort"): Promise<void> =>
     invoke("claude_interactive_submit", {
       sessionId: input.sessionId,
@@ -1011,6 +1041,35 @@ export async function sendInteractiveClaude(
   await done;
 }
 
+/** A prompt in flight and the promise its turn settles. */
+function newTurn(
+  text: string,
+  compact: boolean,
+  onAccepted: (() => void) | undefined,
+): { pending: Pending; done: Promise<void> } {
+  let resolveTurn: () => void = () => undefined;
+  let rejectTurn: (error: Error) => void = () => undefined;
+  const done = new Promise<void>((resolve, reject) => {
+    resolveTurn = resolve;
+    rejectTurn = reject;
+  });
+  // Attach a rejection handler before IPC: hook polling can fail while it awaits.
+  void done.catch(() => undefined);
+  return {
+    pending: {
+      text,
+      compact,
+      accepted: false,
+      resolve: resolveTurn,
+      reject: rejectTurn,
+      onAccepted,
+    },
+    done,
+  };
+}
+
+/** How long a launch prompt may wait for Claude to submit it (a startup dialog holds it). */
+const LAUNCH_ACCEPT_TIMEOUT_MS = 45_000;
 /** Longest wait for Claude to draw a paste; a resumed chat can stall seconds after it mounts. */
 const PASTE_SHOWN_TIMEOUT_MS = 20_000;
 /** Output this long after a paste is Claude's own drawing, not ConPTY's instant echo. */

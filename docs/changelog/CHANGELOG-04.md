@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 11:50 IST — First Interactive message goes on Claude's command line (L-114)
+- Type: fix
+- What: The first message after opening or resuming a Claude Interactive chat was often lost, because Claude throws away anything typed while it is still starting. MonoCode now hands that message to Claude when it starts it (the way Orca does), so Claude sends it itself once ready. Later messages are typed in as before, with the L-113 on-screen check. Messages that Claude could mistake for a command (one word, or starting with "-" or "/"), messages with attachments, and /compact are still typed in.
+- Why: User approved Orca's approach after the race was reproduced outside MonoCode.
+- Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractiveProtocol.ts](../../src/integrations/harness/providers/claude/claudeInteractiveProtocol.ts), and their tests incl. [claudeInteractiveBridge.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveBridge.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,464 passed, 2 skipped) cargo ✅ (claude_interactive:: 13 passed, 1 new) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 11:18 IST — Windows build with L-113 (0.14.0-local4)
 - Type: chore
 - What: New Windows installer where Interactive sends wait for Claude's prompt to show the message before pressing Enter.
 - Why: User asked to commit and build the L-113 fix.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local4_x64.exe` (13,965,146 bytes, SHA-256 1496A158BAC918D88D69D85EED1DDB05B0CE27B272842C9DBF9C1B714670FE8C, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local4_x64.exe` (13,965,146 bytes, SHA-256 1496A158BAC918D88D69D85EED1DDB05B0CE27B272842C9DBF9C1B714670FE8C, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
 - Commit: see git log (chore(release): 0.14.0-local4)
 - Verified: tsc ✅ tests ✅ (7,449 passed, 2 skipped) cargo — (release build only) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
 
