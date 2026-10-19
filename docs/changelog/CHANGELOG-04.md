@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 21:04 IST — Chat links use the accent colour (L-116)
+- Type: style
+- What: Links in chat replies, user message link previews and file-name chips (on hover) now use your accent colour, or the theme accent when you have not picked one, instead of a fixed blue.
+- Why: User asked for chat links to follow the accent theme colour.
+- Files: [index.css](../../src/styles/index.css), [AgentMarkdown.tsx](../../src/features/sessions/ui/AgentMarkdown.tsx), [UserLinkPreview.tsx](../../src/features/sessions/ui/UserLinkPreview.tsx)
+- Commit: see git log
+- Verified: tsc ✅ tests ✅ (7,465 passed, 2 skipped) cargo — (no Rust change) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 12:15 IST — Windows build with L-114 and L-115 (0.14.0-local5)
 - Type: chore
 - What: New Windows installer where the first Interactive message after opening or resuming a chat is handed to Claude when it starts, and the chat folder is pre-trusted so Claude does not stop at a hidden trust question.

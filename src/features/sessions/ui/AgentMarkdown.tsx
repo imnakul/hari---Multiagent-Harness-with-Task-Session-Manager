@@ -330,7 +330,7 @@ function MarkdownLink({
   const link = (
     <a
       href={href}
-      className={`text-sky-400/90 hover:text-sky-300 hover:underline ${className ?? ""}`}
+      className={`chat-link hover:underline ${className ?? ""}`}
       {...props}
       dir={dir ?? "auto"}
       onClick={(event) => {
@@ -399,7 +399,7 @@ function MarkdownCode({
         {...props}
         dir="ltr"
         className={`inline-flex items-center gap-1 rounded-md bg-content/8 px-1.5 min-h-6 max-w-full [overflow-wrap:anywhere] align-baseline font-mono text-[0.8em] text-content ${
-          open ? "cursor-pointer hover:text-sky-300 hover:underline" : ""
+          open ? "chat-link-hover cursor-pointer hover:underline" : ""
         } ${className ?? ""}`}
         role={open ? "link" : undefined}
         tabIndex={open ? 0 : undefined}
@@ -582,7 +582,7 @@ function ProjectMarkdownImage({
         {onOpenFile ? (
           <button
             type="button"
-            className="ml-2 text-sky-400/90 hover:underline"
+            className="chat-link ml-2 hover:underline"
             aria-label={`Open ${label}`}
             onClick={() => onOpenFile(path)}
             onContextMenu={(event) => onFileContextMenu?.(event, path)}

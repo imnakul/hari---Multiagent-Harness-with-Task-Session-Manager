@@ -86,7 +86,7 @@ function GenericLinkPreview({ link }: { link: UserLink }) {
       data-user-link-preview
       title={link.url}
       aria-label={`Open ${title}`}
-      className="user-link-preview group mx-0.5 text-sky-400/90 hover:text-sky-300 hover:underline"
+      className="user-link-preview group mx-0.5 chat-link hover:underline"
       onClick={(event) => openExternalLink(event, link.url)}
     >
       <span className="mr-1 inline-flex size-4 items-center justify-center overflow-hidden rounded bg-background-base/50 align-[-0.125em] text-[9px] font-semibold uppercase text-content/55">

@@ -1854,6 +1854,20 @@ html.theme-light .orchestrator-constellation {
   outline-offset: 1px;
 }
 
+/* Chat links follow the accent (the user accent when set, else the theme accent). */
+.chat-link {
+  color: color-mix(
+    in srgb,
+    var(--user-accent-color, var(--color-accent)) 90%,
+    transparent
+  );
+}
+
+.chat-link:hover,
+.chat-link-hover:hover {
+  color: var(--user-accent-color, var(--color-accent));
+}
+
 .edit-last-turn-button {
   color: var(--user-accent-color, var(--color-accent));
   background: color-mix(
