@@ -5,7 +5,7 @@
 - What: When Claude never picked up a sent prompt, the chat showed "Prompt delivery is unconfirmed", and Return to chat then always said to wait for the conversation to finish, so only Stop Claude helped. Return to chat now hands the chat back once the terminal shows an empty, idle prompt. The message is not resent.
 - Why: User hit the dead end on a chat resumed from yesterday.
 - Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts)
-- Commit: uncommitted
+- Commit: 4a21425d
 - Verified: tsc ✅ tests ✅ cargo ✅ (claude_interactive:: 11 passed, 1 new) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-19 10:01 IST — Antigravity CLI in Add MCP server, lighter glass for composer dialogs (L-111)
@@ -13,7 +13,7 @@
 - What: Add MCP server now offers Antigravity CLI and saves to the same files the MCP list reads. The Add MCP server and Add Draft dialogs use the floating Quick Composer's lighter glass and a light backdrop instead of the dark dialog fill.
 - Why: User reported Antigravity CLI missing from the Provider list and both dialogs looking too dark next to the Quick Composer.
 - Files: [mcp.rs](../../src-tauri/src/mcp.rs), [McpSettings.tsx](../../src/features/settings/ui/McpSettings.tsx), [Modal.tsx](../../src/shared/ui/Modal.tsx), [index.css](../../src/styles/index.css), [SessionTodoComposer.tsx](../../src/features/session-board/ui/SessionTodoComposer.tsx)
-- Commit: uncommitted
+- Commit: 9e8ea67f
 - Verified: tsc ✅ tests ✅ (7,440 passed, 2 skipped; 3 new) cargo ✅ (mcp:: 38 passed, 2 new) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-19 02:31 IST — Windows build with the Interactive and composer fixes (0.14.0-local2-upstream-sync)
