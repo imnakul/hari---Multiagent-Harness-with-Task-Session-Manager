@@ -1222,14 +1222,12 @@ export async function replyInteractiveClaude(
 export async function returnInteractiveClaudeToChat(id: string): Promise<void> {
   const live = lives.get(id);
   if (!live || live.stopped) throw new Error("Interactive Claude is not running.");
-  const unacknowledged =
-    live.fault !== undefined &&
-    (live.phase === "sending" || live.phase === "unconfirmed");
+  // A fault stops polling, so live.phase and live.external are frozen at the
+  // moment of the fault. The backend checks its current phase in reclaim().
   if (
     live.pending ||
-    live.external ||
     live.terminal.writing ||
-    (live.phase !== "ready" && !unacknowledged)
+    (!live.fault && (live.external || live.phase !== "ready"))
   )
     throw new Error(
       "Wait for the native conversation to finish before returning to chat.",

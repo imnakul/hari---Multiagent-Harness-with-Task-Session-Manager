@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 21:31 IST — Interactive chat survives a pasted image (L-117)
+- Type: fix
+- What: After sending a pasted image in a Claude Interactive chat, the chat stopped showing Claude's reply ("Interactive observation stopped … exceeds the interactive read limit") even though Claude kept working in the terminal, and Return to chat then refused with "Wait for the native conversation to finish". The app now reads the large image record, drops the image bytes it never shows, and keeps rendering; Return to chat also works after any such stop once Claude is idle.
+- Why: Claude stores pasted images as base64 inside one transcript line, which can exceed the 1 MiB read page; after the stop the GUI kept a stale "busy" state.
+- Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts)
+- Commit: see git log
+- Verified: tsc ✅ vitest (claude provider, 317 passed) ✅ cargo (claude_, 46 passed) ✅ lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 21:04 IST — Chat links use the accent colour (L-116)
 - Type: style
 - What: Links in chat replies, user message link previews and file-name chips (on hover) now use your accent colour, or the theme accent when you have not picked one, instead of a fixed blue.

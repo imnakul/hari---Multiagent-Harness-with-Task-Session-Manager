@@ -888,25 +888,12 @@ pub fn claude_interactive_poll(
         }
         file.seek(SeekFrom::Start(state.offset))
             .map_err(|e| e.to_string())?;
-        let mut bytes = Vec::new();
-        file.take(MAX_BODY + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|e| e.to_string())?;
-        more = bytes.len() as u64 > MAX_BODY;
-        if let Some(end) = bytes
-            .iter()
-            .take(MAX_BODY as usize)
-            .rposition(|b| *b == b'\n')
-        {
-            lines = String::from_utf8(bytes[..=end].to_vec())
-                .map_err(|e| e.to_string())?
-                .lines()
-                .map(String::from)
-                .collect();
-            state.offset += (end + 1) as u64;
+        let (read, consumed, rest) = read_records(file)?;
+        lines = read;
+        more = rest;
+        if consumed > 0 {
+            state.offset += consumed;
             state.activity = Some(Instant::now());
-        } else if more {
-            return Err("Claude transcript record exceeds the interactive read limit".into());
         }
     }
     Ok(Poll {
@@ -922,6 +909,85 @@ pub fn claude_interactive_poll(
         lines,
         more,
     })
+}
+
+/// Largest single transcript record kept for parsing. Pasted images make Claude
+/// write multi-megabyte JSONL records; larger records are skipped whole.
+const MAX_RECORD: u64 = 64 * 1024 * 1024;
+/// Strings above this size (base64 image data, huge tool output) are replaced
+/// before the record crosses IPC; the GUI never renders them from the transcript.
+const MAX_RECORD_STRING: usize = 64 * 1024;
+
+/// Reads whole JSONL records from the reader's position.
+///
+/// Returns the complete lines, the bytes consumed and whether more data follows.
+/// A trailing record without its newline is left for the next poll, because
+/// Claude may still be writing it.
+fn read_records(reader: impl Read) -> Result<(Vec<String>, u64, bool), String> {
+    let mut reader = reader;
+    let mut bytes = Vec::new();
+    (&mut reader)
+        .take(MAX_BODY + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    let more = bytes.len() as u64 > MAX_BODY;
+    if let Some(end) = bytes
+        .iter()
+        .take(MAX_BODY as usize)
+        .rposition(|b| *b == b'\n')
+    {
+        let lines = String::from_utf8(bytes[..=end].to_vec())
+            .map_err(|e| e.to_string())?
+            .lines()
+            .map(String::from)
+            .collect();
+        return Ok((lines, (end + 1) as u64, more));
+    }
+    if !more {
+        return Ok((Vec::new(), 0, false));
+    }
+    // One record is larger than a normal page: read on to its newline.
+    let mut chunk = vec![0u8; 64 * 1024];
+    let mut total = bytes.len() as u64;
+    loop {
+        if let Some(at) = bytes.iter().position(|b| *b == b'\n') {
+            let consumed = total - (bytes.len() - at - 1) as u64;
+            if consumed > MAX_RECORD {
+                return Ok((Vec::new(), consumed, true));
+            }
+            return Ok((vec![shrink_record(&bytes[..at])?], consumed, true));
+        }
+        let read = reader.read(&mut chunk).map_err(|e| e.to_string())?;
+        if read == 0 {
+            return Ok((Vec::new(), 0, false));
+        }
+        total += read as u64;
+        if total - read as u64 > MAX_RECORD {
+            // Past the cap: keep only the scanned chunk to find the newline.
+            bytes.clear();
+        }
+        bytes.extend_from_slice(&chunk[..read]);
+    }
+}
+
+fn shrink_record(record: &[u8]) -> Result<String, String> {
+    fn shrink(value: &mut Value) {
+        match value {
+            Value::String(text) if text.len() > MAX_RECORD_STRING => {
+                *text = format!("[omitted {} bytes]", text.len());
+            }
+            Value::Array(items) => items.iter_mut().for_each(shrink),
+            Value::Object(map) => map.values_mut().for_each(shrink),
+            _ => {}
+        }
+    }
+    let text = std::str::from_utf8(record).map_err(|e| e.to_string())?;
+    let Ok(mut value) = serde_json::from_str::<Value>(text.trim_end_matches('\r')) else {
+        // The frontend parser reports malformed records itself.
+        return Ok(text.to_string());
+    };
+    shrink(&mut value);
+    Ok(value.to_string())
 }
 
 #[tauri::command(async)]
@@ -1232,6 +1298,34 @@ mod tests {
         missing.data = None;
         assert!(save_attachments(&dir, vec![missing]).is_err());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn transcript_reads_oversized_records_whole_and_waits_for_partial_ones() {
+        let image = "A".repeat(3 * 1024 * 1024);
+        let big = json!({"type": "user", "message": {"content": [
+            {"type": "image", "source": {"type": "base64", "data": image}},
+            {"type": "text", "text": "what is this?"}
+        ]}})
+        .to_string();
+        let file = format!("{{\"a\":1}}\n{big}\n{{\"b\":2}}\n");
+        let mut offset = 0usize;
+        let mut read = Vec::new();
+        loop {
+            let (lines, consumed, more) = read_records(&file.as_bytes()[offset..]).unwrap();
+            read.extend(lines);
+            offset += consumed as usize;
+            if !more {
+                break;
+            }
+        }
+        assert_eq!(offset, file.len());
+        assert_eq!(read.len(), 3);
+        assert!(read[1].len() < MAX_BODY as usize);
+        assert!(read[1].contains("what is this?") && read[1].contains("[omitted"));
+        // A large record still being written is left for the next poll.
+        let (lines, consumed, more) = read_records(&big.as_bytes()[..]).unwrap();
+        assert_eq!((lines.len(), consumed, more), (0, 0, false));
     }
 
     #[test]

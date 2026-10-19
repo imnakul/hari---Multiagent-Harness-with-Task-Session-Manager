@@ -412,6 +412,29 @@ describe("interactive turn delivery", () => {
     await next;
     expect(mocks.sends).toEqual(["first line\nsecond line", "again"]);
   });
+  it("Return to chat works after observation stopped mid-turn", async () => {
+    await running();
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    const backend = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation(async (command: string, args) => {
+      if (command === "claude_interactive_poll")
+        throw new Error("transcript read failed");
+      return backend(command, args);
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(String(await turn)).toContain("Interactive observation stopped");
+    // The turn finished in the terminal; the GUI's phase is still "busy".
+    mocks.invoke.mockImplementation(backend);
+    await returnInteractiveClaudeToChat("interactive-test");
+    const next = sendInteractiveClaude(input({ text: "again" }));
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next;
+  });
   it("presses Enter only once Claude's prompt shows the paste", async () => {
     await running();
     mocks.dropPastes = 1;
