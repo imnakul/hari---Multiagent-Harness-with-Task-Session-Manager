@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 23:24 IST — Two queued messages both run in order (L-120)
+- Type: fix
+- What: When two messages were queued behind a running reply, the first queued one stopped after about a second and the second was sent in its place, so the agent never saw the first. Both now run, one after the other.
+- Why: User saw the first queued message ("Ran for 1s", no reply) skipped in a Claude Interactive chat. The cause is in the shared queue code, not Claude: the finished turn closed itself a second time after a slow save, which ended the queued turn that had just started.
+- Files: [messageQueue.ts](../../src/features/sessions/model/messageQueue.ts), [App.tsx](../../src/app/App.tsx), [messageQueue.test.ts](../../src/features/sessions/model/messageQueue.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,482 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 22:45 IST — Windows build with L-119 (0.14.0-local7)
 - Type: chore
 - What: New Windows installer with the Link previews setting (Off, On hover, Always) and rich link cards showing the page's picture, title and description.

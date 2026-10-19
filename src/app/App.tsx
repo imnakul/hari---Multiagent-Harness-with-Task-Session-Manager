@@ -958,7 +958,6 @@ import {
   type ResumedWorkspace,
 } from "./model/appLifecycle";
 import { type ReviewIssue } from "../features/inbox/model/githubTasks";
-import { type PlanStatus } from "../features/sessions/model/session";
 import { type RecentProject } from "../features/projects/model/recents";
 import { queuePersistFingerprint } from "../features/sessions/data/sessionStore";
 import { SidechatSubmitPreflight, createSidechatSession } from "../features/sessions/model/sidechatSubmit";
@@ -981,7 +980,6 @@ import {
   forgetTerminal,
   startTerminal,
 } from "../features/sessions/model/terminalLifecycle";
-import { promoteLastAssistantToPlan } from "../integrations/harness/core/apply";
 import { latestTurnNeedsHarnessLogin } from "../integrations/harness/core/authSupport";
 import { refreshHarnessCatalogs } from "../integrations/harness/core/registry";
 import { killPty } from "../platform/tauri/pty";
@@ -1074,35 +1072,6 @@ type Submit = (
   attachments?: Attachment[],
   options?: SubmitOptions,
 ) => SubmissionAcceptance;
-
-function withPlanStatus(
-  session: Session,
-  blockId: string,
-  status: PlanStatus,
-): Session {
-  return {
-    ...session,
-    blocks: session.blocks.map((block) =>
-      block.id === blockId && block.role === "plan"
-        ? {
-            ...block,
-            plan: { ...(block.plan ?? { status: "ready" }), status },
-          }
-        : block,
-    ),
-  };
-}
-
-function lastAssistantTextInTurn(session: Session): string {
-  for (let index = session.blocks.length - 1; index >= 0; index -= 1) {
-    const block = session.blocks[index];
-    if (session.queuedMessages?.some((message) => message.blockId === block.id))
-      continue;
-    if (block.role === "user") return "";
-    if (block.role === "assistant" && block.text.trim()) return block.text;
-  }
-  return "";
-}
 
 function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;
@@ -9871,7 +9840,30 @@ function Workspace({
             buildSucceeded,
             nativePlanSeen,
             planEventKey,
+            // Streaming, plan promotion and plan status are already settled
+            // there; only the orchestration proposal is left to close.
+            finalizeSession: (session, providerFailed) =>
+              proposalDraft && proposalId
+                ? withOrchestrationProposal(
+                    session,
+                    proposalId,
+                    completedProposal && !providerFailed && buildSucceeded
+                      ? completedProposal
+                      : completeOrchestrationProposal(
+                          proposalDraft,
+                          nativeProposalText || proposalText,
+                          providerFailed || !buildSucceeded
+                            ? ((providerFailureSeen
+                                ? controlOutcome.error
+                                : undefined) ??
+                                "The lead could not finish planning.")
+                            : undefined,
+                        ),
+                  )
+                : session,
           });
+          // The session now belongs to the queue, which may already have
+          // started the next turn. Do not seal or stop streaming again here.
           controlOutcome = {
             status:
               providerFailureSeen ||
@@ -9883,41 +9875,6 @@ function Workspace({
             ...(providerFailureSeen ? { error: controlOutcome.error } : {}),
           };
           await flushSessionCheckpoint(sessionId);
-          setSessions((prev) =>
-            prev.map((s) => {
-              if (s.id !== sessionId) return s;
-              const stopped = stopStreaming(s);
-              const providerFailed =
-                providerFailureSeen ||
-                isProviderFailureText(lastAssistantTextInTurn(stopped));
-              const finalized =
-                proposalDraft && proposalId
-                  ? withOrchestrationProposal(
-                      stopped,
-                      proposalId,
-                      completedProposal && !providerFailed && buildSucceeded
-                        ? completedProposal
-                        : completeOrchestrationProposal(
-                            proposalDraft,
-                            nativeProposalText || proposalText,
-                            providerFailed || !buildSucceeded
-                              ? (controlOutcome.error ??
-                                  "The lead could not finish planning.")
-                              : undefined,
-                          ),
-                    )
-                  : intent === "plan" && !nativePlanSeen && !providerFailed
-                    ? promoteLastAssistantToPlan(stopped, planEventKey)
-                    : stopped;
-              return approvedPlan && intent === "build"
-                ? withPlanStatus(
-                    finalized,
-                    approvedPlan.id,
-                    buildSucceeded && !providerFailed ? "built" : "ready",
-                  )
-                : finalized;
-            }),
-          );
           // A worktree removed outside the app fails every turn. Detach the
           // session as an in-app removal would, so it can pick a new checkout.
           const worktreePath = current.worktreeCwd;

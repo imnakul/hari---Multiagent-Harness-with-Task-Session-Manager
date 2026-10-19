@@ -358,6 +358,12 @@ export interface TurnCompletionParams {
   buildSucceeded: boolean;
   nativePlanSeen: boolean;
   planEventKey: string;
+  /**
+   * The caller's last changes to the finished turn, applied in the same update
+   * that releases `busy`. Once released, the queue may start the next turn, so
+   * a later update from the finished turn would end that one instead.
+   */
+  finalizeSession?: (session: Session, providerFailed: boolean) => Session;
 }
 
 /**
@@ -365,6 +371,8 @@ export interface TurnCompletionParams {
  * If provider failed, synchronously transitions non-empty queue to "held"
  * before awaiting checkpoint flush, preventing auto-dispatch race conditions.
  * On success, preserves busy: true until checkpoint flush completes.
+ * After this resolves the session belongs to the queue: callers must not
+ * finalize the turn again.
  */
 export async function orchestrateTurnCompletion(
   params: TurnCompletionParams,
@@ -376,15 +384,19 @@ export async function orchestrateTurnCompletion(
     params.providerFailureSeen ||
     isProviderFailureText(lastAssistantTextInTurn(current));
 
+  const finalizeSession = params.finalizeSession ?? ((session) => session);
   if (providerFailed) {
-    const finalized = finalizeTurnSession(current, {
-      providerFailed: true,
-      intent: params.intent,
-      approvedPlanId: params.approvedPlanId,
-      buildSucceeded: false,
-      nativePlanSeen: params.nativePlanSeen,
-      planEventKey: params.planEventKey,
-    });
+    const finalized = finalizeSession(
+      finalizeTurnSession(current, {
+        providerFailed: true,
+        intent: params.intent,
+        approvedPlanId: params.approvedPlanId,
+        buildSucceeded: false,
+        nativePlanSeen: params.nativePlanSeen,
+        planEventKey: params.planEventKey,
+      }),
+      true,
+    );
     const nextSessions = params
       .getSessions()
       .map((s) => (s.id === params.sessionId ? finalized : s));
@@ -400,14 +412,17 @@ export async function orchestrateTurnCompletion(
 
     const latest =
       params.getSessions().find((s) => s.id === params.sessionId) ?? current;
-    const finalized = finalizeTurnSession(latest, {
-      providerFailed: false,
-      intent: params.intent,
-      approvedPlanId: params.approvedPlanId,
-      buildSucceeded: params.buildSucceeded,
-      nativePlanSeen: params.nativePlanSeen,
-      planEventKey: params.planEventKey,
-    });
+    const finalized = finalizeSession(
+      finalizeTurnSession(latest, {
+        providerFailed: false,
+        intent: params.intent,
+        approvedPlanId: params.approvedPlanId,
+        buildSucceeded: params.buildSucceeded,
+        nativePlanSeen: params.nativePlanSeen,
+        planEventKey: params.planEventKey,
+      }),
+      false,
+    );
     const nextSessions = params
       .getSessions()
       .map((s) => (s.id === params.sessionId ? finalized : s));

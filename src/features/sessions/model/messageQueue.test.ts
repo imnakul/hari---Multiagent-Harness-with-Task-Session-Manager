@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { appendUser } from "../../../integrations/harness/core/apply";
 import { appendPreparingHandoff } from "./handoff";
 import {
   beginQueuedSteerCancellation,
@@ -835,5 +836,107 @@ describe("orchestrateTurnCompletion (production-used orchestration, Defect 2)", 
     expect(currentSession.busy).toBe(false);
     expect(currentSession.queueStatus).toBe("active");
     expect(canDispatchQueuedHead(currentSession)).toBe(true);
+  });
+
+  it("applies the caller's last changes in the update that releases busy", async () => {
+    let currentSession = chat({
+      busy: true,
+      blocks: [
+        { id: "u0", role: "user", text: "build it", startedAt: 1 },
+        { id: "a0", role: "assistant", text: "Done." },
+      ],
+    });
+    const released: Session[] = [];
+    const failures: boolean[] = [];
+
+    await orchestrateTurnCompletion({
+      sessionId: currentSession.id,
+      getSessions: () => [currentSession],
+      setSessions: (sessions) => {
+        currentSession = sessions[0];
+        if (!currentSession.busy) released.push(currentSession);
+      },
+      flushCheckpoint: async () => undefined,
+      finalizeSession: (session, providerFailed) => {
+        failures.push(providerFailed);
+        return { ...session, title: "finalized" };
+      },
+      providerFailureSeen: false,
+      buildSucceeded: true,
+      nativePlanSeen: false,
+      planEventKey: "plan-1",
+    });
+
+    expect(failures).toEqual([false]);
+    expect(released).toHaveLength(1);
+    expect(released[0].title).toBe("finalized");
+  });
+
+  it("passes provider failure to the caller's last changes before holding the queue", async () => {
+    let currentSession = chat({ busy: true });
+    const failures: boolean[] = [];
+
+    const completion = orchestrateTurnCompletion({
+      sessionId: currentSession.id,
+      getSessions: () => [currentSession],
+      setSessions: (sessions) => {
+        currentSession = sessions[0];
+      },
+      flushCheckpoint: () => new Promise<void>(() => undefined),
+      finalizeSession: (session, providerFailed) => {
+        failures.push(providerFailed);
+        return { ...session, title: "finalized" };
+      },
+      providerFailureSeen: true,
+      buildSucceeded: false,
+      nativePlanSeen: false,
+      planEventKey: "plan-1",
+    });
+    void completion;
+
+    expect(failures).toEqual([true]);
+    expect(currentSession.title).toBe("finalized");
+    expect(currentSession.queueStatus).toBe("held");
+  });
+
+  // A late second seal from the finished turn ended the queued head's turn
+  // after ~0.3 s, so the queue sent the next row over it and the head was lost.
+  it("leaves the dispatched queue head running once the finished turn is released", async () => {
+    let currentSession = chat({
+      busy: true,
+      blocks: [
+        { id: "u0", role: "user", text: "fix the hero", startedAt: 1 },
+        { id: "a0", role: "assistant", text: "Fixed." },
+      ],
+    });
+
+    await orchestrateTurnCompletion({
+      sessionId: currentSession.id,
+      getSessions: () => [currentSession],
+      setSessions: (sessions) => {
+        currentSession = sessions[0];
+      },
+      flushCheckpoint: async () => undefined,
+      providerFailureSeen: false,
+      buildSucceeded: true,
+      nativePlanSeen: false,
+      planEventKey: "plan-1",
+    });
+    expect(canDispatchQueuedHead(currentSession)).toBe(true);
+
+    // The queue sends its head as a new turn, as App.submitSession does.
+    const head = queuedHead(currentSession)!;
+    currentSession = appendUser(
+      dequeueQueuedMessage(currentSession, head.id),
+      head.text,
+    );
+    await Promise.resolve();
+
+    const headTurn = currentSession.blocks.at(-1)!;
+    expect(headTurn.text).toBe("first");
+    expect(headTurn.durationMs).toBeUndefined();
+    expect(currentSession.busy).toBe(true);
+    expect(queuedHead(currentSession)?.id).toBe("b");
+    expect(canDispatchQueuedHead(currentSession)).toBe(false);
   });
 });
