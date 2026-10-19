@@ -706,22 +706,25 @@ describe("creating tasks", () => {
     expect(input("Task title").value).toBe("Untitled");
   });
 
-  it("keeps the editor header to one row without duplicate create controls", async () => {
+  // The editor keeps an icon-only New task button just before Focus today,
+  // and Ctrl+Enter always creates the next task (no Add more toggle).
+  it("creates the next task from the editor's + button and plain Ctrl+Enter", async () => {
     await render();
     await click(listRow("Fix installer"));
     const editor = peek()!;
-    // The panel's own New task button is the only create control.
-    expect(editor.querySelector('[aria-label="New task"]')).toBeNull();
-    expect(
-      [...editor.querySelectorAll("button")].some(
-        (entry) => entry.textContent?.trim() === "Add more",
-      ),
-    ).toBe(false);
+    const plus = editor.querySelector<HTMLButtonElement>(
+      'header [aria-label="New task"]',
+    );
+    expect(plus).not.toBeNull();
+    expect(plus!.textContent).toBe("");
+    const headerButtons = [...editor.querySelectorAll("header button")];
+    const focusIndex = headerButtons.findIndex(
+      (item) => item.getAttribute("aria-label") === "Focus today",
+    );
+    expect(headerButtons[focusIndex - 1]).toBe(plus);
+    expect(editor.textContent).not.toContain("Add more");
     expect(editor.querySelector("header")?.textContent).not.toMatch(/^Task/);
-    // Plain Ctrl+Enter no longer creates a task; Ctrl+Shift+Enter still does.
-    const untitled = () =>
-      [...rows.values()].filter((item) => item.title === "Untitled").length;
-    for (const shiftKey of [false, true]) {
+    const ctrlEnter = async (shiftKey = false) => {
       await act(async () => {
         input("Task title").dispatchEvent(
           new KeyboardEvent("keydown", {
@@ -734,8 +737,14 @@ describe("creating tasks", () => {
         );
         await tick(20);
       });
-      expect(untitled()).toBe(shiftKey ? 1 : 0);
-    }
+    };
+    const untitled = () =>
+      [...rows.values()].filter((item) => item.title === "Untitled").length;
+    await ctrlEnter();
+    expect(untitled()).toBe(1);
+    expect(input("Task title").value).toBe("Untitled");
+    await ctrlEnter(true);
+    expect(untitled()).toBe(2);
   });
 
   it("does not resubmit an exact title that autosaved before New task", async () => {

@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-20 01:14 IST — Task editor + New task button and Ctrl+Enter are back (L-90, L-94)
+- Type: fix
+- What: The task editor has an icon-only + button just before Focus today, filled so it looks different from copy and delete. It saves the task and starts the next one, and so does plain Ctrl+Enter (Ctrl+Shift+Enter still works). There is no Add more toggle. The header stays on one row without the "Task" label.
+- Why: L-94 (2026-10-17) removed the editor's New task button and the shortcut, but the user still uses them to add several tasks in a row. A first restore at 00:58 also brought back Add more; the user asked for just the + button and Ctrl+Enter.
+- Files: [TaskEditor.tsx](../../src/features/tasks/ui/TaskEditor.tsx), [TasksView.test.ts](../../src/features/tasks/ui/TasksView.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,482 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-20 00:38 IST — Windows build with L-120 (0.14.0-local8)
 - Type: chore
 - What: New Windows installer where two messages queued behind a running reply both run, in order, instead of the first being skipped.

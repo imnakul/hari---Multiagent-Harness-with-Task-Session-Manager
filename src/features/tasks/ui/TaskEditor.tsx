@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   Copy,
+  Plus,
   Target,
   Trash2,
 } from "../../../shared/ui/icons";
@@ -82,6 +83,7 @@ export function TaskEditor({
   const savedValues = useRef<Record<string, unknown>>({});
   const observedTaskValues = useRef<Record<string, unknown>>({});
   const creatingAnother = useRef(false);
+  const [creatingAnotherTask, setCreatingAnotherTask] = useState(false);
   const source = useRef<HTMLTextAreaElement>(null);
   const lock = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
@@ -312,6 +314,7 @@ export function TaskEditor({
       return;
     }
     creatingAnother.current = true;
+    setCreatingAnotherTask(true);
     setActionError(null);
     const projectCwd =
       editsRef.current.projectCwd === null
@@ -325,6 +328,7 @@ export function TaskEditor({
       if (alive.current) setActionError(message(error));
     } finally {
       creatingAnother.current = false;
+      if (alive.current) setCreatingAnotherTask(false);
     }
   };
   const copy = async () => {
@@ -361,7 +365,6 @@ export function TaskEditor({
           !onCreateAnother ||
           event.defaultPrevented ||
           event.key !== "Enter" ||
-          !event.shiftKey ||
           !(event.metaKey || event.ctrlKey) ||
           event.nativeEvent.isComposing ||
           event.nativeEvent.keyCode === 229 ||
@@ -378,8 +381,7 @@ export function TaskEditor({
       <div className={outer}>
         <header className="flex flex-col gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-content/50">
-            {/* One row: the Tasks panel already says this is a task, and the
-                panel's own New task button replaces the duplicate here (fork, L-94). */}
+            {/* One row: the Tasks panel already says this is a task (fork, L-94). */}
             <TaskProjectMark task={{ projectCwd: project }} marks={marks} />
             <SearchableProjectPicker
               cwd={project ?? "~"}
@@ -397,6 +399,22 @@ export function TaskEditor({
               onChange={(next) => edit({ status: next }, true)}
             />
             <span className="ml-auto flex items-center gap-0.5">
+              {onCreateAnother ? (
+                <button
+                  type="button"
+                  aria-label="New task"
+                  title="New task (Ctrl+Enter)"
+                  disabled={creatingAnotherTask || deleting}
+                  onClick={() => void createAnother()}
+                  className="mr-1 grid size-7 shrink-0 place-items-center rounded-md bg-content/10 text-content transition-colors duration-100 hover:bg-content/20 disabled:opacity-40"
+                >
+                  {creatingAnotherTask ? (
+                    <span className="size-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <Plus aria-hidden className="size-3.5" strokeWidth={2} />
+                  )}
+                </button>
+              ) : null}
               <TaskFocusChip
                 task={{ ...task, focusDate }}
                 today={today}
@@ -478,7 +496,6 @@ export function TaskEditor({
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
-                event.shiftKey &&
                 (event.metaKey || event.ctrlKey)
               ) {
                 return; // Let the editor-scoped New task shortcut handle it.
