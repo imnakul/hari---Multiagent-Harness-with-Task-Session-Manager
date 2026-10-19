@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-19 10:15 IST — Return to chat after an unacknowledged Interactive send (L-112)
+- Type: fix
+- What: When Claude never picked up a sent prompt, the chat showed "Prompt delivery is unconfirmed", and Return to chat then always said to wait for the conversation to finish, so only Stop Claude helped. Return to chat now hands the chat back once the terminal shows an empty, idle prompt. The message is not resent.
+- Why: User hit the dead end on a chat resumed from yesterday.
+- Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ cargo ✅ (claude_interactive:: 11 passed, 1 new) lint — (no ESLint config) build —; desktop check manual
+
 ## 2026-10-19 10:01 IST — Antigravity CLI in Add MCP server, lighter glass for composer dialogs (L-111)
 - Type: fix
 - What: Add MCP server now offers Antigravity CLI and saves to the same files the MCP list reads. The Add MCP server and Add Draft dialogs use the floating Quick Composer's lighter glass and a light backdrop instead of the dark dialog fill.

@@ -21,6 +21,10 @@ const mocks = vi.hoisted(() => ({
   parked: false,
   sends: [] as string[],
   sendError: false,
+  /** Send succeeds but Claude never fires UserPromptSubmit. */
+  silentSend: false,
+  /** Backend phase reported by poll instead of the hook-derived one. */
+  phase: undefined as string | undefined,
   seq: 0,
   exit: undefined as ((code: number | null) => void) | undefined,
 }));
@@ -118,6 +122,8 @@ beforeEach(() => {
   mocks.owner = false;
   mocks.inputAge = null;
   mocks.sendError = false;
+  mocks.silentSend = false;
+  mocks.phase = undefined;
   mocks.seq = 0;
   mocks.starts = [];
   mocks.hooks = [];
@@ -139,7 +145,8 @@ beforeEach(() => {
         const rows = mocks.hooks.splice(0);
         const last = rows.at(-1)?.hook_event_name;
         return {
-          phase: last === "UserPromptSubmit" ? "busy" : "ready",
+          phase:
+            mocks.phase ?? (last === "UserPromptSubmit" ? "busy" : "ready"),
           terminalOwner: mocks.owner,
           events: rows,
           sequence: mocks.seq,
@@ -150,6 +157,7 @@ beforeEach(() => {
       if (command === "claude_interactive_send") {
         mocks.sends.push(String(args.text));
         if (mocks.sendError) throw new Error("IPC disconnected after write");
+        if (mocks.silentSend) return undefined;
         hook("UserPromptSubmit", { prompt: args.text });
       }
       if (command === "claude_interactive_park") return mocks.parked;
@@ -261,6 +269,31 @@ describe("interactive turn delivery", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await turn;
     expect(mocks.sends).toEqual(["first line\nsecond line", "reviewed"]);
+  });
+  it("Return to chat recovers a send Claude never acknowledged", async () => {
+    mocks.silentSend = true;
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => mocks.sends.length === 1);
+    mocks.phase = "sending";
+    await vi.advanceTimersByTimeAsync(1000);
+    // The send is still awaiting acknowledgement, so Return to chat waits.
+    await expect(
+      returnInteractiveClaudeToChat("interactive-test"),
+    ).rejects.toThrow("Wait for the native conversation");
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(String(await turn)).toContain("unconfirmed");
+    // The mocked terminal skips the backend, which hands the phase back to ready.
+    mocks.phase = undefined;
+    await returnInteractiveClaudeToChat("interactive-test");
+    mocks.silentSend = false;
+    const next = sendInteractiveClaude(input({ text: "again" }));
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next;
+    expect(mocks.sends).toEqual(["first line\nsecond line", "again"]);
   });
   it("Return to chat refuses while the prompt holds a draft", async () => {
     mocks.sendError = true;

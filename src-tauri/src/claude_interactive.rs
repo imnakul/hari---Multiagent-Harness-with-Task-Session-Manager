@@ -979,14 +979,32 @@ pub fn claude_interactive_terminal(
         drop(state);
         crate::pty::pty_write(app.state(), pty_id(&session_id), data)
     } else {
-        if state.phase != "ready" {
-            return Err(
-                "Wait for the native conversation to finish before returning to chat".into(),
-            );
-        }
-        state.terminal_owner = false;
-        Ok(())
+        hand_back_to_chat(&mut state)
     }
+}
+
+/// Seconds the GUI waits for UserPromptSubmit before it reports a send as
+/// unconfirmed; matches the timer in `sendInteractiveClaude`.
+const PROMPT_ACK_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Return to chat. Besides an idle "ready" prompt, this recovers a send that
+/// Claude never acknowledged: "unconfirmed" (the write failed) or "sending"
+/// with no write in progress and no hook for the acknowledgement timeout. Only
+/// the user's explicit action reaches this, after the frontend has confirmed an
+/// empty prompt on screen, so nothing is resent; a pending approval still blocks.
+fn hand_back_to_chat(state: &mut LiveState) -> Result<(), String> {
+    let quiet = state
+        .activity
+        .map_or(true, |at| at.elapsed() >= PROMPT_ACK_TIMEOUT);
+    let stuck = !state.writing
+        && !state.replies.values().any(Option::is_none)
+        && (state.phase == "unconfirmed" || (state.phase == "sending" && quiet));
+    if state.phase != "ready" && !stuck {
+        return Err("Wait for the native conversation to finish before returning to chat".into());
+    }
+    state.phase = "ready".into();
+    state.terminal_owner = false;
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -1036,6 +1054,43 @@ mod tests {
         missing.data = None;
         assert!(save_attachments(&dir, vec![missing]).is_err());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn return_to_chat_recovers_an_unacknowledged_send_but_not_live_work() {
+        let stale = Some(Instant::now() - Duration::from_secs(16));
+        let mut state = LiveState {
+            phase: "sending".into(),
+            terminal_owner: true,
+            activity: stale,
+            ..Default::default()
+        };
+        hand_back_to_chat(&mut state).unwrap();
+        assert_eq!(
+            (state.phase.as_str(), state.terminal_owner),
+            ("ready", false)
+        );
+        for phase in ["busy", "ended"] {
+            state.phase = phase.into();
+            assert!(hand_back_to_chat(&mut state).is_err());
+        }
+        state.phase = "sending".into();
+        state.activity = Some(Instant::now());
+        assert!(
+            hand_back_to_chat(&mut state).is_err(),
+            "acknowledgement may still arrive"
+        );
+        state.activity = stale;
+        state.writing = true;
+        assert!(hand_back_to_chat(&mut state).is_err(), "paste in progress");
+        state.writing = false;
+        state.phase = "unconfirmed".into();
+        state.activity = Some(Instant::now());
+        state.replies.insert(1, None);
+        assert!(hand_back_to_chat(&mut state).is_err(), "approval pending");
+        state.replies.clear();
+        hand_back_to_chat(&mut state).unwrap();
+        assert_eq!(state.phase, "ready");
     }
 
     #[test]

@@ -1030,15 +1030,26 @@ export async function replyInteractiveClaude(
  * idle with no tracked turn and an empty prompt (`reclaim` checks the screen,
  * the backend checks its phase). A pasted draft or a turn still running keeps
  * it blocked, so an unconfirmed prompt is never resent without that review.
+ * After a faulted send the backend phase can stay "sending" (Claude never
+ * acknowledged the prompt) or "unconfirmed"; the backend accepts those here.
  */
 export async function returnInteractiveClaudeToChat(id: string): Promise<void> {
   const live = lives.get(id);
   if (!live || live.stopped) throw new Error("Interactive Claude is not running.");
-  if (live.pending || live.external || live.phase !== "ready")
+  const unacknowledged =
+    live.fault !== undefined &&
+    (live.phase === "sending" || live.phase === "unconfirmed");
+  if (
+    live.pending ||
+    live.external ||
+    live.terminal.writing ||
+    (live.phase !== "ready" && !unacknowledged)
+  )
     throw new Error(
       "Wait for the native conversation to finish before returning to chat.",
     );
   await live.terminal.reclaim();
+  live.phase = "ready";
   live.fault = undefined;
   // Observation stops after a poll failure; returning restarts it.
   wakePoll(live);
