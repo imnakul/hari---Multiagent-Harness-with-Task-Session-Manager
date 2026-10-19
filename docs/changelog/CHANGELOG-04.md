@@ -1,11 +1,19 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 02:04 IST — Windows rebuild of 0.14.0-local9 with L-121
+- Type: chore
+- What: New Windows installer, still versioned 0.14.0-local9, that adds the Interactive Claude auto-compact and queue fix (L-121) to the task editor + button build.
+- Why: User asked to commit, push and build, keeping the version because the earlier local9 installer was never installed.
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local9-task-plus-interactive-queue_x64.exe` (14,018,128 bytes, SHA-256 010D1C75E0DB1CD94A922E99236EA15A383EF82EB8DA03DCC050D7281A3A3F3A, NotSigned). The earlier `MonoCode_0.14.0-local9-task-plus-button_x64.exe` lacks L-121.
+- Commit: built from fd40cef0
+- Verified: tsc ✅ tests ✅ (7,486 passed, 2 skipped) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 
 ## 2026-10-20 01:52 IST — Interactive Claude: auto-compact no longer ends the turn, and mid-work sends queue (L-121)
 - Type: fix
 - What: In an Interactive Claude chat, when Claude compacts its memory on its own as a message lands, the turn stays open until Claude really finishes. A message sent while Claude is still working on its own now waits in the queue and goes out once Claude is idle, instead of being refused.
 - Why: The user's message with two images showed "Ran for 4s" with no reply while Claude kept working for minutes; the next message was sent straight away and Claude refused it ("has not reached an idle conversation state"). The transcript showed an auto-compact right at that prompt, and the app treated its end hook (`PostCompact`) like the end of the turn.
 - Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [steerSupport.ts](../../src/features/sessions/model/steerSupport.ts), [messageQueue.ts](../../src/features/sessions/model/messageQueue.ts), [App.tsx](../../src/app/App.tsx), tests in claudeInteractive.test.ts, messageQueue.test.ts, steerSupport.test.ts
-- Commit: uncommitted
+- Commit: fd40cef0
 - Verified: tsc ✅ tests ✅ (7,486 passed, 2 skipped; the auto-compact test fails on the old code) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-20 01:25 IST — Windows build with the task editor + button (0.14.0-local9)
