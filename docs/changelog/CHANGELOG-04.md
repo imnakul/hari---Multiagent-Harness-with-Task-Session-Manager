@@ -5,7 +5,7 @@
 - What: New Windows installer with Antigravity CLI in Add MCP server, the lighter glass on the Add MCP and Add Draft dialogs, and Return to chat working after a prompt Claude never picked up.
 - Why: User asked to commit and build so work can continue in MonoCode.
 - Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local3-upstream-sync_x64.exe` (13,954,886 bytes, SHA-256 5DF0D8D74C7819534B86DA1D0004F6FA6FA9EB4A4A1113BB84CADCBAF93175DA, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
-- Commit: uncommitted
+- Commit: 3e3c2c34
 - Verified: tsc ✅ tests ✅ (7,441 passed, 2 skipped) cargo — (release build only) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
 
 ## 2026-10-19 10:15 IST — Return to chat after an unacknowledged Interactive send (L-112)
