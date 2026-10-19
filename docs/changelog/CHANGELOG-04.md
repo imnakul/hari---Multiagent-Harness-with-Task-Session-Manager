@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-20 00:38 IST — Windows build with L-120 (0.14.0-local8)
+- Type: chore
+- What: New Windows installer where two messages queued behind a running reply both run, in order, instead of the first being skipped.
+- Why: User asked to commit, push and build after L-120.
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local8-queue-order-fix_x64.exe` (14,022,703 bytes, SHA-256 C2EBCCC2ECCC410F367255B08AFBC8B0A33136D57A23F8C6F21482D60A514A44, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Commit: see git log (chore(release): 0.14.0-local8)
+- Verified: tsc ✅ tests ✅ (7,482 passed, 2 skipped) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-19 23:24 IST — Two queued messages both run in order (L-120)
 - Type: fix
 - What: When two messages were queued behind a running reply, the first queued one stopped after about a second and the second was sent in its place, so the agent never saw the first. Both now run, one after the other.
