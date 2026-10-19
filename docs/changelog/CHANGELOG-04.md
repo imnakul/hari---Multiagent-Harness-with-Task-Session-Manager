@@ -1,5 +1,13 @@
 # Changelog 04 — MonoCode Windows fork
 
+## 2026-10-20 01:25 IST — Windows build with the task editor + button (0.14.0-local9)
+- Type: chore
+- What: New Windows installer where the task editor has a + button before Focus today, and Ctrl+Enter creates the next task without an Add more toggle.
+- Why: User asked to commit, push and build after the L-90 change.
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local9-task-plus-button_x64.exe` (14,021,954 bytes, SHA-256 78B116EBD655AD78E57CF8A9039239F326A0DC9CA4F1FC81715AB1C17EAABD79, NotSigned); version in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json
+- Commit: see git log (chore(release): 0.14.0-local9)
+- Verified: tsc ✅ tests ✅ (7,482 passed, 2 skipped) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-20 01:14 IST — Task editor + New task button and Ctrl+Enter are back (L-90, L-94)
 - Type: fix
 - What: The task editor has an icon-only + button just before Focus today, filled so it looks different from copy and delete. It saves the task and starts the next one, and so does plain Ctrl+Enter (Ctrl+Shift+Enter still works). There is no Add more toggle. The header stays on one row without the "Task" label.
