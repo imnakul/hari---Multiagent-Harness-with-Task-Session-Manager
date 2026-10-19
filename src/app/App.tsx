@@ -975,6 +975,10 @@ import {
   isInteractiveClaudeSession,
   isInteractiveClaudeWorkingElsewhere,
 } from "../features/sessions/model/steerSupport";
+import {
+  isSessionWorking,
+  workingProjectPaths,
+} from "../features/sessions/model/workingSessions";
 import { isProviderFailureText } from "../features/sessions/model/plan";
 import { QueueDurabilityScheduler } from "../features/sessions/model/queueDurability";
 import {
@@ -2438,7 +2442,7 @@ function Workspace({
   const workingSessionIds = useMemo(() => {
     const ids = new Set<string>();
     for (const session of sessions) {
-      if (session.busy || session.externalTurnId) ids.add(session.id);
+      if (isSessionWorking(session)) ids.add(session.id);
     }
     return ids;
   }, [sessions]);
@@ -15553,10 +15557,9 @@ function Workspace({
     // The roster is read through its snapshot.
   }, [monosSnap, sessions, monoReplies.counts]);
   const monoRail = useStableValue(monoRailState);
+  // Includes turns the app did not send, like the sidebar session list (L-122).
   const busyProjectPaths = useStableValue(
-    promptableSessions.flatMap((session) =>
-      session.busy && session.cwd ? [session.cwd] : [],
-    ),
+    workingProjectPaths(promptableSessions),
   );
   const onOpenRailMono = useCallback(
     (monoId: string) => void onOpenMono(monoId),
