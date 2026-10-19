@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 02:35 IST — 0.14.0-local10 Windows build (L-122)
+- Type: chore
+- What: New Windows installer, version 0.14.0-local10, adding the project name shimmer during external turns (L-122) on top of local9 (task editor + button, Interactive Claude auto-compact and queue fix).
+- Why: User asked to commit, push and build L-122.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local10-project-shimmer-external-turns_x64.exe` (14,023,090 bytes, SHA-256 2E2FB17B53863A055CA553F28A61E44010D7C421D6BD446D9EAB06829BB49E6E, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from e7534c37
+- Verified: tsc ✅ tests ✅ (7,488 passed, 2 skipped) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-20 02:25 IST — Project name shimmers during external turns (L-122)
 - Type: fix
 - What: The project name in the sidebar now shimmers while a chat in that project is working on a turn the app did not send (a phone turn, or Interactive Claude carrying on in the background), the same as the chat row already did.
 - Why: User saw a chat working while its project name stayed still.
 - Files: [workingSessions.ts](../../src/features/sessions/model/workingSessions.ts), [App.tsx](../../src/app/App.tsx) (`workingSessionIds`, `busyProjectPaths`), [workingSessions.test.ts](../../src/features/sessions/model/workingSessions.test.ts)
-- Commit: uncommitted
+- Commit: e7534c37
 - Verified: tsc ✅ tests ✅ (7,488 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
 
 ## 2026-10-20 02:04 IST — Windows rebuild of 0.14.0-local9 with L-121
