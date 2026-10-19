@@ -3,7 +3,7 @@
 - Type: chore
 - What: New Windows installer, version 0.14.0-local10, adding the project name shimmer during external turns (L-122) on top of local9 (task editor + button, Interactive Claude auto-compact and queue fix).
 - Why: User asked to commit, push and build L-122.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.14.0-local10-project-shimmer-external-turns_x64.exe` (14,023,090 bytes, SHA-256 2E2FB17B53863A055CA553F28A61E44010D7C421D6BD446D9EAB06829BB49E6E, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.14.0-local10-project-shimmer-external-turns_x64.exe` (14,023,090 bytes, SHA-256 2E2FB17B53863A055CA553F28A61E44010D7C421D6BD446D9EAB06829BB49E6E, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from e7534c37
 - Verified: tsc ✅ tests ✅ (7,488 passed, 2 skipped) lint — (no ESLint config) build ✅ (npm run build:windows); desktop check manual
 
