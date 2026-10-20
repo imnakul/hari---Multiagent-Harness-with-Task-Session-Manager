@@ -1486,6 +1486,17 @@ function Workspace({
       : focusGridIds(focusGrid)[0];
   const focusPaneIdRef = useRef(focusPaneId);
   focusPaneIdRef.current = focusPaneId;
+  const focusPaneSession = focusMode
+    ? sessions.find((session) => session.id === focusPaneId)
+    : undefined;
+  const focusPaneCwd = focusPaneSession?.cwd;
+  /** The workspace's project when Focus opened; leaving Focus restores it. */
+  const focusEntryCwd = useRef<string | null>(null);
+  // In Focus the project terminal follows the focused chat's project (L-136).
+  useEffect(() => {
+    if (!focusPaneCwd || !looksLikeProject(focusPaneCwd)) return;
+    setProjectCwd(normalizeProjectPath(focusPaneCwd));
+  }, [focusPaneCwd]);
   /** Focus grid chats stay mounted though no workspace tab holds them. */
   const focusShownIds = useMemo(
     () => new Set(focusMode ? focusGridIds(focusGrid) : []),
@@ -2520,8 +2531,10 @@ function Workspace({
 
   // The footer's usage follows what is in view: under the inset layout a
   // Mono's tab keeps the footer, which then reads the Mono's model.
+  // Focus mode's footer reads the focused pane's chat (L-136).
   const usageSource =
-    insetLayout && monoViewSession ? monoViewSession : active;
+    focusPaneSession ??
+    (insetLayout && monoViewSession ? monoViewSession : active);
   const usageProviders = useMemo(() => {
     if (
       usageSource?.harness === "claude" ||
@@ -5460,6 +5473,9 @@ function Workspace({
   const onToggleFocusMode = useCallback(() => {
     if (focusModeRef.current) {
       focusSeenIds.current.clear();
+      const entryCwd = focusEntryCwd.current;
+      focusEntryCwd.current = null;
+      if (entryCwd != null) setProjectCwd(entryCwd);
       setFocusMode(false);
       setComposerFocusToken((token) => token + 1);
       return;
@@ -5473,6 +5489,7 @@ function Workspace({
     setProjectTerminalFocused(false);
     setComposerFocused(true);
     setComposerFocusToken((token) => token + 1);
+    focusEntryCwd.current = projectCwdRef.current;
     setFocusMode(true);
   }, [sessionsRef]);
 
@@ -15365,6 +15382,7 @@ function Workspace({
     [onProjectTerminalSize],
   );
   const dockWasOpen = useRef<{ path: string; open: boolean } | null>(null);
+  const dockGridEl = useRef<HTMLElement | null>(null);
   const dockAnimation = useRef<{ key: string; stop: () => void } | null>(
     null,
   );
@@ -15388,7 +15406,11 @@ function Workspace({
     // Only a dock opening or closing in place slides; a project switch or a
     // mono covering the workspace shows or hides it at once.
     const previous = dockWasOpen.current;
-    const inPlace = !!previous && sameProjectPath(previous.path, projectCwd);
+    // Moving between the workspace and Focus's grid shows it at once too.
+    const sameGrid = dockGridEl.current === el;
+    dockGridEl.current = el;
+    const inPlace =
+      sameGrid && !!previous && sameProjectPath(previous.path, projectCwd);
     dockWasOpen.current = { path: projectCwd, open };
     const key = side ? `${open ? "open" : "close"}:${side}:${size}` : "";
     // Unrelated dock updates, like a terminal retitling itself, leave a
@@ -15479,6 +15501,7 @@ function Workspace({
     monoCovers,
     insetLayout,
     projectCwd,
+    focusMode,
   ]);
   useEffect(() => () => dockAnimation.current?.stop(), []);
 
@@ -16313,6 +16336,43 @@ function Workspace({
       />
     );
 
+  // The project terminal docks sit in the workspace grid, or beside the
+  // panes in Focus (L-136). They mount in one place only, so a terminal is
+  // never attached twice.
+  const projectDockHosts = projectTerminals.map((dock) => {
+    const show =
+      (dock.open || dockClosingShown) &&
+      !monoCovers &&
+      sameProjectPath(dock.projectPath, projectCwd);
+    return (
+      <div
+        key={dock.projectPath}
+        className={
+          show ? "h-full min-h-0 min-w-0 w-full overflow-hidden" : "hidden"
+        }
+        style={show ? { gridArea: "dock" } : undefined}
+        aria-hidden={!show}
+        data-dock-shown={show ? "" : undefined}
+      >
+        <ProjectTerminalDock
+          dock={dock}
+          focused={show && projectTerminalFocused}
+          onFocus={focusProjectTerminal}
+          onHide={onHideProjectTerminal}
+          onSideChange={onProjectTerminalSide}
+          onSizePaint={paintDockSize}
+          onSizeCommit={commitDockSize}
+          onAddTerminal={onNewTerminal}
+          onSelectTerminal={onSelectProjectTerminal}
+          onCloseTerminal={onCloseProjectTerminal}
+          onCloseOtherTerminals={onCloseOtherProjectTerminals}
+          onReorderTerminals={onReorderProjectTerminals}
+          onTerminalMetaChange={onTerminalMetaChange}
+        />
+      </div>
+    );
+  });
+
   const focusView = focusMode ? (
     <FocusView
       grid={focusGrid}
@@ -16355,6 +16415,9 @@ function Workspace({
           ? () => setResumeSessionOpen(true)
           : undefined
       }
+      dock={projectDockHosts}
+      dockGridRef={dockGridRef}
+      paneFocused={!projectTerminalFocused}
       footer={usageFooter}
     />
   ) : null;
@@ -16539,50 +16602,10 @@ function Workspace({
 
                         <main className="relative flex min-h-0 min-w-0 flex-1">
                           <div
-                            ref={dockGridRef}
+                            ref={focusMode ? undefined : dockGridRef}
                             className="grid h-full min-h-0 min-w-0 flex-1"
                           >
-                            {projectTerminals.map((dock) => {
-                              const show =
-                                (dock.open || dockClosingShown) &&
-                                !monoCovers &&
-                                sameProjectPath(dock.projectPath, projectCwd);
-                              return (
-                                <div
-                                  key={dock.projectPath}
-                                  className={
-                                    show
-                                      ? "h-full min-h-0 min-w-0 w-full overflow-hidden"
-                                      : "hidden"
-                                  }
-                                  style={
-                                    show ? { gridArea: "dock" } : undefined
-                                  }
-                                  aria-hidden={!show}
-                                  data-dock-shown={show ? "" : undefined}
-                                >
-                                  <ProjectTerminalDock
-                                    dock={dock}
-                                    focused={show && projectTerminalFocused}
-                                    onFocus={focusProjectTerminal}
-                                    onHide={onHideProjectTerminal}
-                                    onSideChange={onProjectTerminalSide}
-                                    onSizePaint={paintDockSize}
-                                    onSizeCommit={commitDockSize}
-                                    onAddTerminal={onNewTerminal}
-                                    onSelectTerminal={onSelectProjectTerminal}
-                                    onCloseTerminal={onCloseProjectTerminal}
-                                    onCloseOtherTerminals={
-                                      onCloseOtherProjectTerminals
-                                    }
-                                    onReorderTerminals={
-                                      onReorderProjectTerminals
-                                    }
-                                    onTerminalMetaChange={onTerminalMetaChange}
-                                  />
-                                </div>
-                              );
-                            })}
+                            {focusMode ? null : projectDockHosts}
                             <div
                               className="relative flex min-h-0 min-w-0 flex-row"
                               style={{ gridArea: "main" }}

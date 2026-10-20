@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 22:11 IST — Terminal and usage follow the focused pane in Focus mode; active pane outline (L-136, L-137)
+- Type: fix
+- What: In Focus mode the Terminal button at the bottom right did nothing visible, because the terminal panel lived in the hidden workspace. It now opens beside the Focus grid, for the project of the chat you last clicked. The usage footer also follows that chat, so its model is the one highlighted. The focused chat now has a thin outline in your accent colour, in Focus mode and in workspace splits, whenever more than one pane is on screen.
+- Why: User report with a screenshot: terminals not opening in Focus, usage fixed to one model, and no clear sign of the active pane.
+- Files: [App.tsx](../../src/app/App.tsx) (`projectDockHosts`, `focusPaneSession`, `focusEntryCwd`, `usageSource`); [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx); [ActivePaneRing.tsx](../../src/shared/ui/ActivePaneRing.tsx); [PaneTree.tsx](../../src/features/workspace/ui/PaneTree.tsx); [FocusView.test.ts](../../src/features/focus/ui/FocusView.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (focus, workspace, projects, terminal, src/app: 1070 passed) build —; desktop check manual
 ## 2026-10-20 21:38 IST — Focus mode's New chat no longer vanishes (L-135)
 - Type: fix
 - What: In Focus mode, New made a chat that showed for a moment and then disappeared, leaving the first chat focused. The app was clearing away chats that no tab holds, and a new chat in Focus has no tab yet. Chats in the Focus grid now count as open.

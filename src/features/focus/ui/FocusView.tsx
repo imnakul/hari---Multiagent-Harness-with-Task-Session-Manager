@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { IconButton } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
@@ -13,6 +14,7 @@ import { IS_MAC, MOD, SHIFT } from "../../../platform/tauri/platform";
 import { useTrafficLightsVisible } from "../../../platform/tauri/useTrafficLightsVisible";
 import { setGrabbing, suppressTextSelection } from "../../../shared/lib/drag";
 import { projectName } from "../../../shared/lib/paths";
+import { ActivePaneRing } from "../../../shared/ui/ActivePaneRing";
 import { Focus, FolderTree, GripVertical, X } from "../../../shared/ui/icons";
 import type { RecentProject } from "../../projects/model/recents";
 import {
@@ -73,6 +75,14 @@ type Props = {
   /** Adds a chat (Continue, "+N more"), trading places with the focused pane if it would not show. */
   onOpenChat: (sessionId: string) => void;
   onImport?: () => void;
+  /**
+   * App's project terminal docks. They share a grid with the panes, which App
+   * lays out through `dockGridRef` as it does in the workspace (L-136).
+   */
+  dock?: ReactNode;
+  dockGridRef?: Ref<HTMLDivElement>;
+  /** False while the keyboard is in the terminal dock: no pane outline. */
+  paneFocused?: boolean;
   footer?: ReactNode;
 };
 
@@ -105,6 +115,9 @@ export function FocusView({
   onStartNew,
   onOpenChat,
   onImport,
+  dock,
+  dockGridRef,
+  paneFocused = true,
   footer,
 }: Props): ReactNode {
   const marks = useProjectMarks();
@@ -349,6 +362,7 @@ export function FocusView({
     window.addEventListener("keydown", onKey, true);
   };
 
+  const outlined = paneFocused && shown.columns.flat().length > 1;
   const panes = shown.columns.flatMap((column, columnIndex) =>
     column.map((id, rowIndex) => {
       const session = byId.get(id);
@@ -435,6 +449,7 @@ export function FocusView({
               </div>
             )}
           </div>
+          <ActivePaneRing shown={focused && outlined} />
           {drag && drag.overId === id ? <FocusDropHint edge={drag.edge} /> : null}
         </section>
       );
@@ -504,38 +519,42 @@ export function FocusView({
           />
         </>
       ) : null}
-      <main
-        ref={main}
-        id={gridRegionId}
-        role={activeGroup && !empty ? "tabpanel" : undefined}
-        aria-label={
-          activeGroup && !empty
-            ? activeGroup.cwd
-              ? projectName(activeGroup.cwd)
-              : "Other"
-            : undefined
-        }
-        className="relative flex min-h-0 min-w-0 flex-1"
-      >
-        {empty ? (
-          <FocusEmptyState {...newActions} />
-        ) : shown.columns.length === 0 ? (
-          // Everything is in "+N more" (e.g. a column the window lost).
-          <p className="m-auto text-[13px] text-content/50">
-            Pick a chat from “+{hiddenItems.length} more”.
-          </p>
-        ) : (
-          <div
-            className="grid min-h-0 min-w-0 flex-1"
-            style={{
-              gridTemplateColumns: `repeat(${shown.columns.length}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-            }}
-          >
-            {panes}
-          </div>
-        )}
-      </main>
+      <div ref={dockGridRef} className="grid min-h-0 min-w-0 flex-1">
+        {dock}
+        <main
+          ref={main}
+          id={gridRegionId}
+          role={activeGroup && !empty ? "tabpanel" : undefined}
+          aria-label={
+            activeGroup && !empty
+              ? activeGroup.cwd
+                ? projectName(activeGroup.cwd)
+                : "Other"
+              : undefined
+          }
+          className="relative flex min-h-0 min-w-0"
+          style={{ gridArea: "main" }}
+        >
+          {empty ? (
+            <FocusEmptyState {...newActions} />
+          ) : shown.columns.length === 0 ? (
+            // Everything is in "+N more" (e.g. a column the window lost).
+            <p className="m-auto text-[13px] text-content/50">
+              Pick a chat from “+{hiddenItems.length} more”.
+            </p>
+          ) : (
+            <div
+              className="grid min-h-0 min-w-0 flex-1"
+              style={{
+                gridTemplateColumns: `repeat(${shown.columns.length}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+              }}
+            >
+              {panes}
+            </div>
+          )}
+        </main>
+      </div>
       {footer}
     </div>
   );

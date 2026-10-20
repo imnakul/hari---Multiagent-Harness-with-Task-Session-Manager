@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { newDefaultSession } from "../../sessions/model/session";
@@ -19,7 +19,11 @@ const SESSIONS = [
   session("a2", "C:/work/alpha", "Alpha two"),
 ];
 
-function render(groupByProject: boolean, focusedId = "b1"): string {
+function render(
+  groupByProject: boolean,
+  focusedId = "b1",
+  extra: { dock?: ReactNode; paneFocused?: boolean } = {},
+): string {
   const store = new Map([["monocode.focusGroupByProject.v1", groupByProject ? "1" : "0"]]);
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => store.get(key) ?? null,
@@ -42,6 +46,7 @@ function render(groupByProject: boolean, focusedId = "b1"): string {
       onNewChat: noop,
       onStartNew: noop,
       onOpenChat: noop,
+      ...extra,
     }),
   );
 }
@@ -71,5 +76,28 @@ describe("FocusView group by project (L-128)", () => {
     expect(html).not.toContain('data-pane-body="b1"');
     expect(html).toContain('role="tabpanel"');
     expect(html).toContain('aria-pressed="true" title="Group chats by project"');
+  });
+});
+
+describe("FocusView terminal dock and active outline (L-136, L-137)", () => {
+  it("renders App's dock beside the panes, in the same grid", () => {
+    const html = render(false, "b1", {
+      dock: createElement("div", { "data-dock-shown": "" }, "dock"),
+    });
+    // The dock and the pane region are siblings, so App lays them out.
+    expect(html).toMatch(/<div class="grid[^"]*"><div data-dock-shown="">dock<\/div><main/);
+    expect(html).toContain('style="grid-area:main"');
+  });
+
+  it("outlines only the focused pane, and none while the dock has the keyboard", () => {
+    const focused = render(false, "b1");
+    expect(focused.match(/data-active-pane-ring=""/g)).toHaveLength(1);
+    const ringAt = focused.indexOf('data-active-pane-ring=""');
+    expect(focused.lastIndexOf('data-focus-pane="b1"', ringAt)).toBeGreaterThan(
+      focused.lastIndexOf('data-focus-pane="a1"', ringAt),
+    );
+    expect(render(false, "b1", { paneFocused: false })).not.toContain(
+      'data-active-pane-ring=""',
+    );
   });
 });

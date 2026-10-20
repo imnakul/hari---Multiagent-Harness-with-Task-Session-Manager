@@ -12,6 +12,7 @@ import {
 } from "react";
 import { setGrabbing, suppressTextSelection } from "../../../shared/lib/drag";
 import { beginLayoutTransition } from "../../../shared/lib/layoutTransition";
+import { ActivePaneRing } from "../../../shared/ui/ActivePaneRing";
 import {
   paneDropFromPoint,
   setExternalTitleTabDrop,
@@ -768,6 +769,9 @@ function PaneTreeComponent({
             {drop && drop.overId === leaf.id && drop.fromId !== leaf.id ? (
               <PaneDropHint edge={drop.edge} />
             ) : null}
+            <ActivePaneRing
+              shown={inSplit && !leaving && focusedId === leaf.id}
+            />
             <div
               data-pane-content=""
               data-pane-enter={
