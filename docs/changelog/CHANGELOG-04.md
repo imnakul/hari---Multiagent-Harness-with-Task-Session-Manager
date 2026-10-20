@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 15:52 IST — Focus mode: group by project (L-128)
+- Type: feature
+- What: Focus mode has a "Group by project" button. When on, two tab rows appear under the top bar: one tab per project with chats in Focus, and one tab per chat of the chosen project. The grid then shows only that project's chats; switching projects is one click. Turning it off shows every chat again in the same places.
+- Why: User wanted to switch projects side by side as tabs, with each project's running chats under it.
+- Files: `src/features/focus/model/focusGroups.ts`; `src/features/focus/ui/FocusGroupTabs.tsx`; `src/features/focus/ui/FocusView.tsx`; tests `src/features/focus/model/focusGroups.test.ts`, `src/features/focus/ui/FocusView.test.ts`; spec `docs/specs/focus-group-by-project-plan.md`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,574 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 15:01 IST — Wallpaper in the new layout; logos not cropped (L-126, L-127)
 - Type: fix
 - What: In the new layout, the Windows wallpaper now shows through the main workspace card, tinted by Glass strength, in light and dark mode, as it does in the classic layout. Project logos fit inside their square instead of being cut off.

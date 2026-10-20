@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-10-20 15:41 | [Review — Focus mode: group by project (L-128)](focus-group-by-project-plan.md) | Top-bar toggle adds a project tab row and a chat tab row; the grid shows one project at a time. Desktop check manual. |
 | 2026-10-20 03:37 | [Review — Focus mode: every running chat side by side, across projects (L-123)](focus-mode-plan.md) | Title-bar Focus button hides the chrome and tiles running chats from any project (4 columns, then 2 rows, up to 8); stable placement, drag to move, status in pane headers, New split button (Start new, Continue, Import). Built with the default answers; typecheck and 7,508 tests pass. Desktop check manual. |
 | 2026-10-19 22:17 | [Review — Chat link previews: setting and rich cards (L-119)](chat-link-previews.md) | Off / On hover / Always setting; cards with page image, title and description; JPEG thumbnails in a 100-link memory cache, nothing on disk. Desktop check manual. |
 | 2026-10-19 11:57 | [Review — Pre-trust the chat folder before Claude Interactive starts (L-115)](claude-folder-pretrust.md) | Orca's approach: set `hasTrustDialogAccepted` in Claude's own config before launch, lock-respecting and never creating or breaking the file; on by default with a setting to turn it off. Desktop check manual. |
