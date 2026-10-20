@@ -324,6 +324,7 @@ it
         code?: number;
         error?: string;
         delayMs?: number;
+        result?: string;
       };
       if (value.event === "data") {
         const chunk = Buffer.from(value.data!, "base64");
@@ -339,15 +340,15 @@ it
         const waiter = pending.get(value.id);
         pending.delete(value.id);
         if (value.error) waiter?.reject(new Error(value.error));
-        else waiter?.resolve(value.delayMs);
+        else waiter?.resolve(value.result ?? value.delayMs);
       }
     });
     const rpc = async (
       command: string,
       args: Record<string, unknown> = {},
-    ): Promise<number | undefined> => {
+    ): Promise<number | string | undefined> => {
       const serial = ++requestId;
-      return new Promise<number | undefined>((resolve, reject) => {
+      return new Promise<number | string | undefined>((resolve, reject) => {
         pending.set(serial, { resolve, reject });
         driver.stdin.write(
           `${JSON.stringify({ id: serial, command, ...args })}\n`,

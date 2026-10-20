@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   draft: "" as string | null,
   submits: [] as string[],
   outputAge: 1000,
+  /** What the backend reports about native output after a paste (L-133). */
+  settle: undefined as "quiet" | "noisy" | undefined,
   /** Backend phase reported by poll instead of the hook-derived one. */
   phase: undefined as string | undefined,
   seq: 0,
@@ -144,6 +146,7 @@ beforeEach(() => {
   mocks.owner = false;
   mocks.inputAge = null;
   mocks.sendError = false;
+  mocks.settle = undefined;
   mocks.silentSend = false;
   mocks.dropPastes = 0;
   mocks.draft = "";
@@ -189,6 +192,7 @@ beforeEach(() => {
         mocks.sends.push(String(args.text));
         if (mocks.sendError) throw new Error("IPC disconnected after write");
         mocks.draft = mocks.dropPastes-- > 0 ? "" : String(args.text);
+        return mocks.settle;
       }
       if (command === "claude_interactive_submit") {
         mocks.submits.push(String(args.action));
@@ -450,6 +454,38 @@ describe("interactive turn delivery", () => {
     finish();
     await vi.advanceTimersByTimeAsync(1000);
     await turn;
+  });
+  it("presses Enter on noisy output once the prompt holds the paste still (L-133)", async () => {
+    await running();
+    mocks.settle = "noisy";
+    mocks.outputAge = 0; // An animated status line keeps the screen busy.
+    mocks.draft = "first line";
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => mocks.sends.length === 1);
+    // The paste is still being drawn: the draft keeps changing.
+    mocks.draft = "first line\n  sec";
+    await vi.advanceTimersByTimeAsync(1000);
+    mocks.draft = "first line\n  second line";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mocks.submits).toEqual([]);
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    expect(mocks.submits).toEqual(["enter"]);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events.some((event) => event.type === "session.error")).toBe(false);
+  });
+  it("never presses Enter on busy output the backend saw go quiet, however still the prompt is", async () => {
+    await running();
+    mocks.settle = "quiet";
+    mocks.outputAge = 0;
+    const turn = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => mocks.sends.length === 1);
+    await vi.advanceTimersByTimeAsync(21000);
+    expect(String(await turn)).toContain("unconfirmed");
+    expect(mocks.submits).toEqual([]);
   });
   it("pastes once more when Claude redraws an empty prompt after dropping the paste", async () => {
     await running();

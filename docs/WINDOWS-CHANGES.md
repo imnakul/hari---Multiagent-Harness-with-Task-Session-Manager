@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 20 Oct 2026 | Fall back to the prompt screen when native output never goes quiet | ConPTY, paste settlement |
 | 18 Oct 2026 | Verify native process identity before stopping a tool | resources, PID reuse |
 | 17 Oct 2026 | Reconcile folded native input with the original GUI turn | Claude Interactive, timing |
 | 17 Oct 2026 | Repaint omitted input after long native history | ConPTY, startup geometry |
@@ -61,6 +62,16 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 20 Oct 2026 - Fall back to the prompt screen when native output never goes quiet
+
+The 17 Oct quiet gate (1.5 s of no output after the paste) failed every send
+while Claude's status line animated: output advanced but never went quiet, so
+the 8 s deadline fired with "Prompt delivery is unconfirmed". `wait_for_paste`
+now reports `quiet` or `noisy` (advanced, still busy 4 s past the ingest
+floor). Noisy is not proof: the GUI presses the single Enter only after
+Claude's framed prompt shows the message and the text holds still for 1.5 s.
+Output that never advances still fails after 8 s with no Enter (L-133).
 
 ## Verify native process identity before stopping a tool
 

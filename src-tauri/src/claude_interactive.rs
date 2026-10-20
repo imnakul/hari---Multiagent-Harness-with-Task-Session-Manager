@@ -997,7 +997,7 @@ pub fn claude_interactive_send(
     session_id: String,
     submission_id: String,
     text: String,
-) -> Result<(), String> {
+) -> Result<crate::interactive_delivery::PasteSettle, String> {
     if text.is_empty()
         || text.len() > 512 * 1024
         || text
@@ -1046,15 +1046,16 @@ pub fn claude_interactive_send(
     result
 }
 
-/// Paste and wait for the native output to settle. No Enter: output alone does
-/// not prove Claude kept the paste (ConPTY echoes bytes at once, and Claude
-/// 2.1.303 discards input that arrives while its startup screen takes over).
+/// Paste and wait for the native output to settle (or stay noisy). No Enter:
+/// output alone does not prove Claude kept the paste (ConPTY echoes bytes at
+/// once, and Claude 2.1.303 discards input that arrives while its startup
+/// screen takes over).
 fn write_paste(
     app: &AppHandle,
     live: &Live,
     session_id: &str,
     payload: &str,
-) -> Result<(), String> {
+) -> Result<crate::interactive_delivery::PasteSettle, String> {
     let pty_host = app.state::<crate::pty::PtyHost>();
     let id = pty_id(session_id);
     let baseline = pty_host.paste_output(&id)?.0;
@@ -1118,7 +1119,7 @@ pub fn claude_interactive_submit(
     session_id: String,
     submission_id: String,
     action: String,
-) -> Result<(), String> {
+) -> Result<Option<crate::interactive_delivery::PasteSettle>, String> {
     let live = host.get(&session_id)?;
     let step = {
         let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -1133,12 +1134,12 @@ pub fn claude_interactive_submit(
         step
     };
     let SubmitStep::Write(data) = step else {
-        return Ok(());
+        return Ok(None);
     };
     if action != "repaste" {
-        return crate::pty::pty_write(app.state(), pty_id(&session_id), data);
+        return crate::pty::pty_write(app.state(), pty_id(&session_id), data).map(|()| None);
     }
-    let result = write_paste(&app, &live, &session_id, &data);
+    let result = write_paste(&app, &live, &session_id, &data).map(Some);
     let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
     state.writing = false;
     if result.is_err() && state.phase == "sending" {

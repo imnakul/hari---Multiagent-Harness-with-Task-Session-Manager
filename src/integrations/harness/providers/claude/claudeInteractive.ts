@@ -1031,21 +1031,24 @@ export async function sendInteractiveClaude(
   const { pending, done } = newTurn(text, compact, input.onAccepted);
   live.pending = pending;
   wakePoll(live);
-  const submit = (action: "enter" | "repaste" | "abort"): Promise<void> =>
+  const submit = (
+    action: "enter" | "repaste" | "abort",
+  ): Promise<PasteSettle | null | undefined> =>
     invoke("claude_interactive_submit", {
       sessionId: input.sessionId,
       submissionId,
       action,
     });
   let outcome: PasteOutcome = "unknown";
+  const paste: PasteWatch = { noisy: false };
   try {
     const pastedAt = Date.now();
-    await invoke("claude_interactive_send", {
-      sessionId: input.sessionId,
-      submissionId,
-      text,
-    });
-    outcome = await awaitPasteShown(live, pending, text, pastedAt, () =>
+    const settle = await invoke<PasteSettle | null | undefined>(
+      "claude_interactive_send",
+      { sessionId: input.sessionId, submissionId, text },
+    );
+    paste.noisy = settle === "noisy";
+    outcome = await awaitPasteShown(live, pending, text, pastedAt, paste, () =>
       submit("repaste"),
     );
     if (outcome === "dropped") {
@@ -1082,7 +1085,8 @@ export async function sendInteractiveClaude(
   } finally {
     live.terminal.writing = false;
   }
-  if (outcome === "shown") await retryEnter(live, pending, text, submit);
+  if (outcome === "shown")
+    await retryEnter(live, pending, text, paste, () => submit("enter"));
   await done;
 }
 
@@ -1127,20 +1131,48 @@ const ENTER_RETRY_MS = 3000;
 type PasteOutcome = "shown" | "accepted" | "dropped" | "unknown";
 
 /**
+ * How the backend saw native output after a paste: it went quiet, or it kept
+ * drawing (an animated status line) past the ingest floor (L-133).
+ */
+type PasteSettle = "quiet" | "noisy";
+
+/** Whether the latest paste's native output stayed noisy; repaste updates it. */
+type PasteWatch = { noisy: boolean };
+
+/** Track how long the prompt's draft text has stayed the same. */
+function draftHold(): (draft: string | null) => number {
+  let held: string | null = null;
+  let since = Date.now();
+  return (draft) => {
+    if (draft !== held) {
+      held = draft;
+      since = Date.now();
+    }
+    return Date.now() - since;
+  };
+}
+
+/**
  * Wait until Claude's prompt box shows the paste. Output bytes prove nothing:
  * ConPTY echoes at once, and Claude 2.1.303 discards input that arrives while
  * its startup screen takes over the terminal. A prompt Claude redrew empty after
  * the paste means nothing reached it, so paste once more, then report "dropped".
  * A prompt that is not redrawn (Claude stalled) is never repasted.
+ *
+ * When the backend reports noisy output, the screen never goes quiet, so the
+ * output-age check cannot pass; instead the prompt must show the paste with its
+ * text unchanged for SCREEN_QUIET_MS (L-133).
  */
 async function awaitPasteShown(
   live: Live,
   pending: Pending,
   text: string,
   pastedAt: number,
-  repaste: () => Promise<void>,
+  paste: PasteWatch,
+  repaste: () => Promise<PasteSettle | null | undefined>,
 ): Promise<PasteOutcome> {
   let repasted = false;
+  const heldFor = draftHold();
   for (;;) {
     if (live.pending !== pending || pending.accepted) return "accepted";
     if (live.stopped || live.terminal.stopped || live.terminal.owner)
@@ -1151,13 +1183,15 @@ async function awaitPasteShown(
     const redrawn =
       screen.outputAgeMs != null &&
       Date.now() - screen.outputAgeMs >= pastedAt + PASTE_ECHO_MS;
-    if (draft != null && composerShowsPaste(draft, text) && age >= 300)
-      return "shown";
+    const held = heldFor(draft);
+    const showsPaste = draft != null && composerShowsPaste(draft, text);
+    if (showsPaste && age >= 300) return "shown";
+    if (showsPaste && paste.noisy && held >= SCREEN_QUIET_MS) return "shown";
     if (draft === "" && redrawn && age >= SCREEN_QUIET_MS) {
       if (repasted) return "dropped";
       repasted = true;
       pastedAt = Date.now();
-      await repaste();
+      paste.noisy = (await repaste()) === "noisy";
       continue;
     }
     if (Date.now() - pastedAt >= PASTE_SHOWN_TIMEOUT_MS) return "unknown";
@@ -1174,9 +1208,11 @@ async function retryEnter(
   live: Live,
   pending: Pending,
   text: string,
-  submit: (action: "enter") => Promise<void>,
+  paste: PasteWatch,
+  enter: () => Promise<unknown>,
 ): Promise<void> {
   let enteredAt = Date.now();
+  const heldFor = draftHold();
   for (let enters = 1; enters < 3; ) {
     await new Promise<void>((resolve) => setTimeout(resolve, 250));
     if (
@@ -1189,16 +1225,20 @@ async function retryEnter(
       return;
     const screen = live.terminal.inspect();
     const draft = live.terminal.composer();
+    const held = heldFor(draft);
+    // Noisy output never goes quiet: a draft that holds still stands in (L-133).
+    const settled = paste.noisy
+      ? held >= 1000
+      : !screen.pendingParses && (screen.outputAgeMs ?? 0) >= 1000;
     if (
       Date.now() - enteredAt < ENTER_RETRY_MS ||
-      screen.pendingParses ||
-      (screen.outputAgeMs ?? 0) < 1000 ||
+      !settled ||
       draft == null ||
       !composerShowsPaste(draft, text)
     )
       continue;
     try {
-      await submit("enter");
+      await enter();
     } catch {
       return; // Claude acknowledged meanwhile, or the user took the terminal.
     }

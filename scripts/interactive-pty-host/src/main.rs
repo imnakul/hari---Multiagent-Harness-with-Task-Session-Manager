@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 emit(
                     &stdout,
                     match result {
-                        Ok(()) => json!({"id":request.id}),
+                        Ok(settle) => json!({"id":request.id, "result":settle}),
                         Err(error) => json!({"id":request.id, "error":error}),
                     },
                 );

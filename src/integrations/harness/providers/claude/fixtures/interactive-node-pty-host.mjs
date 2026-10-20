@@ -116,19 +116,21 @@ async function dispatch(request) {
         if (!current) throw Error("No native PTY");
         const started = Date.now();
         const minimum = 500 + Math.ceil(current.size / 64);
-        while (true) {
+        // Mirrors interactive_delivery::check_paste (L-133).
+        let settle;
+        while (!settle) {
           if (live !== current) throw Error("Native PTY changed");
-          if (
-            Date.now() - started >= minimum &&
-            current.total > current.baseline &&
-            Date.now() - current.at >= 1500
-          )
-            break;
-          if (Date.now() - started >= minimum + 8000)
-            throw Error("Native paste output did not settle");
-          await sleep(20);
+          const elapsed = Date.now() - started;
+          const output = current.total > current.baseline;
+          if (elapsed >= minimum && output && Date.now() - current.at >= 1500)
+            settle = "quiet";
+          else if (output && elapsed >= minimum + 4000) settle = "noisy";
+          else if (elapsed >= minimum + 8000)
+            throw Error("Native paste output was never drawn");
+          else await sleep(20);
         }
-        break;
+        emit({ id: request.id, result: settle });
+        return;
       }
       case "resize":
         if (!live) throw Error("No native PTY");
