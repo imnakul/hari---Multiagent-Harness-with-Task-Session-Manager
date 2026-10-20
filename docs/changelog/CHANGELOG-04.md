@@ -1,4 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 20:38 IST — Pasted images show at once with a loader (L-134)
+- Type: feature
+- What: Pasting a screenshot or file now shows its chip straight away: an image appears dimmed with a spinning loader until it is saved, then becomes the normal thumbnail. A screenshot the app has to read from the system clipboard shows a "Pasted image" chip with a spinner. If nothing could be attached, the composer now says so instead of silently dropping the paste.
+- Why: Pasted images took a while to appear with no sign anything was happening.
+- Files: [attachments.ts](../../src/features/sessions/model/attachments.ts) (`pendingAttachmentsFor`, `pendingPreviewUrls`); [AttachmentChip.tsx](../../src/features/sessions/ui/AttachmentChip.tsx) (`PendingAttachmentChip`); [Composer.tsx](../../src/features/sessions/ui/Composer.tsx) (`pasteFiles`, `attachPasted`); [Composer.pasteImage.test.ts](../../src/features/sessions/ui/Composer.pasteImage.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (sessions: 1892 passed) build ✅; desktop check manual
+## 2026-10-20 20:38 IST — Interactive sends work while Claude's status line animates (L-133)
+- Type: fix
+- What: An Interactive Claude send could fail with "Prompt delivery is unconfirmed" when Claude's status line kept redrawing, because the app waited for the terminal to go quiet. Now, if the terminal stays busy, the app presses Enter once Claude's prompt shows the message and has held still for 1.5 seconds. If the terminal never draws the paste at all, it still stops without pressing Enter.
+- Why: User report of the error with a busy native terminal; chose the screen fallback.
+- Files: [interactive_delivery.rs](../../src-tauri/src/interactive_delivery.rs) (`PasteSettle`, `check_paste`); [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs); [main.rs](../../scripts/interactive-pty-host/src/main.rs); [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts) (`awaitPasteShown`, `retryEnter`); [interactive-node-pty-host.mjs](../../src/integrations/harness/providers/claude/fixtures/interactive-node-pty-host.mjs); [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts); [claudeInteractiveCli.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (Claude provider: 324 passed; Rust interactive_delivery: 5 passed) build ✅; desktop check manual
 ## 2026-10-20 19:30 IST — Link preview cards no longer cut their text (L-119)
 - Type: fix
 - What: With Link previews set to Always, the cards under a reply were a fixed height, so the description was cut off part-way through its second line. Cards now grow to fit the site name, title and up to three lines of description, and the preview image grows with them.

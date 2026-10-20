@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { X } from "../../../shared/ui/icons";
-import { attachmentPreviewSrc, isAttachmentFolder } from "../model/attachments";
+import { Loader, X } from "../../../shared/ui/icons";
+import {
+  attachmentPreviewSrc,
+  isAttachmentFolder,
+  type PendingAttachment,
+} from "../model/attachments";
 import type { Attachment } from "../model/session";
 import { FileTypeIcon } from "../../files/ui/FileTypeIcon";
 import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
@@ -112,5 +116,58 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Stands in for a paste until its attachment is ready (L-134). It cannot be
+ * removed or opened: the real chip replaces it, and send waits for that.
+ */
+export function PendingAttachmentChip({
+  pending,
+}: {
+  pending: PendingAttachment;
+}) {
+  const label = `Attaching ${pending.name}`;
+  if (pending.previewUrl) {
+    return (
+      <div
+        role="status"
+        aria-label={label}
+        title={label}
+        className="relative size-9 shrink-0 overflow-hidden rounded-lg"
+      >
+        <img
+          src={pending.previewUrl}
+          alt=""
+          draggable={false}
+          className="size-9 rounded-lg object-cover opacity-60"
+        />
+        <span className="absolute inset-0 grid place-items-center bg-black/25">
+          <Loader
+            aria-hidden
+            className="size-4 text-white motion-safe:animate-spin"
+          />
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      title={label}
+      className="flex min-w-0 items-center gap-1.5 rounded-md bg-content/10 py-0.5 pl-1 pr-1.5"
+    >
+      <span className="grid size-5 shrink-0 place-items-center">
+        <Loader
+          aria-hidden
+          className="size-3.5 text-content/60 motion-safe:animate-spin"
+        />
+      </span>
+      <span className="min-w-0 max-w-[140px] truncate text-[11px] leading-none text-content/60">
+        {pending.name}
+      </span>
+    </div>
   );
 }

@@ -176,6 +176,49 @@ export function revokeAttachment(file: Attachment) {
   if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
 }
 
+/** A pasted file shown at once, while it is still being read and saved (L-134). */
+export type PendingAttachment = {
+  id: string;
+  name: string;
+  /** Object URL of a pasted image; absent for other files. */
+  previewUrl?: string;
+  /** The pasted file, so its real attachment can reuse `previewUrl`. */
+  file?: File;
+};
+
+/**
+ * Placeholder chips for pasted files, so an image shows the moment it is
+ * pasted instead of after it is encoded and written to disk. The caller owns
+ * each `previewUrl` and revokes it once the real attachment replaces it.
+ */
+export function pendingAttachmentsFor(files: File[]): PendingAttachment[] {
+  return files
+    .filter((file) => !skipName(file.name))
+    .map((file) => {
+      const mimeType = mimeFromFile(file);
+      return {
+        id: crypto.randomUUID(),
+        name: file.name.trim() || fallbackName(mimeType),
+        ...(kindFromMime(mimeType) === "image"
+          ? { previewUrl: URL.createObjectURL(file), file }
+          : {}),
+      };
+    });
+}
+
+/** Preview URLs a pasted file's attachment may adopt instead of making its own. */
+export function pendingPreviewUrls(
+  pending: PendingAttachment[],
+): Map<File, string> {
+  return new Map(
+    pending.flatMap((item) =>
+      item.file && item.previewUrl
+        ? [[item.file, item.previewUrl] as const]
+        : [],
+    ),
+  );
+}
+
 function bytesAt(bytes: Uint8Array, offset: number, prefix: number[]): boolean {
   if (bytes.length < offset + prefix.length) return false;
   return prefix.every((byte, index) => bytes[offset + index] === byte);
@@ -371,8 +414,14 @@ export async function attachmentsFromPaths(
   return out;
 }
 
+/**
+ * `previews` lends existing object URLs (see `pendingPreviewUrls`). A lent
+ * URL is never revoked here: an attachment that uses it takes ownership, and
+ * the lender keeps every URL no attachment took.
+ */
 export async function attachmentsFromFiles(
   files: File[],
+  previews?: ReadonlyMap<File, string>,
 ): Promise<Attachment[]> {
   const out: Attachment[] = [];
   const pathFiles: string[] = [];
@@ -386,7 +435,7 @@ export async function attachmentsFromFiles(
     out.push(...(await attachmentsFromPaths(pathFiles)));
   }
   for (const file of blobs) {
-    const item = await attachmentFromBlob(file);
+    const item = await attachmentFromBlob(file, previews?.get(file));
     if (item) out.push(item);
   }
   return out;
@@ -499,12 +548,22 @@ async function attachmentFromPath(info: PathInfo): Promise<Attachment | null> {
   return file;
 }
 
-async function attachmentFromBlob(file: File): Promise<Attachment | null> {
+async function attachmentFromBlob(
+  file: File,
+  lentPreviewUrl?: string,
+): Promise<Attachment | null> {
   if (skipName(file.name) || file.size < 0) return null;
   const mimeType = mimeFromFile(file);
   const kind = kindFromMime(mimeType);
   const name = file.name.trim() || fallbackName(mimeType);
-  const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
+  const previewUrl =
+    kind === "image"
+      ? (lentPreviewUrl ?? URL.createObjectURL(file))
+      : undefined;
+  const dropPreview = () => {
+    if (previewUrl && previewUrl !== lentPreviewUrl)
+      URL.revokeObjectURL(previewUrl);
+  };
   const data = await readBlobBase64(file);
   if (kind === "image" && isVisionImage(mimeType) && data) {
     // Persist a copy alongside the inline data: the session store strips
@@ -527,7 +586,7 @@ async function attachmentFromBlob(file: File): Promise<Attachment | null> {
     };
   }
   if (data === null) {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    dropPreview();
     return null;
   }
   try {
@@ -542,7 +601,7 @@ async function attachmentFromBlob(file: File): Promise<Attachment | null> {
       previewUrl,
     };
   } catch {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    dropPreview();
     return null;
   }
 }

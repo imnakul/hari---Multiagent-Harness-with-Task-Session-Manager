@@ -245,7 +245,10 @@ it("sends a screenshot that is still being read when the turn is sent", async ()
   expect(submit).not.toHaveBeenCalled();
 
   release?.();
-  await settleUntil(() => submit.mock.calls.length === 1, "the turn to include the screenshot");
+  await settleUntil(
+    () => submit.mock.calls.length === 1,
+    "the turn to include the screenshot",
+  );
 
   expect(submit.mock.calls[0][0]).toBe("look");
   expect(submit.mock.calls[0][1]).toEqual([
@@ -469,4 +472,103 @@ it("reports why a clipboard image could not be attached", async () => {
   expect(
     container.querySelector('[aria-label^="Open clipboard-image"]'),
   ).toBeNull();
+});
+
+/** A paste whose clipboard carries these files, as WebView2 reports a screenshot. */
+function pasteFiles(target: HTMLTextAreaElement, files: File[]) {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: { getData: () => "", files, items: [] },
+  });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+}
+
+function pendingChip(name: string) {
+  return container.querySelector(
+    `[role="status"][aria-label="Attaching ${name}"]`,
+  );
+}
+
+it("shows a pasted image at once with a loader until it is saved (L-134)", async () => {
+  const created = vi
+    .spyOn(URL, "createObjectURL")
+    .mockImplementation(
+      (() => `blob:${Math.random()}`) as typeof URL.createObjectURL,
+    );
+  const revoked = vi
+    .spyOn(URL, "revokeObjectURL")
+    .mockImplementation(() => undefined);
+  let release: (() => void) | undefined;
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "write_attachment") {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return "/saved/shot.png";
+    }
+    return [];
+  });
+  pasteFiles(render(), [
+    new File([PNG_BYTES], "shot.png", { type: "image/png" }),
+  ]);
+
+  // Before the file is read or written, the thumbnail is already there.
+  const chip = pendingChip("shot.png");
+  const pendingUrl = chip?.querySelector("img")?.getAttribute("src");
+  expect(pendingUrl).toMatch(/^blob:/);
+  expect(chipCount()).toBe(0);
+
+  await settleUntil(() => release !== undefined, "the attachment write");
+  release!();
+  await waitForAttachments(1);
+  expect(pendingChip("shot.png")).toBeNull();
+  // The real chip takes over the same preview: one object URL, no flicker.
+  expect(created).toHaveBeenCalledOnce();
+  expect(
+    container
+      .querySelector('[aria-label="Open shot.png full screen"] img')
+      ?.getAttribute("src"),
+  ).toBe(pendingUrl);
+  expect(revoked).not.toHaveBeenCalled();
+  created.mockRestore();
+  revoked.mockRestore();
+});
+
+it("shows a loader for a native clipboard image while it is read (L-134)", async () => {
+  let release: (() => void) | undefined;
+  const original = invoke.getMockImplementation()!;
+  invoke.mockImplementation(
+    async (command: string, args?: { paths?: string[] }) => {
+      if (command === "clipboard_image")
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      return original(command, args);
+    },
+  );
+  paste(render());
+  expect(pendingChip("Pasted image")).not.toBeNull();
+
+  await settleUntil(() => release !== undefined, "the clipboard read");
+  release!();
+  await waitForAttachments(1);
+  expect(pendingChip("Pasted image")).toBeNull();
+});
+
+it("says so when a pasted file could not be attached, instead of dropping it (L-134)", async () => {
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "write_attachment") throw new Error("disk full");
+    return [];
+  });
+  pasteFiles(render(), [
+    new File(["notes"], "notes.txt", { type: "text/plain" }),
+  ]);
+  expect(pendingChip("notes.txt")).not.toBeNull();
+
+  await waitForAlert();
+  expect(alert()).toContain("Couldn't attach the pasted file");
+  expect(pendingChip("notes.txt")).toBeNull();
+  expect(chipCount()).toBe(0);
 });

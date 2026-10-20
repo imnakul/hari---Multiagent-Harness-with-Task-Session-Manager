@@ -36,8 +36,11 @@ import {
   attachmentsFromFiles,
   filesFromClipboard,
   mergeAttachments,
+  pendingAttachmentsFor,
+  pendingPreviewUrls,
   pickAttachments,
   revokeAttachment,
+  type PendingAttachment,
 } from "../model/attachments";
 import { resizeComposer, restoreComposerSize } from "../model/composerResize";
 import {
@@ -112,7 +115,7 @@ import { ComposerRunner } from "./ComposerRunner";
 import { ContextMeter } from "./ContextMeter";
 import type { ProcessedUsage } from "../model/tokenAccounting";
 import type { Block } from "../model/session";
-import { AttachmentChip } from "./AttachmentChip";
+import { AttachmentChip, PendingAttachmentChip } from "./AttachmentChip";
 import { BranchPicker } from "../../source-control/ui/BranchPicker";
 import { WorktreePicker } from "../../source-control/ui/WorktreePicker";
 import {
@@ -556,6 +559,8 @@ export function Composer({
   );
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pasteError, setPasteError] = useState<string | null>(null);
+  /** Pasted files shown with a loader until their attachments are ready (L-134). */
+  const [pendingPastes, setPendingPastes] = useState<PendingAttachment[]>([]);
   const [plusOpen, setPlusOpen] = useState(false);
   const [interactiveTerminalOpen, setInteractiveTerminalOpen] = useState(false);
   useSyncExternalStore(subscribeInteractiveTerminals, interactiveTerminalRevision);
@@ -868,6 +873,43 @@ export function Composer({
       if (pasteFlightRef.current === joined) pasteFlightRef.current = null;
     });
   }, []);
+
+  /**
+   * Show placeholders now; the returned callback retires them once the read
+   * ends, revoking every preview URL none of the `adopted` attachments took.
+   */
+  const showPendingPastes = useCallback(
+    (pending: PendingAttachment[]): ((adopted?: Attachment[]) => void) => {
+      if (pending.length === 0) return () => undefined;
+      setPendingPastes((current) => [...current, ...pending]);
+      return (adopted = []) => {
+        const ids = new Set(pending.map((item) => item.id));
+        setPendingPastes((current) =>
+          current.filter((item) => !ids.has(item.id)),
+        );
+        const kept = new Set(adopted.map((item) => item.previewUrl));
+        for (const item of pending)
+          if (item.previewUrl && !kept.has(item.previewUrl))
+            URL.revokeObjectURL(item.previewUrl);
+      };
+    },
+    [],
+  );
+
+  /** Read pasted files behind placeholders that show at once (L-134). */
+  const pasteFiles = (files: File[], generation: number): void => {
+    const pending = pendingAttachmentsFor(files);
+    const settled = showPendingPastes(pending);
+    let adopted: Attachment[] = [];
+    rememberAttachmentRead(
+      attachmentsFromFiles(files, pendingPreviewUrls(pending))
+        .then((pasted) => {
+          adopted = pasted;
+          attachPasted(pasted, files, generation);
+        })
+        .finally(() => settled(adopted)),
+    );
+  };
 
   const readDroppedAttachments = useCallback(
     (read: () => Promise<Attachment[]>) => {
@@ -1940,15 +1982,7 @@ export function Composer({
       const text = e.clipboardData.getData("text/plain");
       if (captured) insertRestoredText(captured, text);
       if (!attachmentsSupported) return;
-      rememberAttachmentRead(
-        attachmentsFromFiles(messageFiles).then((pasted) => {
-          if (pasteGenerationRef.current !== generation) {
-            pasted.forEach(revokeAttachment);
-            return;
-          }
-          addAttachments(pasted);
-        }),
-      );
+      pasteFiles(messageFiles, generation);
       return;
     }
     const files = filesFromClipboard(e.clipboardData);
@@ -1969,6 +2003,13 @@ export function Composer({
       const captured = isFileReferenceText(text)
         ? captureDraft(e.currentTarget)
         : null;
+      // The bytes are still on the native clipboard, so there is no preview yet.
+      const settled = showPendingPastes([
+        {
+          id: crypto.randomUUID(),
+          name: text ? "Pasted files" : "Pasted image",
+        },
+      ]);
       rememberAttachmentRead(
         nativeClipboardAttachments(text)
           .then(({ files: pasted, warning }) => {
@@ -1989,22 +2030,32 @@ export function Composer({
             setPasteError(
               reason instanceof Error ? reason.message : String(reason),
             );
-          }),
+          })
+          .finally(() => settled()),
       );
       return;
     }
     e.preventDefault();
     if (!attachmentsSupported) return;
-    const generation = pasteGenerationRef.current;
-    rememberAttachmentRead(
-      attachmentsFromFiles(files).then((pasted) => {
-        if (pasteGenerationRef.current !== generation) {
-          pasted.forEach(revokeAttachment);
-          return;
-        }
-        addAttachments(pasted);
-      }),
-    );
+    pasteFiles(files, pasteGenerationRef.current);
+  };
+
+  /** Add pasted attachments, unless the draft they belonged to is gone. */
+  const attachPasted = (
+    pasted: Attachment[],
+    files: File[],
+    generation: number,
+  ): void => {
+    if (pasteGenerationRef.current !== generation) {
+      pasted.forEach(revokeAttachment);
+      return;
+    }
+    // The loader promised a file: say so when none of them could be read.
+    if (pasted.length === 0 && files.length > 0) {
+      setPasteError("Couldn't attach the pasted file. Try pasting it again.");
+      return;
+    }
+    addAttachments(pasted);
   };
 
   const attachFromPicker = (): void => {
@@ -2357,7 +2408,7 @@ export function Composer({
           ) : null}
           {workspaceBarOutside ? null : workspaceBar}
 
-          {attachments.length > 0 ? (
+          {attachments.length > 0 || pendingPastes.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 px-3 pt-2">
               {attachments.map((file) => (
                 <AttachmentChip
@@ -2365,6 +2416,9 @@ export function Composer({
                   attachment={file}
                   onRemove={() => removeAttachment(file.id)}
                 />
+              ))}
+              {pendingPastes.map((pending) => (
+                <PendingAttachmentChip key={pending.id} pending={pending} />
               ))}
             </div>
           ) : null}
