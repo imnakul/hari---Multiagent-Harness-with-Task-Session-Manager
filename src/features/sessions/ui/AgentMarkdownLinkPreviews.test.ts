@@ -49,6 +49,13 @@ describe("AgentMarkdown link previews", () => {
     ]);
   });
 
+  it("lets a card grow with its text instead of clipping it", () => {
+    saveLinkPreviewMode("always");
+    const card = render().match(/<a[^>]*data-link-card="[^"]+"[^>]*>/)?.[0];
+    expect(card).toContain("min-h-[5.5rem]");
+    expect(card).not.toMatch(/(?:^|s)h-[5.5rem]/);
+  });
+
   it("waits for the reply to finish, and only in chats", () => {
     saveLinkPreviewMode("always");
     expect(cardUrls(render({ streaming: true }))).toEqual([]);

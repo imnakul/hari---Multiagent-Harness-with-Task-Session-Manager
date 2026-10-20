@@ -329,7 +329,7 @@ function InlineLinkCard({ url }: { url: string }) {
       href={url}
       data-link-card={url}
       aria-label={title ? `${title} (${hostOf(url)})` : url}
-      className="group/card flex h-[5.5rem] w-full max-w-[520px] overflow-hidden rounded-lg border border-content/10 bg-content/[0.03] text-left font-sans no-underline transition-colors duration-150 hover:border-content/15 hover:bg-content/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="group/card flex min-h-[5.5rem] w-full max-w-[520px] overflow-hidden rounded-lg border border-content/10 bg-content/[0.03] text-left font-sans no-underline transition-colors duration-150 hover:border-content/15 hover:bg-content/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       onClick={(event) => {
         event.preventDefault();
         void openUrl(url).catch((error) => {
@@ -347,20 +347,22 @@ function InlineLinkCard({ url }: { url: string }) {
               {title || hostOf(url)}
             </span>
             {description ? (
-              <span className="line-clamp-2 text-xs leading-snug text-content/60">
+              <span className="line-clamp-3 text-xs leading-snug text-content/60">
                 {description}
               </span>
             ) : null}
           </>
         )}
       </span>
+      {/* The card grows with its text (site, title, up to three lines); the
+          image column stretches to match instead of fixing the height. */}
       {metadata?.imageDataUrl ? (
         <PreviewImage
           src={metadata.imageDataUrl}
-          className="h-full w-32 rounded-none border-l border-content/10"
+          className="w-32 self-stretch rounded-none border-l border-content/10"
         />
       ) : state.status === "loading" ? (
-        <span className="block h-full w-32 shrink-0 animate-pulse border-l border-content/10 bg-content/[0.06] motion-reduce:animate-none" />
+        <span className="block w-32 shrink-0 self-stretch animate-pulse border-l border-content/10 bg-content/[0.06] motion-reduce:animate-none" />
       ) : null}
     </a>
   );

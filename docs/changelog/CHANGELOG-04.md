@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 19:30 IST — Link preview cards no longer cut their text (L-119)
+- Type: fix
+- What: With Link previews set to Always, the cards under a reply were a fixed height, so the description was cut off part-way through its second line. Cards now grow to fit the site name, title and up to three lines of description, and the preview image grows with them.
+- Why: The preview text could not be read.
+- Files: [ChatHoverPreviews.tsx](../../src/features/sessions/ui/ChatHoverPreviews.tsx) (`InlineLinkCard`); [AgentMarkdownLinkPreviews.test.ts](../../src/features/sessions/ui/AgentMarkdownLinkPreviews.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (link preview tests) build ✅; desktop check manual
 ## 2026-10-20 19:25 IST — Project slots look like the Theme switch (L-132)
 - Type: style
 - What: With two or more project slots, they now sit in a bordered switch like Settings → Theme (System / Dark / Light). The current slot has the selected pill, which glides when you switch, and a soft highlight follows the pointer across slots. Other slots are wider, so more of their names show. The + stays outside the switch.
