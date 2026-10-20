@@ -30,6 +30,7 @@ export function useIdleSessionDetach({
   liveAgentsEnabled,
   remoteControlDesired,
   unseenFinishedIds,
+  shownSessionIds,
   openingSessionIds,
   loadedSessionCache,
   skipForgetSessionIds,
@@ -44,6 +45,12 @@ export function useIdleSessionDetach({
   liveAgentsEnabled: boolean;
   remoteControlDesired: ReadonlySet<string>;
   unseenFinishedIds: ReadonlySet<string>;
+  /**
+   * Sessions on screen outside workspace tabs (fork, L-135: Focus mode's
+   * grid). They count as visible, so a new chat started there, which has no
+   * tab and is not saved until its first message, is not discarded.
+   */
+  shownSessionIds?: ReadonlySet<string>;
   openingSessionIds: RefObject<Set<string>>;
   loadedSessionCache: RefObject<Map<string, Session>>;
   skipForgetSessionIds: RefObject<Set<string>>;
@@ -56,11 +63,13 @@ export function useIdleSessionDetach({
     orchestrationRuns,
     liveAgentsEnabled,
     remoteControlDesired,
+    shownSessionIds,
   });
   detachInputs.current = {
     orchestrationRuns,
     liveAgentsEnabled,
     remoteControlDesired,
+    shownSessionIds,
   };
   const unseenFinishedRef = useRef(unseenFinishedIds);
   unseenFinishedRef.current = unseenFinishedIds;
@@ -68,11 +77,16 @@ export function useIdleSessionDetach({
   const detachIdleSessions = useCallback(() => {
     detachTimer.current = null;
     const sessions = sessionsRef.current;
-    const { orchestrationRuns, liveAgentsEnabled, remoteControlDesired } =
-      detachInputs.current;
-    const visibleIds = new Set(
-      tabsRef.current.flatMap((tab) => leafIds(tab.layout)),
-    );
+    const {
+      orchestrationRuns,
+      liveAgentsEnabled,
+      remoteControlDesired,
+      shownSessionIds,
+    } = detachInputs.current;
+    const visibleIds = new Set([
+      ...tabsRef.current.flatMap((tab) => leafIds(tab.layout)),
+      ...(shownSessionIds ?? []),
+    ]);
     // Inbox and resident agents own panes independently of project tabs. Keep
     // their drafts and attachments mounted when the user switches views.
     for (const session of sessions) {
@@ -164,6 +178,7 @@ export function useIdleSessionDetach({
     liveAgentsEnabled,
     remoteControlDesired,
     orchestrationRuns,
+    shownSessionIds,
     detachIdleSessions,
   ]);
 

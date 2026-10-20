@@ -1486,6 +1486,11 @@ function Workspace({
       : focusGridIds(focusGrid)[0];
   const focusPaneIdRef = useRef(focusPaneId);
   focusPaneIdRef.current = focusPaneId;
+  /** Focus grid chats stay mounted though no workspace tab holds them. */
+  const focusShownIds = useMemo(
+    () => new Set(focusMode ? focusGridIds(focusGrid) : []),
+    [focusGrid, focusMode],
+  );
   /** Columns the Focus view has room for, as it last measured. */
   const focusColumnCapRef = useRef(FOCUS_GRID_MAX_COLUMNS);
   /** Tab id -> project name, kept in sync with the rendered title tabs. */
@@ -3118,6 +3123,7 @@ function Workspace({
     liveAgentsEnabled,
     remoteControlDesired,
     unseenFinishedIds,
+    shownSessionIds: focusShownIds,
     openingSessionIds,
     loadedSessionCache,
     skipForgetSessionIds,

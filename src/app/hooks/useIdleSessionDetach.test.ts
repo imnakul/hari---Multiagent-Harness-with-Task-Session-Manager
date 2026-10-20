@@ -119,6 +119,7 @@ type WorkspaceState = {
   activeSessionId: string;
   liveAgentsEnabled: boolean;
   remoteControlDesired: ReadonlySet<string>;
+  shownSessionIds?: ReadonlySet<string>;
 };
 
 function mountWorkspace(initial: Partial<WorkspaceState> = {}) {
@@ -561,4 +562,28 @@ describe("orchestration worker detachment", () => {
     expect(workspace.persistSession).not.toHaveBeenCalled();
     expect(mocks.forgetHarnessSession).not.toHaveBeenCalled();
   });
+});
+
+it("keeps a new chat shown in Focus mode though no tab holds it", async () => {
+  // L-135: Focus's New makes a blank chat that lives only in the Focus grid.
+  const blank: Session = { ...newSession("claude", "/repo"), id: "focus-new" };
+  const workspace = mountWorkspace({
+    sessions: [chat("other"), blank],
+    tabs: [newTab("other")],
+    orchestrationRuns: [],
+    busySessionIds: new Set(),
+    shownSessionIds: new Set(["focus-new"]),
+  });
+  await advance();
+  expect(workspace.snapshot().sessions.map((session) => session.id)).toEqual([
+    "other",
+    "focus-new",
+  ]);
+  expect(mocks.forgetHarnessSession).not.toHaveBeenCalled();
+
+  workspace.update({ shownSessionIds: new Set() });
+  await advance();
+  expect(workspace.snapshot().sessions.map((session) => session.id)).toEqual([
+    "other",
+  ]);
 });

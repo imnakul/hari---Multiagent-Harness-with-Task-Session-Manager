@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 21:38 IST — Focus mode's New chat no longer vanishes (L-135)
+- Type: fix
+- What: In Focus mode, New made a chat that showed for a moment and then disappeared, leaving the first chat focused. The app was clearing away chats that no tab holds, and a new chat in Focus has no tab yet. Chats in the Focus grid now count as open.
+- Why: User report: adding a new session in Focus mode did not work.
+- Files: [useIdleSessionDetach.ts](../../src/app/hooks/useIdleSessionDetach.ts) (`shownSessionIds`); [App.tsx](../../src/app/App.tsx) (`focusShownIds`); [useIdleSessionDetach.test.ts](../../src/app/hooks/useIdleSessionDetach.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (src/app + focus: 499 passed; new test fails without the fix) build —; desktop check manual
 ## 2026-10-20 20:56 IST — 0.16.0-local3 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local3: 0.16.0-local2 plus L-132 project slots in the new layout, the L-119 link card height fix, L-133 Interactive sends that work while Claude's status line animates, and L-134 pasted images shown at once with a loader.
