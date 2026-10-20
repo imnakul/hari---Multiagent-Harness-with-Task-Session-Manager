@@ -25,6 +25,7 @@ const ACCENT_COLOR_KEY = "monocode.accentColor";
 const THEME_HUE_KEY = "monocode.themeHue";
 const THEME_SATURATION_KEY = "monocode.themeSaturation";
 const THEME_DARK_LIGHTNESS_KEY = "monocode.themeDarkLightness";
+const THEME_LIGHT_LIGHTNESS_KEY = "monocode.themeLightLightness";
 const OPACITY_KEY = "monocode.sidebarOpacity";
 const BLUR_KEY = "monocode.sidebarBlur";
 const PROJECT_RAIL_OPEN_KEY = "monocode.projectRailOpen";
@@ -255,6 +256,10 @@ export const THEME_DARK_LIGHTNESS_MIN = 0;
 export const THEME_DARK_LIGHTNESS_MAX = 30;
 export const THEME_DARK_LIGHTNESS_DEFAULT = 9;
 
+export const THEME_LIGHT_LIGHTNESS_MIN = 70;
+export const THEME_LIGHT_LIGHTNESS_MAX = 100;
+export const THEME_LIGHT_LIGHTNESS_DEFAULT = 97;
+
 export const SIDEBAR_OPACITY_MIN = 0.15;
 export const SIDEBAR_OPACITY_MAX = 1;
 export const SIDEBAR_OPACITY_DEFAULT = 0.72;
@@ -459,6 +464,43 @@ export function applyThemeDarkLightness(value: number) {
   document.documentElement.style.setProperty(
     "--theme-dark-lightness",
     `${insetLayoutApplied() ? THEME_DARK_LIGHTNESS_DEFAULT : next}%`,
+  );
+  refreshNativeTint();
+  return next;
+}
+
+export function loadThemeLightLightness(): number {
+  return Math.round(
+    clamp(
+      readNumber(THEME_LIGHT_LIGHTNESS_KEY) ?? THEME_LIGHT_LIGHTNESS_DEFAULT,
+      THEME_LIGHT_LIGHTNESS_MIN,
+      THEME_LIGHT_LIGHTNESS_MAX,
+    ),
+  );
+}
+
+export function saveThemeLightLightness(value: number) {
+  writeNumber(
+    THEME_LIGHT_LIGHTNESS_KEY,
+    Math.round(
+      clamp(value, THEME_LIGHT_LIGHTNESS_MIN, THEME_LIGHT_LIGHTNESS_MAX),
+    ),
+  );
+}
+
+/**
+ * Fork (L-139): the light theme's base brightness, which the Lightness slider
+ * sets while light mode is on. Lower values grey the white surfaces, so a
+ * wallpaper shows through less harshly. Stored apart from the dark value, so
+ * each theme keeps its own.
+ */
+export function applyThemeLightLightness(value: number) {
+  const next = Math.round(
+    clamp(value, THEME_LIGHT_LIGHTNESS_MIN, THEME_LIGHT_LIGHTNESS_MAX),
+  );
+  document.documentElement.style.setProperty(
+    "--theme-light-lightness",
+    `${insetLayoutApplied() ? THEME_LIGHT_LIGHTNESS_DEFAULT : next}%`,
   );
   refreshNativeTint();
   return next;
@@ -1247,6 +1289,7 @@ const THEME_KEYS = new Set([
   THEME_HUE_KEY,
   THEME_SATURATION_KEY,
   THEME_DARK_LIGHTNESS_KEY,
+  THEME_LIGHT_LIGHTNESS_KEY,
   SCHEME_KEY,
 ]);
 
@@ -1254,6 +1297,7 @@ function applyStoredTheme() {
   applyAccentColor(loadAccentColor());
   applyThemeTint(loadThemeHue(), loadThemeSaturation());
   applyThemeDarkLightness(loadThemeDarkLightness());
+  applyThemeLightLightness(loadThemeLightLightness());
   applyWorkspaceTheme(loadWorkspaceTheme());
   applyThemePreference(loadThemePreference());
 }
@@ -1569,6 +1613,7 @@ export function applyInsetLayout(value: boolean) {
   applySidebarBlur(loadSidebarBlur());
   applyThemeTint(loadThemeHue(), loadThemeSaturation());
   applyThemeDarkLightness(loadThemeDarkLightness());
+  applyThemeLightLightness(loadThemeLightLightness());
   if (nativeGlassReady) syncNativeGlass(isLightScheme() ? "light" : "dark");
   return value;
 }

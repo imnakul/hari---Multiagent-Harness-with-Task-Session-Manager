@@ -33,3 +33,19 @@ describe("inset layout over a Windows wallpaper (L-126)", () => {
     expect(base.body).toContain("var(--inset-surface)");
   });
 });
+
+describe("light-mode lightness (L-139)", () => {
+  it("takes the light theme's base brightness from the Lightness slider", () => {
+    expect(ruleBody("html.theme-light").body).toContain(
+      "--background-lightness: var(--theme-light-lightness);",
+    );
+  });
+});
+
+describe("light-mode text over a wallpaper (L-142)", () => {
+  it("darkens text only in light mode with a wallpaper", () => {
+    expect(ruleBody("html.is-windows.has-app-wallpaper.theme-light").body).toContain(
+      "--content-lightness: 8%;",
+    );
+  });
+});

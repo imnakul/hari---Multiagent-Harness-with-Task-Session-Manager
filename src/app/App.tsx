@@ -14513,6 +14513,13 @@ function Workspace({
     setSettingsOpen(false);
   }, []);
 
+  // Fork (L-141): Focus mode hides the workspace that Settings draws in, so
+  // the header's Focus button closes Settings first.
+  const onFocusFromSettings = useCallback(() => {
+    onCloseSettings();
+    onToggleFocusMode();
+  }, [onCloseSettings, onToggleFocusMode]);
+
   const onSelectSettingsSection = useCallback((section: SettingsSectionId) => {
     setSettingsSection(section);
     saveSettingsSection(section);
@@ -15502,6 +15509,8 @@ function Workspace({
     insetLayout,
     projectCwd,
     focusMode,
+    // In Focus the dock follows the focused pane into its body.
+    focusMode ? focusPaneId : null,
   ]);
   useEffect(() => () => dockAnimation.current?.stop(), []);
 
@@ -16417,14 +16426,27 @@ function Workspace({
       }
       dock={projectDockHosts}
       dockGridRef={dockGridRef}
-      paneFocused={!projectTerminalFocused}
+      onOpenTasks={() => {
+        onToggleFocusMode();
+        onOpenTasks();
+      }}
+      onOpenAutomations={() => {
+        onToggleFocusMode();
+        onOpenAutomations();
+      }}
+      onOpenSettings={() => {
+        onToggleFocusMode();
+        onOpenSettings();
+      }}
       footer={usageFooter}
     />
   ) : null;
 
   return (
     <SessionStateContext.Provider value={sessionState}>
-    <FocusModeToggle.Provider value={settingsOpen ? undefined : onToggleFocusMode}>
+    <FocusModeToggle.Provider
+      value={settingsOpen ? onFocusFromSettings : onToggleFocusMode}
+    >
     <OrchestrationActions.Provider value={orchestrationActions}>
       <OrchestrationWorkers.Provider value={orchestrationWorkers}>
         <div

@@ -15,7 +15,15 @@ import { useTrafficLightsVisible } from "../../../platform/tauri/useTrafficLight
 import { setGrabbing, suppressTextSelection } from "../../../shared/lib/drag";
 import { projectName } from "../../../shared/lib/paths";
 import { ActivePaneRing } from "../../../shared/ui/ActivePaneRing";
-import { Focus, FolderTree, GripVertical, X } from "../../../shared/ui/icons";
+import {
+  CheckCircle,
+  Focus,
+  FolderTree,
+  GripVertical,
+  Settings,
+  X,
+  Zap,
+} from "../../../shared/ui/icons";
 import type { RecentProject } from "../../projects/model/recents";
 import {
   ProjectIcon,
@@ -24,7 +32,10 @@ import {
 } from "../../projects/ui/ProjectMark";
 import type { BoardCard } from "../../session-board/sessionBoard";
 import { BoardCardTag } from "../../session-board/ui/BoardSessionCard";
-import { sessionDisplayTitle, type Session } from "../../sessions/model/session";
+import {
+  sessionDisplayTitle,
+  type Session,
+} from "../../sessions/model/session";
 import {
   focusColumnCap,
   focusGridHas,
@@ -48,7 +59,11 @@ import {
   FocusSearchList,
   type FocusPickItem,
 } from "./FocusPicker";
-import { FOCUS_NEW_OPTIONS, FocusMoreButton, FocusNewButton } from "./FocusTopBar";
+import {
+  FOCUS_NEW_OPTIONS,
+  FocusMoreButton,
+  FocusNewButton,
+} from "./FocusTopBar";
 
 const DRAG_THRESHOLD = 4;
 /** Within this share of a pane's edge a drop goes beside it; else it swaps. */
@@ -76,18 +91,24 @@ type Props = {
   onOpenChat: (sessionId: string) => void;
   onImport?: () => void;
   /**
-   * App's project terminal docks. They share a grid with the panes, which App
-   * lays out through `dockGridRef` as it does in the workspace (L-136).
+   * App's project terminal docks. They open inside the focused pane, whose
+   * body App lays out through `dockGridRef` as it does the workspace (L-136).
    */
   dock?: ReactNode;
   dockGridRef?: Ref<HTMLDivElement>;
-  /** False while the keyboard is in the terminal dock: no pane outline. */
-  paneFocused?: boolean;
+  /** Title-bar shortcuts; each leaves Focus (its grid is kept) for that view. */
+  onOpenTasks?: () => void;
+  onOpenAutomations?: () => void;
+  onOpenSettings?: () => void;
   footer?: ReactNode;
 };
 
-function paneTitle(session: Session | undefined, card: BoardCard | undefined): string {
-  if (session) return sessionDisplayTitle(session.title, session.harness) || "New session";
+function paneTitle(
+  session: Session | undefined,
+  card: BoardCard | undefined,
+): string {
+  if (session)
+    return sessionDisplayTitle(session.title, session.harness) || "New session";
   return card?.title || "Chat";
 }
 
@@ -117,7 +138,9 @@ export function FocusView({
   onImport,
   dock,
   dockGridRef,
-  paneFocused = true,
+  onOpenTasks,
+  onOpenAutomations,
+  onOpenSettings,
   footer,
 }: Props): ReactNode {
   const marks = useProjectMarks();
@@ -205,8 +228,10 @@ export function FocusView({
   const showProject = (key: string) => {
     const group = groups.find((entry) => entry.key === key);
     if (!group) return;
-    const visible = visibleFocusGrid(projectFocusGrid(grid, group), cap)
-      .columns.flat();
+    const visible = visibleFocusGrid(
+      projectFocusGrid(grid, group),
+      cap,
+    ).columns.flat();
     const remembered = lastFocused.current.get(key);
     const target =
       remembered && visible.includes(remembered) ? remembered : visible[0];
@@ -294,7 +319,8 @@ export function FocusView({
     edge: FocusDropEdge,
   ): FocusGrid | null => {
     const current = gridRef.current;
-    if (!groupedRef.current) return moveInFocusGrid(current, fromId, overId, edge);
+    if (!groupedRef.current)
+      return moveInFocusGrid(current, fromId, overId, edge);
     return fromId !== overId &&
       focusGridHas(current, fromId) &&
       focusGridHas(current, overId)
@@ -304,7 +330,8 @@ export function FocusView({
 
   const startDrag = (fromId: string, event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest("button")) return;
+    if (event.target instanceof Element && event.target.closest("button"))
+      return;
     const handle = event.currentTarget;
     const pointerId = event.pointerId;
     const startX = event.clientX;
@@ -316,7 +343,9 @@ export function FocusView({
 
     const onMove = (ev: PointerEvent) => {
       if (!active) {
-        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD)
+        if (
+          Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD
+        )
           return;
         active = true;
         restoreSelection = suppressTextSelection();
@@ -362,7 +391,12 @@ export function FocusView({
     window.addEventListener("keydown", onKey, true);
   };
 
-  const outlined = paneFocused && shown.columns.flat().length > 1;
+  const outlined = shown.columns.flat().length > 1;
+  // The dock opens inside the focused pane; with that pane hidden (another
+  // project's tab, or "+N more") it falls back to the whole pane region.
+  const dockInPane = shown.columns.some((column) =>
+    column.includes(focusedId ?? ""),
+  );
   const panes = shown.columns.flatMap((column, columnIndex) =>
     column.map((id, rowIndex) => {
       const session = byId.get(id);
@@ -435,22 +469,37 @@ export function FocusView({
               <X aria-hidden className="size-3.5" strokeWidth={1.75} />
             </button>
           </header>
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            {session ? (
-              renderPane(session)
-            ) : (
-              <div
-                aria-busy="true"
-                aria-label="Loading chat"
-                className="flex flex-1 flex-col gap-3 p-4"
-              >
-                <div className="h-3 w-2/3 animate-pulse rounded bg-content/8" />
-                <div className="h-3 w-1/2 animate-pulse rounded bg-content/8" />
-              </div>
-            )}
+          {/* Every pane keeps this wrapper, so moving the dock between panes
+              never remounts a transcript; App lays out the focused one. */}
+          <div
+            ref={focused && dockInPane ? dockGridRef : undefined}
+            className={`min-h-0 min-w-0 flex-1 ${
+              focused && dockInPane ? "grid" : "flex flex-col"
+            }`}
+          >
+            {focused && dockInPane ? dock : null}
+            <div
+              className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+              style={{ gridArea: "main" }}
+            >
+              {session ? (
+                renderPane(session)
+              ) : (
+                <div
+                  aria-busy="true"
+                  aria-label="Loading chat"
+                  className="flex flex-1 flex-col gap-3 p-4"
+                >
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-content/8" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-content/8" />
+                </div>
+              )}
+            </div>
           </div>
           <ActivePaneRing shown={focused && outlined} />
-          {drag && drag.overId === id ? <FocusDropHint edge={drag.edge} /> : null}
+          {drag && drag.overId === id ? (
+            <FocusDropHint edge={drag.edge} />
+          ) : null}
         </section>
       );
     }),
@@ -473,6 +522,24 @@ export function FocusView({
           >
             <Focus className="size-3.5" strokeWidth={1.75} />
           </IconButton>
+          {onOpenTasks ? (
+            <IconButton label="Task Manager" onClick={onOpenTasks}>
+              <CheckCircle className="size-3.5" strokeWidth={1.75} />
+            </IconButton>
+          ) : null}
+          {onOpenAutomations ? (
+            <IconButton label="Automations" onClick={onOpenAutomations}>
+              <Zap className="size-3.5" strokeWidth={1.75} />
+            </IconButton>
+          ) : null}
+          {onOpenSettings ? (
+            <IconButton label="Settings" onClick={onOpenSettings}>
+              <Settings className="size-3.5" strokeWidth={1.75} />
+            </IconButton>
+          ) : null}
+          {empty ? null : (
+            <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-stroke" />
+          )}
           {empty ? null : (
             <FocusNewButton onNewChat={onNewChat} {...newActions} />
           )}
@@ -519,8 +586,11 @@ export function FocusView({
           />
         </>
       ) : null}
-      <div ref={dockGridRef} className="grid min-h-0 min-w-0 flex-1">
-        {dock}
+      <div
+        ref={dockInPane ? undefined : dockGridRef}
+        className={`min-h-0 min-w-0 flex-1 ${dockInPane ? "flex" : "grid"}`}
+      >
+        {dockInPane ? null : dock}
         <main
           ref={main}
           id={gridRegionId}
@@ -532,7 +602,7 @@ export function FocusView({
                 : "Other"
               : undefined
           }
-          className="relative flex min-h-0 min-w-0"
+          className="relative flex min-h-0 min-w-0 flex-1"
           style={{ gridArea: "main" }}
         >
           {empty ? (
@@ -578,7 +648,9 @@ function FocusDropHint({ edge }: { edge: FocusDropEdge }): ReactNode {
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
       <div className={`absolute bg-accent/15 ${wash}`} />
-      <div className={`absolute ${edge === "center" ? line : `bg-accent ${line}`}`} />
+      <div
+        className={`absolute ${edge === "center" ? line : `bg-accent ${line}`}`}
+      />
     </div>
   );
 }

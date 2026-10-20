@@ -90,6 +90,7 @@ import {
   applySidebarBlur,
   applySidebarOpacity,
   applyThemeDarkLightness,
+  applyThemeLightLightness,
   applyThemeTint,
   applyWorkspaceTheme,
   BODY_GLASS_DEFAULT,
@@ -154,6 +155,7 @@ import {
   loadSidebarBlur,
   loadSidebarOpacity,
   loadThemeHue,
+  loadThemeLightLightness,
   loadThemeSaturation,
   loadWorkspaceTheme,
   loadTranscriptLayout,
@@ -181,6 +183,7 @@ import {
   saveDiffPalette,
   setNewThreadBackgroundEffect,
   saveThemeDarkLightness,
+  saveThemeLightLightness,
   saveThemePreference,
   saveSidebarBlur,
   saveSidebarOpacity,
@@ -207,6 +210,9 @@ import {
   THEME_HUE_DEFAULT,
   THEME_HUE_MAX,
   THEME_HUE_MIN,
+  THEME_LIGHT_LIGHTNESS_DEFAULT,
+  THEME_LIGHT_LIGHTNESS_MAX,
+  THEME_LIGHT_LIGHTNESS_MIN,
   THEME_SATURATION_DEFAULT,
   THEME_SATURATION_MAX,
   THEME_SATURATION_MIN,
@@ -2624,6 +2630,9 @@ function useAppearanceSettings(
   const [themeDarkLightness, setThemeDarkLightness] = useState(
     loadThemeDarkLightness,
   );
+  const [themeLightLightness, setThemeLightLightness] = useState(
+    loadThemeLightLightness,
+  );
   const [bodyGlass, setBodyGlass] = useState(loadBodyGlass);
   const [popoverSurfaceOpacity, setPopoverSurfaceOpacity] = useState(
     loadPopoverSurfaceOpacity,
@@ -2758,6 +2767,12 @@ function useAppearanceSettings(
     const next = applyThemeDarkLightness(value);
     saveThemeDarkLightness(next);
     setThemeDarkLightness(next);
+  }, []);
+
+  const onLightLightness = useCallback((value: number) => {
+    const next = applyThemeLightLightness(value);
+    saveThemeLightLightness(next);
+    setThemeLightLightness(next);
   }, []);
 
   const onBodyGlass = useCallback((next: boolean) => {
@@ -3012,6 +3027,7 @@ function useAppearanceSettings(
     onBlur(SIDEBAR_BLUR_DEFAULT);
     onTint(THEME_HUE_DEFAULT, THEME_SATURATION_DEFAULT);
     onDarkLightness(THEME_DARK_LIGHTNESS_DEFAULT);
+    onLightLightness(THEME_LIGHT_LIGHTNESS_DEFAULT);
     onBodyGlass(BODY_GLASS_DEFAULT);
     onPopoverSurfaceOpacity(POPOVER_SURFACE_OPACITY_DEFAULT);
     onPopoverBlur(POPOVER_BLUR_DEFAULT);
@@ -3066,6 +3082,7 @@ function useAppearanceSettings(
     onUiFont,
     onUiFontSize,
     onDarkLightness,
+    onLightLightness,
     onUiScale,
     onCollapsedProjectRailMode,
   ]);
@@ -3083,6 +3100,7 @@ function useAppearanceSettings(
     themeHue,
     themeSaturation,
     themeDarkLightness,
+    themeLightLightness,
     bodyGlass,
     popoverSurfaceOpacity,
     popoverBlur,
@@ -3117,6 +3135,7 @@ function useAppearanceSettings(
     onBlur,
     onTint,
     onDarkLightness,
+    onLightLightness,
     onBodyGlass,
     onPopoverSurfaceOpacity,
     onPopoverBlur,
@@ -3310,7 +3329,7 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
       {inset ? null : (
       <Group
         title="Color"
-        description="Hue and saturation tint every surface. Lightness only moves the dark theme."
+        description="Hue and saturation tint every surface. Lightness moves the theme you are in; each keeps its own value."
       >
         <Row
           id="hue"
@@ -3344,22 +3363,32 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
         </Row>
         <Row
           id="dark-lightness"
-          label="Dark-mode lightness"
+          label={glassDisabled ? "Light-mode lightness" : "Dark-mode lightness"}
           description={
             glassDisabled
-              ? "This only affects dark mode. Your dark-mode value is preserved."
+              ? "Base brightness of the light theme. Lower values soften the white, so a wallpaper is easier on the eyes. Your dark-mode value is kept."
               : "Base brightness of the dark theme. Lower values are darker; zero is true black."
           }
         >
-          <Slider
-            label="Dark-mode lightness"
-            value={appearance.themeDarkLightness}
-            display={`${appearance.themeDarkLightness}%`}
-            min={THEME_DARK_LIGHTNESS_MIN}
-            max={THEME_DARK_LIGHTNESS_MAX}
-            onChange={appearance.onDarkLightness}
-            disabled={glassDisabled}
-          />
+          {glassDisabled ? (
+            <Slider
+              label="Light-mode lightness"
+              value={appearance.themeLightLightness}
+              display={`${appearance.themeLightLightness}%`}
+              min={THEME_LIGHT_LIGHTNESS_MIN}
+              max={THEME_LIGHT_LIGHTNESS_MAX}
+              onChange={appearance.onLightLightness}
+            />
+          ) : (
+            <Slider
+              label="Dark-mode lightness"
+              value={appearance.themeDarkLightness}
+              display={`${appearance.themeDarkLightness}%`}
+              min={THEME_DARK_LIGHTNESS_MIN}
+              max={THEME_DARK_LIGHTNESS_MAX}
+              onChange={appearance.onDarkLightness}
+            />
+          )}
         </Row>
       </Group>
       )}

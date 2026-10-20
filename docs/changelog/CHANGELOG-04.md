@@ -1,4 +1,32 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 01:46 IST — Darker text in light mode over a wallpaper (L-142)
+- Type: fix
+- What: In light mode with a Windows wallpaper, text is darker, including grey labels and descriptions. A frosted panel behind Settings and the chat was tried and removed before any commit, at the user's request.
+- Why: User feedback: even at the lowest light-mode lightness, the white wash over the wallpaper left grey text hard to read.
+- Files: [index.css](../../src/styles/index.css) (`html.is-windows.has-app-wallpaper.theme-light`); [insetWallpaper.test.ts](../../src/styles/insetWallpaper.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (styles, sessions, settings: 2,387 passed) build —; desktop check manual
+## 2026-10-21 01:31 IST — Lightness slider works in light mode; Focus header order; top-left Focus button in Settings (L-139, L-141)
+- Type: feature
+- What: Removed the Light-mode frost slider. Instead, the Lightness slider under Settings → Appearance → Color now also works in light mode, where lower values soften the white; light and dark each keep their own value. Focus mode's header now reads Focus, Task Manager, Automations, Settings, then a gap, then New and Group by project. Settings now shows the Focus button at the top left, as other views do; it closes Settings and opens Focus mode.
+- Why: User feedback: use the existing lightness control instead of a new one, and the button order shown in a screenshot.
+- Files: [appearance.ts](../../src/features/settings/model/appearance.ts) (`applyThemeLightLightness`); [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx) (`dark-lightness` row); [focusModeToggle.ts](../../src/app/shell/focusModeToggle.ts); [settings.ts](../../src/features/settings/model/settings.ts); [index.css](../../src/styles/index.css) (`--theme-light-lightness`); [floatingMain.tsx](../../src/features/monos/floatingMain.tsx); [main.tsx](../../src/features/quick-composer/main.tsx); [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx); [App.tsx](../../src/app/App.tsx); [insetWallpaper.test.ts](../../src/styles/insetWallpaper.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (settings, focus, app, styles, skills, monos, quick composer: 1,441 passed; new CSS test fails without the fix) build —; desktop check manual
+## 2026-10-21 01:02 IST — Skill send fix, Light-mode frost, sidebar session cards, Focus shortcuts (L-138–L-141)
+- Type: feature + fix
+- What: An Interactive message using a skill saved with Windows line endings failed before any terminal opened; the skill text is now cleaned first. Light theme over a Windows wallpaper gets a Light-mode frost slider in Settings → Appearance, with a glass edge and sheen (replaced at 01:31 before any commit, see above). In the new layout, each sidebar session shows its branch and model under the title, as a card. Focus mode's title bar has Task Manager, Automations and Settings buttons.
+- Why: User report (send failed with no terminal) and three requests with screenshots.
+- Files: [skills.ts](../../src/features/skills/model/skills.ts) (`readSkillBody`); [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts); [appearance.ts](../../src/features/settings/model/appearance.ts); [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx); [settings.ts](../../src/features/settings/model/settings.ts); [index.css](../../src/styles/index.css); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (`SessionCard`); [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx); [App.tsx](../../src/app/App.tsx); tests in skillCatalog.test.ts, insetWallpaper.test.ts, SidebarRename.test.ts
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (1,398 passed, 2 skipped, plus the new sidebar test) build —; desktop check manual
+## 2026-10-21 00:39 IST — Focus terminal opens inside its chat card; pane outline uses your accent (L-136, L-137)
+- Type: fix
+- What: In Focus mode the project terminal now opens inside the focused chat's card instead of under every card. The focused pane's outline now uses your chosen accent colour, with a faint inner glow.
+- Why: User request (screenshot): the outline showed the theme blue, and the terminal spanned all cards.
+- Files: [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx) (`dockInPane`); [App.tsx](../../src/app/App.tsx) (dock layout effect deps); [ActivePaneRing.tsx](../../src/shared/ui/ActivePaneRing.tsx); [index.css](../../src/styles/index.css) (`.active-pane-ring`); [FocusView.test.ts](../../src/features/focus/ui/FocusView.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (focus, workspace, app: 855 passed) build —; desktop check manual
 ## 2026-10-20 22:59 IST — 0.16.0-local4 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local4: 0.16.0-local3 plus L-135 (a new chat in Focus mode stays open), L-136 (Focus mode's Terminal button opens the focused chat's project terminal, and the usage footer follows the focused pane) and L-137 (an accent outline on the focused pane).

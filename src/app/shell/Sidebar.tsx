@@ -3090,7 +3090,7 @@ function SidebarComponent({
                 <ul
                   data-session-list
                   className={`flex flex-col pb-10 ${
-                    inset ? "gap-px px-2 pt-1" : "gap-0.5 p-1.5"
+                    inset ? "gap-0.5 px-2 pt-1" : "gap-0.5 p-1.5"
                   }`}
                 >
                   {groupedSessionListEntries.map((group) => {
@@ -5564,8 +5564,11 @@ export const SessionCard = memo(function SessionCard({
   // the bottom.
   // Dense rows match the project rail's 32px rows.
   // Dense rows hang their agents on a rail below the card instead.
+  // Fork (L-140): top-level dense rows are cards with branch and model lines.
   const cardPaddingY = dense
-    ? "py-[3px]"
+    ? nested
+      ? "py-[3px]"
+      : "py-1.5"
     : orchestrationExpanded
       ? compact
         ? "pb-2.5 pt-1.5"
@@ -5779,6 +5782,41 @@ export const SessionCard = memo(function SessionCard({
                     )}
                   </span>
                 </span>
+              </span>
+            ) : null}
+            {/* Fork (L-140): the branch and model sit under the title, lined
+                up with it, so an inset row reads as a card. */}
+            {dense && !nested && (gitLabel || project || model) ? (
+              <span
+                data-session-card-meta
+                className="flex min-w-0 flex-col gap-0.5 pb-0.5 pl-6 text-[11px] leading-4 text-content/45"
+              >
+                {gitLabel || project ? (
+                  <span
+                    className="flex min-w-0 items-center gap-1"
+                    title={
+                      gitLabel
+                        ? session.worktreeCwd
+                          ? `${gitLabel}\n${session.worktreeCwd}`
+                          : gitLabel
+                        : session.cwd
+                    }
+                  >
+                    {gitLabel ? (
+                      <GitBranch className="size-3 shrink-0" strokeWidth={1.75} />
+                    ) : (
+                      <Folder className="size-3 shrink-0" strokeWidth={1.75} />
+                    )}
+                    <span className="min-w-0 truncate">
+                      {project && gitLabel
+                        ? `${project} · ${gitLabel}`
+                        : gitLabel || project}
+                    </span>
+                  </span>
+                ) : null}
+                {model ? (
+                  <span className="min-w-0 truncate">{model}</span>
+                ) : null}
               </span>
             ) : null}
             {!dense && headerRow ? (

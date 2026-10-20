@@ -374,7 +374,8 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     id: "dark-lightness",
     section: "appearance",
     label: "Dark-mode lightness",
-    keywords: "black brightness contrast background",
+    keywords:
+      "black brightness contrast background light-mode lightness white overlay",
   },
   {
     id: "inset-glass",

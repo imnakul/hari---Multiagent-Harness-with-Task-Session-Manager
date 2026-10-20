@@ -224,6 +224,7 @@ html.popover-highlight-invert
   --theme-hue: 240;
   --theme-saturation: 0%;
   --theme-dark-lightness: 9%;
+  --theme-light-lightness: 97%;
   --sidebar-opacity: 0.85;
   --chat-background-opacity: 0.24;
   --window-background-opacity: 0.4;
@@ -325,7 +326,7 @@ html {
 }
 
 html.theme-light {
-  --background-lightness: 97%;
+  --background-lightness: var(--theme-light-lightness);
   --content-lightness: 18%;
   --link-color: hsl(211 92% 40%);
   --color-skill: #a07c10;
@@ -849,6 +850,13 @@ html.is-windows.has-app-wallpaper .inset-card {
     transparent
   );
   box-shadow: none;
+}
+
+/* Fork (L-142): in light mode a pale base washes the wallpaper toward white,
+   and the default text loses contrast on the mid-tone picture behind it, so
+   text (and secondary text, drawn as content at reduced opacity) runs darker. */
+html.is-windows.has-app-wallpaper.theme-light {
+  --content-lightness: 8%;
 }
 
 /* A collapsed sidebar peeking out blurs the workspace under a faint wash,
@@ -1876,6 +1884,16 @@ html.theme-light .orchestrator-constellation {
       transparent
     );
   outline-offset: 1px;
+}
+
+/* Focused pane outline (L-137): the user accent, with a faint inner glow.
+   Static; ActivePaneRing only fades its opacity. */
+.active-pane-ring {
+  box-shadow:
+    inset 0 0 0 1px
+      color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 75%, transparent),
+    inset 0 0 16px -6px
+      color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 35%, transparent);
 }
 
 /* Chat links follow the accent (the user accent when set, else the theme accent). */

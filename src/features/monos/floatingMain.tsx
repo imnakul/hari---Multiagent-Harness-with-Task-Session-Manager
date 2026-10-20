@@ -8,6 +8,7 @@ import {
   applySidebarBlur,
   applySidebarOpacity,
   applyThemeDarkLightness,
+  applyThemeLightLightness,
   applyThemePreference,
   applyThemeTint,
   loadAccentColor,
@@ -15,6 +16,7 @@ import {
   loadSidebarBlur,
   loadSidebarOpacity,
   loadThemeDarkLightness,
+  loadThemeLightLightness,
   loadThemeHue,
   loadThemePreference,
   loadThemeSaturation,
@@ -33,6 +35,7 @@ function applyFloatingAppearance() {
     loadThemeHue(),
     loadThemeSaturation(),
     loadThemeDarkLightness(),
+    loadThemeLightLightness(),
     loadThemePreference(),
     loadSidebarOpacity(),
     loadSidebarBlur(),
@@ -44,6 +47,7 @@ function applyFloatingAppearance() {
   applyAccentColor(loadAccentColor());
   applyThemeTint(loadThemeHue(), loadThemeSaturation());
   applyThemeDarkLightness(loadThemeDarkLightness());
+  applyThemeLightLightness(loadThemeLightLightness());
   applySidebarOpacity(loadSidebarOpacity());
   applySidebarBlur(loadSidebarBlur());
   applyBodyGlass(loadBodyGlass());

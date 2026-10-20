@@ -6,6 +6,7 @@ import { installNativeContextMenuGuard } from "../../shared/lib/nativeContextMen
 import {
   applyAccentColor,
   applyThemeDarkLightness,
+  applyThemeLightLightness,
   applyThemePreference,
   applyThemeTint,
   applyUiFont,
@@ -14,6 +15,7 @@ import {
   applyWorkspaceTheme,
   loadAccentColor,
   loadThemeDarkLightness,
+  loadThemeLightLightness,
   loadThemeHue,
   loadThemePreference,
   loadThemeSaturation,
@@ -44,6 +46,7 @@ function applyAppearance() {
   applyAccentColor(loadAccentColor());
   applyThemeTint(loadThemeHue(), loadThemeSaturation());
   applyThemeDarkLightness(loadThemeDarkLightness());
+  applyThemeLightLightness(loadThemeLightLightness());
   applyWorkspaceTheme(loadWorkspaceTheme());
   applyUiFont(loadUiFont());
   applyUiFontSize(loadUiFontSize());

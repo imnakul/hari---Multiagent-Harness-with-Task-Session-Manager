@@ -22,9 +22,11 @@ const SESSIONS = [
 function render(
   groupByProject: boolean,
   focusedId = "b1",
-  extra: { dock?: ReactNode; paneFocused?: boolean } = {},
+  extra: { dock?: ReactNode } = {},
 ): string {
-  const store = new Map([["monocode.focusGroupByProject.v1", groupByProject ? "1" : "0"]]);
+  const store = new Map([
+    ["monocode.focusGroupByProject.v1", groupByProject ? "1" : "0"],
+  ]);
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => store.set(key, value),
@@ -58,7 +60,9 @@ describe("FocusView group by project (L-128)", () => {
     const html = render(false);
     expect(html).not.toContain('role="tablist"');
     expect(html.match(/data-pane-body=/g)).toHaveLength(3);
-    expect(html).toContain('aria-pressed="false" title="Group chats by project"');
+    expect(html).toContain(
+      'aria-pressed="false" title="Group chats by project"',
+    );
   });
 
   it("adds a project row and a chat row, and shows only the focused chat's project", () => {
@@ -75,29 +79,42 @@ describe("FocusView group by project (L-128)", () => {
     expect(html).toContain('data-pane-body="a2"');
     expect(html).not.toContain('data-pane-body="b1"');
     expect(html).toContain('role="tabpanel"');
-    expect(html).toContain('aria-pressed="true" title="Group chats by project"');
+    expect(html).toContain(
+      'aria-pressed="true" title="Group chats by project"',
+    );
   });
 });
 
 describe("FocusView terminal dock and active outline (L-136, L-137)", () => {
-  it("renders App's dock beside the panes, in the same grid", () => {
-    const html = render(false, "b1", {
-      dock: createElement("div", { "data-dock-shown": "" }, "dock"),
-    });
-    // The dock and the pane region are siblings, so App lays them out.
-    expect(html).toMatch(/<div class="grid[^"]*"><div data-dock-shown="">dock<\/div><main/);
-    expect(html).toContain('style="grid-area:main"');
+  it("opens App's dock inside the focused pane only", () => {
+    const dock = createElement("div", { "data-dock-shown": "" }, "dock");
+    const html = render(false, "b1", { dock });
+    expect(html.match(/data-dock-shown=/g)).toHaveLength(1);
+    const dockAt = html.indexOf("data-dock-shown");
+    expect(html.lastIndexOf("<section", dockAt)).toBe(
+      html.lastIndexOf('<section data-focus-pane="b1"', dockAt),
+    );
+    // The dock and the pane body are siblings in one grid, so App lays them out.
+    expect(html).toMatch(
+      /<div class="min-h-0 min-w-0 flex-1 grid"><div data-dock-shown="">dock<\/div><div class="[^"]*" style="grid-area:main"><p data-pane-body="b1">/,
+    );
   });
 
-  it("outlines only the focused pane, and none while the dock has the keyboard", () => {
+  it("falls back to the pane region when the focused chat is hidden", () => {
+    const dock = createElement("div", { "data-dock-shown": "" }, "dock");
+    // A focused chat outside the shown grid, as in "+N more".
+    const html = render(false, "zz", { dock });
+    expect(html).toMatch(
+      /<div class="min-h-0 min-w-0 flex-1 grid"><div data-dock-shown="">dock<\/div><main/,
+    );
+  });
+
+  it("outlines only the focused pane", () => {
     const focused = render(false, "b1");
     expect(focused.match(/data-active-pane-ring=""/g)).toHaveLength(1);
     const ringAt = focused.indexOf('data-active-pane-ring=""');
     expect(focused.lastIndexOf('data-focus-pane="b1"', ringAt)).toBeGreaterThan(
       focused.lastIndexOf('data-focus-pane="a1"', ringAt),
-    );
-    expect(render(false, "b1", { paneFocused: false })).not.toContain(
-      'data-active-pane-ring=""',
     );
   });
 });

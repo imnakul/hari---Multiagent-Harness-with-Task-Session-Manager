@@ -287,6 +287,20 @@ describe("inset session previews", () => {
     ).toBe(preview()?.id);
   });
 
+  it("shows the branch and model under the title, as a card (L-140)", () => {
+    props.sessions[0] = {
+      ...props.sessions[0],
+      harness: "claude",
+      model: "claude:sonnet-4.6",
+      repo: "monocode",
+      branch: "feature/session-card",
+    };
+    act(() => render());
+    const meta = card().querySelector("[data-session-card-meta]");
+    expect(meta?.textContent).toContain("feature/session-card");
+    expect(meta?.textContent).toContain("Sonnet 4.6");
+  });
+
   it("stays open while the pointer crosses into the preview", () => {
     vi.useFakeTimers();
     act(() => render());
