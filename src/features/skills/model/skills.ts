@@ -477,7 +477,9 @@ export async function readSkillBody(
 ): Promise<string> {
   if (skill.kind === "builtin") return CREATE_SKILL_BODY;
   try {
-    return await readTextFile(skill.path);
+    // A SKILL.md saved on Windows has CRLF endings. Prompts carry LF only:
+    // Interactive Claude refuses a carriage return as a control character.
+    return (await readTextFile(skill.path)).replace(/\r\n?/g, "\n");
   } catch {
     return `Skill "${skill.name}" could not be read from ${skill.path}.`;
   }

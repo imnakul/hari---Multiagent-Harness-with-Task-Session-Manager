@@ -848,6 +848,13 @@ export async function sendInteractiveClaude(
   input: SendTurnInput,
   epoch = interactiveClaudeEpoch(input.sessionId),
 ): Promise<void> {
+  // Text read from Windows files (skills, notes) can carry CRLF; a line
+  // break is not a control character the terminal must refuse.
+  if (input.text.includes("\r"))
+    return sendInteractiveClaude(
+      { ...input, text: input.text.replace(/\r\n?/g, "\n") },
+      epoch,
+    );
   if (input.fork?.forkPoint)
     throw new NativeForkError(
       "Interactive Claude only forks full native history. Use copied context for a selected earlier turn. No prompt was sent.",

@@ -46,6 +46,7 @@ import {
   skillCatalogKey,
   subscribeSkills,
   applySkillsToTurn,
+  readSkillBody,
 } from "./skills";
 import type { DiscoveredSkill } from "../../../platform/tauri/fs";
 import type { PiSkillCommand } from "../../../integrations/harness/providers/pi/piSkills";
@@ -534,5 +535,21 @@ describe("file skill visibility preferences", () => {
     expect(disabledSkills.find((s) => s.name === "review")).toBeUndefined();
     const disabledTurn = await applySkillsToTurn("/review inspect this", context);
     expect(disabledTurn).toBe("/review inspect this");
+  });
+});
+
+describe("readSkillBody", () => {
+  it("turns a Windows SKILL.md's CRLF into LF, so Interactive accepts the prompt", async () => {
+    mocks.readTextFile.mockResolvedValueOnce("# Skill\r\n\r\nStep one\rStep two\n");
+    const body = await readSkillBody({
+      kind: "file",
+      name: "emil-design-eng",
+      description: "",
+      invocation: "/emil-design-eng",
+      path: "C:/Users/me/.claude/skills/emil-design-eng/SKILL.md",
+      scope: "user",
+      source: "claude",
+    });
+    expect(body).toBe("# Skill\n\nStep one\nStep two\n");
   });
 });
