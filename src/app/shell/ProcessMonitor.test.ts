@@ -23,7 +23,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke,
   isTauri: () => true,
 }));
-vi.mock("../../platform/tauri/pty", () => ({ killPty: mocks.kill }));
+vi.mock("../../platform/tauri/pty", () => ({ stopPty: mocks.kill }));
 vi.mock("../../integrations/harness/core/child", () => ({
   killChild: mocks.kill,
 }));

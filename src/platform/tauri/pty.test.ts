@@ -4,6 +4,7 @@ import {
   markUnsupportedNotified,
   PTY_SUPPORTED,
   PTY_UNSUPPORTED_MESSAGE,
+  stopPty,
   subscribePty,
   trimReplay,
 } from "./pty";
@@ -27,8 +28,9 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
+// The listeners stay registered between tests: pty.ts keeps its event bridge
+// for 500ms after the last view leaves, and its unlisten removes them.
 afterEach(() => {
-  listeners.clear();
   vi.useRealTimers();
 });
 
@@ -86,6 +88,37 @@ describe("PTY output offsets and lazy replay", () => {
     expect(restarted).toEqual([0]);
     stopFresh();
     await killPty(id);
+  });
+});
+
+describe("stopping a PTY", () => {
+  it("still tells an open view its shell exited after a process-monitor stop (L-125)", async () => {
+    const id = `term-${Date.now()}-${Math.random()}`;
+    const exits: (number | null)[] = [];
+    const unsubscribe = subscribePty(
+      id,
+      () => undefined,
+      (code) => exits.push(code),
+    );
+    await stopPty(id);
+    listeners.get("pty-exit")?.({ payload: { id, code: null } });
+    expect(exits).toEqual([null]);
+    unsubscribe();
+    await killPty(id);
+  });
+
+  it("drops a closing view's handlers before the kill reports the exit", async () => {
+    const id = `term-${Date.now()}-${Math.random()}`;
+    const exits: (number | null)[] = [];
+    const unsubscribe = subscribePty(
+      id,
+      () => undefined,
+      (code) => exits.push(code),
+    );
+    await killPty(id);
+    listeners.get("pty-exit")?.({ payload: { id, code: null } });
+    expect(exits).toEqual([]);
+    unsubscribe();
   });
 });
 

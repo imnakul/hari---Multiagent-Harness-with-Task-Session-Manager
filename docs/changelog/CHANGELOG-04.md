@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 10:43 IST — Terminals stopped from the process monitor no longer freeze (L-125)
+- Type: fix
+- What: Stopping a terminal from the process monitor left its tab showing the last screen and ignoring typing, and only closing the tab helped. The tab now shows that the process exited and offers Restart.
+- Why: Stopping a shell from the monitor silently cut the tab off from it, so the tab never learned the shell had ended.
+- Files: [pty.rs (pty_kill)](../../src-tauri/src/pty.rs:384), [pty.ts (stopPty)](../../src/platform/tauri/pty.ts:206), [ProcessMonitor.tsx (line 180)](../../src/app/shell/ProcessMonitor.tsx:180), [pty.test.ts (line 94)](../../src/platform/tauri/pty.test.ts:94), [ProcessMonitor.test.ts (line 26)](../../src/app/shell/ProcessMonitor.test.ts:26)
+- Commit: uncommitted
+- Verified: typecheck ✅ cargo check ✅ lint — (no linter configured) tests ✅ build —
+
 ## 2026-10-20 10:34 IST — Focus button always at the top left (L-123)
 - Type: feature
 - What: The Focus mode button now sits first in the header at the window's left edge in every view: the project rail, the session sidebar, Session Manager, Task Manager, Inbox and the other full-window views, or the title bar when no sidebar is open. Before, it showed only in the workspace title bar beside the tabs.

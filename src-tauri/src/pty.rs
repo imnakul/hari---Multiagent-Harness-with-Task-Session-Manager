@@ -380,14 +380,19 @@ pub fn pty_status(host: State<'_, PtyHost>, id: String) -> Result<PtyStatus, Str
     }
 }
 
+/// Removing the session first silences its wait thread (`remove_if_pid` then
+/// finds nothing), so this reports the exit itself. A view that is closing
+/// has already dropped its handlers; one that stays open, such as a tab whose
+/// shell the process monitor stopped, shows the exit and offers Restart.
 #[tauri::command]
-pub fn pty_kill(host: State<PtyHost>, id: String) -> Result<(), String> {
+pub fn pty_kill(app: AppHandle, host: State<PtyHost>, id: String) -> Result<(), String> {
     if let Some(live) = host.remove(&id) {
         #[cfg(windows)]
         windows_pty_teardown(&live);
         terminate(live.pid);
         #[cfg(unix)]
         close_fd(live.master_fd);
+        let _ = app.emit(EXIT_EVENT, PtyExit { id, code: None });
     }
     Ok(())
 }

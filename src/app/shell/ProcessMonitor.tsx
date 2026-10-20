@@ -13,7 +13,7 @@ import {
 import type { Session } from "../../features/sessions/model/session";
 import { Popover } from "../../shared/ui/Popover";
 import { useResourcePressure } from "../../features/notifications/ui/ResourcePressureNotice";
-import { killPty } from "../../platform/tauri/pty";
+import { stopPty } from "../../platform/tauri/pty";
 import { killChild } from "../../integrations/harness/core/child";
 import {
   interactiveClaudeIdleSafe,
@@ -177,7 +177,7 @@ function EnabledProcessMonitor({
         await stopInteractiveClaude(id);
       else if (current && row.root.kind !== "terminal")
         await latest.current.onStop(id);
-      else if (row.root.kind === "terminal") await killPty(row.root.id);
+      else if (row.root.kind === "terminal") await stopPty(row.root.id);
       else if (!idleOnly && row.root.kind === "structured")
         await killChild(row.root.id);
     } catch (failure) {

@@ -203,6 +203,16 @@ export async function killPty(id: string): Promise<void> {
   await invoke("pty_kill", { id }).catch(() => undefined);
 }
 
+/**
+ * Stops a shell whose view stays open (the process monitor's Stop). Unlike
+ * `killPty`, which a closing view calls, this keeps the view's handlers so
+ * the backend's `pty-exit` reaches it and the tab offers Restart instead of
+ * silently dropping input.
+ */
+export async function stopPty(id: string): Promise<void> {
+  await invoke("pty_kill", { id });
+}
+
 export async function killAllPtys(): Promise<void> {
   dataHandlers.clear();
   exitHandlers.clear();
