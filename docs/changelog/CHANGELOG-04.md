@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 16:01 IST — Project menu glide and inset project tabs (L-129, L-130)
+- Type: feature
+- What: Hover now glides smoothly between rows of the sidebar project menu and the Switch project list. In the inset layout, Ctrl+clicking a project in Switch project keeps it as a small tab beside the project name; clicking a tab switches to that project. A plain click still just switches.
+- Why: User asked for the glide in both lists, and for a way to keep a few projects one click apart.
+- Files: `src/features/sessions/ui/SharedHoverHighlight.tsx`; `src/features/projects/ui/SearchableProjectPicker.tsx`; `src/features/projects/model/projectTabs.ts`; `src/features/projects/ui/ProjectTabs.tsx`; `src/app/shell/Sidebar.tsx`; tests `SharedHoverHighlight.test.ts`, `projectTabs.test.ts`, `ProjectTabs.test.ts`; spec `docs/specs/inset-project-tabs-plan.md`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,586 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 15:52 IST — Focus mode: group by project (L-128)
 - Type: feature
 - What: Focus mode has a "Group by project" button. When on, two tab rows appear under the top bar: one tab per project with chats in Focus, and one tab per chat of the chosen project. The grid then shows only that project's chats; switching projects is one click. Turning it off shows every chat again in the same places.

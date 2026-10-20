@@ -3,10 +3,12 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { useTabGroupLogos } from "../hooks/useTabGroupLogos";
 import { useProjectAppearance } from "../hooks/useProjectAppearance";
 import { basename } from "../../../platform/tauri/fs";
+import { IS_MAC } from "../../../platform/tauri/platform";
 import {
   prettyParent,
   projectKey,
@@ -260,7 +262,19 @@ type ProjectPickerPopoverProps = Pick<
   /** A flyout off another menu opens beside it, and that menu owns outside
    * clicks for both. */
   flyout?: { layer: number; attributes?: Record<`data-${string}`, boolean> };
+  /** Ctrl+click (⌘ on macOS) or Ctrl+Enter keeps a project as a tab beside
+   * the current one instead of switching (L-130); the menu stays open. */
+  projectTabs?: {
+    isTab: (path: string) => boolean;
+    onToggle: (path: string) => void;
+  };
 };
+
+const TAB_SHORTCUT = IS_MAC ? "⌘-click" : "Ctrl+click";
+
+function wantsTab(event: { ctrlKey: boolean; metaKey: boolean }): boolean {
+  return IS_MAC ? event.metaKey : event.ctrlKey;
+}
 
 /** Shared searchable project menu for switching projects or adding them to a Mono. */
 export function ProjectPickerPopover({
@@ -276,6 +290,7 @@ export function ProjectPickerPopover({
   label = "Project picker",
   emptyMessage = "No projects found",
   flyout,
+  projectTabs,
 }: ProjectPickerPopoverProps) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -316,7 +331,14 @@ export function ProjectPickerPopover({
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const pickProject = (path: string) => {
+  const pickProject = (
+    path: string,
+    event?: { ctrlKey: boolean; metaKey: boolean },
+  ) => {
+    if (projectTabs && event && wantsTab(event)) {
+      if (!isCurrent(path)) projectTabs.onToggle(path);
+      return;
+    }
     onDismiss();
     if (!isCurrent(path)) onSelectProject(path);
   };
@@ -328,11 +350,14 @@ export function ProjectPickerPopover({
 
   /** Keyboard rows: the Monos, then the projects. */
   const rowCount = filteredMonos.length + filteredProjects.length;
-  const pickRow = (index: number) => {
+  const pickRow = (
+    index: number,
+    event?: { ctrlKey: boolean; metaKey: boolean },
+  ) => {
     if (index < filteredMonos.length) pickMono(filteredMonos[index].id);
     else {
       const project = filteredProjects[index - filteredMonos.length];
-      if (project) pickProject(project.path);
+      if (project) pickProject(project.path, event);
     }
   };
 
@@ -377,7 +402,7 @@ export function ProjectPickerPopover({
     if (event.key === "Enter") {
       if (active >= rowCount) return;
       event.preventDefault();
-      pickRow(active);
+      pickRow(active, event);
     }
   };
 
@@ -474,10 +499,17 @@ export function ProjectPickerPopover({
               <button
                 key={item.path}
                 type="button"
-                title={item.path}
+                title={
+                  projectTabs && !current
+                    ? `${item.path}
+${TAB_SHORTCUT} to keep it as a tab`
+                    : item.path
+                }
                 data-shared-hover-item
                 onMouseEnter={() => setActive(index)}
-                onClick={() => pickProject(item.path)}
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) =>
+                  pickProject(item.path, event)
+                }
                 onContextMenu={
                   onProjectContextMenu
                     ? (event) => {
@@ -522,6 +554,11 @@ export function ProjectPickerPopover({
                 <span className="min-w-0 max-w-28 flex-1 truncate font-mono text-[11px] text-content/40">
                   {prettyParent(item.path)}
                 </span>
+                {!current && projectTabs?.isTab(item.path) ? (
+                  <span className="shrink-0 text-[11px] text-content/40">
+                    Tab
+                  </span>
+                ) : null}
               </button>
             );
           })

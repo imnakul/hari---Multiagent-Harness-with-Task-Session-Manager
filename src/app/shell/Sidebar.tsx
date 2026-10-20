@@ -225,6 +225,15 @@ import {
   ProjectPickerPopover,
   SearchableProjectPicker,
 } from "../../features/projects/ui/SearchableProjectPicker";
+import { ProjectTabs } from "../../features/projects/ui/ProjectTabs";
+import {
+  closeProjectTab,
+  isProjectTab,
+  loadProjectTabs,
+  saveProjectTabs,
+  toggleProjectTab,
+  visibleProjectTabs,
+} from "../../features/projects/model/projectTabs";
 import { useRailTooltip } from "./RailTooltip";
 import { useProjectMenu } from "./useProjectMenu";
 import { SessionFiltersMenu } from "../../features/sessions/ui/SessionFiltersMenu";
@@ -2328,6 +2337,23 @@ function SidebarComponent({
     // Only the inset layout uses this menu, and it has no project rail.
     railOptions: false,
   });
+  // Projects Ctrl+clicked in Switch project sit as tabs beside the name
+  // (L-130); a plain click still just switches.
+  const [projectTabs, setProjectTabs] = useState(loadProjectTabs);
+  const updateProjectTabs = useCallback((next: string[]) => {
+    saveProjectTabs(next);
+    setProjectTabs(next);
+  }, []);
+  const shownProjectTabs = useMemo(
+    () =>
+      inset
+        ? visibleProjectTabs(
+            projectTabs,
+            recents.map((item) => item.path),
+          )
+        : [],
+    [inset, projectTabs, recents],
+  );
   // The inset layout names the project here, with its settings and the
   // project and worktree pickers in a menu below it.
   const headerProject = inset
@@ -2364,6 +2390,11 @@ function SidebarComponent({
                 onOpenProject={onOpenProject}
                 onProjectContextMenu={headerProjectMenu.open}
                 projectMenuActive={headerProjectMenu.isActive}
+                projectTabs={{
+                  isTab: (path) => isProjectTab(projectTabs, path),
+                  onToggle: (path) =>
+                    updateProjectTabs(toggleProjectTab(projectTabs, path, cwd)),
+                }}
               />
             )
           : undefined,
@@ -2604,6 +2635,18 @@ function SidebarComponent({
             Workspace
           </span>
         )}
+        {onSelectProject ? (
+          <ProjectTabs
+            paths={shownProjectTabs}
+            currentPath={cwd}
+            isBusy={(path) => projectPathBusy(busyProjectPaths, path)}
+            onSelect={onSelectProject}
+            onClose={(path) =>
+              updateProjectTabs(closeProjectTab(projectTabs, path))
+            }
+            onContextMenu={headerProjectMenu.open}
+          />
+        ) : null}
       </div>
       {/* Inset, a new session is the + at the end of the title bar's tabs. */}
       <WorkspaceTitleActions
