@@ -425,12 +425,13 @@ export function ProjectPickerPopover({
             type="button"
             title={mono.name}
             data-picker-mono={mono.id}
+            data-shared-hover-item
             onMouseEnter={() => setActive(index)}
             onClick={() => pickMono(mono.id)}
             className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left ${
               active === index
                 ? "bg-selection text-content"
-                : "text-content/75 hover:bg-content/5 hover:text-content"
+                : "text-content/75 hover:text-content"
             }`}
           >
             <span className="grid size-4 shrink-0 place-items-center">
@@ -474,6 +475,7 @@ export function ProjectPickerPopover({
                 key={item.path}
                 type="button"
                 title={item.path}
+                data-shared-hover-item
                 onMouseEnter={() => setActive(index)}
                 onClick={() => pickProject(item.path)}
                 onContextMenu={
@@ -493,7 +495,7 @@ export function ProjectPickerPopover({
                 className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left ${
                   active === index
                     ? "bg-selection text-content"
-                    : "text-content/75 hover:bg-content/5 hover:text-content"
+                    : "text-content/75 hover:text-content"
                 }`}
               >
                 <span className="grid size-4 shrink-0 place-items-center">
@@ -534,11 +536,12 @@ export function ProjectPickerPopover({
           {monos?.onCreate ? (
             <button
               type="button"
+              data-shared-hover-item
               onClick={() => {
                 onDismiss();
                 monos.onCreate?.();
               }}
-              className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-content/75 hover:bg-content/8 hover:text-content"
+              className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-content/75 hover:text-content"
             >
               <Plus className="size-4 shrink-0" strokeWidth={1.75} />
               <span>New mono</span>
@@ -547,11 +550,12 @@ export function ProjectPickerPopover({
           {onOpenProject ? (
             <button
               type="button"
+              data-shared-hover-item
               onClick={() => {
                 onDismiss();
                 onOpenProject();
               }}
-              className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-content/75 hover:bg-content/8 hover:text-content"
+              className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-content/75 hover:text-content"
             >
               <Plus className="size-4 shrink-0" strokeWidth={1.75} />
               <span>New project</span>

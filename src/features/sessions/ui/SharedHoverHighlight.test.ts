@@ -6,6 +6,7 @@ import {
   isTargetDisabled,
   resolveSharedHoverAction,
   SHARED_HOVER_CONTINUITY_ATTR,
+  shouldHideOnFocusOut,
   type SharedHoverAction,
 } from "./SharedHoverHighlight";
 
@@ -354,5 +355,25 @@ describe("SharedHoverHighlight continuity and decision logic", () => {
 
       expect(action).toEqual({ type: "hide" });
     });
+  });
+});
+
+describe("shouldHideOnFocusOut (L-129)", () => {
+  it("keeps the marker when a hovered row moves focus into its flyout", () => {
+    expect(
+      shouldHideOnFocusOut({ focusLeftList: true, pointerOverList: true }),
+    ).toBe(false);
+  });
+
+  it("hides when keyboard focus leaves the list", () => {
+    expect(
+      shouldHideOnFocusOut({ focusLeftList: true, pointerOverList: false }),
+    ).toBe(true);
+  });
+
+  it("ignores focus moves inside the list", () => {
+    expect(
+      shouldHideOnFocusOut({ focusLeftList: false, pointerOverList: false }),
+    ).toBe(false);
   });
 });

@@ -92,6 +92,22 @@ export function resolveSharedHoverAction({
   return { type: "hide" };
 }
 
+/**
+ * Whether focus leaving the list hides the marker. While the pointer is over
+ * the list the pointer owns the marker: a menu row that opens a flyout moves
+ * focus into the flyout, and hiding there made every next hover snap instead
+ * of gliding (L-129).
+ */
+export function shouldHideOnFocusOut({
+  focusLeftList,
+  pointerOverList,
+}: {
+  focusLeftList: boolean;
+  pointerOverList: boolean;
+}): boolean {
+  return focusLeftList && !pointerOverList;
+}
+
 export type SharedHoverReflow =
   | { type: "reposition" }
   | { type: "activate"; target: HTMLElement }
@@ -349,7 +365,12 @@ export function SharedHoverHighlight({
     const onFocusIn = (event: FocusEvent): void =>
       show(findHoverTarget(event.target, root, selector));
     const onFocusOut = (event: FocusEvent): void => {
-      if (!root.contains(event.relatedTarget as Node | null))
+      if (
+        shouldHideOnFocusOut({
+          focusLeftList: !root.contains(event.relatedTarget as Node | null),
+          pointerOverList: pointer !== null,
+        })
+      )
         hide("focus left the list");
     };
 
