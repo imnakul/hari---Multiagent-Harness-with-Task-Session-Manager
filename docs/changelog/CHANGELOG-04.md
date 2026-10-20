@@ -1,31 +1,38 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 17:00 IST — 0.16.0-local2 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local2: 0.16.0-local1 plus L-126 wallpaper in the new layout, L-127 uncropped project logos, L-128 Focus mode group by project, L-129 project menu hover glide, L-130 inset project tabs (fixed order) and L-131 inset sidebar blur on Windows.
+- Why: User asked to push and build a new version for testing.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local2-inset-blur-project-tabs-focus-groups_x64.exe` (14,916,850 bytes, SHA-256 DFC661B121007C4AFA86CD0E0EBB136D9A1EF011EB46A239FC8C6532340372E2, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from b9e5f0af
+- Verified: tsc ✅ tests ✅ (7,587 passed, 2 skipped) build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-20 16:13 IST — Inset sidebar blur on Windows, fixed project tab order (L-131, L-130)
 - Type: fix
 - What: In the new layout on Windows, the sidebar now lets the desktop blur through as much as the classic sidebar does, and the Sidebar opacity slider is back in Settings → Appearance to tune it. Project tabs no longer swap places when you switch project: they stay in the order you added them, and the current one is highlighted.
 - Why: The new layout painted its sidebar at a fixed 80% near-black, hiding the Acrylic blur; and the current project was dropped from the tab row, so the others shifted on every switch.
 - Files: `src/styles/index.css`; `src/features/settings/ui/SettingsView.tsx`; `src/features/settings/model/settings.ts` (+ test); `src/features/projects/model/projectTabs.ts` (+ test); `src/features/projects/ui/ProjectTabs.tsx` (+ test); `src/app/shell/Sidebar.tsx`; spec `docs/specs/inset-project-tabs-plan.md`
-- Commit: uncommitted
+- Commit: b9e5f0af
 - Verified: tsc ✅ tests ✅ (7,587 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 16:01 IST — Project menu glide and inset project tabs (L-129, L-130)
 - Type: feature
 - What: Hover now glides smoothly between rows of the sidebar project menu and the Switch project list. In the inset layout, Ctrl+clicking a project in Switch project keeps it as a small tab beside the project name; clicking a tab switches to that project. A plain click still just switches.
 - Why: User asked for the glide in both lists, and for a way to keep a few projects one click apart.
 - Files: `src/features/sessions/ui/SharedHoverHighlight.tsx`; `src/features/projects/ui/SearchableProjectPicker.tsx`; `src/features/projects/model/projectTabs.ts`; `src/features/projects/ui/ProjectTabs.tsx`; `src/app/shell/Sidebar.tsx`; tests `SharedHoverHighlight.test.ts`, `projectTabs.test.ts`, `ProjectTabs.test.ts`; spec `docs/specs/inset-project-tabs-plan.md`
-- Commit: uncommitted
+- Commit: 13941da2, 0e10d7db
 - Verified: tsc ✅ tests ✅ (7,586 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 15:52 IST — Focus mode: group by project (L-128)
 - Type: feature
 - What: Focus mode has a "Group by project" button. When on, two tab rows appear under the top bar: one tab per project with chats in Focus, and one tab per chat of the chosen project. The grid then shows only that project's chats; switching projects is one click. Turning it off shows every chat again in the same places.
 - Why: User wanted to switch projects side by side as tabs, with each project's running chats under it.
 - Files: `src/features/focus/model/focusGroups.ts`; `src/features/focus/ui/FocusGroupTabs.tsx`; `src/features/focus/ui/FocusView.tsx`; tests `src/features/focus/model/focusGroups.test.ts`, `src/features/focus/ui/FocusView.test.ts`; spec `docs/specs/focus-group-by-project-plan.md`
-- Commit: uncommitted
+- Commit: 76e7000c
 - Verified: tsc ✅ tests ✅ (7,574 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 15:01 IST — Wallpaper in the new layout; logos not cropped (L-126, L-127)
 - Type: fix
 - What: In the new layout, the Windows wallpaper now shows through the main workspace card, tinted by Glass strength, in light and dark mode, as it does in the classic layout. Project logos fit inside their square instead of being cut off.
 - Why: User saw the new layout's card stay solid white over the wallpaper, and some project logos cropped.
 - Files: `src/styles/index.css` (inset wallpaper rules); `src/features/projects/ui/ProjectLogoIcon.tsx`; `src/features/quick-composer/ui/QuickProjectIcon.tsx`; tests `src/styles/insetWallpaper.test.ts`, `src/features/projects/ui/ProjectLogoIcon.test.ts`
-- Commit: uncommitted
+- Commit: 7bcc4627, eac0f169
 - Verified: tsc ✅ tests ✅ (7,566 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 11:27 IST — 0.16.0-local1 Windows build (upstream 0.16.0)
 - Type: chore
