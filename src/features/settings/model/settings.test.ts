@@ -1092,8 +1092,10 @@ describe("settings search", () => {
   it("leaves out the rows the current layout does not show", () => {
     const labels = (hidden: ReadonlySet<string>) =>
       searchSettings("glass", undefined, hidden).map((result) => result.label);
+    // Fork (L-131): Windows keeps Sidebar opacity in the inset layout.
     expect(labels(INSET_LAYOUT_HIDDEN_SETTINGS)).toEqual([
       "Glass strength",
+      ...(IS_WIN ? ["Sidebar opacity"] : []),
       "Transparent window",
       "Appearance",
     ]);

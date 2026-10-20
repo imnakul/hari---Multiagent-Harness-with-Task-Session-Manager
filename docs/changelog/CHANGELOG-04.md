@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 16:13 IST — Inset sidebar blur on Windows, fixed project tab order (L-131, L-130)
+- Type: fix
+- What: In the new layout on Windows, the sidebar now lets the desktop blur through as much as the classic sidebar does, and the Sidebar opacity slider is back in Settings → Appearance to tune it. Project tabs no longer swap places when you switch project: they stay in the order you added them, and the current one is highlighted.
+- Why: The new layout painted its sidebar at a fixed 80% near-black, hiding the Acrylic blur; and the current project was dropped from the tab row, so the others shifted on every switch.
+- Files: `src/styles/index.css`; `src/features/settings/ui/SettingsView.tsx`; `src/features/settings/model/settings.ts` (+ test); `src/features/projects/model/projectTabs.ts` (+ test); `src/features/projects/ui/ProjectTabs.tsx` (+ test); `src/app/shell/Sidebar.tsx`; spec `docs/specs/inset-project-tabs-plan.md`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,587 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 16:01 IST — Project menu glide and inset project tabs (L-129, L-130)
 - Type: feature
 - What: Hover now glides smoothly between rows of the sidebar project menu and the Switch project list. In the inset layout, Ctrl+clicking a project in Switch project keeps it as a small tab beside the project name; clicking a tab switches to that project. A plain click still just switches.

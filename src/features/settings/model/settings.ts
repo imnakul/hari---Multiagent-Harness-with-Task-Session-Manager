@@ -695,12 +695,13 @@ const NO_HIDDEN_SETTINGS: ReadonlySet<string> = new Set();
 
 /** Appearance rows that only one layout shows: the inset workspace drops the
  * tint and translucency controls, and only it has workspace themes and its
- * own glass switch. */
+ * own glass switch. Fork (L-131): Windows keeps Sidebar opacity, which sets
+ * how much of the Acrylic blur shows through the inset shell. */
 export const INSET_LAYOUT_HIDDEN_SETTINGS: ReadonlySet<string> = new Set([
   "hue",
   "saturation",
   "dark-lightness",
-  "sidebar-opacity",
+  ...(IS_WIN ? [] : ["sidebar-opacity"]),
   "blur",
   "main-pane-glass",
 ]);

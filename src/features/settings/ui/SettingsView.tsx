@@ -3503,7 +3503,7 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
         </Row>
       </Group>
 
-      {inset ? null : (
+      {inset && !IS_WINDOWS ? null : (
       <Group
         title="Translucency"
         description={
@@ -3515,7 +3515,11 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
         <Row
           id="sidebar-opacity"
           label="Sidebar opacity"
-          description="Applies to the project rail and the other glass panes."
+          description={
+            inset
+              ? "How much of the desktop blur shows through the sidebar, tabs and footer."
+              : "Applies to the project rail and the other glass panes."
+          }
         >
           <Slider
             label="Sidebar opacity"
@@ -3524,9 +3528,12 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
             min={Math.round(SIDEBAR_OPACITY_MIN * 100)}
             max={Math.round(SIDEBAR_OPACITY_MAX * 100)}
             onChange={appearance.onOpacity}
-            disabled={glassDisabled}
+            disabled={glassDisabled || (inset && !appearance.insetGlass)}
           />
         </Row>
+        {/* Fork (L-131): the inset layout on Windows shows only Sidebar opacity. */}
+        {inset ? null : (
+        <>
         <Row
           id="blur"
           label="Blur radius"
@@ -3554,6 +3561,8 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
             disabled={glassDisabled}
           />
         </Row>
+        </>
+        )}
       </Group>
       )}
 

@@ -712,6 +712,12 @@ html.layout-inset {
   --inset-stroke: color-mix(in srgb, var(--color-content) 4%, transparent);
 }
 
+/* Fork (L-131): on Windows the shell follows Sidebar opacity, like the classic
+   sidebar, so the Desktop Acrylic blur shows through as much as it does there. */
+html.is-windows.layout-inset {
+  --inset-glass-alpha: var(--sidebar-opacity, 0.8);
+}
+
 /* Keep the opaque pane close to the washed sidebar instead of near black. */
 html.layout-inset:not(.has-native-glass):not(.theme-light) {
   --inset-panel: var(--wt-dark-panel-solid, #141414);
