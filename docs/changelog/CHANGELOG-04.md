@@ -1,45 +1,52 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 20:56 IST — 0.16.0-local3 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local3: 0.16.0-local2 plus L-132 project slots in the new layout, the L-119 link card height fix, L-133 Interactive sends that work while Claude's status line animates, and L-134 pasted images shown at once with a loader.
+- Why: User asked to commit, push and build a new version.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local3-project-slots-paste-preview-busy-send_x64.exe` (14,910,094 bytes, SHA-256 FF31F2C45FAE3E2B2A5044A56EDBDD807D26195C37D72C318D106F3B1E95F857, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from a6ab0620
+- Verified: tsc ✅ tests ✅ (7,598 passed, 2 skipped; FileEditorCrlfGit failed once under memory pressure and passed on rerun) build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-20 20:38 IST — Pasted images show at once with a loader (L-134)
 - Type: feature
 - What: Pasting a screenshot or file now shows its chip straight away: an image appears dimmed with a spinning loader until it is saved, then becomes the normal thumbnail. A screenshot the app has to read from the system clipboard shows a "Pasted image" chip with a spinner. If nothing could be attached, the composer now says so instead of silently dropping the paste.
 - Why: Pasted images took a while to appear with no sign anything was happening.
 - Files: [attachments.ts](../../src/features/sessions/model/attachments.ts) (`pendingAttachmentsFor`, `pendingPreviewUrls`); [AttachmentChip.tsx](../../src/features/sessions/ui/AttachmentChip.tsx) (`PendingAttachmentChip`); [Composer.tsx](../../src/features/sessions/ui/Composer.tsx) (`pasteFiles`, `attachPasted`); [Composer.pasteImage.test.ts](../../src/features/sessions/ui/Composer.pasteImage.test.ts)
-- Commit: uncommitted
+- Commit: a6ab0620
 - Verified: tsc ✅ tests ✅ (sessions: 1892 passed) build ✅; desktop check manual
 ## 2026-10-20 20:38 IST — Interactive sends work while Claude's status line animates (L-133)
 - Type: fix
 - What: An Interactive Claude send could fail with "Prompt delivery is unconfirmed" when Claude's status line kept redrawing, because the app waited for the terminal to go quiet. Now, if the terminal stays busy, the app presses Enter once Claude's prompt shows the message and has held still for 1.5 seconds. If the terminal never draws the paste at all, it still stops without pressing Enter.
 - Why: User report of the error with a busy native terminal; chose the screen fallback.
 - Files: [interactive_delivery.rs](../../src-tauri/src/interactive_delivery.rs) (`PasteSettle`, `check_paste`); [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs); [main.rs](../../scripts/interactive-pty-host/src/main.rs); [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts) (`awaitPasteShown`, `retryEnter`); [interactive-node-pty-host.mjs](../../src/integrations/harness/providers/claude/fixtures/interactive-node-pty-host.mjs); [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts); [claudeInteractiveCli.test.ts](../../src/integrations/harness/providers/claude/claudeInteractiveCli.test.ts)
-- Commit: uncommitted
+- Commit: ddb84aa9
 - Verified: tsc ✅ tests ✅ (Claude provider: 324 passed; Rust interactive_delivery: 5 passed) build ✅; desktop check manual
 ## 2026-10-20 19:30 IST — Link preview cards no longer cut their text (L-119)
 - Type: fix
 - What: With Link previews set to Always, the cards under a reply were a fixed height, so the description was cut off part-way through its second line. Cards now grow to fit the site name, title and up to three lines of description, and the preview image grows with them.
 - Why: The preview text could not be read.
 - Files: [ChatHoverPreviews.tsx](../../src/features/sessions/ui/ChatHoverPreviews.tsx) (`InlineLinkCard`); [AgentMarkdownLinkPreviews.test.ts](../../src/features/sessions/ui/AgentMarkdownLinkPreviews.test.ts)
-- Commit: uncommitted
+- Commit: 3bdd8314
 - Verified: tsc ✅ tests ✅ (link preview tests) build ✅; desktop check manual
 ## 2026-10-20 19:25 IST — Project slots look like the Theme switch (L-132)
 - Type: style
 - What: With two or more project slots, they now sit in a bordered switch like Settings → Theme (System / Dark / Light). The current slot has the selected pill, which glides when you switch, and a soft highlight follows the pointer across slots. Other slots are wider, so more of their names show. The + stays outside the switch.
 - Why: The slots read as loose labels; a switch makes it clear they are one control and which project is current.
 - Files: [ProjectSlots.tsx](../../src/features/projects/ui/ProjectSlots.tsx); [ProjectSlots.test.ts](../../src/features/projects/ui/ProjectSlots.test.ts)
-- Commit: uncommitted
+- Commit: 91487de7
 - Verified: tsc ✅ tests ✅ (projects: 131 passed) build ✅; desktop check manual
 ## 2026-10-20 19:00 IST — Named project slots, steadier project slide (L-132)
 - Type: fix
 - What: Project slots that aren't current now show their name next to the icon, muted, instead of the icon alone. When you switch project, the slide now runs the way the slots do: a slot to the left comes in from the left. Only the sessions area slides; the project row, search, Inbox, Notes, Task Manager, Automations and Session Manager stay still.
 - Why: Icons alone didn't say which project was which; the slide went the wrong way for left slots and moved parts of the sidebar that do not change.
 - Files: [ProjectSlots.tsx](../../src/features/projects/ui/ProjectSlots.tsx); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (slide direction from slot order, slide only the content under the nav, overlay clipped to the list); [ProjectSlots.test.ts](../../src/features/projects/ui/ProjectSlots.test.ts)
-- Commit: uncommitted
+- Commit: 91487de7
 - Verified: tsc ✅ tests ✅ (7,592 passed, 2 skipped) build ✅ (npm run build); desktop check manual
 ## 2026-10-20 18:25 IST — Project slots in the new layout (L-132)
 - Type: feature
 - What: The new layout's top row now holds up to four project slots. The + after them adds a project as a new slot; clicking a slot switches to it, with a background that glides across. The current slot shows its name and the usual ⌄ project menu; the others shrink to their icon. × on hover or a middle-click closes a slot (never the last one). Slots come back after a restart. This replaces the Ctrl+click project tabs from L-130.
 - Why: User asked for a visible + and slots instead of a hidden Ctrl+click shortcut.
 - Files: [projectSlots.ts](../../src/features/projects/model/projectSlots.ts); [ProjectSlots.tsx](../../src/features/projects/ui/ProjectSlots.tsx); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx); [SearchableProjectPicker.tsx](../../src/features/projects/ui/SearchableProjectPicker.tsx) (L-130 code removed); removed projectTabs.ts, ProjectTabs.tsx and their tests; spec [inset-project-slots-plan.md](../specs/inset-project-slots-plan.md)
-- Commit: uncommitted
+- Commit: 91487de7
 - Verified: tsc ✅ tests ✅ (7,592 passed, 2 skipped) build ✅ (npm run build); desktop check manual
 ## 2026-10-20 17:00 IST — 0.16.0-local2 Windows build
 - Type: chore
