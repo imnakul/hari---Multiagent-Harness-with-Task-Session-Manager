@@ -7,6 +7,14 @@
 - Commit: uncommitted
 - Verified: typecheck ✅ lint — (no linter configured) tests ✅ (7,511) build —
 
+## 2026-10-20 04:45 IST — Interactive Claude no longer works forever after a usage limit (L-124)
+- Type: fix
+- What: After Claude hit a usage limit, its notice ("You've hit your weekly limit · resets …") started a new "Working" turn whose timer never stopped, and stopping Claude or closing its terminal did not end it. The notice now shows as an error in the chat, and stopping Claude, closing its terminal or Claude exiting ends any turn it was working on.
+- Why: The chat looked busy with no way to stop it.
+- Files: [claudeInteractive.ts (lines 249–268, 542–571, 1305)](../../src/integrations/harness/providers/claude/claudeInteractive.ts:249), [claudeInteractive.test.ts (lines 888, 1030–1054)](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts:888)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no linter configured) tests ✅ (7,511) build —
+
 ## 2026-10-20 04:20 IST — Focus mode (L-123)
 - Type: feature
 - What: A Focus button at the top left of the title bar (or Ctrl+Shift+E) hides the sidebars and tabs and shows running chats from every project side by side: up to 4 columns, then the 5th to 8th chats split the columns into two rows, with more in "+N more". Chats stay after they finish and never move on their own; drag a pane's header to move it. Each pane shows its project and a status tag. A New split button starts a chat in any project, continues a Done, Needs attention or Draft chat, or imports a CLI conversation, and an empty Focus shows those three full screen. Leaving Focus brings the workspace back as it was.

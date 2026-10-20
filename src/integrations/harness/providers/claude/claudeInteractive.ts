@@ -254,6 +254,18 @@ function fail(live: Live, message: string): void {
   live.pending?.reject(faultError(live));
   live.pending = undefined;
   if (!hadPending) emit(live, { type: "session.error", message });
+  finishExternal(live);
+}
+
+/**
+ * Ends the turn MonoCode did not send (L-124). Calls `onEvent` directly, not
+ * `emit`: Stop marks the live stopped first, and the chat must still leave
+ * Working.
+ */
+function finishExternal(live: Live): void {
+  if (!live.external) return;
+  live.onEvent({ type: "externalTurn.finished", turnId: live.external });
+  live.external = undefined;
 }
 
 /**
@@ -270,10 +282,7 @@ function failTurn(live: Live, message: string): void {
   clearTimeout(pending?.timer);
   if (pending) pending.reject(new HarnessNeedsAttentionError(message));
   else emit(live, { type: "session.error", message });
-  if (live.external) {
-    live.onEvent({ type: "externalTurn.finished", turnId: live.external });
-    live.external = undefined;
-  }
+  finishExternal(live);
 }
 
 function complete(live: Live): void {
@@ -286,10 +295,7 @@ function complete(live: Live): void {
   }
   emit(live, { type: "message.completed" });
   emit(live, { type: "reasoning.completed" });
-  if (live.external) {
-    live.onEvent({ type: "externalTurn.finished", turnId: live.external });
-    live.external = undefined;
-  }
+  finishExternal(live);
   clearTimeout(live.pending?.timer);
   live.pending?.resolve();
   live.pending = undefined;
@@ -486,6 +492,7 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
         "Claude ended the interactive session. Review its terminal before retrying.",
       );
     emit(live, { type: "session.ended" });
+    finishExternal(live);
   }
 }
 
@@ -531,6 +538,35 @@ async function poll(live: Live): Promise<void> {
           live.continuation = undefined;
           live.transcript = newTranscriptState();
         }
+      }
+      // Claude's own notice after a failed request (usage limit, overload):
+      // model "<synthetic>", no Stop hook follows. StopFailure has already
+      // ended the turn, so show it as an error, not as a new turn (L-124).
+      if (
+        row?.type === "assistant" &&
+        row.isApiErrorMessage === true &&
+        !row.isSidechain &&
+        !live.pending &&
+        !live.external
+      ) {
+        if (typeof row.uuid === "string") {
+          if (live.seenMessages.has(row.uuid)) continue;
+          live.seenMessages.add(row.uuid);
+        }
+        const content = asRecord(row.message)?.content;
+        const text = Array.isArray(content)
+          ? content
+              .flatMap((part) => {
+                const block = asRecord(part);
+                return block?.type === "text" && typeof block.text === "string"
+                  ? [block.text]
+                  : [];
+              })
+              .join("\n")
+              .trim()
+          : "";
+        if (text) emit(live, { type: "session.error", message: text });
+        continue;
       }
       if (
         row?.type === "assistant" &&
@@ -1266,6 +1302,7 @@ export async function stopInteractiveClaude(
   if (live) {
     live.stopped = true;
     clearTimeout(live.timer);
+    finishExternal(live);
     clearTimeout(live.pending?.timer);
     live.pending?.reject(
       new Error(

@@ -885,6 +885,43 @@ describe("interactive turn delivery", () => {
     await retry;
     expect(mocks.sends).toEqual(["first line\nsecond line", "retry"]);
   });
+  it("shows Claude's usage-limit notice as an error, not a new turn (L-124)", async () => {
+    await running();
+    const failed = sendInteractiveClaude(input()).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    // Real CLI: StopFailure, then a synthetic assistant record with the notice.
+    hook("StopFailure", { error: "rate_limit" });
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "limit-notice",
+        isApiErrorMessage: true,
+        error: "rate_limit",
+        message: {
+          model: "<synthetic>",
+          content: [
+            {
+              type: "text",
+              text: "You've hit your weekly limit · resets 10:30am (Asia/Kolkata)",
+            },
+          ],
+        },
+      }),
+    );
+    await settle();
+    expect(await failed).toBeInstanceOf(HarnessNeedsAttentionError);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(events.filter((e) => e.type === "externalTurn.started")).toEqual([]);
+    expect(events).toContainEqual({
+      type: "session.error",
+      message: "You've hit your weekly limit · resets 10:30am (Asia/Kolkata)",
+    });
+    expect(
+      interactiveClaudeDiagnostics("interactive-test")?.current.externalTurn,
+    ).toBe(false);
+  });
 });
 
 describe("interactive observation and parking", () => {
@@ -989,6 +1026,31 @@ describe("interactive observation and parking", () => {
     expect(
       interactiveClaudeDiagnostics("interactive-test")?.current.externalTurn,
     ).toBe(false);
+  });
+  async function externalTurn(): Promise<string> {
+    await idle();
+    mocks.lines.push(
+      JSON.stringify({
+        type: "assistant",
+        uuid: "autonomous",
+        message: { content: [{ type: "text", text: "Working on it" }] },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    const started = events.find((e) => e.type === "externalTurn.started");
+    if (started?.type !== "externalTurn.started")
+      throw new Error("No external turn");
+    return started.turnId;
+  }
+  it("ends an open external turn when Claude is stopped (L-124)", async () => {
+    const turnId = await externalTurn();
+    await stopInteractiveClaude("interactive-test");
+    expect(events).toContainEqual({ type: "externalTurn.finished", turnId });
+  });
+  it("ends an open external turn when Claude's terminal exits (L-124)", async () => {
+    const turnId = await externalTurn();
+    mocks.exit?.(1);
+    expect(events).toContainEqual({ type: "externalTurn.finished", turnId });
   });
   it("does not let an earlier Stop with no turn to finish fail the next prompt", async () => {
     await idle();
