@@ -1,4 +1,25 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 19:25 IST — Project slots look like the Theme switch (L-132)
+- Type: style
+- What: With two or more project slots, they now sit in a bordered switch like Settings → Theme (System / Dark / Light). The current slot has the selected pill, which glides when you switch, and a soft highlight follows the pointer across slots. Other slots are wider, so more of their names show. The + stays outside the switch.
+- Why: The slots read as loose labels; a switch makes it clear they are one control and which project is current.
+- Files: [ProjectSlots.tsx](../../src/features/projects/ui/ProjectSlots.tsx); [ProjectSlots.test.ts](../../src/features/projects/ui/ProjectSlots.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (projects: 131 passed) build ✅; desktop check manual
+## 2026-10-20 19:00 IST — Named project slots, steadier project slide (L-132)
+- Type: fix
+- What: Project slots that aren't current now show their name next to the icon, muted, instead of the icon alone. When you switch project, the slide now runs the way the slots do: a slot to the left comes in from the left. Only the sessions area slides; the project row, search, Inbox, Notes, Task Manager, Automations and Session Manager stay still.
+- Why: Icons alone didn't say which project was which; the slide went the wrong way for left slots and moved parts of the sidebar that do not change.
+- Files: [ProjectSlots.tsx](../../src/features/projects/ui/ProjectSlots.tsx); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (slide direction from slot order, slide only the content under the nav, overlay clipped to the list); [ProjectSlots.test.ts](../../src/features/projects/ui/ProjectSlots.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,592 passed, 2 skipped) build ✅ (npm run build); desktop check manual
+## 2026-10-20 18:25 IST — Project slots in the new layout (L-132)
+- Type: feature
+- What: The new layout's top row now holds up to four project slots. The + after them adds a project as a new slot; clicking a slot switches to it, with a background that glides across. The current slot shows its name and the usual ⌄ project menu; the others shrink to their icon. × on hover or a middle-click closes a slot (never the last one). Slots come back after a restart. This replaces the Ctrl+click project tabs from L-130.
+- Why: User asked for a visible + and slots instead of a hidden Ctrl+click shortcut.
+- Files: [projectSlots.ts](../../src/features/projects/model/projectSlots.ts); [ProjectSlots.tsx](../../src/features/projects/ui/ProjectSlots.tsx); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx); [SearchableProjectPicker.tsx](../../src/features/projects/ui/SearchableProjectPicker.tsx) (L-130 code removed); removed projectTabs.ts, ProjectTabs.tsx and their tests; spec [inset-project-slots-plan.md](../specs/inset-project-slots-plan.md)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,592 passed, 2 skipped) build ✅ (npm run build); desktop check manual
 ## 2026-10-20 17:00 IST — 0.16.0-local2 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local2: 0.16.0-local1 plus L-126 wallpaper in the new layout, L-127 uncropped project logos, L-128 Focus mode group by project, L-129 project menu hover glide, L-130 inset project tabs (fixed order) and L-131 inset sidebar blur on Windows.

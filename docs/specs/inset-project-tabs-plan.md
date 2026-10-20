@@ -1,6 +1,6 @@
 # Review — Inset sidebar: project tabs with Ctrl+click (L-130)
 
-Created 2026-10-20 15:55 IST. Status: Review (desktop check manual).
+Created 2026-10-20 15:55 IST. Status: Superseded by [L-132 project slots](inset-project-slots-plan.md) (2026-10-20 18:25 IST).
 
 - Goal: keep a few projects one click apart in the inset layout, without changing how a plain click works.
 - User story: As someone working across a few projects, I want to Ctrl+click projects in Switch project so they sit as tabs beside the current project's name, and click a tab to switch.

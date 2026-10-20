@@ -225,15 +225,16 @@ import {
   ProjectPickerPopover,
   SearchableProjectPicker,
 } from "../../features/projects/ui/SearchableProjectPicker";
-import { ProjectTabs } from "../../features/projects/ui/ProjectTabs";
+import { ProjectSlots } from "../../features/projects/ui/ProjectSlots";
 import {
-  closeProjectTab,
-  isProjectTab,
-  loadProjectTabs,
-  saveProjectTabs,
-  toggleProjectTab,
-  visibleProjectTabs,
-} from "../../features/projects/model/projectTabs";
+  addProjectSlot,
+  closeProjectSlot,
+  loadProjectSlots,
+  pruneProjectSlots,
+  saveProjectSlots,
+  slotAfterClosing,
+  syncProjectSlots,
+} from "../../features/projects/model/projectSlots";
 import { useRailTooltip } from "./RailTooltip";
 import { useProjectMenu } from "./useProjectMenu";
 import { SessionFiltersMenu } from "../../features/sessions/ui/SessionFiltersMenu";
@@ -2337,22 +2338,65 @@ function SidebarComponent({
     // Only the inset layout uses this menu, and it has no project rail.
     railOptions: false,
   });
-  // Projects Ctrl+clicked in Switch project sit as tabs beside the name
-  // (L-130); a plain click still just switches.
-  const [projectTabs, setProjectTabs] = useState(loadProjectTabs);
-  const updateProjectTabs = useCallback((next: string[]) => {
-    saveProjectTabs(next);
-    setProjectTabs(next);
-  }, []);
-  const shownProjectTabs = useMemo(
+  // Up to four projects sit as slots in the inset top row (L-132). The
+  // current project always has one; switching from elsewhere lands in the
+  // active slot.
+  const [projectSlots, setProjectSlots] = useState(loadProjectSlots);
+  const hasProjectSlot = inset && !!cwd && cwd !== "~";
+  // Closing the current slot switches first; the slot goes once it has.
+  const closingSlot = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hasProjectSlot) return;
+    const closing = closingSlot.current;
+    closingSlot.current = null;
+    setProjectSlots((slots) =>
+      syncProjectSlots(
+        closing && !sameProjectPath(closing, cwd)
+          ? closeProjectSlot(slots, closing)
+          : slots,
+        cwd,
+      ),
+    );
+  }, [hasProjectSlot, cwd]);
+  useEffect(() => saveProjectSlots(projectSlots), [projectSlots]);
+  const shownSlotState = useMemo(
     () =>
-      inset
-        ? visibleProjectTabs(
-            projectTabs,
-            recents.map((item) => item.path),
+      hasProjectSlot
+        ? syncProjectSlots(
+            pruneProjectSlots(
+              projectSlots,
+              (path) =>
+                sameProjectPath(path, cwd) ||
+                recents.some((item) => sameProjectPath(item.path, path)),
+            ),
+            cwd,
           )
-        : [],
-    [inset, projectTabs, recents],
+        : undefined,
+    [hasProjectSlot, projectSlots, recents, cwd],
+  );
+  const shownProjectSlots = shownSlotState?.paths ?? [];
+  // The slide between projects runs the way the slots do.
+  const slotOrder = useRef(shownProjectSlots);
+  slotOrder.current = shownProjectSlots;
+  const closeSlot = useCallback(
+    (path: string) => {
+      if (!sameProjectPath(path, cwd)) {
+        setProjectSlots((slots) => closeProjectSlot(slots, path));
+        return;
+      }
+      const next = shownSlotState && slotAfterClosing(shownSlotState, path);
+      if (!next || !onSelectProject) return;
+      closingSlot.current = path;
+      onSelectProject(next);
+    },
+    [cwd, shownSlotState, onSelectProject],
+  );
+  const addSlot = useCallback(
+    (path: string) => {
+      setProjectSlots((slots) => addProjectSlot(slots, path));
+      if (!sameProjectPath(path, cwd)) onSelectProject?.(path);
+    },
+    [cwd, onSelectProject],
   );
   // The inset layout names the project here, with its settings and the
   // project and worktree pickers in a menu below it.
@@ -2390,11 +2434,6 @@ function SidebarComponent({
                 onOpenProject={onOpenProject}
                 onProjectContextMenu={headerProjectMenu.open}
                 projectMenuActive={headerProjectMenu.isActive}
-                projectTabs={{
-                  isTab: (path) => isProjectTab(projectTabs, path),
-                  onToggle: (path) =>
-                    updateProjectTabs(toggleProjectTab(projectTabs, path, cwd)),
-                }}
               />
             )
           : undefined,
@@ -2548,32 +2587,49 @@ function SidebarComponent({
     projectStep = null;
     if (!inset) return;
     endSpaceSlide();
-    const spaces = spaceProjectsRef.current;
-    const fromIndex = spaces.findIndex((path) => sameProjectPath(path, from));
-    const toIndex = spaces.findIndex((path) => sameProjectPath(path, cwd));
+    // A swipe follows the rail it walks; anything else between two slots
+    // follows the slots, left to right.
+    const slots = slotOrder.current;
+    const fromSlot = slots.findIndex((path) => sameProjectPath(path, from));
+    const toSlot = slots.findIndex((path) => sameProjectPath(path, cwd));
+    const bySlots = !swipe && fromSlot >= 0 && toSlot >= 0;
+    const spaces = bySlots ? slots : spaceProjectsRef.current;
+    const fromIndex = bySlots
+      ? fromSlot
+      : spaces.findIndex((path) => sameProjectPath(path, from));
+    const toIndex = bySlots
+      ? toSlot
+      : spaces.findIndex((path) => sameProjectPath(path, cwd));
     if (fromIndex < 0 || toIndex < 0) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     if (slideRefs.current.some((el) => el && typeof el.animate !== "function"))
       return;
-    // The copies sit on an overlay over the sidebar, each where its live
-    // counterpart now is, covering it until the push starts.
+    // The copies sit on an overlay clipped to the session list, each where
+    // its live counterpart now is, covering it until the push starts.
     const aside = slideRefs.current[0]?.closest("aside");
+    const list = sessionsScrollRef.current;
     let overlay: HTMLDivElement | null = null;
-    if (aside && outgoing?.nodes.length) {
+    if (aside && list && outgoing?.nodes.length) {
       overlay = document.createElement("div");
       overlay.setAttribute("aria-hidden", "true");
       overlay.inert = true;
-      overlay.className =
-        "pointer-events-none absolute inset-0 z-20 overflow-hidden";
+      overlay.className = "pointer-events-none absolute z-20 overflow-hidden";
       const asideRect = aside.getBoundingClientRect();
+      const listRect = list.getBoundingClientRect();
+      Object.assign(overlay.style, {
+        left: `${listRect.left - asideRect.left}px`,
+        top: `${listRect.top - asideRect.top}px`,
+        width: `${listRect.width}px`,
+        height: `${listRect.height}px`,
+      });
       outgoing.nodes.forEach(({ node, scrollTop }, index) => {
         const live = slideRefs.current[index];
         if (!live) return;
         const rect = live.getBoundingClientRect();
         Object.assign(node.style, {
           position: "absolute",
-          left: `${rect.left - asideRect.left}px`,
-          top: `${rect.top - asideRect.top}px`,
+          left: `${rect.left - listRect.left}px`,
+          top: `${rect.top - listRect.top}px`,
           width: `${rect.width}px`,
           height: `${rect.height}px`,
         });
@@ -2606,11 +2662,19 @@ function SidebarComponent({
   }, [cwd, pendingFirstLoad, startSpaceSlide]);
   useEffect(() => endSpaceSlide, [endSpaceSlide]);
 
+  const worktreeSwitcher = (
+    <SidebarWorktreeSwitcher
+      worktrees={!remoteProject}
+      cwd={cwd}
+      tabStats={worktreeTabStats}
+      onSelect={onSelectWorkspace}
+      pending={workspaceSwitchPending}
+      switchError={workspaceSwitchError}
+      project={headerProject}
+    />
+  );
   const workspaceHeader = (
     <div
-      ref={(el) => {
-        slideRefs.current[0] = el;
-      }}
       // Inset, it sits just under the title bar, so it keeps less above the
       // project button than below it, and its search icon lines up with the
       // sessions' filter and times.
@@ -2621,32 +2685,35 @@ function SidebarComponent({
     >
       <div className="flex min-w-0 flex-1 items-center">
         {(headerProject || !remoteProject) && cwd && cwd !== "~" ? (
-          <SidebarWorktreeSwitcher
-            worktrees={!remoteProject}
-            cwd={cwd}
-            tabStats={worktreeTabStats}
-            onSelect={onSelectWorkspace}
-            pending={workspaceSwitchPending}
-            switchError={workspaceSwitchError}
-            project={headerProject}
-          />
+          headerProject && onSelectProject && shownProjectSlots.length ? (
+            <ProjectSlots
+              paths={shownProjectSlots}
+              currentPath={cwd}
+              renderCurrent={() => worktreeSwitcher}
+              renderAddPicker={(anchor, onDismiss) => (
+                <ProjectPickerPopover
+                  anchor={anchor}
+                  projects={pickerProjects(recents, cwd)}
+                  currentProject={cwd}
+                  onDismiss={onDismiss}
+                  onSelectProject={addSlot}
+                  onOpenProject={onOpenProject}
+                  label="Add a project slot"
+                />
+              )}
+              isBusy={(path) => projectPathBusy(busyProjectPaths, path)}
+              onSelect={onSelectProject}
+              onClose={closeSlot}
+              onContextMenu={headerProjectMenu.open}
+            />
+          ) : (
+            worktreeSwitcher
+          )
         ) : (
           <span className="min-w-0 truncate text-sm font-medium leading-tight">
             Workspace
           </span>
         )}
-        {onSelectProject ? (
-          <ProjectTabs
-            paths={shownProjectTabs}
-            currentPath={cwd}
-            isBusy={(path) => projectPathBusy(busyProjectPaths, path)}
-            onSelect={onSelectProject}
-            onClose={(path) =>
-              updateProjectTabs(closeProjectTab(projectTabs, path))
-            }
-            onContextMenu={headerProjectMenu.open}
-          />
-        ) : null}
       </div>
       {/* Inset, a new session is the + at the end of the title bar's tabs. */}
       <WorkspaceTitleActions
@@ -2937,9 +3004,8 @@ function SidebarComponent({
           ref={(el) => {
             sessionsLock(el);
             sessionsScrollRef.current = el;
-            slideRefs.current[1] = el;
           }}
-          className={`sidebar-session-scroll min-h-0 flex-1 overflow-y-auto overscroll-none ${
+          className={`sidebar-session-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-none ${
             tab === "sessions" ? "" : "hidden"
           }`}
           // Marks a scrolled list straight on the element, so the header's
@@ -2955,6 +3021,13 @@ function SidebarComponent({
           }
         >
           {navList}
+          {/* Only the project's own content slides on a switch; the nav above
+            stays put (L-132). */}
+          <div
+            ref={(el) => {
+              slideRefs.current[0] = el;
+            }}
+          >
           {/* The project's Monos, above its folders. */}
           {inset && railMonos && inProject ? (
             <MonoRailSection {...railMonos} project={cwd} />
@@ -3348,6 +3421,7 @@ function SidebarComponent({
               )}
             </div>
           )}
+          </div>
         </div>
         {paneHost ? null : changesPane}
         {showSidebarFooter ? (
