@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 11:27 IST — 0.16.0-local1 Windows build (upstream 0.16.0)
+- Type: chore
+- What: New Windows installer, version 0.16.0-local1: upstream 0.16.0 (phone companion pairing, sidebar swipe, context-menu polish) on top of 0.14.0-local10 plus L-123 Focus button everywhere, L-124 usage-limit turn fix and L-125 terminal Stop fix.
+- Why: User asked to commit, push and build the 0.16.0 intake for testing.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local1-upstream-0.16-phone-companion_x64.exe` (14,899,780 bytes, SHA-256 7DA672BBEAE43C54F03F5D737933269F78C4C7E139EA1497CA9AA26645C869DD, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from f6f940a8
+- Verified: tsc ✅ tests ✅ (7,563 passed, 2 skipped) build ✅ (npm run build:windows); desktop check manual
+
 ## 2026-10-20 11:12 IST — Take in upstream MonoCode 0.16.0 (phone companion)
 - Type: chore
 - What: A new branch, `nakul/windows-support-upstream-0.16.0`, brings in upstream 0.16.0: the phone companion app and desktop pairing, sidebar swipe between projects, context-menu polish and a Windows phone-connection fix. All fork features stay.
 - Why: Keep the fork current with upstream.
 - Files: [upstream-merge-2026-10-20-016.md](../notes/archive/upstream-merge-2026-10-20-016.md) (every conflict decision), [App.tsx (lines 8539, 8942, 10814)](../../src/app/App.tsx:8539), [Sidebar.tsx (line 2767)](../../src/app/shell/Sidebar.tsx:2767), [mobileAttachments.test.ts (line 22)](../../src/features/mobile/model/mobileAttachments.test.ts:22)
-- Commit: uncommitted
+- Commit: f6f940a8
 - Verified: typecheck ✅ tests ✅ (7,563) build ✅ cargo fmt ❌ (pre-existing, mcp.rs) clippy ❌ (pre-existing fork lints + 1 upstream) cargo test ❌ 816/818 (2 macOS-only tests from the 0.14 intake)
 ## 2026-10-20 10:43 IST — Terminals stopped from the process monitor no longer freeze (L-125)
 - Type: fix
