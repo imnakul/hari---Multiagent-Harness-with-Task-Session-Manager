@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 11:12 IST — Take in upstream MonoCode 0.16.0 (phone companion)
+- Type: chore
+- What: A new branch, `nakul/windows-support-upstream-0.16.0`, brings in upstream 0.16.0: the phone companion app and desktop pairing, sidebar swipe between projects, context-menu polish and a Windows phone-connection fix. All fork features stay.
+- Why: Keep the fork current with upstream.
+- Files: [upstream-merge-2026-10-20-016.md](../notes/archive/upstream-merge-2026-10-20-016.md) (every conflict decision), [App.tsx (lines 8539, 8942, 10814)](../../src/app/App.tsx:8539), [Sidebar.tsx (line 2767)](../../src/app/shell/Sidebar.tsx:2767), [mobileAttachments.test.ts (line 22)](../../src/features/mobile/model/mobileAttachments.test.ts:22)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (7,563) build ✅ cargo fmt ❌ (pre-existing, mcp.rs) clippy ❌ (pre-existing fork lints + 1 upstream) cargo test ❌ 816/818 (2 macOS-only tests from the 0.14 intake)
 ## 2026-10-20 10:43 IST — Terminals stopped from the process monitor no longer freeze (L-125)
 - Type: fix
 - What: Stopping a terminal from the process monitor left its tab showing the last screen and ignoring typing, and only closing the tab helped. The tab now shows that the process exited and offers Restart.
