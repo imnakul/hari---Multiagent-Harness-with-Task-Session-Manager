@@ -827,6 +827,24 @@ html.is-mac.has-native-glass:not(.theme-light) .inset-card {
   transform: translateZ(0);
 }
 
+/* Fork (L-126): with a Windows wallpaper the inset layout uses the same
+   background stack as the classic one. The shell's opaque base takes the
+   workspace theme's shell colour, and the card is tinted only by Glass
+   strength (as `.body-glass` is), so the wallpaper shows through it in light
+   and dark mode instead of the fixed panel fill hiding it. */
+html.is-windows.has-app-wallpaper.layout-inset .app-shell::before {
+  background: var(--inset-surface);
+}
+
+html.is-windows.has-app-wallpaper .inset-card {
+  background: color-mix(
+    in srgb,
+    var(--inset-panel) var(--window-glass-tint-opacity),
+    transparent
+  );
+  box-shadow: none;
+}
+
 /* A collapsed sidebar peeking out blurs the workspace under a faint wash,
    with the rest of the window dimmed behind it. */
 .sidebar-peek {
