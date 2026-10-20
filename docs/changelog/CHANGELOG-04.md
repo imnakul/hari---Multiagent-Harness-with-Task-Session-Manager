@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 15:01 IST — Wallpaper in the new layout; logos not cropped (L-126, L-127)
+- Type: fix
+- What: In the new layout, the Windows wallpaper now shows through the main workspace card, tinted by Glass strength, in light and dark mode, as it does in the classic layout. Project logos fit inside their square instead of being cut off.
+- Why: User saw the new layout's card stay solid white over the wallpaper, and some project logos cropped.
+- Files: `src/styles/index.css` (inset wallpaper rules); `src/features/projects/ui/ProjectLogoIcon.tsx`; `src/features/quick-composer/ui/QuickProjectIcon.tsx`; tests `src/styles/insetWallpaper.test.ts`, `src/features/projects/ui/ProjectLogoIcon.test.ts`
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (7,566 passed, 2 skipped) build ✅; desktop check manual
 ## 2026-10-20 11:27 IST — 0.16.0-local1 Windows build (upstream 0.16.0)
 - Type: chore
 - What: New Windows installer, version 0.16.0-local1: upstream 0.16.0 (phone companion pairing, sidebar swipe, context-menu polish) on top of 0.14.0-local10 plus L-123 Focus button everywhere, L-124 usage-limit turn fix and L-125 terminal Stop fix.

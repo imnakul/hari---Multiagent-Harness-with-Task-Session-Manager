@@ -44,7 +44,7 @@ export function QuickProjectIcon({
       <img
         src={src}
         alt=""
-        className={`rounded-sm object-cover ${className ?? ""}`}
+        className={`rounded-sm object-contain ${className ?? ""}`}
         onError={() => setFailed(true)}
       />
     );
