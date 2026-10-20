@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Code,
   DashboardSquare,
+  Focus,
   Inbox,
   MessageMultiple,
   PanelLeft,
@@ -19,6 +20,7 @@ import {
 import {
   memo,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -28,6 +30,7 @@ import {
   type ReactNode,
 } from "react";
 import { basename } from "../../platform/tauri/fs";
+import { FocusModeToggle } from "./focusModeToggle";
 import { looksLikeProject } from "../../features/projects/model/recents";
 import type { HarnessId } from "../../features/sessions/model/session";
 import { CwdPicker } from "../../features/projects/ui/CwdPicker";
@@ -646,6 +649,17 @@ export function DevModeIcon() {
   );
 }
 
+/** The Focus mode button, first in the header at the window's left edge. */
+export function FocusToggleButton() {
+  const onToggle = useContext(FocusModeToggle);
+  if (!onToggle) return null;
+  return (
+    <IconButton label={`Focus (${MOD}${SHIFT}E)`} onClick={onToggle}>
+      <Focus className="size-3.5" strokeWidth={1.75} />
+    </IconButton>
+  );
+}
+
 /** Flex spacer that keeps the Development badge next to the visit arrows. */
 export function DevModeSlot() {
   return (
@@ -751,9 +765,11 @@ export function OverlayNav({
   onBack?: () => void;
   onToggleSidebar?: () => void;
 }) {
-  if (!onBack && !onToggleSidebar) return null;
+  const onToggleFocus = useContext(FocusModeToggle);
+  if (!onBack && !onToggleSidebar && !onToggleFocus) return null;
   return (
     <div className="flex shrink-0 items-center px-1.5">
+      <FocusToggleButton />
       {onBack ? (
         <IconButton label={`Back (${MOD}[)`} onClick={onBack}>
           <ChevronLeft className="size-3.5" strokeWidth={1.75} />
@@ -1075,6 +1091,9 @@ function TitleBarComponent({
   // Until a project is picked, the rail and the sidebar hide, so nothing
   // project-scoped is actionable and the window controls need room.
   const projectless = !showCurrentProject;
+  // Focus sits first in the header at the window's left edge: the rail's or
+  // the sidebar's while one is open, otherwise this bar's.
+  const focusButton = !embedded && !mono ? <FocusToggleButton /> : null;
   // An open project is labeled in the sidebar, above Sessions / Explorer /
   // Changes. Without a project that sidebar is gone, so the picker stays here.
   // The inset sidebar's header menu switches projects.
@@ -1215,6 +1234,7 @@ function TitleBarComponent({
               </IconButton>
             </span>
           ) : null}
+          {focusButton}
           <DevModeIcon />
           {/* History sits at the rail's far edge and follows it as the
               sidebar resizes. */}
@@ -1234,6 +1254,7 @@ function TitleBarComponent({
             trafficLightsVisible ? (mono ? "pl-[22px]" : "pl-[70px]") : "pl-1.5"
           }`}
         >
+          {focusButton}
           <TabVisitNav
             canGoBack={canGoBack}
             canGoForward={canGoForward}
@@ -1248,6 +1269,7 @@ function TitleBarComponent({
         <>
           {trafficLightsVisible ? <div className="w-[78px] shrink-0" /> : null}
           <div className="flex shrink-0 items-center px-1.5">
+            {focusButton}
             <IconButton
               label={`Toggle Sidebar (${MOD}B)`}
               onClick={onToggleSidebar}
@@ -1265,6 +1287,7 @@ function TitleBarComponent({
           {trafficLightsVisible && railClosed && !compactRail && !inset ? (
             <div className="w-[70px] shrink-0" />
           ) : null}
+          {railClosed && !compactRail ? focusButton : null}
           <IconButton
             label={`Toggle Session Sidebar (${MOD}${SHIFT}B)`}
             onClick={onToggleSessionSidebar}

@@ -16,6 +16,7 @@ const APP_SHORTCUTS: [string, string, boolean][] = [
   ["App: Toggle Sidebar", "b", false],
   ["App: Toggle Session Sidebar", "b", true],
   ["App: Toggle Mono", "i", false],
+  ["App: Toggle Focus", "e", true],
   ["App: Go to File", "p", false],
   ["App: Command Palette", "p", true],
   ["View: Reload", "r", true],

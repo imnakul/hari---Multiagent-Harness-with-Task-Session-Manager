@@ -118,6 +118,7 @@ import { useStableValue } from "../shared/hooks/useStableValue";
 import { useDragResize } from "../shared/hooks/useDragResize";
 import { beginLayoutTransition } from "../shared/lib/layoutTransition";
 import { noteProjectStep, Sidebar } from "./shell/Sidebar";
+import { FocusModeToggle } from "./shell/focusModeToggle";
 import { ApprovalToasts } from "../features/sessions/ui/ApprovalToasts";
 import { HarnessUpdateNotice } from "../features/providers/ui/HarnessUpdateNotice";
 import { NewLayoutNotice } from "./shell/NewLayoutNotice";
@@ -809,6 +810,19 @@ import {
   recordBoardOutcome,
 } from "../features/session-board/sessionBoard";
 import {
+  FOCUS_GRID_MAX_COLUMNS,
+  addToFocusGrid,
+  focusGridHas,
+  focusGridIds,
+  loadFocusGrid,
+  pruneFocusGrid,
+  removeFromFocusGrid,
+  saveFocusGrid,
+  swapInFocusGrid,
+  visibleFocusGrid,
+} from "../features/focus/model/focusGrid";
+import { FocusView } from "../features/focus/ui/FocusView";
+import {
   loadFileOpeningBehavior,
   loadSessionOpeningBehavior,
   resolveOpeningBehavior,
@@ -1159,6 +1173,17 @@ function withPlanBuildTarget(
   return next;
 }
 
+/** Chats Focus mode adds by itself: not Monos, workers, hidden or temporary runs. */
+function isFocusEligible(session: Session): boolean {
+  return (
+    !session.ephemeral &&
+    !session.inboxAsk &&
+    !session.sidebarHidden &&
+    !session.orchestrationLeadId &&
+    !isMonoSession(session.id)
+  );
+}
+
 function openSessionIds(tabs: WorkspaceTab[]): Set<string> {
   const ids = new Set<string>();
   for (const tab of tabs) {
@@ -1434,6 +1459,23 @@ function Workspace({
     );
   });
   const [composerFocusToken, setComposerFocusToken] = useState(0);
+  // Focus mode (fork, L-123): running chats from every project side by side.
+  // The workspace stays mounted underneath, so leaving restores it exactly.
+  const [focusMode, setFocusMode] = useState(false);
+  const focusModeRef = useRef(focusMode);
+  focusModeRef.current = focusMode;
+  const [focusGrid, setFocusGrid] = useState(loadFocusGrid);
+  useEffect(() => saveFocusGrid(focusGrid), [focusGrid]);
+  const [focusPaneChoice, setFocusPaneChoice] = useState<string>();
+  // The chosen pane while it is still in the grid, else the first chat.
+  const focusPaneId =
+    focusPaneChoice && focusGridHas(focusGrid, focusPaneChoice)
+      ? focusPaneChoice
+      : focusGridIds(focusGrid)[0];
+  const focusPaneIdRef = useRef(focusPaneId);
+  focusPaneIdRef.current = focusPaneId;
+  /** Columns the Focus view has room for, as it last measured. */
+  const focusColumnCapRef = useRef(FOCUS_GRID_MAX_COLUMNS);
   /** Tab id -> project name, kept in sync with the rendered title tabs. */
   const tabProjectsRef = useRef(new Map<string, string>());
   const displayedTabNavigation = useRef<{
@@ -2564,7 +2606,9 @@ function Workspace({
   }
   const approvalSessionIds = approvalSessionIdsRef.current;
 
-  const activeSessionId = inboxViewOpen
+  const activeSessionId = focusMode
+    ? focusPaneId
+    : inboxViewOpen
     ? inboxAskPortal?.sessionId
     : shownMonoSessionId && monoShownSessionFocused
       ? shownMonoSessionId
@@ -5348,6 +5392,143 @@ function Workspace({
     [loadStoredSession, refreshHistory, sidebarCwd],
   );
 
+  // Focus mode grid upkeep (L-123). Ids seen live this Focus visit: one that
+  // then leaves `sessions` was deleted or closed and is dropped, while one
+  // never seen (restored grid, parked chat) is loaded from storage first.
+  const focusSeenIds = useRef(new Set<string>());
+  const focusLoadingIds = useRef(new Set<string>());
+  const focusPrevWorkingIds = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const previous = focusPrevWorkingIds.current;
+    focusPrevWorkingIds.current = workingSessionIds;
+    if (!focusMode) return;
+    // Only chats that start working join: closing a running pane keeps it closed.
+    const started = sessionsRef.current.filter(
+      (session) =>
+        workingSessionIds.has(session.id) &&
+        !previous.has(session.id) &&
+        isFocusEligible(session),
+    );
+    if (started.length === 0) return;
+    setFocusGrid((grid) =>
+      started.reduce((next, session) => addToFocusGrid(next, session.id), grid),
+    );
+  }, [focusMode, sessionsRef, workingSessionIds]);
+  useEffect(() => {
+    if (!focusMode) return;
+    const present = new Set(sessions.map((session) => session.id));
+    const ids = focusGridIds(focusGrid);
+    const gone = new Set(
+      ids.filter((id) => !present.has(id) && focusSeenIds.current.has(id)),
+    );
+    for (const id of ids) if (present.has(id)) focusSeenIds.current.add(id);
+    if (gone.size > 0) {
+      for (const id of gone) focusSeenIds.current.delete(id);
+      setFocusGrid((grid) => pruneFocusGrid(grid, (id) => !gone.has(id)));
+    }
+    for (const id of ids) {
+      if (present.has(id) || gone.has(id) || focusLoadingIds.current.has(id))
+        continue;
+      focusLoadingIds.current.add(id);
+      void ensureOpenSession(id)
+        .catch(() => null)
+        .then((session) => {
+          focusLoadingIds.current.delete(id);
+          if (!session) setFocusGrid((grid) => removeFromFocusGrid(grid, id));
+        });
+    }
+  }, [ensureOpenSession, focusGrid, focusMode, sessions]);
+
+  const onToggleFocusMode = useCallback(() => {
+    if (focusModeRef.current) {
+      focusSeenIds.current.clear();
+      setFocusMode(false);
+      setComposerFocusToken((token) => token + 1);
+      return;
+    }
+    const working = sessionsRef.current.filter(
+      (session) => isSessionWorking(session) && isFocusEligible(session),
+    );
+    setFocusGrid((grid) =>
+      working.reduce((next, session) => addToFocusGrid(next, session.id), grid),
+    );
+    setProjectTerminalFocused(false);
+    setComposerFocused(true);
+    setComposerFocusToken((token) => token + 1);
+    setFocusMode(true);
+  }, [sessionsRef]);
+
+  const onFocusFocusPane = useCallback((sessionId: string) => {
+    setFocusPaneChoice(sessionId);
+    setProjectTerminalFocused(false);
+    setComposerFocused(true);
+  }, []);
+
+  const onCloseFocusPane = useCallback((sessionId: string) => {
+    setFocusGrid((grid) => removeFromFocusGrid(grid, sessionId));
+  }, []);
+
+  /**
+   * Puts a chat in the grid and focuses it. When it would land out of sight
+   * ("+N more", or a column the window has no room for) it trades places
+   * with the focused pane, which moves to "+N more".
+   */
+  const placeInFocus = useCallback((sessionId: string) => {
+    setFocusGrid((grid) => {
+      const next = addToFocusGrid(grid, sessionId);
+      const shown = visibleFocusGrid(next, focusColumnCapRef.current);
+      if (!shown.hidden.includes(sessionId)) return next;
+      const visibleIds = shown.columns.flat();
+      const target =
+        focusPaneIdRef.current && visibleIds.includes(focusPaneIdRef.current)
+          ? focusPaneIdRef.current
+          : visibleIds[0];
+      return target ? swapInFocusGrid(next, sessionId, target) : next;
+    });
+    setFocusPaneChoice(sessionId);
+    setProjectTerminalFocused(false);
+    setComposerFocused(true);
+    setComposerFocusToken((token) => token + 1);
+  }, []);
+  const placeInFocusRef = useRef(placeInFocus);
+  placeInFocusRef.current = placeInFocus;
+
+  const onFocusStartNew = useCallback(
+    (cwd: string) => {
+      const session = newWorkspaceSession(cwd, sessionDefaults?.runtimeMode);
+      setSessions((prev) => [...prev, session]);
+      placeInFocus(session.id);
+    },
+    [placeInFocus, sessionDefaults?.runtimeMode, setSessions],
+  );
+  /** New chat in the focused pane's project, else the current project. */
+  const onFocusNewChat = useCallback(() => {
+    const focused = sessionsRef.current.find(
+      (session) => session.id === focusPaneIdRef.current,
+    );
+    onFocusStartNew(focused?.cwd ?? sidebarCwd);
+  }, [onFocusStartNew, sessionsRef, sidebarCwd]);
+
+  const onFocusContinue = useCallback(
+    async (sessionId: string) => {
+      const session = await ensureOpenSession(sessionId).catch(() => null);
+      if (session) placeInFocus(session.id);
+    },
+    [ensureOpenSession, placeInFocus],
+  );
+
+  /** A review opens in the workspace, so Focus steps aside for it. */
+  const onFocusOpenDiff = useCallback(
+    (path?: string, session?: { sessionId: string; cwd: string }) => {
+      if (focusModeRef.current) onToggleFocusMode();
+      onOpenDiff(path, session);
+    },
+    [onOpenDiff, onToggleFocusMode],
+  );
+  const onFocusColumnCapChange = useCallback((cap: number) => {
+    focusColumnCapRef.current = cap;
+  }, []);
+
   const onPrefetchHistorySession = useCallback(
     (sessionId: string) => {
       if (
@@ -6880,7 +7061,13 @@ function Workspace({
       setSettingsOpen(false);
       setFilePickerOpen(false);
       setSelectedProvider(null);
-      await onSelectHistorySession(session.id);
+      if (focusModeRef.current) {
+        // In Focus the resumed chat joins the grid instead of a project tab.
+        if (await ensureOpenSession(session.id))
+          placeInFocusRef.current(session.id);
+      } else {
+        await onSelectHistorySession(session.id);
+      }
       if (!session.busy) {
         await nativeHistoryStore.ensureLoaded(
           session.id,
@@ -6961,6 +7148,7 @@ function Workspace({
     [
       onSelectHistorySession,
       onArchiveHistorySession,
+      ensureOpenSession,
       enqueueHarnessEvent,
       flushHarnessEvents,
       refreshHistory,
@@ -14629,6 +14817,9 @@ function Workspace({
     onToggleSidebar,
     onToggleSessionSidebar: onToggleSessionSidebarShortcut,
     onToggleMono,
+    onToggleFocusMode,
+    onFocusNewChat,
+    onCloseFocusPane,
     onGoToFile,
     onOpenCommandPalette,
     onReload,
@@ -14661,6 +14852,9 @@ function Workspace({
     onToggleSidebar,
     onToggleSessionSidebar: onToggleSessionSidebarShortcut,
     onToggleMono,
+    onToggleFocusMode,
+    onFocusNewChat,
+    onCloseFocusPane,
     onGoToFile,
     onOpenCommandPalette,
     onReload,
@@ -14813,6 +15007,16 @@ function Workspace({
         e.preventDefault();
         e.stopPropagation();
         const a = actions.current;
+        if (focusModeRef.current) {
+          // Focus has no tabs or splits: leave the hidden workspace as it is.
+          if (cmd === "new") run("new", a.onFocusNewChat);
+          else if (cmd === "close")
+            run("close", () => {
+              if (focusPaneIdRef.current)
+                a.onCloseFocusPane(focusPaneIdRef.current);
+            });
+          return;
+        }
         if (cmd === "new") run("new", a.onNewFocused);
         else if (cmd === "close-others")
           run("close-others", a.onCloseOtherTabs);
@@ -14889,6 +15093,8 @@ function Workspace({
           run("toggle_session_sidebar", a.onToggleSessionSidebar);
         else if (shortcut === "App: Toggle Mono")
           run("toggle_mono", a.onToggleMono);
+        else if (shortcut === "App: Toggle Focus")
+          run("toggle_focus", a.onToggleFocusMode);
         else if (shortcut === "App: Go to File")
           run("go_to_file", a.onGoToFile);
         else if (shortcut === "App: Command Palette")
@@ -15452,14 +15658,15 @@ function Workspace({
             // second opinion belongs in its own tab.
             onSecondOpinion={undefined}
             onHandoff={undefined}
-            visible={monoCovers}
+            visible={monoCovers && !focusMode}
             focused={monoShownSessionActive && !projectTerminalFocused}
             inSplit={false}
             addToChatTarget={false}
             composerFocused={
               monoShownSessionActive &&
               composerFocused &&
-              !projectTerminalFocused
+              !projectTerminalFocused &&
+              !focusMode
             }
             composerFocusToken={composerFocusToken}
           />
@@ -15984,8 +16191,55 @@ function Workspace({
       />
     );
 
+  const focusView = focusMode ? (
+    <FocusView
+      grid={focusGrid}
+      sessions={sessions}
+      boardCards={sessionBoard.cards}
+      recents={recents}
+      focusedId={focusPaneId}
+      renderPane={(session) => (
+        <SessionPane
+          {...sessionPaneProps}
+          session={session}
+          onFocus={onFocusFocusPane}
+          onClose={onCloseFocusPane}
+          onOpenDiff={onFocusOpenDiff}
+          // Both open in a tab of their own, which Focus hides.
+          onSecondOpinion={undefined}
+          onHandoff={undefined}
+          visible
+          focused={session.id === focusPaneId && !projectTerminalFocused}
+          inSplit={false}
+          addToChatTarget={false}
+          composerFocused={
+            session.id === focusPaneId &&
+            composerFocused &&
+            !projectTerminalFocused
+          }
+          composerFocusToken={composerFocusToken}
+        />
+      )}
+      onGridChange={setFocusGrid}
+      onFocusPane={onFocusFocusPane}
+      onClosePane={onCloseFocusPane}
+      onColumnCapChange={onFocusColumnCapChange}
+      onExit={onToggleFocusMode}
+      onNewChat={onFocusNewChat}
+      onStartNew={onFocusStartNew}
+      onOpenChat={(sessionId) => void onFocusContinue(sessionId)}
+      onImport={
+        enabledNativeProviders.length > 0
+          ? () => setResumeSessionOpen(true)
+          : undefined
+      }
+      footer={usageFooter}
+    />
+  ) : null;
+
   return (
     <SessionStateContext.Provider value={sessionState}>
+    <FocusModeToggle.Provider value={settingsOpen ? undefined : onToggleFocusMode}>
     <OrchestrationActions.Provider value={orchestrationActions}>
       <OrchestrationWorkers.Provider value={orchestrationWorkers}>
         <div
@@ -15997,7 +16251,7 @@ function Workspace({
                 : "bg-background-base"
           }`}
         >
-          {titleBarSpansWindow ? workspaceTitleBar : null}
+          {titleBarSpansWindow && !focusMode ? workspaceTitleBar : null}
           <SavePromptDialogHost />
           {continueOffer
             ? (() => {
@@ -16049,7 +16303,12 @@ function Workspace({
               }}
             />
           ) : null}
-          <div className="flex min-h-0 min-w-0 flex-1">
+          {/* Focus mode covers the workspace; it stays mounted underneath so
+              tabs, terminals and scroll positions are as they were. */}
+          <div
+            className={focusMode ? "hidden" : "flex min-h-0 min-w-0 flex-1"}
+            inert={focusMode || undefined}
+          >
             {insetLayout ? (
               <div
                 ref={setInsetRailHost}
@@ -16154,7 +16413,7 @@ function Workspace({
                     ) : null}
                     <div className="flex min-h-0 min-w-0 flex-1">
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                        {boardOpen && !monoCovers ? null : titleBarInBody ? workspaceTitleBar : null}
+                        {boardOpen && !monoCovers ? null : titleBarInBody && !focusMode ? workspaceTitleBar : null}
 
                         <main className="relative flex min-h-0 min-w-0 flex-1">
                           <div
@@ -16227,6 +16486,7 @@ function Workspace({
                                           tab.id === activeTabId &&
                                           !inboxViewOpen &&
                                           !monoCovers &&
+                                          !focusMode &&
                                           (!boardOpen || boardPaneVisible)
                                         }
                                         layout={tab.layout}
@@ -16254,7 +16514,8 @@ function Workspace({
                                         composerFocused={
                                           composerFocused &&
                                           !projectTerminalFocused &&
-                                          !monoViewId
+                                          !monoViewId &&
+                                          !focusMode
                                         }
                                         composerFocusToken={composerFocusToken}
                                         onSelectFile={onSelectFileSurface}
@@ -16286,7 +16547,7 @@ function Workspace({
                                     isMonoSession(session.id),
                                   )
                                   .map((session) => {
-                                    const visible = monoViewId === session.id;
+                                    const visible = monoViewId === session.id && !focusMode;
                                     return (
                                       <div
                                         key={session.id}
@@ -16430,6 +16691,7 @@ function Workspace({
                       .map((session) => {
                         const visible =
                           inboxViewOpen &&
+                          !focusMode &&
                           inboxAskPortal?.sessionId === session.id;
                         return (
                           <SessionSurface
@@ -16640,7 +16902,7 @@ function Workspace({
                       }
                     />
                   ) : null}
-                  {insetLayout ? null : usageFooter}
+                  {insetLayout || focusMode ? null : usageFooter}
                 </div>
                 {insetLayout ? (
                   // Part of the card: the project tools beside the
@@ -16677,7 +16939,7 @@ function Workspace({
                   </div>
                 ) : null}
               </div>
-              {insetLayout
+              {insetLayout && !focusMode
                 ? (usageFooter ??
                   // Settings has no footer, so the card runs down to the same
                   // gutter as its right edge.
@@ -16687,6 +16949,7 @@ function Workspace({
                 : null}
             </div>
           </div>
+          {focusView}
 
           {filePickerOpen ? (
             <FilePicker
@@ -16775,6 +17038,7 @@ function Workspace({
         <TranscriptPoolOutlet pool={transcriptPool} />
       </OrchestrationWorkers.Provider>
     </OrchestrationActions.Provider>
+    </FocusModeToggle.Provider>
     </SessionStateContext.Provider>
   );
 }

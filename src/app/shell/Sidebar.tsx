@@ -211,7 +211,12 @@ import type { NativeProvider } from "../../features/provider-sessions/model/prov
 import { InboxNotificationMenu } from "../../features/inbox/ui/InboxNotificationMenu";
 import { RailAction, RailSearch } from "./RailAction";
 import { TerminalSpinner } from "../../features/sessions/ui/TerminalSpinner";
-import { DevModeSlot, IconButton, TabVisitNav } from "./TitleBar";
+import {
+  DevModeSlot,
+  FocusToggleButton,
+  IconButton,
+  TabVisitNav,
+} from "./TitleBar";
 import { ProjectSearch } from "../../features/projects/ui/ProjectSearch";
 import { Popover } from "../../shared/ui/Popover";
 import {
@@ -2764,6 +2769,9 @@ function SidebarComponent({
               data-tauri-drag-region="deep"
             >
               {trafficLightsVisible ? <div className="w-[78px] shrink-0" /> : null}
+              <div className="flex shrink-0 items-center pl-1.5">
+                <FocusToggleButton />
+              </div>
               <DevModeSlot />
               <TabVisitNav
                 canGoBack={canGoBack}

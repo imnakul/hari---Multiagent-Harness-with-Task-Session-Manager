@@ -1,4 +1,28 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-20 10:34 IST — Focus button always at the top left (L-123)
+- Type: feature
+- What: The Focus mode button now sits first in the header at the window's left edge in every view: the project rail, the session sidebar, Session Manager, Task Manager, Inbox and the other full-window views, or the title bar when no sidebar is open. Before, it showed only in the workspace title bar beside the tabs.
+- Why: Focus mode should be one click away from anywhere.
+- Files: [focusModeToggle.ts](../../src/app/shell/focusModeToggle.ts:1), [TitleBar.tsx (FocusToggleButton, OverlayNav, title bar slots)](../../src/app/shell/TitleBar.tsx:653), [ProjectRail.tsx (header)](../../src/app/shell/ProjectRail.tsx:425), [Sidebar.tsx (header)](../../src/app/shell/Sidebar.tsx:2771), [App.tsx (root provider)](../../src/app/App.tsx:16242)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no linter configured) tests ✅ (7,511) build —
+
+## 2026-10-20 04:20 IST — Focus mode (L-123)
+- Type: feature
+- What: A Focus button at the top left of the title bar (or Ctrl+Shift+E) hides the sidebars and tabs and shows running chats from every project side by side: up to 4 columns, then the 5th to 8th chats split the columns into two rows, with more in "+N more". Chats stay after they finish and never move on their own; drag a pane's header to move it. Each pane shows its project and a status tag. A New split button starts a chat in any project, continues a Done, Needs attention or Draft chat, or imports a CLI conversation, and an empty Focus shows those three full screen. Leaving Focus brings the workspace back as it was.
+- Why: Work on several projects at once without switching through the Session Manager.
+- Files: [focusGrid.ts](../../src/features/focus/model/focusGrid.ts), [focusPaneTag.ts](../../src/features/focus/model/focusPaneTag.ts), [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx), [FocusTopBar.tsx](../../src/features/focus/ui/FocusTopBar.tsx), [FocusPicker.tsx](../../src/features/focus/ui/FocusPicker.tsx), [App.tsx](../../src/app/App.tsx), [TitleBar.tsx](../../src/app/shell/TitleBar.tsx), [BoardSessionCard.tsx](../../src/features/session-board/ui/BoardSessionCard.tsx), [appShortcuts.ts](../../src/features/settings/model/appShortcuts.ts), [settings.ts](../../src/features/settings/model/settings.ts), [icons.tsx](../../src/shared/ui/icons.tsx), [focus-mode-plan.md](../specs/focus-mode-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no linter configured) tests ✅ (7,508) build —
+
+## 2026-10-20 03:37 IST — Focus mode spec (L-123, draft)
+- Type: docs
+- What: Draft spec for Focus mode: a title-bar button that hides the sidebars and tiles every running chat from any project (4 columns, then two rows, up to 8), keeps finished chats, never reorders on its own, supports drag to move, and adds a New split button (Start new, Continue, Import).
+- Why: User wants to work on several projects side by side instead of switching through the Session Manager.
+- Files: [focus-mode-plan.md](../specs/focus-mode-plan.md), [SPECS.md](../specs/SPECS.md)
+- Commit: uncommitted
+- Verified: docs only
+
 ## 2026-10-20 02:35 IST — 0.14.0-local10 Windows build (L-122)
 - Type: chore
 - What: New Windows installer, version 0.14.0-local10, adding the project name shimmer during external turns (L-122) on top of local9 (task editor + button, Interactive Claude auto-compact and queue fix).

@@ -279,7 +279,7 @@ function boardModelLabel(harness: HarnessId | null, stored: string): string {
   );
 }
 
-function BoardCardTag({
+export function BoardCardTag({
   label,
   tone,
   title,
