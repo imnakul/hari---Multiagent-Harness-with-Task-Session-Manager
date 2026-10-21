@@ -1943,6 +1943,10 @@ html.theme-light .orchestrator-constellation {
   transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+[data-focus-resizing] > .focus-ring-glide {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .focus-pane,
   .focus-ring-glide {
@@ -3745,6 +3749,34 @@ html.theme-light .mono-pill {
 
 .orchestration-tree-step:last-child::before {
   height: 9px;
+}
+
+/* Chats started from another one (fork, sidechat, second opinion, L-173):
+   the same rail, with the curve meeting the card's title line. Scoped to
+   the rail so it outranks the base curve defined further down. A full card
+   has a 6px inset and a 18px title; the inset sidebar's row is 24px. */
+.session-link-rail {
+  padding-top: 2px;
+}
+
+.session-link-step {
+  padding-bottom: 2px;
+}
+
+.session-link-rail > .session-link-step::after {
+  top: 8px;
+}
+
+.session-link-rail > .session-link-step:last-child::before {
+  height: 9px;
+}
+
+.session-link-rail[data-dense] > .session-link-step::after {
+  top: 11px;
+}
+
+.session-link-rail[data-dense] > .session-link-step:last-child::before {
+  height: 12px;
 }
 
 /* RevealHeight: grows a block open from nothing, pushing what follows down,

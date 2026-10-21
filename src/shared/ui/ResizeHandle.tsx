@@ -5,8 +5,10 @@ const KEY_STEP = 16;
 
 /**
  * Vertical drag handle for a column edge. The live value is reported through
- * `onLive` while dragging; `onCommit` fires once on pointerup/keyup/double-click.
- * Double-click restores `defaultValue`, or calls `onReset` when given.
+ * `onLive` while dragging, at most once per frame (fork, L-176), and `null`
+ * when the drag ends; `onCommit` fires once on pointerup/keyup/double-click.
+ * An `onLive` that writes the DOM instead of state keeps the drag free of
+ * React renders. Double-click restores `defaultValue`, or calls `onReset`.
  */
 export function ResizeHandle({
   label,
@@ -65,12 +67,25 @@ export function ResizeHandle({
     const restoreSelection = suppressTextSelection();
     const previousCursor = document.body.style.cursor;
     document.body.style.cursor = "col-resize";
+    let pending: number | null = null;
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
+      if (pending === null) return;
+      setLive(pending);
+      handle.setAttribute("aria-valuenow", String(pending));
+    };
     const onMove = (move: globalThis.PointerEvent) => {
       if (move.pointerId !== pointerId) return;
-      setLive(clamp(startValue + move.clientX - startX));
+      pending = clamp(startValue + move.clientX - startX);
+      if (!frame) frame = requestAnimationFrame(paint);
     };
     const onUp = (up: globalThis.PointerEvent) => {
       if (up.pointerId !== pointerId) return;
+      if (frame) {
+        cancelAnimationFrame(frame);
+        paint();
+      }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

@@ -78,6 +78,72 @@ function dialogLayer(layer: number | undefined, inDialog: boolean): number {
   );
 }
 
+type DismissLayer = {
+  contains: (target: Node) => boolean;
+  escape: boolean;
+  /** The layer this one opened inside, through React's tree. */
+  parent: DismissLayer | null;
+};
+
+/**
+ * Open popovers that dismiss themselves, oldest first (L-174). A menu opened
+ * from inside a popover lands above it: a pointer inside the menu is not
+ * outside the popover below, and Escape closes only the topmost layer that
+ * takes it, so opening one no longer closes both.
+ */
+const dismissLayers: DismissLayer[] = [];
+/** The Escape a layer already took, so the layers below it let it pass. */
+let claimedEscape: Event | null = null;
+/** The nearest dismissable popover a popover renders inside. */
+const DismissLayerParent = createContext<DismissLayer | null>(null);
+
+/**
+ * Registers a popover on the dismiss stack while it has a dismiss handler,
+ * and returns the layer its children should see as their parent.
+ */
+function useDismissLayer(
+  enabled: boolean,
+  element: { current: HTMLElement | null },
+): { layer: DismissLayer; childParent: DismissLayer | null } {
+  const parent = useContext(DismissLayerParent);
+  const [layer] = useState<DismissLayer>(() => ({
+    contains: (target) => element.current?.contains(target) ?? false,
+    escape: true,
+    parent,
+  }));
+  layer.parent = parent;
+  useEffect(() => {
+    if (!enabled) return;
+    // A menu mounted with its popover runs its effect first; it still has to
+    // land above it, so a layer goes below any child already registered.
+    const child = dismissLayers.findIndex((entry) => entry.parent === layer);
+    if (child >= 0) dismissLayers.splice(child, 0, layer);
+    else dismissLayers.push(layer);
+    return () => {
+      const index = dismissLayers.indexOf(layer);
+      if (index >= 0) dismissLayers.splice(index, 1);
+    };
+  }, [enabled, layer]);
+  return { layer, childParent: enabled ? layer : parent };
+}
+
+function insideLayerAbove(layer: DismissLayer, target: Node): boolean {
+  const index = dismissLayers.indexOf(layer);
+  return (
+    index >= 0 &&
+    dismissLayers.slice(index + 1).some((above) => above.contains(target))
+  );
+}
+
+/** Whether this layer should take the Escape, claiming it if so. */
+function takesEscape(layer: DismissLayer, event: Event): boolean {
+  if (claimedEscape === event) return false;
+  const top = [...dismissLayers].reverse().find((entry) => entry.escape);
+  if (top && top !== layer) return false;
+  claimedEscape = event;
+  return true;
+}
+
 const FRAME = "isolate relative overflow-hidden border border-content/10 shadow-xl";
 
 /** Which corner the open animation grows from, so it reads as anchored. */
@@ -170,13 +236,19 @@ function NativePopover({
   ...props
 }: Props & { host: HTMLElement }) {
   const surface = useRef<HTMLDivElement | null>(null);
+  const { layer: dismissLayer, childParent } = useDismissLayer(
+    !!onDismiss,
+    surface,
+  );
   useEffect(() => {
     if (autoFocus) surface.current?.focus({ preventScroll: true });
   }, [autoFocus]);
   useEffect(() => {
     if (!onDismiss) return;
+    dismissLayer.escape = dismissOnEscape;
     const key = (event: KeyboardEvent) => {
       if (!dismissOnEscape || event.key !== "Escape") return;
+      if (!takesEscape(dismissLayer, event)) return;
       event.preventDefault();
       event.stopPropagation();
       onDismiss("escape");
@@ -186,6 +258,7 @@ function NativePopover({
       if (
         !(target instanceof Element) ||
         surface.current?.contains(target) ||
+        insideLayerAbove(dismissLayer, target) ||
         (ignore && target.closest(ignore))
       )
         return;
@@ -197,7 +270,7 @@ function NativePopover({
       window.removeEventListener("keydown", key, true);
       window.removeEventListener("pointerdown", outside);
     };
-  }, [onDismiss, dismissOnEscape, ignore]);
+  }, [onDismiss, dismissOnEscape, ignore, dismissLayer]);
   // These position the ordinary web popover; the OS positions this surface.
   const {
     anchor: _anchor,
@@ -224,7 +297,9 @@ function NativePopover({
       style={{ maxHeight: maxHeight ?? 400, ...style }}
       className={`relative w-full outline-none ${className ?? ""}`}
     >
-      {children}
+      <DismissLayerParent.Provider value={childParent}>
+        {children}
+      </DismissLayerParent.Provider>
     </div>,
     host,
   );
@@ -262,6 +337,10 @@ function WebPopover({
   anchorRef.current = anchor;
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
+  const { layer: dismissLayer, childParent } = useDismissLayer(
+    !!onDismiss,
+    frame,
+  );
   const key = anchorKey(anchor);
 
   const place = useCallback(() => {
@@ -301,10 +380,12 @@ function WebPopover({
 
   useEffect(() => {
     if (!onDismiss) return;
+    dismissLayer.escape = dismissOnEscape;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (frame.current?.contains(target)) return;
+      if (insideLayerAbove(dismissLayer, target)) return;
       if (anchorElement(anchorRef.current)?.contains(target)) return;
       const el =
         target instanceof Element ? target : (target.parentElement ?? null);
@@ -313,6 +394,7 @@ function WebPopover({
     };
     const onKey = (event: KeyboardEvent) => {
       if (!dismissOnEscape || event.key !== "Escape") return;
+      if (!takesEscape(dismissLayer, event)) return;
       event.preventDefault();
       event.stopPropagation();
       dismissRef.current?.("escape");
@@ -323,7 +405,7 @@ function WebPopover({
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [onDismiss, dismissOnEscape, ignore]);
+  }, [onDismiss, dismissOnEscape, ignore, dismissLayer]);
 
   // The first pass measures the surface off to the side; the layout effect
   // lands it before the browser paints.
@@ -384,7 +466,9 @@ function WebPopover({
         }}
         className={`${position ? "popover-open " : ""}relative z-[1] outline-none ${className ?? ""}`}
       >
-        {children}
+        <DismissLayerParent.Provider value={childParent}>
+          {children}
+        </DismissLayerParent.Provider>
       </div>
     </div>,
     document.body,

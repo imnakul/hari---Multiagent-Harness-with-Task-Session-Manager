@@ -7,6 +7,8 @@ const KEY_STEP = 0.02;
 type Props = {
   /** "vertical" sits between columns and drags sideways; "horizontal" splits a column. */
   orientation: "vertical" | "horizontal";
+  /** Names this edge on the DOM, so a live resize can move it (L-176). */
+  sashId: string;
   label: string;
   /** The edge's place in its span, 0–1. */
   value: number;
@@ -27,6 +29,7 @@ type Props = {
  */
 export function FocusSash({
   orientation,
+  sashId,
   label,
   value,
   style,
@@ -46,7 +49,7 @@ export function FocusSash({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(value * 100)}
-      data-focus-sash=""
+      data-focus-sash={sashId}
       title="Drag to resize · double-click for equal sizes"
       style={style}
       className={`group absolute z-10 touch-none focus-visible:outline-none ${

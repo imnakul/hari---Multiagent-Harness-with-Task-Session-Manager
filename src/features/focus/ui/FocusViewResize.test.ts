@@ -22,6 +22,7 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  localStorage.clear();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => {
     run(0);
@@ -69,47 +70,51 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const bodies = () =>
-  [...host.querySelectorAll<HTMLElement>("[data-focus-pane-body]")];
+const pane = (id: string) =>
+  host.querySelector<HTMLElement>(`[data-focus-pane="${id}"]`);
 const pointer = (type: string, clientX: number) =>
   new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX });
 
-describe("FocusView resize keeps transcripts still (L-156)", () => {
-  it("holds each pane body at its starting size until the drag ends", () => {
+describe("FocusView resize reflows live (L-176)", () => {
+  it("moves the panes on every frame and keeps the release", () => {
     const sash = host.querySelector<HTMLElement>('[role="separator"]');
     if (!sash) throw new Error("no separator");
-    expect(bodies().every((body) => body.style.width === "")).toBe(true);
+    expect(pane("a1")?.style.width).toBe("calc(50% - 6px)");
 
     act(() => {
       sash.dispatchEvent(pointer("pointerdown", 500));
       sash.dispatchEvent(pointer("pointermove", 400));
     });
-    expect(bodies()).toHaveLength(2);
-    for (const body of bodies()) {
-      expect(body.style.width).toBe("480px");
-      expect(body.style.height).toBe("560px");
-      expect(body.style.contain).toBe("layout paint");
-    }
-    // The pane boxes still follow the pointer.
-    const first = host.querySelector<HTMLElement>('[data-focus-pane="a1"]');
-    expect(first?.style.width).toBe("calc(40% - 6px)");
+    // Pane bodies are never frozen, so their text re-wraps as the edge moves.
+    const bodies = [
+      ...host.querySelectorAll<HTMLElement>("[data-focus-pane-body]"),
+    ];
+    expect(bodies).toHaveLength(2);
+    expect(bodies.every((body) => body.style.width === "")).toBe(true);
+    expect(pane("a1")?.style.width).toBe("calc(40% - 6px)");
+    expect(pane("b1")?.style.left).toBe("calc(40% + 3px)");
+    expect(sash.style.left).toBe("calc(40% - 3px)");
+    expect(sash.getAttribute("aria-valuenow")).toBe("40");
+    expect(host.querySelector("[data-focus-resizing]")).not.toBeNull();
 
     act(() => sash.dispatchEvent(pointer("pointerup", 400)));
-    expect(bodies().every((body) => body.style.width === "")).toBe(true);
-    expect(first?.style.width).toBe("calc(40% - 6px)");
+    expect(pane("a1")?.style.width).toBe("calc(40% - 6px)");
+    expect(host.querySelector("[data-focus-resizing]")).toBeNull();
   });
 
-  it("releases the bodies when Escape cancels the drag", () => {
+  it("puts the saved layout back when Escape cancels the drag", () => {
     const sash = host.querySelector<HTMLElement>('[role="separator"]');
     if (!sash) throw new Error("no separator");
     act(() => {
       sash.dispatchEvent(pointer("pointerdown", 500));
       sash.dispatchEvent(pointer("pointermove", 300));
     });
-    expect(bodies()[0].style.width).toBe("480px");
+    expect(pane("a1")?.style.width).toBe("calc(30% - 6px)");
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(bodies().every((body) => body.style.width === "")).toBe(true);
+    expect(pane("a1")?.style.width).toBe("calc(50% - 6px)");
+    expect(sash.style.left).toBe("calc(50% - 3px)");
+    expect(host.querySelector("[data-focus-resizing]")).toBeNull();
   });
 });

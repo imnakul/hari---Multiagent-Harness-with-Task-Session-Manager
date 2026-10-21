@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
@@ -139,17 +138,64 @@ type Props = {
   footer?: ReactNode;
 };
 
-/** A pane body held at its pre-resize size, contained so it never reflows. */
-function frozenBodyStyle(
-  size: { width: number; height: number } | undefined,
-): CSSProperties | undefined {
-  if (!size) return undefined;
-  return {
-    flex: "none",
-    width: size.width,
-    height: size.height,
-    contain: "layout paint",
+type FocusBoxStyle = Record<"left" | "top" | "width" | "height", string>;
+
+/**
+ * Where each pane and edge sits for `sizes`. Render and a live resize
+ * (L-176) both read it, so the release writes the values the drag showed.
+ */
+function focusBoxes(
+  columns: readonly (readonly string[])[],
+  sizes: FocusLayout,
+) {
+  const shares = focusColumnShares(columns, sizes);
+  const starts = shares.map((_, index) =>
+    shares.slice(0, index).reduce((sum, share) => sum + share, 0),
+  );
+  /** A pane's box: its column's share of the width, its row's of the height. */
+  const pane = (columnIndex: number, rowIndex: number): FocusBoxStyle => {
+    const column = columns[columnIndex] ?? [];
+    const split = focusRowSplit(column, sizes);
+    const top = column.length > 1 && rowIndex > 0 ? split : 0;
+    const height = column.length > 1 ? (rowIndex > 0 ? 1 - split : split) : 1;
+    return {
+      left: `calc(${starts[columnIndex] * 100}% + ${PANE_GAP}px)`,
+      width: `calc(${shares[columnIndex] * 100}% - ${PANE_GAP * 2}px)`,
+      top: `calc(${top * 100}% + ${PANE_GAP}px)`,
+      height: `calc(${height * 100}% - ${PANE_GAP * 2}px)`,
+    };
   };
+  /** The edge before column `index` (1 or more). */
+  const columnEdge = (index: number) => ({
+    value: starts[index],
+    style: {
+      left: `calc(${starts[index] * 100}% - ${PANE_GAP}px)`,
+      width: `${PANE_GAP * 2}px`,
+      top: "0px",
+      height: "100%",
+    } satisfies FocusBoxStyle,
+  });
+  /** The edge between a column's two chats. */
+  const rowEdge = (columnIndex: number) => {
+    const split = focusRowSplit(columns[columnIndex] ?? [], sizes);
+    return {
+      value: split,
+      style: {
+        left: `calc(${starts[columnIndex] * 100}% + ${PANE_GAP}px)`,
+        width: `calc(${shares[columnIndex] * 100}% - ${PANE_GAP * 2}px)`,
+        top: `calc(${split * 100}% - ${PANE_GAP}px)`,
+        height: `${PANE_GAP * 2}px`,
+      } satisfies FocusBoxStyle,
+    };
+  };
+  return { pane, columnEdge, rowEdge };
+}
+
+function writeBox(element: HTMLElement | null, style: FocusBoxStyle): void {
+  if (!element) return;
+  for (const [name, value] of Object.entries(style)) {
+    element.style.setProperty(name, value);
+  }
 }
 
 function paneTitle(
@@ -205,42 +251,8 @@ export function FocusView({
   const endDrag = useRef<(() => void) | null>(null);
   const paneArea = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<FocusLayout>(loadFocusLayout);
-  /** A resize in progress; the saved layout returns if it is cancelled. */
-  const [draftLayout, setDraftLayout] = useState<FocusLayout | null>(null);
-  /**
-   * Fork (L-156): each pane body's pixel size when a resize began. While an
-   * edge is dragged the bodies hold that size (the card clips or shows its
-   * background), so transcripts and terminals reflow once on release instead
-   * of on every frame.
-   */
-  const [frozenBodies, setFrozenBodies] = useState<ReadonlyMap<
-    string,
-    { width: number; height: number }
-  > | null>(null);
-  const previewLayout = (next: FocusLayout) => {
-    if (!frozenBodies) {
-      const measured = new Map<string, { width: number; height: number }>();
-      paneArea.current
-        ?.querySelectorAll<HTMLElement>("[data-focus-pane-body]")
-        .forEach((body) => {
-          const id = body.dataset.focusPaneBody;
-          if (id)
-            measured.set(id, {
-              width: body.offsetWidth,
-              height: body.offsetHeight,
-            });
-        });
-      setFrozenBodies(measured);
-    }
-    setDraftLayout(next);
-  };
-  const cancelLayout = () => {
-    setFrozenBodies(null);
-    setDraftLayout(null);
-  };
   const commitLayout = (next: FocusLayout) => {
-    setFrozenBodies(null);
-    setDraftLayout(null);
+    delete paneArea.current?.dataset.focusResizing;
     setLayout(next);
     saveFocusLayout(next);
   };
@@ -285,11 +297,47 @@ export function FocusView({
   const viewGrid = activeGroup ? projectFocusGrid(grid, activeGroup) : grid;
   const shown = visibleFocusGrid(viewGrid, cap);
   const empty = shown.columns.length === 0 && shown.hidden.length === 0;
-  const sizes = draftLayout ?? layout;
-  const shares = focusColumnShares(shown.columns, sizes);
-  const starts = shares.map((_, index) =>
-    shares.slice(0, index).reduce((sum, share) => sum + share, 0),
-  );
+  const boxes = focusBoxes(shown.columns, layout);
+  /**
+   * Fork (L-176, replaces L-156's frozen bodies): a dragged edge moves the
+   * panes, edges and ring straight on the DOM each frame, the way T3 Code
+   * drags its panels, so chats re-wrap live without a React render per
+   * frame. The release commits the layout once.
+   */
+  const previewLayout = (next: FocusLayout) => {
+    const area = paneArea.current;
+    if (!area) return;
+    area.dataset.focusResizing = "";
+    const live = focusBoxes(shown.columns, next);
+    const find = (selector: string) =>
+      area.querySelector<HTMLElement>(selector);
+    shown.columns.forEach((column, columnIndex) => {
+      column.forEach((id, rowIndex) => {
+        const box = live.pane(columnIndex, rowIndex);
+        writeBox(find(`[data-focus-pane="${CSS.escape(id)}"]`), box);
+        if (id === focusedId) writeBox(find("[data-focus-ring]"), box);
+      });
+      const moveSash = (
+        key: string,
+        edge: { value: number; style: FocusBoxStyle },
+      ) => {
+        const sash = find(`[data-focus-sash="${key}"]`);
+        writeBox(sash, edge.style);
+        sash?.setAttribute(
+          "aria-valuenow",
+          String(Math.round(edge.value * 100)),
+        );
+      };
+      if (columnIndex > 0)
+        moveSash(`column-${columnIndex}`, live.columnEdge(columnIndex));
+      if (column.length > 1)
+        moveSash(`row-${columnIndex}`, live.rowEdge(columnIndex));
+    });
+  };
+  const cancelLayout = () => {
+    previewLayout(layout);
+    delete paneArea.current?.dataset.focusResizing;
+  };
 
   const projectItems = useMemo(
     () => focusProjectItems(recents, marks),
@@ -524,22 +572,6 @@ export function FocusView({
   const dockInPane = shown.columns.some((column) =>
     column.includes(focusedId ?? ""),
   );
-  /** A pane's box: its column's share of the width, its row's of the height. */
-  const paneBox = (
-    columnIndex: number,
-    column: readonly string[],
-    rowIndex: number,
-  ) => {
-    const split = focusRowSplit(column, sizes);
-    const top = column.length > 1 && rowIndex > 0 ? split : 0;
-    const height = column.length > 1 ? (rowIndex > 0 ? 1 - split : split) : 1;
-    return {
-      left: `calc(${starts[columnIndex] * 100}% + ${PANE_GAP}px)`,
-      width: `calc(${shares[columnIndex] * 100}% - ${PANE_GAP * 2}px)`,
-      top: `calc(${top * 100}% + ${PANE_GAP}px)`,
-      height: `calc(${height * 100}% - ${PANE_GAP * 2}px)`,
-    };
-  };
   const areaSpan = (vertical: boolean) => {
     const rect = paneArea.current?.getBoundingClientRect();
     if (!rect) return null;
@@ -550,7 +582,7 @@ export function FocusView({
   const resetLayout = () =>
     commitLayout(resetFocusLayout(layout, shown.columns));
   const columnSashes = shown.columns.slice(1).map((column, index) => {
-    const edge = starts[index + 1];
+    const edge = boxes.columnEdge(index + 1);
     const resize = (value: number) => {
       const width = paneArea.current?.clientWidth ?? 0;
       const minShare = width > 0 ? MIN_PANE_WIDTH / width : 0.1;
@@ -560,14 +592,10 @@ export function FocusView({
       <FocusSash
         key={`column-${column[0]}`}
         orientation="vertical"
+        sashId={`column-${index + 1}`}
         label={`Resize columns ${index + 1} and ${index + 2}`}
-        value={edge}
-        style={{
-          left: `calc(${edge * 100}% - ${PANE_GAP}px)`,
-          width: PANE_GAP * 2,
-          top: 0,
-          bottom: 0,
-        }}
+        value={edge.value}
+        style={edge.style}
         measure={() => areaSpan(true)}
         onPreview={(value) => previewLayout(resize(value))}
         onCommit={(value) => commitLayout(resize(value))}
@@ -578,7 +606,7 @@ export function FocusView({
   });
   const rowSashes = shown.columns.flatMap((column, columnIndex) => {
     if (column.length < 2) return [];
-    const split = focusRowSplit(column, sizes);
+    const edge = boxes.rowEdge(columnIndex);
     const resize = (value: number) => {
       const height = paneArea.current?.clientHeight ?? 0;
       const minShare = height > 0 ? MIN_PANE_HEIGHT / height : 0.2;
@@ -588,14 +616,10 @@ export function FocusView({
       <FocusSash
         key={`row-${column[0]}`}
         orientation="horizontal"
+        sashId={`row-${columnIndex}`}
         label={`Resize chats in column ${columnIndex + 1}`}
-        value={split}
-        style={{
-          left: `calc(${starts[columnIndex] * 100}% + ${PANE_GAP}px)`,
-          width: `calc(${shares[columnIndex] * 100}% - ${PANE_GAP * 2}px)`,
-          top: `calc(${split * 100}% - ${PANE_GAP}px)`,
-          height: PANE_GAP * 2,
-        }}
+        value={edge.value}
+        style={edge.style}
         measure={() => areaSpan(false)}
         onPreview={(value) => previewLayout(resize(value))}
         onCommit={(value) => commitLayout(resize(value))}
@@ -607,7 +631,8 @@ export function FocusView({
   const sessionDropOver = useFocusSessionDropOver();
   // Fork (L-151): one accent ring over the focused pane, so a focus change
   // glides it from the old pane to the new one instead of swapping outlines.
-  // It snaps (no transition) while an edge is dragged, so it never lags.
+  // It snaps (no transition) while an edge is dragged, so it never lags:
+  // `data-focus-resizing` on the pane area turns the glide off.
   const ringColumn = outlined
     ? shown.columns.findIndex((column) => column.includes(focusedId ?? ""))
     : -1;
@@ -616,12 +641,9 @@ export function FocusView({
       <div
         aria-hidden
         data-focus-ring
-        className={`focus-ring pointer-events-none absolute z-[1] rounded-[10px]${
-          draftLayout ? "" : " focus-ring-glide"
-        }`}
-        style={paneBox(
+        className="focus-ring focus-ring-glide pointer-events-none absolute z-[1] rounded-[10px]"
+        style={boxes.pane(
           ringColumn,
-          shown.columns[ringColumn],
           shown.columns[ringColumn].indexOf(focusedId ?? ""),
         )}
       />
@@ -647,7 +669,7 @@ export function FocusView({
           className={`focus-pane absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-stroke${
             focused && outlined ? " focus-pane-active z-[1]" : ""
           }${drag?.fromId === id ? " opacity-40" : ""}`}
-          style={paneBox(columnIndex, column, rowIndex)}
+          style={boxes.pane(columnIndex, rowIndex)}
         >
           <header
             data-focus-pane-header
@@ -701,7 +723,6 @@ export function FocusView({
             className={`min-h-0 min-w-0 flex-1 ${
               focused && dockInPane ? "grid" : "flex flex-col"
             }`}
-            style={frozenBodyStyle(frozenBodies?.get(id))}
           >
             {focused && dockInPane ? dock : null}
             <div

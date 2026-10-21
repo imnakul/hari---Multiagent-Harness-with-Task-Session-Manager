@@ -547,6 +547,7 @@ export function GraphResizeSash({
   maxHeight,
 }: {
   height: number;
+  /** Draws a height mid-drag, straight on the DOM; no React state. */
   onHeightPaint: (height: number) => void;
   onHeightCommit: (height: number) => void;
   maxHeight: () => number;
@@ -578,15 +579,28 @@ export function GraphResizeSash({
     const previousCursor = document.body.style.cursor;
     document.body.style.cursor = "row-resize";
     document.documentElement.classList.add("is-resizing");
+    // Fork (L-176): one paint per frame, written to the DOM by the owner, and
+    // React state only on release, so the list below re-wraps live.
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
+      paintRef.current(paintedRef.current);
+      handle.setAttribute("aria-valuenow", String(paintedRef.current));
+    };
 
     const onMove = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId || !drag.current) return;
-      const next = clamp(drag.current.size - (ev.clientY - drag.current.start));
-      paintedRef.current = next;
-      paintRef.current(next);
+      paintedRef.current = clamp(
+        drag.current.size - (ev.clientY - drag.current.start),
+      );
+      if (!frame) frame = requestAnimationFrame(paint);
     };
 
     const stop = () => {
+      if (frame) {
+        cancelAnimationFrame(frame);
+        paint();
+      }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

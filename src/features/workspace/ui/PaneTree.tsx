@@ -6,7 +6,6 @@ import {
   useReducer,
   useRef,
   useState,
-  type CSSProperties,
   type ComponentProps,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -313,7 +312,6 @@ function PaneTreeComponent({
   const treeRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
-  const [draft, setDraft] = useState<LayoutNode | null>(null);
   const [paneDrag, setPaneDrag] = useState<PaneDrag | null>(null);
   const externalDrop = useExternalPaneDrop(visible);
   const drop = paneDrag ?? externalDrop;
@@ -324,13 +322,9 @@ function PaneTreeComponent({
   const onFocusRef = useRef(onFocus);
   onFocusRef.current = onFocus;
 
-  useEffect(() => {
-    setDraft(null);
-  }, [layout]);
-
-  // A sash drag re-renders this tree every frame. `SessionPane` compares props
-  // shallowly, so handing it a fresh drag handler each frame would re-render
-  // the whole session subtree (transcript, composer, picker) per frame.
+  // `SessionPane` compares props shallowly, so handing it a fresh drag
+  // handler on every render of this tree would re-render the whole session
+  // subtree (transcript, composer, picker) each time.
   const dragHandlers = useRef(
     new Map<string, (event: ReactPointerEvent<HTMLElement>) => void>(),
   );
@@ -343,9 +337,8 @@ function PaneTreeComponent({
     return handler;
   };
 
-  const tree = draft ?? layout;
-  const leaves = layoutLeaves(tree);
-  const sashes = layoutSashes(tree);
+  const leaves = layoutLeaves(layout);
+  const sashes = layoutSashes(layout);
 
   // A pane split into an existing layout pushes in from the edge it was
   // added on, and a closed file pane slides back out the same way. Its
@@ -364,7 +357,7 @@ function PaneTreeComponent({
   const slide = useRef<{ stop: () => void } | null>(null);
   const [, rerender] = useReducer((tick: number) => tick + 1, 0);
   const previousLeaves = knownLeaves.current;
-  if (previousLeaves && visible && !draft) {
+  if (previousLeaves && visible) {
     const current = new Set(leaves.map((leaf) => leaf.id));
     const removed = [...previousLeaves.values()].filter(
       (leaf) => !current.has(leaf.id),
@@ -735,12 +728,6 @@ function PaneTreeComponent({
         const dragging = drop?.fromId === leaf.id;
         const onPaneDragStart =
           inSplit && !leaving ? paneDragStartFor(leaf.id) : undefined;
-        const backgroundStyle = {
-          "--chat-background-left": `${(-leaf.rect.x / leaf.rect.w) * 100}%`,
-          "--chat-background-top": `${(-leaf.rect.y / leaf.rect.h) * 100}%`,
-          "--chat-background-width": `${100 / leaf.rect.w}%`,
-          "--chat-background-height": `${100 / leaf.rect.h}%`,
-        } as CSSProperties;
         return (
           <div
             key={leaf.id}
@@ -758,13 +745,7 @@ function PaneTreeComponent({
               event.currentTarget.scrollLeft = 0;
               event.currentTarget.scrollTop = 0;
             }}
-            style={{
-              left: `${leaf.rect.x * 100}%`,
-              top: `${leaf.rect.y * 100}%`,
-              width: `${leaf.rect.w * 100}%`,
-              height: `${leaf.rect.h * 100}%`,
-              ...backgroundStyle,
-            }}
+            style={paneRectStyle(leaf.rect)}
           >
             {drop && drop.overId === leaf.id && drop.fromId !== leaf.id ? (
               <PaneDropHint edge={drop.edge} />
@@ -899,19 +880,89 @@ function PaneTreeComponent({
           sash={sash}
           containerRef={treeRef}
           onPreview={(ratio) =>
-            setDraft(
+            previewLayout(
+              treeRef.current,
               setSplitRatio(layoutRef.current, sash.splitId, sash.index, ratio),
             )
           }
-          onCommit={(ratio) => {
-            setDraft(null);
-            onRatio(sash.splitId, sash.index, ratio);
-          }}
-          onCancel={() => setDraft(null)}
+          onCommit={(ratio) => onRatio(sash.splitId, sash.index, ratio)}
+          onCancel={() => previewLayout(treeRef.current, layoutRef.current)}
         />
       ))}
     </div>
   );
+}
+
+/** Where a pane sits in the tree, and where its slice of the chat background starts. */
+function paneRectStyle(rect: LayoutRect): Record<string, string> {
+  return {
+    left: `${rect.x * 100}%`,
+    top: `${rect.y * 100}%`,
+    width: `${rect.w * 100}%`,
+    height: `${rect.h * 100}%`,
+    "--chat-background-left": `${(-rect.x / rect.w) * 100}%`,
+    "--chat-background-top": `${(-rect.y / rect.h) * 100}%`,
+    "--chat-background-width": `${100 / rect.w}%`,
+    "--chat-background-height": `${100 / rect.h}%`,
+  };
+}
+
+function sashBoundary(sash: LayoutSash): number {
+  return sash.sizes
+    .slice(0, sash.index + 1)
+    .reduce((sum, size) => sum + size, 0);
+}
+
+function sashStyle(sash: LayoutSash): Record<string, string> {
+  const { group } = sash;
+  const boundary = sashBoundary(sash);
+  return sash.dir === "right"
+    ? {
+        left: `${(group.x + boundary * group.w) * 100}%`,
+        top: `${group.y * 100}%`,
+        height: `${group.h * 100}%`,
+      }
+    : {
+        left: `${group.x * 100}%`,
+        top: `${(group.y + boundary * group.h) * 100}%`,
+        width: `${group.w * 100}%`,
+      };
+}
+
+/**
+ * Moves the panes and sashes already on screen to `layout` without a React
+ * render, the way T3 Code drags its panels (L-175). Text still reflows live,
+ * but nothing re-renders per frame; the release commits the ratio and React
+ * writes the same values. Only sizes may differ from the rendered layout.
+ */
+function previewLayout(tree: HTMLElement | null, layout: LayoutNode): void {
+  if (!tree) return;
+  const panes = new Map(layoutLeaves(layout).map((leaf) => [leaf.id, leaf]));
+  const sashes = new Map(
+    layoutSashes(layout).map((sash) => [`${sash.splitId}:${sash.index}`, sash]),
+  );
+  for (const child of tree.children) {
+    if (!(child instanceof HTMLElement)) continue;
+    const pane = child.dataset.paneId ? panes.get(child.dataset.paneId) : null;
+    const sash = child.dataset.paneSash
+      ? sashes.get(child.dataset.paneSash)
+      : null;
+    const style = pane
+      ? paneRectStyle(pane.rect)
+      : sash
+        ? sashStyle(sash)
+        : null;
+    if (!style) continue;
+    for (const [name, value] of Object.entries(style)) {
+      child.style.setProperty(name, value);
+    }
+    if (sash) {
+      child.setAttribute(
+        "aria-valuenow",
+        String(Math.round(sashBoundary(sash) * 100)),
+      );
+    }
+  }
 }
 
 /** What review undo locking reads from sessions outside this tree. */
@@ -1056,15 +1107,13 @@ function Sash({
   onCancel: () => void;
 }) {
   const row = sash.dir === "right";
-  const boundary = sash.sizes
-    .slice(0, sash.index + 1)
-    .reduce((sum, size) => sum + size, 0);
+  const boundary = sashBoundary(sash);
   const group = sash.group;
 
   return (
     <div
       role="separator"
-      data-pane-sash=""
+      data-pane-sash={`${sash.splitId}:${sash.index}`}
       aria-orientation={row ? "vertical" : "horizontal"}
       aria-valuemin={0}
       aria-valuemax={100}
@@ -1072,19 +1121,7 @@ function Sash({
       className={
         row ? "absolute z-10 w-px bg-stroke" : "absolute z-10 h-px bg-stroke"
       }
-      style={
-        row
-          ? {
-              left: `${(group.x + boundary * group.w) * 100}%`,
-              top: `${group.y * 100}%`,
-              height: `${group.h * 100}%`,
-            }
-          : {
-              left: `${group.x * 100}%`,
-              top: `${(group.y + boundary * group.h) * 100}%`,
-              width: `${group.w * 100}%`,
-            }
-      }
+      style={sashStyle(sash)}
     >
       <div
         className={

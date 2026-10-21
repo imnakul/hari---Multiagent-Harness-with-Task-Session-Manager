@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FocusSearchList,
   focusPickProjects,
+  focusProjectMenuItems,
   type FocusPickItem,
 } from "./FocusPicker";
 
@@ -60,18 +61,49 @@ describe("Continue picker filters (L-145)", () => {
     ]);
   });
 
-  it("offers a project dropdown only when chats span projects (L-162)", () => {
+  it("lists a folder saved plain and verbatim once, by its plain path (L-174)", () => {
+    const projects = focusPickProjects([
+      {
+        id: "v1",
+        label: "Verbatim",
+        project: { key: "e:/site", cwd: "//?/E:/site" },
+      },
+      { id: "p1", label: "Plain", project: { key: "e:/site", cwd: "E:/site" } },
+    ]);
+    expect(projects.map((project) => project.cwd)).toEqual(["E:/site"]);
+  });
+
+  it("offers a project menu only when chats span projects (L-162, L-174)", () => {
     const html = render(ITEMS);
-    expect(html).toContain('<select aria-label="Filter by project"');
-    expect(html).toContain('<option value="" selected="">All projects</option>');
-    expect(html).toContain('<option value="c:/work/alpha">alpha</option>');
-    expect(html).toContain('<option value="c:/work/beta">beta</option>');
+    expect(html).toContain('aria-haspopup="menu" aria-expanded="false" aria-label="Filter by project"');
+    expect(html).toContain(">All projects<");
+    // The trigger sits in the search row, before the Model toggle.
+    expect(html.indexOf("Filter by project")).toBeLessThan(
+      html.indexOf("Show each chat"),
+    );
+    expect(html).not.toContain("<select");
     expect(html).not.toContain("aria-pressed=\"true\"");
     expect(render(ITEMS.slice(0, 1))).not.toContain("Filter by project");
   });
 
+  it("lists All projects, then each project, checking the current one (L-174)", () => {
+    const projects = focusPickProjects(ITEMS);
+    const all = focusProjectMenuItems(projects, null);
+    expect(
+      all.map((item) =>
+        item.kind === "sep" ? "-" : `${item.label}:${item.checked ? "on" : "off"}`,
+      ),
+    ).toEqual(["All projects:on", "-", "alpha:off", "beta:off"]);
+    const beta = focusProjectMenuItems(projects, "c:/work/beta");
+    expect(
+      beta.flatMap((item) =>
+        item.kind === "item" && item.checked ? [item.id] : [],
+      ),
+    ).toEqual(["c:/work/beta"]);
+  });
+
   it("names projects that share a folder name by their full path (L-162)", () => {
-    const html = render([
+    const projects = focusPickProjects([
       ...ITEMS,
       {
         id: "c1",
@@ -79,9 +111,11 @@ describe("Continue picker filters (L-145)", () => {
         project: { key: "d:/alpha", cwd: "D:/alpha" },
       },
     ]);
-    expect(html).toContain('<option value="c:/work/alpha">C:/work/alpha</option>');
-    expect(html).toContain('<option value="d:/alpha">D:/alpha</option>');
-    expect(html).toContain('<option value="c:/work/beta">beta</option>');
+    expect(
+      focusProjectMenuItems(projects, null).flatMap((item) =>
+        item.kind === "item" ? [item.label] : [],
+      ),
+    ).toEqual(["All projects", "C:/work/alpha", "beta", "D:/alpha"]);
   });
 
   it("shows models only when the toggle is on", () => {

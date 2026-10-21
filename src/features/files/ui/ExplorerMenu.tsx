@@ -42,6 +42,8 @@ type Props = (
   width?: number;
   /** Optional stacking layer for menus opened from a dialog or another surface. */
   layer?: number;
+  /** A pointer landing here is not outside, e.g. the trigger that toggles the menu. */
+  ignore?: string;
   onPick: (id: string) => void;
   onClose: () => void;
   onMouseEnter?: () => void;
@@ -75,6 +77,7 @@ export function ExplorerMenu({
   header,
   width = MENU_WIDTH,
   layer,
+  ignore,
   onPick,
   onClose,
   onMouseEnter,
@@ -329,7 +332,7 @@ export function ExplorerMenu({
           if (reason === "escape" && submenu) closeSubmenu();
           else onClose();
         }}
-        ignore={`[data-explorer-menu="${menuId}"]`}
+        ignore={`[data-explorer-menu="${menuId}"]${ignore ? `, ${ignore}` : ""}`}
         data-explorer-menu={menuId}
         role="menu"
         tabIndex={-1}

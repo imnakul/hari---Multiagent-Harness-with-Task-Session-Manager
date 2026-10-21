@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useMemo, useRef, type MouseEvent, type ReactNode } from "react";
 import { ChevronDown } from "../../../shared/ui/icons";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import type { ProjectMarks } from "../../projects/ui/ProjectMark";
@@ -45,14 +45,29 @@ export function TaskTable({
   onContextMenu: (task: Task, x: number, y: number) => void;
 }) {
   const lock = useLockOverscroll<HTMLDivElement>();
-  const [live, setLive] = useState<{
-    column: TaskColumnId;
-    width: number;
-  } | null>(null);
+  const table = useRef<HTMLTableElement>(null);
   const columns = TASK_COLUMN_IDS.filter((id) => !state.hidden.includes(id));
-  const widthOf = (id: TaskColumnId) =>
-    live?.column === id ? live.width : state.widths[id];
+  const widthOf = (id: TaskColumnId) => state.widths[id];
   const total = columns.reduce((sum, id) => sum + widthOf(id), 0);
+  /**
+   * Fork (L-176): a column drag writes its `<col>` and the table width on
+   * the DOM each frame, so cells re-wrap live without re-rendering every row;
+   * `null` puts the saved widths back before the commit renders.
+   */
+  const previewWidth = (column: TaskColumnId, width: number | null) => {
+    const element = table.current;
+    if (!element) return;
+    const widths = columns.map((id) =>
+      id === column && width !== null ? width : widthOf(id),
+    );
+    element.style.setProperty(
+      "width",
+      `${widths.reduce((sum, value) => sum + value, 0)}px`,
+    );
+    element
+      .querySelector<HTMLElement>(`col[data-column="${column}"]`)
+      ?.style.setProperty("width", `${width ?? widthOf(column)}px`);
+  };
   const groups = useMemo(
     () => groupTasks(sortTasks(tasks, state.sort), groupBy),
     [tasks, state.sort, groupBy],
@@ -120,13 +135,14 @@ export function TaskTable({
     >
       <SharedHoverHighlight />
       <table
+        ref={table}
         aria-label="Tasks table"
         className="table-fixed border-separate border-spacing-0 text-[12px]"
         style={{ width: total, minWidth: "100%" }}
       >
         <colgroup>
           {columns.map((id) => (
-            <col key={id} style={{ width: widthOf(id) }} />
+            <col key={id} data-column={id} style={{ width: widthOf(id) }} />
           ))}
         </colgroup>
         {/* One sticky, blurred header layer instead of a blur per cell: each
@@ -175,9 +191,7 @@ export function TaskTable({
                     min={meta.min}
                     max={TASK_COLUMN_MAX_WIDTH}
                     defaultValue={meta.width}
-                    onLive={(width) =>
-                      setLive(width === null ? null : { column: id, width })
-                    }
+                    onLive={(width) => previewWidth(id, width)}
                     onCommit={(width) =>
                       onStateChange({
                         ...state,

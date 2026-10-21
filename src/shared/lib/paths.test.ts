@@ -4,7 +4,9 @@ import {
   isEqualOrInside,
   joinPath,
   parentPath,
+  pathKey,
   prettyCwd,
+  projectKey,
   projectName,
   rebasePath,
   resolveDocumentImage,
@@ -182,6 +184,25 @@ describe("workspace file references", () => {
     expect(
       resolveWorkspacePath("~/.codex/skills/zuse/SKILL.md", "/data/project"),
     ).toBeUndefined();
+  });
+});
+
+describe("pathKey", () => {
+  it("keys a verbatim Windows path as its plain form (L-174)", () => {
+    expect(pathKey(String.raw`\\?\E:\Developing\portfolio2`)).toBe(
+      pathKey("E:/Developing/portfolio2"),
+    );
+    expect(projectKey("//?/E:/Developing/portfolio2/")).toBe(
+      "e:/developing/portfolio2",
+    );
+    expect(pathKey(String.raw`\\?\UNC\host\share\repo`)).toBe(
+      pathKey(String.raw`\\host\share\repo`),
+    );
+    expect(pathKey("//?/C:")).toBe("c:");
+  });
+
+  it("leaves POSIX paths and their case alone", () => {
+    expect(pathKey("/Users/me/Repo/")).toBe("/Users/me/Repo");
   });
 });
 

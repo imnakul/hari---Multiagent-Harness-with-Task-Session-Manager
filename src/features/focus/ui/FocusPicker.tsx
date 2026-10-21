@@ -7,8 +7,13 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { LAYER } from "../../../shared/lib/layers";
 import { projectKey, projectName } from "../../../shared/lib/paths";
 import { ChevronDown, Search } from "../../../shared/ui/icons";
+import {
+  ExplorerMenu,
+  type ExplorerMenuItem,
+} from "../../files/ui/ExplorerMenu";
 import { isHarnessId } from "../../sessions/model/models";
 import { sessionDisplayTitle } from "../../sessions/model/session";
 import type { RecentProject } from "../../projects/model/recents";
@@ -56,14 +61,16 @@ function saveShowModel(on: boolean): void {
 /** Distinct projects of the items, in the order they first appear, with the first item's icon. */
 export function focusPickProjects(
   items: readonly FocusPickItem[],
-): { key: string; cwd: string; icon?: ReactNode }[] {
-  const projects = new Map<
-    string,
-    { key: string; cwd: string; icon?: ReactNode }
-  >();
+): FocusPickProject[] {
+  const projects = new Map<string, FocusPickProject>();
   for (const item of items) {
-    if (item.project && !projects.has(item.project.key))
+    if (!item.project) continue;
+    const seen = projects.get(item.project.key);
+    if (!seen)
       projects.set(item.project.key, { ...item.project, icon: item.icon });
+    // One folder saved both plain and verbatim (`//?/E:/x`) shows the plain path.
+    else if (seen.cwd.startsWith("//?/") && !item.project.cwd.startsWith("//?/"))
+      projects.set(item.project.key, { ...seen, cwd: item.project.cwd });
   }
   return [...projects.values()];
 }
@@ -125,60 +132,139 @@ export function focusContinueItems(
   );
 }
 
+type FocusPickProject = { key: string; cwd: string; icon?: ReactNode };
+
+/** The menu id that clears the project filter. */
+const ALL_PROJECTS = "";
+
+/** A project's name, or its full path when another project shares the name. */
+function focusProjectLabel(
+  projects: readonly FocusPickProject[],
+  key: string,
+): string {
+  const entry = projects.find((project) => project.key === key);
+  if (!entry) return "";
+  const name = projectName(entry.cwd);
+  const clashes = projects.some(
+    (other) => other.key !== key && projectName(other.cwd) === name,
+  );
+  return clashes ? entry.cwd : name;
+}
+
 /**
- * The project filter (L-162). A native select on purpose: these lists sit
- * inside popovers, and a second popover would count as an outside click and
- * share their Escape handler, closing both. The native menu takes its own
- * clicks and Escape, and gets keyboard and screen reader support for free.
+ * The project filter's menu (L-162, L-174): "All projects", then each
+ * project with its icon, the current choice checked, as the Notes "File note
+ * under…" menu lists them.
  */
-function ProjectFilterSelect({
+export function focusProjectMenuItems(
+  projects: readonly FocusPickProject[],
+  value: string | null,
+): ExplorerMenuItem[] {
+  return [
+    {
+      kind: "item",
+      id: ALL_PROJECTS,
+      label: "All projects",
+      checked: value === null,
+    },
+    { kind: "sep" },
+    ...projects.map(
+      (entry): ExplorerMenuItem => ({
+        kind: "item",
+        id: entry.key,
+        label: focusProjectLabel(projects, entry.key),
+        icon: entry.icon,
+        checked: entry.key === value,
+      }),
+    ),
+  ];
+}
+
+/**
+ * The project filter's trigger, in the search row before "Model" (L-174).
+ * Its menu floats over the popover the list sits in; Popover's dismiss stack
+ * keeps a click or Escape in the menu from closing that popover too.
+ */
+function ProjectFilterMenu({
   projects,
   value,
   onChange,
+  onClose,
 }: {
-  projects: readonly { key: string; cwd: string; icon?: ReactNode }[];
+  projects: readonly FocusPickProject[];
   value: string | null;
   onChange: (key: string | null) => void;
+  /** The menu closed, picked or not, so focus can go back to the search. */
+  onClose: () => void;
 }): ReactNode {
-  const names = projects.map((entry) => projectName(entry.cwd));
-  // Two projects with one folder name show their full paths instead.
-  const optionLabel = (index: number, cwd: string): string => {
-    const name = names[index] ?? cwd;
-    return names.indexOf(name) === names.lastIndexOf(name) ? name : cwd;
-  };
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const triggerId = useId();
   const selected = projects.find((entry) => entry.key === value);
+  const close = () => {
+    setMenu(null);
+    onClose();
+  };
   return (
-    <span className="relative inline-flex min-w-0 max-w-full items-center">
-      {selected?.icon ? (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute left-2 grid size-3 place-items-center"
-        >
-          {selected.icon}
-        </span>
-      ) : null}
-      <select
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        data-focus-project-filter={triggerId}
+        aria-haspopup="menu"
+        aria-expanded={menu !== null}
         aria-label="Filter by project"
         title={selected?.cwd ?? "Filter by project"}
-        value={value ?? ""}
-        onChange={(event) => onChange(event.target.value || null)}
-        className={`h-6 min-w-0 max-w-full cursor-pointer appearance-none truncate rounded-md pr-6 text-[11px] font-medium outline-none transition-[background-color,color,scale] duration-100 hover:bg-content/8 hover:text-content focus-visible:bg-content/8 active:scale-96 motion-reduce:active:scale-100 ${
-          selected?.icon ? "pl-6" : "pl-2"
-        } ${selected ? "bg-selection text-content" : "bg-transparent text-content/60"}`}
+        onClick={() => {
+          if (menu) {
+            close();
+            return;
+          }
+          const rect = trigger.current?.getBoundingClientRect();
+          if (rect) setMenu({ x: rect.left, y: rect.bottom + 4 });
+        }}
+        className={`flex h-6 min-w-0 max-w-[45%] shrink items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-[background-color,color,scale] duration-100 hover:bg-content/8 hover:text-content focus-visible:bg-content/8 focus-visible:outline-none active:scale-96 motion-reduce:active:scale-100 ${
+          selected || menu ? "bg-content/8 text-content" : "text-content/50"
+        }`}
       >
-        <option value="">All projects</option>
-        {projects.map((entry, index) => (
-          <option key={entry.key} value={entry.key}>
-            {optionLabel(index, entry.cwd)}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        aria-hidden
-        className="pointer-events-none absolute right-1.5 size-3 text-content/45"
-        strokeWidth={1.75}
-      />
-    </span>
+        {selected?.icon ? (
+          <span aria-hidden className="grid size-3 shrink-0 place-items-center">
+            {selected.icon}
+          </span>
+        ) : null}
+        <span className="min-w-0 truncate">
+          {selected ? focusProjectLabel(projects, selected.key) : "All projects"}
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={`size-3 shrink-0 text-content/45 transition-transform duration-150 ease-out motion-reduce:transition-none ${
+            menu ? "rotate-180" : ""
+          }`}
+          strokeWidth={1.75}
+        />
+      </button>
+      {menu ? (
+        <ExplorerMenu
+          x={menu.x}
+          y={menu.y}
+          width={240}
+          layer={LAYER.submenu}
+          ignore={`[data-focus-project-filter="${triggerId}"]`}
+          ariaLabel="Filter by project"
+          header={
+            <p className="px-2 py-1 text-[11px] text-content/50">
+              Show chats from…
+            </p>
+          }
+          items={focusProjectMenuItems(projects, value)}
+          onPick={(id) => {
+            onChange(id === ALL_PROJECTS ? null : id);
+            close();
+          }}
+          onClose={close}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -283,6 +369,17 @@ export function FocusSearchList({
           onKeyDown={onKeyDown}
           className="min-w-0 flex-1 bg-transparent text-[12px] text-content outline-none placeholder:text-content/35"
         />
+        {projects.length > 1 ? (
+          <ProjectFilterMenu
+            projects={projects}
+            value={project}
+            onChange={(key) => {
+              setProjectFilter(key);
+              setActive(0);
+            }}
+            onClose={() => input.current?.focus()}
+          />
+        ) : null}
         {hasModels ? (
           <button
             type="button"
@@ -301,19 +398,6 @@ export function FocusSearchList({
           </button>
         ) : null}
       </label>
-      {projects.length > 1 ? (
-        <div className="flex h-8 shrink-0 items-center border-b border-stroke px-1.5">
-          <ProjectFilterSelect
-            projects={projects}
-            value={project}
-            onChange={(key) => {
-              setProjectFilter(key);
-              setActive(0);
-              input.current?.focus();
-            }}
-          />
-        </div>
-      ) : null}
       <div
         id={listId}
         role="listbox"

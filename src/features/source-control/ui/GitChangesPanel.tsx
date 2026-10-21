@@ -159,6 +159,7 @@ export function GitChangesPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [graphHeight, setGraphHeight] = useState(loadGraphPanelHeight);
+  const graphPanelRef = useRef<HTMLDivElement>(null);
   const [graphExpanded, setGraphExpanded] = useState(graphOpen);
 
   useEffect(() => {
@@ -314,7 +315,9 @@ export function GitChangesPanel({
           {graphExpanded ? (
             <GraphResizeSash
               height={graphHeight}
-              onHeightPaint={setGraphHeight}
+              onHeightPaint={(next) => {
+                graphPanelRef.current?.style.setProperty("height", `${next}px`);
+              }}
               onHeightCommit={(next) => {
                 setGraphHeight(next);
                 saveGraphPanelHeight(next);
@@ -327,6 +330,7 @@ export function GitChangesPanel({
             />
           ) : null}
           <div
+            ref={graphPanelRef}
             className={`shrink-0 overflow-hidden border-t border-stroke ${
               graphExpanded ? "min-h-0" : "h-7"
             }`}

@@ -13,9 +13,18 @@ function trimSlash(path: string): string {
   return slash(path).replace(/\/+$/, "") || "/";
 }
 
-/** Stable comparison key for Windows paths without changing their display case. */
+/**
+ * Stable comparison key for Windows paths without changing their display case.
+ * A verbatim path (`\\?\E:\x`, `\\?\UNC\host\share`), which some tools hand
+ * back for a folder, keys as its plain form, so one folder is one project
+ * (L-174).
+ */
 export function pathKey(path: string): string {
-  const normalized = trimSlash(path);
+  let normalized = trimSlash(path);
+  if (/^\/\/\?\/unc\//i.test(normalized))
+    normalized = `//${normalized.slice(8)}`;
+  else if (/^\/\/\?\/[A-Za-z]:(?:\/|$)/.test(normalized))
+    normalized = normalized.slice(4);
   return /^[A-Za-z]:(?:\/|$)/.test(normalized) || normalized.startsWith("//")
     ? normalized.toLowerCase()
     : normalized;

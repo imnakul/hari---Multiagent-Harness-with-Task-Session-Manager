@@ -113,6 +113,7 @@ export function SessionBoardView({
   }, [width]);
   useEffect(() => () => resizeCleanup.current?.(), []);
   const body = useRef<HTMLDivElement>(null);
+  const boardSide = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000);
@@ -207,24 +208,42 @@ export function SessionBoardView({
       setSelected(true);
     });
   };
+  /**
+   * Fork (L-176): the divider writes the board's width straight on the DOM
+   * once per frame and sets state (and so the saved width) on release, so
+   * cards and the session pane re-wrap live without a render per move.
+   */
   const resize = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeCleanup.current?.();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const divider = event.currentTarget;
+    divider.setPointerCapture?.(event.pointerId);
+    document.documentElement.classList.add("is-resizing");
+    let pending: number | undefined;
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
+      if (pending === undefined) return;
+      boardSide.current?.style.setProperty("width", `${pending}%`);
+      divider.setAttribute("aria-valuenow", String(Math.round(pending)));
+    };
     const move = (next: PointerEvent) => {
       const rect = body.current?.getBoundingClientRect();
-      if (rect)
-        setWidth(
-          Math.max(
-            25,
-            Math.min(75, ((next.clientX - rect.left) / rect.width) * 100),
-          ),
-        );
+      if (!rect) return;
+      pending = Math.max(
+        25,
+        Math.min(75, ((next.clientX - rect.left) / rect.width) * 100),
+      );
+      if (!frame) frame = requestAnimationFrame(paint);
     };
     const up = () => {
+      if (frame) cancelAnimationFrame(frame);
+      paint();
+      document.documentElement.classList.remove("is-resizing");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       resizeCleanup.current = undefined;
+      if (pending !== undefined) setWidth(pending);
     };
     resizeCleanup.current = up;
     window.addEventListener("pointermove", move);
@@ -347,6 +366,7 @@ export function SessionBoardView({
         className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
       >
         <div
+          ref={boardSide}
           className="flex min-h-0 min-w-0 flex-col"
           style={{ width: pane.mounted ? `${width}%` : "100%" }}
         >

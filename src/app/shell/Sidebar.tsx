@@ -42,6 +42,7 @@ import {
   Inbox,
   ListFilter,
   MessageMultiple,
+  MessageSquarePlus,
   PanelLeft,
   Pin,
   Plus,
@@ -176,6 +177,7 @@ import {
   SESSION_LINK_LABEL,
   sessionLinksSnapshot,
   subscribeSessionLinks,
+  type SessionLinkRelation,
 } from "../../features/sessions/model/sessionLinks";
 import type { SettingsSectionId } from "../../features/settings/model/settings";
 import { keybindingShortcutLabel, subscribeKeybindings } from "../../features/settings/model/settings";
@@ -2072,9 +2074,13 @@ function SidebarComponent({
   });
 
   // A session row, with the sessions it started hanging off a rail below it.
-  const renderStartedSessionCard = (session: SessionSummary, compact = false) => {
+  const renderStartedSessionCard = (
+    session: SessionSummary,
+    compact = false,
+    linkRelation?: SessionLinkRelation,
+  ) => {
     const started = startedSessions.byParent.get(session.id);
-    if (!started?.length) return renderSessionRow(session, compact);
+    if (!started?.length) return renderSessionRow(session, compact, { linkRelation });
     // Open while the thread or one of its sessions is the one in view, chosen
     // or working, as an orchestrator's agents are.
     const inPlay = (id: string) =>
@@ -2084,6 +2090,7 @@ function SidebarComponent({
     const open =
       inPlay(session.id) || started.some((child) => inPlay(child.id));
     const card = renderSessionRow(session, compact, {
+      linkRelation,
       startedCount: started.length,
       startedOpen: open,
       startedInView: started.some(
@@ -2125,24 +2132,30 @@ function SidebarComponent({
   const renderSessionCard = (
     session: SessionSummary,
     compact = false,
+    linkRelation?: SessionLinkRelation,
   ): ReactNode => {
     const children = linkedSessions.children.get(session.id);
-    const card = renderStartedSessionCard(session, compact);
+    const card = renderStartedSessionCard(session, compact, linkRelation);
     if (!children?.length) return card;
+    // Chats started from this one hang off one spine under it, each on its
+    // own curve; a child's own children get a spine of their own, one step
+    // in, so siblings and children never share a line (L-173).
     return (
       <>
         {card}
         <div
           role="group"
           aria-label={`Chats from ${sessionDisplayTitle(session.title, session.harness)}`}
-          className="ml-3 border-l border-stroke/70 pl-1.5"
+          data-dense={inset || undefined}
+          className="session-link-rail ml-2.5"
         >
           {children.map((child) => (
-            <div key={child.session.id} data-session-link={child.relation}>
-              <div className="px-2 pt-1 text-[10px] leading-3 text-content/40">
-                {SESSION_LINK_LABEL[child.relation]}
-              </div>
-              {renderSessionCard(child.session, true)}
+            <div
+              key={child.session.id}
+              data-session-link={child.relation}
+              className="zen-phase-step session-link-step"
+            >
+              {renderSessionCard(child.session, true, child.relation)}
             </div>
           ))}
         </div>
@@ -2155,11 +2168,13 @@ function SidebarComponent({
     compact = false,
     {
       nested = false,
+      linkRelation,
       startedCount = 0,
       startedOpen = false,
       startedInView = false,
     }: {
       nested?: boolean;
+      linkRelation?: SessionLinkRelation;
       startedCount?: number;
       startedOpen?: boolean;
       startedInView?: boolean;
@@ -2191,6 +2206,7 @@ function SidebarComponent({
         compact={compact}
         dense={inset}
         nested={nested}
+        linkRelation={linkRelation}
         startedCount={startedCount}
         startedOpen={startedOpen}
         startedInView={startedInView}
@@ -5183,6 +5199,38 @@ function FolderRenameRow({
 }
 
 const SESSION_PREFETCH_DELAY_MS = 120;
+const SESSION_LINK_ICON = {
+  sidechat: { Icon: MessageSquarePlus, tone: "text-sky-400" },
+  fork: { Icon: GitBranch, tone: "text-violet-400" },
+  secondOpinion: { Icon: MessageMultiple, tone: "text-emerald-400" },
+} as const satisfies Record<
+  SessionLinkRelation,
+  { Icon: IconComponent; tone: string }
+>;
+
+/** Marks a chat started from another one, as the automation icon does. */
+function SessionLinkIcon({
+  relation,
+  className,
+}: {
+  relation: SessionLinkRelation;
+  className: string;
+}): ReactNode {
+  const { Icon, tone } = SESSION_LINK_ICON[relation];
+  const label = SESSION_LINK_LABEL[relation];
+  return (
+    <span
+      data-session-link-icon={relation}
+      role="img"
+      title={label}
+      aria-label={label}
+      className={`grid shrink-0 place-items-center ${tone} ${className}`}
+    >
+      <Icon className="size-3" strokeWidth={1.75} />
+    </span>
+  );
+}
+
 export const SessionCard = memo(function SessionCard({
   session,
   isActive,
@@ -5195,6 +5243,7 @@ export const SessionCard = memo(function SessionCard({
   compact = false,
   dense = false,
   nested = false,
+  linkRelation,
   startedCount = 0,
   startedOpen = false,
   startedInView = false,
@@ -5231,6 +5280,8 @@ export const SessionCard = memo(function SessionCard({
   /** A session another one started, on the rail under it: a smaller, muted
    * title like an orchestrator's agent rows. */
   nested?: boolean;
+  /** How this chat was started from the one above it on the rail. */
+  linkRelation?: SessionLinkRelation;
   /** How many listed sessions this one started through /operator. */
   startedCount?: number;
   /** Whether those sessions are showing on the rail below. */
@@ -5764,6 +5815,9 @@ export const SessionCard = memo(function SessionCard({
                   {linkedUpdateDot}
                   {workItemBadge}
                   {modeBadge}
+                  {linkRelation ? (
+                    <SessionLinkIcon relation={linkRelation} className="size-4" />
+                  ) : null}
                   {session.automationId ? (
                     <span
                       data-automation-icon
@@ -5971,6 +6025,9 @@ export const SessionCard = memo(function SessionCard({
                   </button>
                 ) : null}
                 {workItemBadge}
+                {linkRelation ? (
+                  <SessionLinkIcon relation={linkRelation} className="size-5 -mr-1" />
+                ) : null}
                 {session.automationId ? (
                   <span
                     data-automation-icon
@@ -6246,6 +6303,9 @@ export const SessionCard = memo(function SessionCard({
               </button>
             ) : null}
             {workItemBadge}
+            {linkRelation ? (
+              <SessionLinkIcon relation={linkRelation} className="size-5 -mr-1" />
+            ) : null}
             {session.automationId ? (
               <span
                 data-automation-icon
