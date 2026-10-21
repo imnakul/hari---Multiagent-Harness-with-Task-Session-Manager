@@ -2517,3 +2517,99 @@ it.each(["Task Manager", "Session Manager"]) ("opens local %s in the new layout 
   await act(async () => button!.click());
   expect(label === "Task Manager" ? props.onOpenTasks : props.onOpenKanban).toHaveBeenCalledOnce();
 });
+
+describe("new layout views (L-148, L-149)", () => {
+  it("lists Settings after Session Manager, above the scrolling sessions", async () => {
+    props.inset = true;
+    props.onOpenKanban = vi.fn();
+    props.onOpenSettings = vi.fn();
+    await act(async () => render());
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>("button")];
+    const byLabel = (label: string) =>
+      buttons.find((entry) => entry.textContent?.trim().startsWith(label));
+    const kanban = byLabel("Session Manager")!;
+    const settings = byLabel("Settings")!;
+    expect(buttons.indexOf(settings)).toBeGreaterThan(buttons.indexOf(kanban));
+    const scroll = container.querySelector(".sidebar-session-scroll")!;
+    expect(scroll.contains(settings)).toBe(false);
+    expect(
+      settings.compareDocumentPosition(scroll) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await act(async () => settings.click());
+    expect(props.onOpenSettings).toHaveBeenCalledOnce();
+  });
+
+  it("leaves Settings out of the project tab menu (L-155)", async () => {
+    props.inset = true;
+    props.onOpenSettings = vi.fn();
+    await act(async () => render());
+    const trigger = container.querySelector<HTMLButtonElement>(
+      "[data-project-menu]",
+    )!;
+    await act(async () => trigger.click());
+    const items = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ].map((item) => item.textContent?.trim() ?? "");
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.some((text) => text.startsWith("Settings"))).toBe(false);
+  });
+});
+
+describe("drag a session into Focus (L-153)", () => {
+  function pointer(target: EventTarget, type: string, x: number, y: number) {
+    act(() =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          buttons: type === "pointerup" ? 0 : 1,
+          pointerId: 1,
+          clientX: x,
+          clientY: y,
+        }),
+      ),
+    );
+  }
+
+  function dragCardOnto(target: Element) {
+    const handle = card();
+    handle.setPointerCapture = () => {};
+    handle.releasePointerCapture = () => {};
+    const fromPoint = vi
+      .spyOn(document, "elementFromPoint")
+      .mockReturnValue(target);
+    pointer(handle, "pointerdown", 10, 10);
+    pointer(window, "pointermove", 300, 200);
+    pointer(window, "pointerup", 300, 200);
+    fromPoint.mockRestore();
+  }
+
+  it("opens the dropped card in Focus without selecting it", () => {
+    const onOpenSessionInFocus = vi.fn();
+    props = { ...props, onOpenSessionInFocus };
+    act(() => render());
+    const area = document.createElement("main");
+    area.setAttribute("data-focus-drop-area", "");
+    document.body.append(area);
+
+    dragCardOnto(area);
+
+    expect(onOpenSessionInFocus).toHaveBeenCalledExactlyOnceWith("session-1");
+    expect(props.onSelectSession).not.toHaveBeenCalled();
+    area.remove();
+  });
+
+  it("ignores a drop outside Focus", () => {
+    const onOpenSessionInFocus = vi.fn();
+    props = { ...props, onOpenSessionInFocus };
+    act(() => render());
+    const elsewhere = document.createElement("div");
+    document.body.append(elsewhere);
+
+    dragCardOnto(elsewhere);
+
+    expect(onOpenSessionInFocus).not.toHaveBeenCalled();
+    elsewhere.remove();
+  });
+});

@@ -106,6 +106,10 @@ import {
   paneDropFromPoint,
   setExternalPaneDrop,
 } from "../../features/workspace/model/paneDrop";
+import {
+  focusDropFromPoint,
+  setFocusSessionDropOver,
+} from "../../features/focus/model/focusSessionDrop";
 import type { PaneEdge } from "../../features/workspace/model/layout";
 import { suppressTextSelection } from "../../shared/lib/drag";
 import { LAYER } from "../../shared/lib/layers";
@@ -365,6 +369,8 @@ type Props = {
     targetId: string,
     edge: PaneEdge,
   ) => void;
+  /** Fork (L-153): set in Focus mode; a card dragged onto Focus opens there. */
+  onOpenSessionInFocus?: (sessionId: string) => void;
   onRenameSession?: (sessionId: string, title: string) => void;
   onArchiveSession?: (sessionId: string, archived: boolean) => void;
   onArchiveSessions?: (
@@ -413,6 +419,7 @@ type Props = {
   busyProjectPaths?: Iterable<string>;
   liveAgents?: LiveAgent[];
   onSelectAgent?: (sessionId: string, intent?: { altKey?: boolean }) => void;
+  onDismissAgent?: (agent: LiveAgent) => void;
   onSelectProject?: (path: string) => void;
   onOpenProject?: () => void;
   onRemoveProject?: (path: string, options: { purgeData: boolean }) => void;
@@ -508,6 +515,7 @@ function SidebarComponent({
   onSessionNavigationOrder,
   onPrefetchSession: onPrefetchLocalSession,
   onPlaceSessionOnPane: onPlaceLocalSessionOnPane,
+  onOpenSessionInFocus: onOpenLocalSessionInFocus,
   onRenameSession: onRenameLocalSession,
   onArchiveSession: onArchiveLocalSession,
   onArchiveSessions: onArchiveLocalSessions,
@@ -545,6 +553,7 @@ function SidebarComponent({
   busyProjectPaths,
   liveAgents = [],
   onSelectAgent,
+  onDismissAgent,
   onSelectProject,
   onOpenProject,
   onRemoveProject,
@@ -660,6 +669,9 @@ function SidebarComponent({
   const onPlaceSessionOnPane = remoteProject
     ? undefined
     : onPlaceLocalSessionOnPane;
+  const onOpenSessionInFocus = remoteProject
+    ? undefined
+    : onOpenLocalSessionInFocus;
   const onRenameSession = remoteProject
     ? (sessionId: string, title: string) => {
         void remoteChange(sessionId, { title });
@@ -1995,6 +2007,7 @@ function SidebarComponent({
     onOpenInboxItem,
     onPrefetchSession,
     onPlaceSessionOnPane,
+    onOpenSessionInFocus,
     onSessionListDrop,
     onSessionContextMenu,
     onArchiveSession,
@@ -2006,6 +2019,7 @@ function SidebarComponent({
     onOpenInboxItem,
     onPrefetchSession,
     onPlaceSessionOnPane,
+    onOpenSessionInFocus,
     onSessionListDrop,
     onSessionContextMenu,
     onArchiveSession,
@@ -2029,6 +2043,8 @@ function SidebarComponent({
         cardHandlers.current.onPrefetchSession?.(sessionId),
       placeOnPane: (sessionId: string, targetId: string, edge: PaneEdge) =>
         cardHandlers.current.onPlaceSessionOnPane?.(sessionId, targetId, edge),
+      openInFocus: (sessionId: string) =>
+        cardHandlers.current.onOpenSessionInFocus?.(sessionId),
       listDrop: (draggedId: string, target: SessionListDropTarget) =>
         cardHandlers.current.onSessionListDrop(draggedId, target),
       contextMenu: (sessionId: string, e: ReactMouseEvent<HTMLDivElement>) =>
@@ -2188,6 +2204,9 @@ function SidebarComponent({
         onPrefetch={onPrefetchSession ? cardActions.prefetch : undefined}
         onPlaceOnPane={
           onPlaceSessionOnPane ? cardActions.placeOnPane : undefined
+        }
+        onOpenInFocus={
+          onOpenSessionInFocus ? cardActions.openInFocus : undefined
         }
         onListDrop={
           viewGroupedIds.has(session.id) ? undefined : cardActions.listDrop
@@ -2398,8 +2417,9 @@ function SidebarComponent({
     },
     [cwd, onSelectProject],
   );
-  // The inset layout names the project here, with its settings and the
-  // project and worktree pickers in a menu below it.
+  // The inset layout names the project here, with the project and worktree
+  // pickers in a menu below it. Fork (L-155): no Settings row in that menu;
+  // Settings is always in the views list above (L-148).
   const headerProject = inset
     ? {
         name: projectLabel,
@@ -2410,8 +2430,6 @@ function SidebarComponent({
             mascotClassName="size-2.5"
           />
         ),
-        onOpenSettings,
-        settingsShortcut: `${MOD},`,
         keepOpen: headerProjectMenu.isActive,
         // The right-click project menu, as a flyout level with its row.
         onOpenProjectSettings: (row: HTMLElement) => {
@@ -2791,6 +2809,15 @@ function SidebarComponent({
           active: kanbanActive,
           onClick: onOpenKanban,
         },
+        // Fork (L-148): Settings sits with the views, so the floating
+        // sidebar reaches it without opening the project menu.
+        onOpenSettings && {
+          label: "Settings",
+          icon: Settings,
+          shortcut: `${MOD},`,
+          active: settingsOpen,
+          onClick: onOpenSettings,
+        },
       ]}
     />
   ) : null;
@@ -2908,6 +2935,10 @@ function SidebarComponent({
           switches projects. */}
       {railVisible || inset ? (
         <>
+          {/* Fork (L-149): inset, the views come first and stay put; the
+              project slots and their sessions follow, and only the
+              sessions scroll. */}
+          {navList}
           {workspaceHeader}
           {/* The inset sidebar has no tabs: the project tools live in the
               right panel. */}
@@ -3020,7 +3051,6 @@ function SidebarComponent({
               : undefined
           }
         >
-          {navList}
           {/* Only the project's own content slides on a switch; the nav above
             stays put (L-132). */}
           <div
@@ -3430,6 +3460,7 @@ function SidebarComponent({
               agents={liveAgents}
               activeSessionId={activeSessionId}
               onSelect={onSelectAgent}
+              onDismiss={onDismissAgent}
               bottomSpacing={compactRailVisible}
             />
             <SidebarUpdateFooter
@@ -3606,6 +3637,7 @@ function SidebarComponent({
           liveAgents={liveAgents}
           activeSessionId={activeSessionId}
           onSelectAgent={onSelectAgent}
+          onDismissAgent={onDismissAgent}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
           onGoBack={onGoBack}
@@ -5174,6 +5206,7 @@ export const SessionCard = memo(function SessionCard({
   onOpenWorkItem,
   onPrefetch,
   onPlaceOnPane,
+  onOpenInFocus,
   onListDrop,
   onListDropTargetChange,
   onContextMenu,
@@ -5225,6 +5258,7 @@ export const SessionCard = memo(function SessionCard({
   onOpenWorkItem?: (item: LinkedWorkItem, sessionId: string) => void;
   onPrefetch?: (sessionId: string) => void;
   onPlaceOnPane?: (sessionId: string, targetId: string, edge: PaneEdge) => void;
+  onOpenInFocus?: (sessionId: string) => void;
   onListDrop?: (draggedId: string, target: SessionListDropTarget) => void;
   onListDropTargetChange?: (target: SessionListDropTarget | null) => void;
   onContextMenu?: (
@@ -5436,7 +5470,7 @@ export const SessionCard = memo(function SessionCard({
       prefetchTimer.current = null;
     }
     onPrefetch?.(session.id);
-    if (!onPlaceOnPane && !onListDrop) return;
+    if (!onPlaceOnPane && !onListDrop && !onOpenInFocus) return;
     const handle = event.currentTarget;
     const pointerId = event.pointerId;
     const startX = event.clientX;
@@ -5474,6 +5508,9 @@ export const SessionCard = memo(function SessionCard({
           ? sessionListDropFromPoint(ev.clientX, ev.clientY, session.id)
           : null,
       );
+      if (onOpenInFocus) {
+        setFocusSessionDropOver(focusDropFromPoint(ev.clientX, ev.clientY));
+      }
       if (!onPlaceOnPane) return;
       const over = paneDropFromPoint(ev.clientX, ev.clientY);
       if (!over || over.id === session.id) {
@@ -5506,6 +5543,7 @@ export const SessionCard = memo(function SessionCard({
       restoreSelection();
       setDragging(false);
       setExternalPaneDrop(null);
+      setFocusSessionDropOver(false);
       setListTarget(null);
       try {
         handle.releasePointerCapture(pointerId);
@@ -5520,6 +5558,10 @@ export const SessionCard = memo(function SessionCard({
         : null;
       if (listOver) {
         onListDrop?.(session.id, listOver);
+        return;
+      }
+      if (onOpenInFocus && focusDropFromPoint(lastX, lastY)) {
+        onOpenInFocus(session.id);
         return;
       }
       const over = paneDropFromPoint(lastX, lastY);

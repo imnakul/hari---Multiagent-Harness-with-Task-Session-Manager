@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { projectName } from "../../../shared/lib/paths";
+import { projectKey, projectName } from "../../../shared/lib/paths";
 import { Search } from "../../../shared/ui/icons";
 import { isHarnessId } from "../../sessions/model/models";
 import { sessionDisplayTitle } from "../../sessions/model/session";
@@ -19,6 +19,7 @@ import {
   type BoardCard,
   type BoardLane,
 } from "../../session-board/sessionBoard";
+import { boardModelLabel } from "../../session-board/ui/BoardSessionCard";
 
 export type FocusPickItem = {
   id: string;
@@ -28,10 +29,51 @@ export type FocusPickItem = {
   icon?: ReactNode;
   /** Items of one group must be next to each other. */
   group?: string;
+  /** The chat's project, for the list's project filter (L-145). */
+  project?: { key: string; cwd: string };
+  /** The chat's model, shown when the list's "Model" toggle is on (L-145). */
+  model?: string;
 };
 
+const SHOW_MODEL_KEY = "monocode.focusPickerShowModel.v1";
+
+function loadShowModel(): boolean {
+  try {
+    return localStorage.getItem(SHOW_MODEL_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveShowModel(on: boolean): void {
+  try {
+    localStorage.setItem(SHOW_MODEL_KEY, on ? "1" : "0");
+  } catch {
+    // Storage unavailable: the choice still holds while the list is open.
+  }
+}
+
+/** Distinct projects of the items, in the order they first appear, with the first item's icon. */
+export function focusPickProjects(
+  items: readonly FocusPickItem[],
+): { key: string; cwd: string; icon?: ReactNode }[] {
+  const projects = new Map<
+    string,
+    { key: string; cwd: string; icon?: ReactNode }
+  >();
+  for (const item of items) {
+    if (item.project && !projects.has(item.project.key))
+      projects.set(item.project.key, { ...item.project, icon: item.icon });
+  }
+  return [...projects.values()];
+}
+
 /** Lanes Continue offers, in this order. In-progress chats join on their own. */
-const CONTINUE_LANES: readonly BoardLane[] = ["needs_attention", "done", "draft"];
+const CONTINUE_LANES: readonly BoardLane[] = [
+  "needs_attention",
+  "done",
+  "draft",
+];
 
 /** Every recent project, newest first. */
 export function focusProjectItems(
@@ -66,21 +108,28 @@ export function focusContinueItems(
   return CONTINUE_LANES.flatMap((lane) =>
     sorted
       .filter((card) => boardLane(card) === lane)
-      .map((card) => ({
-        id: card.sessionId,
-        label: isHarnessId(card.harness)
-          ? sessionDisplayTitle(card.title, card.harness)
-          : card.title,
-        detail: projectName(card.cwd),
-        icon: <ProjectIcon cwd={card.cwd} {...marks} />,
-        group: BOARD_LANES[lane],
-      })),
+      .map((card) => {
+        const harness = isHarnessId(card.harness) ? card.harness : null;
+        return {
+          id: card.sessionId,
+          label: harness
+            ? sessionDisplayTitle(card.title, harness)
+            : card.title,
+          detail: projectName(card.cwd),
+          icon: <ProjectIcon cwd={card.cwd} {...marks} />,
+          group: BOARD_LANES[lane],
+          project: { key: projectKey(card.cwd), cwd: card.cwd },
+          model: card.model ? boardModelLabel(harness, card.model) : undefined,
+        };
+      }),
   );
 }
 
 /**
  * A search box over a list, with the combobox keyboard contract: arrows and
  * Home/End move, Enter picks. Escape is left to the surface around it.
+ * Items from more than one project get project chips to narrow the list, and
+ * items with a model get a "Model" toggle that shows it on each row (L-145).
  */
 export function FocusSearchList({
   items,
@@ -100,6 +149,15 @@ export function FocusSearchList({
   className?: string;
 }): ReactNode {
   const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [showModel, setShowModel] = useState(loadShowModel);
+  const projects = useMemo(() => focusPickProjects(items), [items]);
+  const hasModels = items.some((item) => item.model);
+  // A project that left the list (its last chat was picked) clears the filter.
+  const project =
+    projectFilter && projects.some((entry) => entry.key === projectFilter)
+      ? projectFilter
+      : null;
   const [active, setActive] = useState(0);
   const listId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -107,13 +165,16 @@ export function FocusSearchList({
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) =>
-      [item.label, item.detail ?? "", item.group ?? ""].some((text) =>
-        text.toLowerCase().includes(needle),
+    const inProject = project
+      ? items.filter((item) => item.project?.key === project)
+      : items;
+    if (!needle) return inProject;
+    return inProject.filter((item) =>
+      [item.label, item.detail ?? "", item.group ?? "", item.model ?? ""].some(
+        (text) => text.toLowerCase().includes(needle),
       ),
     );
-  }, [items, query]);
+  }, [items, query, project]);
   const activeIndex = Math.min(active, Math.max(0, filtered.length - 1));
 
   useEffect(() => {
@@ -164,7 +225,61 @@ export function FocusSearchList({
           onKeyDown={onKeyDown}
           className="min-w-0 flex-1 bg-transparent text-[12px] text-content outline-none placeholder:text-content/35"
         />
+        {hasModels ? (
+          <button
+            type="button"
+            aria-pressed={showModel}
+            title="Show each chat's model"
+            onClick={() => {
+              const next = !showModel;
+              saveShowModel(next);
+              setShowModel(next);
+            }}
+            className={`-mr-1 flex h-6 shrink-0 items-center rounded-md px-1.5 text-[11px] font-medium transition-[background-color,color,scale] duration-100 hover:bg-content/8 hover:text-content focus-visible:bg-content/8 focus-visible:outline-none active:scale-96 motion-reduce:active:scale-100 ${
+              showModel ? "bg-content/8 text-content" : "text-content/50"
+            }`}
+          >
+            Model
+          </button>
+        ) : null}
       </label>
+      {projects.length > 1 ? (
+        <div
+          role="group"
+          aria-label="Filter by project"
+          className="flex shrink-0 gap-1 overflow-x-auto border-b border-stroke px-1.5 py-1 [scrollbar-width:none]"
+        >
+          {[null, ...projects].map((entry) => {
+            const key = entry?.key ?? null;
+            const selected = project === key;
+            return (
+              <button
+                key={key ?? ""}
+                type="button"
+                aria-pressed={selected}
+                title={entry?.cwd}
+                onClick={() => {
+                  setProjectFilter(key);
+                  setActive(0);
+                  input.current?.focus();
+                }}
+                className={`flex h-6 max-w-[140px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium transition-[background-color,color,scale] duration-100 hover:bg-content/8 hover:text-content focus-visible:bg-content/8 focus-visible:outline-none active:scale-96 motion-reduce:active:scale-100 ${
+                  selected ? "bg-selection text-content" : "text-content/55"
+                }`}
+              >
+                {entry?.icon ? (
+                  <span className="grid size-3 shrink-0 place-items-center">
+                    {entry.icon}
+                  </span>
+                ) : null}
+                <span className="truncate">
+                  {entry ? projectName(entry.cwd) : "All"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div
         id={listId}
         role="listbox"
@@ -211,7 +326,15 @@ export function FocusSearchList({
                     </span>
                   ) : null}
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.group && item.detail ? (
+                  {showModel && item.model ? (
+                    <span
+                      title={item.model}
+                      className="max-w-[35%] shrink-0 truncate rounded bg-content/6 px-1.5 py-0.5 text-[11px] text-content/60"
+                    >
+                      {item.model}
+                    </span>
+                  ) : null}
+                  {item.group && item.detail && !project ? (
                     <span className="max-w-[40%] shrink-0 truncate text-[11px] text-content/40">
                       {item.detail}
                     </span>

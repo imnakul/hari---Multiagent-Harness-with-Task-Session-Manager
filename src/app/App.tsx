@@ -666,7 +666,10 @@ import {
   TranscriptPoolOutlet,
 } from "../features/sessions/ui/TranscriptPool";
 import { syncDockBadge } from "../features/notifications/model/dockBadge";
-import { liveAgentsFromSessions } from "../features/sessions/model/liveAgents";
+import {
+  liveAgentsFromSessions,
+  type LiveAgent,
+} from "../features/sessions/model/liveAgents";
 import { hiddenApprovalNotices } from "../features/notifications/model/approvalToast";
 import { useSessionReminders } from "../features/notifications/hooks/useSessionReminders";
 import { ReminderNotices } from "../features/sessions/ui/ReminderNotices";
@@ -831,6 +834,7 @@ import {
   swapInFocusGrid,
   visibleFocusGrid,
 } from "../features/focus/model/focusGrid";
+import { focusAfterClose } from "../features/focus/model/focusGroups";
 import { FocusView } from "../features/focus/ui/FocusView";
 import {
   loadFileOpeningBehavior,
@@ -1486,6 +1490,8 @@ function Workspace({
       : focusGridIds(focusGrid)[0];
   const focusPaneIdRef = useRef(focusPaneId);
   focusPaneIdRef.current = focusPaneId;
+  const focusGridRef = useRef(focusGrid);
+  focusGridRef.current = focusGrid;
   const focusPaneSession = focusMode
     ? sessions.find((session) => session.id === focusPaneId)
     : undefined;
@@ -2400,10 +2406,10 @@ function Workspace({
     activeFile?.projectCwd ?? activeFile?.cwd ?? active?.cwd ?? projectCwd;
   const sidebarCwdRef = useRef(sidebarCwd);
   sidebarCwdRef.current = sidebarCwd;
-  // Each inset space is one project, so its Inbox, Notes and Automations (and
-  // the Inbox dot) show that project's items; the classic layout shows all.
-  const appViewScope =
-    insetLayout && looksLikeProject(sidebarCwd) ? sidebarCwd : undefined;
+  // Fork (L-149): Inbox, Notes and Automations (and the Inbox dot) show every
+  // project in both layouts. Upstream scoped them to the inset space's
+  // project, which meant switching projects to see another one's automations.
+  const appViewScope: string | undefined = undefined;
   const [sidebarTabSelection, setSidebarTabSelection] = useState<{
     project: string;
     tab: SidebarTabId;
@@ -2678,6 +2684,16 @@ function Workspace({
     activeSessionId,
   );
 
+  // Fork (L-150): a Working card dismissed by the user stays hidden for that
+  // run (its turn start), working or done; the next turn shows it again.
+  const [dismissedLiveRuns, setDismissedLiveRuns] = useState<
+    ReadonlyMap<string, number>
+  >(() => new Map());
+  const onDismissLiveAgent = useCallback((agent: LiveAgent) => {
+    setDismissedLiveRuns((current) =>
+      new Map(current).set(agent.id, agent.startedAt ?? -1),
+    );
+  }, []);
   const liveAgentRows = useMemo(
     () =>
       liveAgentsEnabled
@@ -2689,9 +2705,18 @@ function Workspace({
                 mono.sessionId ? [mono.sessionId] : [],
               ),
             ),
+          ).filter(
+            (agent) =>
+              dismissedLiveRuns.get(agent.id) !== (agent.startedAt ?? -1),
           )
         : [],
-    [liveAgentsEnabled, promptableSessions, unseenFinishedIds, monosSnap],
+    [
+      liveAgentsEnabled,
+      promptableSessions,
+      unseenFinishedIds,
+      monosSnap,
+      dismissedLiveRuns,
+    ],
   );
   // Rebuilt for every streamed batch; identity only moves when a row does.
   const liveAgents = useStableValue(liveAgentRows);
@@ -5500,6 +5525,14 @@ function Workspace({
   }, []);
 
   const onCloseFocusPane = useCallback((sessionId: string) => {
+    // Closing the focused chat focuses a neighbour from its project, so the
+    // view stays there instead of falling back to the first chat (L-146).
+    if (sessionId === focusPaneIdRef.current) {
+      const next = focusAfterClose(focusGridRef.current, sessionId, (id) =>
+        sessionsRef.current.find((session) => session.id === id)?.cwd,
+      );
+      setFocusPaneChoice(next);
+    }
     setFocusGrid((grid) => removeFromFocusGrid(grid, sessionId));
   }, []);
 
@@ -5551,6 +5584,16 @@ function Workspace({
     },
     [ensureOpenSession, placeInFocus],
   );
+
+  // Fork (L-153): a sidebar session dropped on Focus opens there, as the
+  // Continue picker does.
+  const onFocusDropSession = useCallback(
+    (sessionId: string) => void onFocusContinue(sessionId),
+    [onFocusContinue],
+  );
+  // Fork (L-152): Focus in the new layout always shows the hover sidebar,
+  // whatever the saved choice; leaving Focus shows the saved one again.
+  const sidebarPinnedShown = sessionSidebarOpen && !(insetLayout && focusMode);
 
   /** A review opens in the workspace, so Focus steps aside for it. */
   const onFocusOpenDiff = useCallback(
@@ -14127,6 +14170,9 @@ function Workspace({
   );
 
   const onToggleSessionSidebar = useCallback(() => {
+    // Fork (L-152): Focus in the new layout always uses the hover sidebar,
+    // so the toggle leaves the saved pinned/hover choice alone there.
+    if (insetLayoutRef.current && focusModeRef.current) return;
     setSessionSidebarOpen((open) => {
       const next = !open;
       saveSessionSidebarOpen(next);
@@ -14494,6 +14540,37 @@ function Workspace({
     },
     [openSettings],
   );
+  // Fork (L-148): the inset sidebar peeks out over Focus mode, but its pages
+  // draw in the workspace Focus hides, so opening one leaves Focus first.
+  const sidebarPages = useMemo(() => {
+    const leavingFocus =
+      <Args extends unknown[]>(open: (...args: Args) => void) =>
+      (...args: Args) => {
+        if (focusModeRef.current) onToggleFocusMode();
+        open(...args);
+      };
+    return {
+      search: leavingFocus(onOpenSearch),
+      inbox: leavingFocus(onOpenInbox),
+      notes: leavingFocus(onOpenNotes),
+      tasks: leavingFocus(onOpenTasks),
+      kanban: leavingFocus(onOpenKanban),
+      automations: leavingFocus(onOpenAutomations),
+      settings: leavingFocus(onOpenSettings),
+      notificationSettings: leavingFocus(onOpenNotificationSettings),
+    };
+  }, [
+    onToggleFocusMode,
+    onOpenSearch,
+    onOpenInbox,
+    onOpenNotes,
+    onOpenTasks,
+    onOpenKanban,
+    onOpenAutomations,
+    onOpenSettings,
+    onOpenNotificationSettings,
+  ]);
+
 
   const onOpenInboxIntegrations = useCallback(
     (source: ConnectableInboxSource) => openSettings("inbox", source),
@@ -16103,7 +16180,7 @@ function Workspace({
       }
       cwd={sidebarCwd}
       projectRailOpen={projectRailOpen}
-      sessionSidebarOpen={sessionSidebarOpen}
+      sessionSidebarOpen={sidebarPinnedShown}
       compactRail={!insetLayout && compactTitleNavigation}
       inset={insetLayout}
       rightPanelOpen={rightPanelOpen}
@@ -16181,8 +16258,8 @@ function Workspace({
       selectedProvider={selectedProvider}
       onSelectProvider={onSelectProvider}
       providerPanel={providerPanel}
-      onOpenTasks={onOpenTasks}
-      onOpenKanban={onOpenKanban}
+      onOpenTasks={sidebarPages.tasks}
+      onOpenKanban={sidebarPages.kanban}
       tasksActive={recordsViewOpen && recordKind === "tasks"}
       kanbanActive={boardOpen}
       cwd={sidebarCwd}
@@ -16198,7 +16275,7 @@ function Workspace({
           : undefined
       }
       explorerRootLabel={explorerRootLabel}
-      open={sessionSidebarOpen}
+      open={sidebarPinnedShown}
       tab={insetLayout ? "sessions" : sidebarTab}
       onTabChange={setSidebarTab}
       rightPanel={
@@ -16227,6 +16304,7 @@ function Workspace({
       onPrefetchSession={onPrefetchHistorySession}
       onSessionNavigationOrder={onSessionNavigationOrder}
       onPlaceSessionOnPane={onPlaceSessionOnPane}
+      onOpenSessionInFocus={focusMode ? onFocusDropSession : undefined}
       onRenameSession={onRenameHistorySession}
       onArchiveSession={onArchiveHistorySession}
       onArchiveSessions={onArchiveHistorySessions}
@@ -16267,6 +16345,7 @@ function Workspace({
       busyProjectPaths={busyProjectPaths}
       liveAgents={liveAgents}
       onSelectAgent={onSelectLiveAgent}
+      onDismissAgent={onDismissLiveAgent}
       onSelectProject={onSelectProjectFromRail}
       onOpenProject={pickProject}
       onRemoveProject={onRemoveProject}
@@ -16275,11 +16354,11 @@ function Workspace({
       onNew={onNew}
       openSessions={openProjectSessions}
       onNewTerminal={onNewTerminal}
-      onSearch={onOpenSearch}
-      onOpenInbox={onOpenInbox}
+      onSearch={sidebarPages.search}
+      onOpenInbox={sidebarPages.inbox}
       onOpenInboxItem={onOpenLinkedWorkItem}
-      onOpenNotes={notesEnabled ? onOpenNotes : undefined}
-      onOpenAutomations={onOpenAutomations}
+      onOpenNotes={notesEnabled ? sidebarPages.notes : undefined}
+      onOpenAutomations={sidebarPages.automations}
       onGoToFile={onGoToFile}
       searchActive={searchViewOpen}
       inboxActive={inboxViewOpen}
@@ -16298,8 +16377,8 @@ function Workspace({
       linkedSessionUpdateIds={linkedSessionUpdateIds}
       settingsOpen={settingsOpen}
       settingsSection={settingsSection}
-      onOpenSettings={onOpenSettings}
-      onOpenNotificationSettings={onOpenNotificationSettings}
+      onOpenSettings={sidebarPages.settings}
+      onOpenNotificationSettings={sidebarPages.notificationSettings}
       onSelectSettingsSection={onSelectSettingsSection}
       onCloseSettings={onCloseSettings}
       updateNotice={updateNotice}
@@ -16426,18 +16505,11 @@ function Workspace({
       }
       dock={projectDockHosts}
       dockGridRef={dockGridRef}
-      onOpenTasks={() => {
-        onToggleFocusMode();
-        onOpenTasks();
-      }}
-      onOpenAutomations={() => {
-        onToggleFocusMode();
-        onOpenAutomations();
-      }}
-      onOpenSettings={() => {
-        onToggleFocusMode();
-        onOpenSettings();
-      }}
+      // The inset layout's sidebar peeks out over Focus with these pages
+      // (L-148), so only the classic layout needs them in the header.
+      onOpenTasks={insetLayout ? undefined : sidebarPages.tasks}
+      onOpenAutomations={insetLayout ? undefined : sidebarPages.automations}
+      onOpenSettings={insetLayout ? undefined : sidebarPages.settings}
       footer={usageFooter}
     />
   ) : null;

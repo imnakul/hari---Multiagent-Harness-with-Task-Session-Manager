@@ -859,31 +859,48 @@ html.is-windows.has-app-wallpaper.theme-light {
   --content-lightness: 8%;
 }
 
-/* A collapsed sidebar peeking out blurs the workspace under a faint wash,
-   with the rest of the window dimmed behind it. */
+/* A collapsed sidebar peeking out is a frosted card, with the rest of the
+   window dimmed behind it. Fork (L-148): not a backdrop blur. The peek floats
+   over the live workspace, so the blur was recomputed whenever anything under
+   or inside it repainted, and the row hover glide dropped to about 30 FPS.
+   Fork (L-154): the frost is faked instead, all of it cheap to composite: a
+   see-through tint (--peek-frost-alpha; lower shows more of the workspace),
+   a grain tile (its opacity= value; stronger hides more of what is behind)
+   the browser draws once and reuses (an image, not a filter on
+   the element, and no blend mode), and a light inner edge. */
 .sidebar-peek {
-  border-color: color-mix(in srgb, var(--color-content) 8%, transparent);
-  background: linear-gradient(var(--inset-wash), var(--inset-wash));
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  --peek-frost-alpha: 0.5;
+  --peek-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.14'/%3E%3C/svg%3E");
+  --peek-edge: rgb(255 255 255 / 0.07);
+  border-color: color-mix(in srgb, var(--color-content) 9%, transparent);
+  background:
+    var(--peek-grain),
+    linear-gradient(var(--inset-wash), var(--inset-wash)),
+    color-mix(
+      in srgb,
+      var(--inset-surface) calc(var(--peek-frost-alpha) * 100%),
+      transparent
+    );
+  background-size: 160px 160px, auto, auto;
   box-shadow:
+    inset 0 1px 0 var(--peek-edge),
+    inset 0 0 0 1px rgb(255 255 255 / 0.02),
     0 12px 32px rgb(0 0 0 / 0.28),
     0 2px 6px rgb(0 0 0 / 0.16);
 }
 
 html.theme-light .sidebar-peek {
-  background:
-    linear-gradient(var(--inset-wash), var(--inset-wash)), var(--inset-surface);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  --peek-frost-alpha: 0.3;
+  --peek-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  --peek-edge: rgb(255 255 255 / 0.7);
 }
 
 .sidebar-peek-backdrop {
-  background: rgb(0 0 0 / 0.4);
+  background: rgb(0 0 0 / 0.3);
 }
 
 html.theme-light .sidebar-peek-backdrop {
-  background: rgb(0 0 0 / 0.18);
+  background: rgb(0 0 0 / 0.2);
 }
 
 /* Lighter rules in the sidebar, so they read as hairlines over the card's
@@ -1894,6 +1911,42 @@ html.theme-light .orchestrator-constellation {
       color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 75%, transparent),
     inset 0 0 16px -6px
       color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 35%, transparent);
+}
+
+/* Focus pane cards (L-144): rounded, with the inset card's soft lift. The
+   focused one takes the accent edge and an outer glow, the turn-mode halo's
+   recipe at a calmer strength, held while it stays focused. Fork (L-151): the
+   edge and glow live on one ring over the focused pane (.focus-ring), which
+   glides between panes. */
+.focus-pane {
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+  transition:
+    border-color var(--motion-feedback-duration) var(--motion-ease-out),
+    box-shadow 200ms var(--motion-ease-out);
+}
+
+.focus-ring {
+  border: 1px solid
+    color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 60%, transparent);
+  box-shadow:
+    0 0 0 1px
+      color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 28%, transparent),
+    0 0 18px 2px
+      color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 22%, transparent);
+}
+
+/* Glides on a focus change or a pane move; off while an edge is dragged. */
+.focus-ring-glide {
+  transition-property: left, top, width, height;
+  transition-duration: 260ms;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-pane,
+  .focus-ring-glide {
+    transition: none;
+  }
 }
 
 /* Chat links follow the accent (the user accent when set, else the theme accent). */

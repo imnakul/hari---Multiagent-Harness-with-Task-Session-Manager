@@ -42,3 +42,25 @@ export function newestBoardCards(
   }
   return newest;
 }
+
+export type FocusProjectStatus = {
+  /** A chat of the project is running a turn. */
+  working: boolean;
+  /** The project tab's dot: a chat waits on you, or every finished chat is done. */
+  dot: "attention" | "done" | null;
+};
+
+/**
+ * A Focus project tab's status (L-147), from its chats' tags: a chat asking
+ * wins the dot, and the done dot shows only while nothing runs or asks, so a
+ * green dot means the whole project is idle and finished.
+ */
+export function focusProjectStatus(
+  tags: readonly ({ label: string; tone: BoardTagTone } | null)[],
+): FocusProjectStatus {
+  const working = tags.some((tag) => tag?.label === "Working…");
+  if (tags.some((tag) => tag?.tone === "attention"))
+    return { working, dot: "attention" };
+  const done = !working && tags.some((tag) => tag?.tone === "done");
+  return { working, dot: done ? "done" : null };
+}

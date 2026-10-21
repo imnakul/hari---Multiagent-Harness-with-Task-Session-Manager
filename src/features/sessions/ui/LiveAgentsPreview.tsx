@@ -11,7 +11,7 @@ import {
   resolveTabGroupLabel,
   resolveTabGroupMascot,
 } from "../../workspace/model/tabGroups";
-import { Check, ChevronDown, ChevronUp, CircleAlert } from "../../../shared/ui/icons";
+import { Check, ChevronDown, ChevronUp, CircleAlert, X } from "../../../shared/ui/icons";
 import { HarnessIcon } from "./HarnessIcon";
 import { ProjectMascot } from "../../projects/ui/ProjectMascot";
 import { TerminalSpinner } from "./TerminalSpinner";
@@ -23,6 +23,8 @@ type Props = {
   agents: LiveAgent[];
   activeSessionId?: string;
   onSelect?: (sessionId: string, intent?: { altKey?: boolean }) => void;
+  /** Fork (L-150): hides this card's run; a later run shows again. */
+  onDismiss?: (agent: LiveAgent) => void;
   bottomSpacing?: boolean;
   groupLabels?: Record<string, string>;
   groupColors?: Record<string, number>;
@@ -34,6 +36,7 @@ export function LiveAgentsPreview({
   agents,
   activeSessionId,
   onSelect,
+  onDismiss,
   bottomSpacing = false,
   groupLabels: groupLabelsProp,
   groupColors: groupColorsProp,
@@ -102,6 +105,7 @@ export function LiveAgentsPreview({
               now={now}
               selected={agent.id === activeSessionId}
               onSelect={onSelect}
+              onDismiss={onDismiss}
               groupLabels={groupLabels}
               groupColors={groupColors}
               groupCustomColors={groupCustomColors}
@@ -134,6 +138,7 @@ function LiveAgentCard({
   now,
   selected,
   onSelect,
+  onDismiss,
   groupLabels,
   groupColors,
   groupCustomColors,
@@ -143,6 +148,7 @@ function LiveAgentCard({
   now: number;
   selected: boolean;
   onSelect?: (sessionId: string, intent?: { altKey?: boolean }) => void;
+  onDismiss?: (agent: LiveAgent) => void;
   groupLabels: Record<string, string>;
   groupColors: Record<string, number>;
   groupCustomColors: Record<string, string>;
@@ -170,62 +176,79 @@ function LiveAgentCard({
     .join("\n");
 
   return (
-    <button
-      type="button"
-      title={title}
-      aria-label={[agent.title, project, activity, elapsed]
-        .filter(Boolean)
-        .join(", ")}
-      aria-current={selected ? "true" : undefined}
-      data-live-agent-card={agent.id}
-      onClick={(event) => event.altKey ? onSelect?.(agent.id, { altKey: true }) : onSelect?.(agent.id)}
-      className={`relative flex w-full flex-col rounded-md px-2 py-1.5 text-left ${
-        selected ? "bg-selection" : "hover:bg-content/8"
-      }`}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <ProjectMascot
-          project={seed}
-          color={color}
-          name={resolveTabGroupMascot(key, groupMascots)}
-          className="size-2 shrink-0"
-          active={live}
-        />
-        {live ? (
-          <p className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug">
-            {agent.title}
-          </p>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug">
-            {agent.title}
-          </span>
-        )}
-      </span>
-      <span
-        className={`mt-1 flex min-w-0 items-center gap-1.5 pl-4 text-[11px] leading-tight ${
-          agent.needsApproval
-            ? "text-amber-400"
-            : agent.done
-              ? "text-emerald-400"
-              : "text-content/50"
+    // A wrapper, so the dismiss button sits beside the card's button
+    // instead of inside it.
+    <div className="group relative">
+      <button
+        type="button"
+        title={title}
+        aria-label={[agent.title, project, activity, elapsed]
+          .filter(Boolean)
+          .join(", ")}
+        aria-current={selected ? "true" : undefined}
+        data-live-agent-card={agent.id}
+        onClick={(event) => event.altKey ? onSelect?.(agent.id, { altKey: true }) : onSelect?.(agent.id)}
+        className={`relative flex w-full flex-col rounded-md px-2 py-1.5 text-left ${
+          selected ? "bg-selection" : "hover:bg-content/8"
         }`}
       >
-        {agent.needsApproval ? (
-          <CircleAlert className="size-3 shrink-0" strokeWidth={1.75} />
-        ) : agent.done ? (
-          <Check className="size-3 shrink-0" strokeWidth={2.25} />
-        ) : (
-          <TerminalSpinner className="inline-block w-3 select-none text-center text-[11px] leading-none" />
-        )}
-        <span className="min-w-0 truncate">{activity}</span>
-      </span>
-      <span className="mt-1 flex min-w-0 items-center gap-1.5 pl-4 text-[11px] leading-tight text-content/45">
-        <HarnessIcon harness={agent.harness} className="size-3 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{project}</span>
-        {elapsed ? (
-          <span className="shrink-0 tabular-nums">{elapsed}</span>
-        ) : null}
-      </span>
-    </button>
+        <span
+          className={`flex min-w-0 items-center gap-2${onDismiss ? " pr-5" : ""}`}
+        >
+          <ProjectMascot
+            project={seed}
+            color={color}
+            name={resolveTabGroupMascot(key, groupMascots)}
+            className="size-2 shrink-0"
+            active={live}
+          />
+          {live ? (
+            <p className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug">
+              {agent.title}
+            </p>
+          ) : (
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug">
+              {agent.title}
+            </span>
+          )}
+        </span>
+        <span
+          className={`mt-1 flex min-w-0 items-center gap-1.5 pl-4 text-[11px] leading-tight ${
+            agent.needsApproval
+              ? "text-amber-400"
+              : agent.done
+                ? "text-emerald-400"
+                : "text-content/50"
+          }`}
+        >
+          {agent.needsApproval ? (
+            <CircleAlert className="size-3 shrink-0" strokeWidth={1.75} />
+          ) : agent.done ? (
+            <Check className="size-3 shrink-0" strokeWidth={2.25} />
+          ) : (
+            <TerminalSpinner className="inline-block w-3 select-none text-center text-[11px] leading-none" />
+          )}
+          <span className="min-w-0 truncate">{activity}</span>
+        </span>
+        <span className="mt-1 flex min-w-0 items-center gap-1.5 pl-4 text-[11px] leading-tight text-content/45">
+          <HarnessIcon harness={agent.harness} className="size-3 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{project}</span>
+          {elapsed ? (
+            <span className="shrink-0 tabular-nums">{elapsed}</span>
+          ) : null}
+        </span>
+      </button>
+      {onDismiss ? (
+        <button
+          type="button"
+          aria-label={`Dismiss ${agent.title} from Working`}
+          title="Dismiss"
+          onClick={() => onDismiss(agent)}
+          className="absolute right-1 top-1 grid size-5 place-items-center rounded-md text-content/45 opacity-0 transition-[opacity,background-color,color,scale] duration-100 hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100 active:scale-96 motion-reduce:active:scale-100"
+        >
+          <X className="size-3" strokeWidth={1.75} />
+        </button>
+      ) : null}
+    </div>
   );
 }

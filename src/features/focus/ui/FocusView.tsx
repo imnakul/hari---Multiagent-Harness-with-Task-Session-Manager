@@ -14,7 +14,7 @@ import { IS_MAC, MOD, SHIFT } from "../../../platform/tauri/platform";
 import { useTrafficLightsVisible } from "../../../platform/tauri/useTrafficLightsVisible";
 import { setGrabbing, suppressTextSelection } from "../../../shared/lib/drag";
 import { projectName } from "../../../shared/lib/paths";
-import { ActivePaneRing } from "../../../shared/ui/ActivePaneRing";
+import { Shimmer } from "../../../shared/ui/Shimmer";
 import {
   CheckCircle,
   Focus,
@@ -32,6 +32,7 @@ import {
 } from "../../projects/ui/ProjectMark";
 import type { BoardCard } from "../../session-board/sessionBoard";
 import { BoardCardTag } from "../../session-board/ui/BoardSessionCard";
+import { useFocusSessionDropOver } from "../model/focusSessionDrop";
 import {
   sessionDisplayTitle,
   type Session,
@@ -51,7 +52,21 @@ import {
   projectFocusGrid,
   saveFocusGroupByProject,
 } from "../model/focusGroups";
-import { focusPaneTag, newestBoardCards } from "../model/focusPaneTag";
+import {
+  focusColumnShares,
+  focusRowSplit,
+  loadFocusLayout,
+  resetFocusLayout,
+  resizeFocusColumns,
+  saveFocusLayout,
+  setFocusRowSplit,
+  type FocusLayout,
+} from "../model/focusLayout";
+import {
+  focusPaneTag,
+  focusProjectStatus,
+  newestBoardCards,
+} from "../model/focusPaneTag";
 import { FocusTabRow, type FocusTab } from "./FocusGroupTabs";
 import {
   focusContinueItems,
@@ -59,6 +74,7 @@ import {
   FocusSearchList,
   type FocusPickItem,
 } from "./FocusPicker";
+import { FocusSash } from "./FocusSash";
 import {
   FOCUS_NEW_OPTIONS,
   FocusMoreButton,
@@ -68,6 +84,21 @@ import {
 const DRAG_THRESHOLD = 4;
 /** Within this share of a pane's edge a drop goes beside it; else it swaps. */
 const EDGE_ZONE = 0.25;
+/** Half the gap around each pane card, in px. */
+const PANE_GAP = 3;
+/** A resize stops before a pane gets narrower or shorter than this, in px. */
+const MIN_PANE_WIDTH = 260;
+const MIN_PANE_HEIGHT = 140;
+/**
+ * Tab text trimmed to cap height and baseline, so centring lines the letters
+ * up with the icon and the count instead of the font's line box (L-147).
+ */
+const TAB_TEXT = "[text-box:trim-both_cap_alphabetic]";
+/** Project tab dots (L-147), in Session Manager's tag colours. */
+const PROJECT_DOT = {
+  attention: { label: "needs attention", className: "bg-amber-400" },
+  done: { label: "done", className: "bg-emerald-400" },
+} as const;
 
 type PaneDrag = { fromId: string; overId: string | null; edge: FocusDropEdge };
 
@@ -153,6 +184,15 @@ export function FocusView({
   const onGridChangeRef = useRef(onGridChange);
   onGridChangeRef.current = onGridChange;
   const endDrag = useRef<(() => void) | null>(null);
+  const paneArea = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<FocusLayout>(loadFocusLayout);
+  /** A resize in progress; the saved layout returns if it is cancelled. */
+  const [draftLayout, setDraftLayout] = useState<FocusLayout | null>(null);
+  const commitLayout = (next: FocusLayout) => {
+    setDraftLayout(null);
+    setLayout(next);
+    saveFocusLayout(next);
+  };
 
   useEffect(() => {
     const el = main.current;
@@ -194,7 +234,11 @@ export function FocusView({
   const viewGrid = activeGroup ? projectFocusGrid(grid, activeGroup) : grid;
   const shown = visibleFocusGrid(viewGrid, cap);
   const empty = shown.columns.length === 0 && shown.hidden.length === 0;
-  const rows = shown.columns.some((column) => column.length > 1) ? 2 : 1;
+  const sizes = draftLayout ?? layout;
+  const shares = focusColumnShares(shown.columns, sizes);
+  const starts = shares.map((_, index) =>
+    shares.slice(0, index).reduce((sum, share) => sum + share, 0),
+  );
 
   const projectItems = useMemo(
     () => focusProjectItems(recents, marks),
@@ -242,22 +286,46 @@ export function FocusView({
     saveFocusGroupByProject(next);
     setGrouped(next);
   };
+  const tagOf = (id: string) => {
+    const session = byId.get(id);
+    return session ? focusPaneTag(session, cards.get(id)) : null;
+  };
   const projectTabs: FocusTab[] = groups.map((group) => {
     const name = group.cwd ? projectName(group.cwd) : "Other";
     const count = group.ids.length;
+    const status = focusProjectStatus(group.ids.map(tagOf));
+    const statusText = [
+      status.working ? "working" : null,
+      status.dot ? PROJECT_DOT[status.dot].label : null,
+    ].filter(Boolean);
     return {
       id: group.key,
-      title: `${name}, ${count} ${count === 1 ? "chat" : "chats"}`,
+      title: [
+        `${name}, ${count} ${count === 1 ? "chat" : "chats"}`,
+        ...statusText,
+      ].join(", "),
       content: (
         <>
-          {group.cwd ? (
-            <ProjectMark cwd={group.cwd} {...marks} />
+          {group.cwd ? <ProjectIcon cwd={group.cwd} {...marks} /> : null}
+          {status.working ? (
+            <Shimmer duration={1.4} className={`${TAB_TEXT} min-w-0 truncate`}>
+              {name}
+            </Shimmer>
           ) : (
-            <span className="truncate">Other</span>
+            <span className={`${TAB_TEXT} min-w-0 truncate`}>{name}</span>
           )}
-          <span className="shrink-0 text-[11px] tabular-nums text-content/40">
+          <span
+            className={`${TAB_TEXT} shrink-0 text-[11px] tabular-nums text-content/40`}
+          >
             {count}
           </span>
+          {status.dot ? (
+            <span
+              aria-hidden
+              data-focus-project-dot={status.dot}
+              className={`size-1.5 shrink-0 rounded-full ${PROJECT_DOT[status.dot].className}`}
+            />
+          ) : null}
         </>
       ),
     };
@@ -266,13 +334,19 @@ export function FocusView({
     const session = byId.get(id);
     const card = cards.get(id);
     const title = paneTitle(session, card);
-    const tag = session ? focusPaneTag(session, card) : null;
+    const tag = tagOf(id);
     return {
       id,
       title: tag ? `${title}, ${tag.label}` : title,
       content: (
         <>
-          <span className="min-w-0 truncate">{title}</span>
+          {tag?.label === "Working…" ? (
+            <Shimmer duration={1.4} className={`${TAB_TEXT} min-w-0 truncate`}>
+              {title}
+            </Shimmer>
+          ) : (
+            <span className={`${TAB_TEXT} min-w-0 truncate`}>{title}</span>
+          )}
           {tag ? (
             <span className="flex shrink-0 text-[11px]">
               <BoardCardTag label={tag.label} tone={tag.tone} />
@@ -397,6 +471,108 @@ export function FocusView({
   const dockInPane = shown.columns.some((column) =>
     column.includes(focusedId ?? ""),
   );
+  /** A pane's box: its column's share of the width, its row's of the height. */
+  const paneBox = (
+    columnIndex: number,
+    column: readonly string[],
+    rowIndex: number,
+  ) => {
+    const split = focusRowSplit(column, sizes);
+    const top = column.length > 1 && rowIndex > 0 ? split : 0;
+    const height = column.length > 1 ? (rowIndex > 0 ? 1 - split : split) : 1;
+    return {
+      left: `calc(${starts[columnIndex] * 100}% + ${PANE_GAP}px)`,
+      width: `calc(${shares[columnIndex] * 100}% - ${PANE_GAP * 2}px)`,
+      top: `calc(${top * 100}% + ${PANE_GAP}px)`,
+      height: `calc(${height * 100}% - ${PANE_GAP * 2}px)`,
+    };
+  };
+  const areaSpan = (vertical: boolean) => {
+    const rect = paneArea.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return vertical
+      ? { origin: rect.left, span: rect.width }
+      : { origin: rect.top, span: rect.height };
+  };
+  const resetLayout = () =>
+    commitLayout(resetFocusLayout(layout, shown.columns));
+  const columnSashes = shown.columns.slice(1).map((column, index) => {
+    const edge = starts[index + 1];
+    const resize = (value: number) => {
+      const width = paneArea.current?.clientWidth ?? 0;
+      const minShare = width > 0 ? MIN_PANE_WIDTH / width : 0.1;
+      return resizeFocusColumns(layout, shown.columns, index, value, minShare);
+    };
+    return (
+      <FocusSash
+        key={`column-${column[0]}`}
+        orientation="vertical"
+        label={`Resize columns ${index + 1} and ${index + 2}`}
+        value={edge}
+        style={{
+          left: `calc(${edge * 100}% - ${PANE_GAP}px)`,
+          width: PANE_GAP * 2,
+          top: 0,
+          bottom: 0,
+        }}
+        measure={() => areaSpan(true)}
+        onPreview={(value) => setDraftLayout(resize(value))}
+        onCommit={(value) => commitLayout(resize(value))}
+        onCancel={() => setDraftLayout(null)}
+        onReset={resetLayout}
+      />
+    );
+  });
+  const rowSashes = shown.columns.flatMap((column, columnIndex) => {
+    if (column.length < 2) return [];
+    const split = focusRowSplit(column, sizes);
+    const resize = (value: number) => {
+      const height = paneArea.current?.clientHeight ?? 0;
+      const minShare = height > 0 ? MIN_PANE_HEIGHT / height : 0.2;
+      return setFocusRowSplit(layout, column, value, minShare);
+    };
+    return [
+      <FocusSash
+        key={`row-${column[0]}`}
+        orientation="horizontal"
+        label={`Resize chats in column ${columnIndex + 1}`}
+        value={split}
+        style={{
+          left: `calc(${starts[columnIndex] * 100}% + ${PANE_GAP}px)`,
+          width: `calc(${shares[columnIndex] * 100}% - ${PANE_GAP * 2}px)`,
+          top: `calc(${split * 100}% - ${PANE_GAP}px)`,
+          height: PANE_GAP * 2,
+        }}
+        measure={() => areaSpan(false)}
+        onPreview={(value) => setDraftLayout(resize(value))}
+        onCommit={(value) => commitLayout(resize(value))}
+        onCancel={() => setDraftLayout(null)}
+        onReset={resetLayout}
+      />,
+    ];
+  });
+  const sessionDropOver = useFocusSessionDropOver();
+  // Fork (L-151): one accent ring over the focused pane, so a focus change
+  // glides it from the old pane to the new one instead of swapping outlines.
+  // It snaps (no transition) while an edge is dragged, so it never lags.
+  const ringColumn = outlined
+    ? shown.columns.findIndex((column) => column.includes(focusedId ?? ""))
+    : -1;
+  const focusRing =
+    ringColumn >= 0 ? (
+      <div
+        aria-hidden
+        data-focus-ring
+        className={`focus-ring pointer-events-none absolute z-[1] rounded-[10px]${
+          draftLayout ? "" : " focus-ring-glide"
+        }`}
+        style={paneBox(
+          ringColumn,
+          shown.columns[ringColumn],
+          shown.columns[ringColumn].indexOf(focusedId ?? ""),
+        )}
+      />
+    ) : null;
   const panes = shown.columns.flatMap((column, columnIndex) =>
     column.map((id, rowIndex) => {
       const session = byId.get(id);
@@ -407,7 +583,7 @@ export function FocusView({
       const cwd = session?.cwd ?? card?.cwd;
       return (
         <section
-          // Keyed by chat and placed by grid lines, so moving a pane never
+          // Keyed by chat and placed by position, so moving a pane never
           // remounts its transcript.
           key={id}
           data-focus-pane={id}
@@ -415,15 +591,10 @@ export function FocusView({
           onPointerDownCapture={() => {
             if (!focused) onFocusPane(id);
           }}
-          className={`relative flex min-h-0 min-w-0 flex-col overflow-hidden${
-            columnIndex > 0 ? " border-l border-stroke" : ""
-          }${rowIndex > 0 ? " border-t border-stroke" : ""}${
-            drag?.fromId === id ? " opacity-40" : ""
-          }`}
-          style={{
-            gridColumn: columnIndex + 1,
-            gridRow: column.length === 1 ? `1 / span ${rows}` : rowIndex + 1,
-          }}
+          className={`focus-pane absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-stroke${
+            focused && outlined ? " focus-pane-active z-[1]" : ""
+          }${drag?.fromId === id ? " opacity-40" : ""}`}
+          style={paneBox(columnIndex, column, rowIndex)}
         >
           <header
             data-focus-pane-header
@@ -496,7 +667,6 @@ export function FocusView({
               )}
             </div>
           </div>
-          <ActivePaneRing shown={focused && outlined} />
           {drag && drag.overId === id ? (
             <FocusDropHint edge={drag.edge} />
           ) : null}
@@ -602,9 +772,11 @@ export function FocusView({
                 : "Other"
               : undefined
           }
+          data-focus-drop-area
           className="relative flex min-h-0 min-w-0 flex-1"
           style={{ gridArea: "main" }}
         >
+          {sessionDropOver ? <FocusSessionDropHint /> : null}
           {empty ? (
             <FocusEmptyState {...newActions} />
           ) : shown.columns.length === 0 ? (
@@ -614,18 +786,33 @@ export function FocusView({
             </p>
           ) : (
             <div
-              className="grid min-h-0 min-w-0 flex-1"
-              style={{
-                gridTemplateColumns: `repeat(${shown.columns.length}, minmax(0, 1fr))`,
-                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-              }}
+              ref={paneArea}
+              className="relative m-[3px] min-h-0 min-w-0 flex-1"
             >
               {panes}
+              {focusRing}
+              {columnSashes}
+              {rowSashes}
             </div>
           )}
         </main>
       </div>
       {footer}
+    </div>
+  );
+}
+
+/** Fork (L-153): a sidebar session held over Focus opens here on release. */
+function FocusSessionDropHint(): ReactNode {
+  return (
+    <div
+      aria-hidden
+      data-focus-session-drop
+      className="pointer-events-none absolute inset-[3px] z-20 grid place-items-center rounded-[10px] border-2 border-accent bg-accent/15"
+    >
+      <span className="rounded-md bg-background-base px-2.5 py-1 text-[12px] text-content shadow-sm">
+        Open in Focus
+      </span>
     </div>
   );
 }

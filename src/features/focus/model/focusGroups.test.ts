@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { swapInFocusGrid, visibleFocusGrid, type FocusGrid } from "./focusGrid";
 import {
-  swapInFocusGrid,
-  visibleFocusGrid,
-  type FocusGrid,
-} from "./focusGrid";
-import { focusProjectGroups, projectFocusGrid } from "./focusGroups";
+  focusAfterClose,
+  focusProjectGroups,
+  projectFocusGrid,
+} from "./focusGroups";
 
 const CWD: Record<string, string> = {
   a1: "C:/work/alpha",
@@ -76,5 +76,29 @@ describe("projectFocusGrid (L-128)", () => {
     );
     expect(after.columns.flat()).toContain("a3");
     expect(after.hidden).toEqual(["a2"]);
+  });
+});
+
+describe("focusAfterClose (L-146)", () => {
+  const cwds: Record<string, string> = {
+    p1: "C:/work/portfolio",
+    f1: "C:/work/fph",
+    f2: "C:/work/fph",
+    t1: "C:/work/teacher",
+  };
+  const grid = { columns: [["p1"], ["f1"], ["t1"], ["f2"]], overflow: [] };
+  const cwdOf = (id: string) => cwds[id];
+
+  it("stays in the closed chat's project", () => {
+    expect(focusAfterClose(grid, "f2", cwdOf)).toBe("f1");
+    expect(focusAfterClose(grid, "f1", cwdOf)).toBe("f2");
+  });
+
+  it("falls back to the nearest chat when the project has no other", () => {
+    expect(focusAfterClose(grid, "t1", cwdOf)).toBe("f1");
+  });
+
+  it("returns nothing for a chat not in the grid", () => {
+    expect(focusAfterClose(grid, "zz", cwdOf)).toBeUndefined();
   });
 });

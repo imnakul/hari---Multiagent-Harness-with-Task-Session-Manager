@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { BoardCard } from "../../session-board/sessionBoard";
-import { focusPaneTag, newestBoardCards } from "./focusPaneTag";
+import {
+  focusPaneTag,
+  focusProjectStatus,
+  newestBoardCards,
+} from "./focusPaneTag";
 
 const idle = { busy: false, blocks: [] };
 
@@ -68,5 +72,37 @@ describe("newestBoardCards", () => {
     ]);
     expect(newest.get("s1")?.runId).toBe("b");
     expect(newest.size).toBe(2);
+  });
+});
+
+describe("focusProjectStatus (L-147)", () => {
+  const working = { label: "Working…", tone: "working" } as const;
+  const asking = { label: "Question", tone: "attention" } as const;
+  const done = { label: "Done", tone: "done" } as const;
+  const queued = { label: "Queued", tone: "working" } as const;
+
+  it("shows the attention dot while a chat asks, even beside a running one", () => {
+    expect(focusProjectStatus([done, asking, working])).toEqual({
+      working: true,
+      dot: "attention",
+    });
+  });
+
+  it("shows the done dot only when nothing runs or asks", () => {
+    expect(focusProjectStatus([done, null])).toEqual({
+      working: false,
+      dot: "done",
+    });
+    expect(focusProjectStatus([done, working])).toEqual({
+      working: true,
+      dot: null,
+    });
+  });
+
+  it("does not count a queued chat as working", () => {
+    expect(focusProjectStatus([queued, null])).toEqual({
+      working: false,
+      dot: null,
+    });
   });
 });

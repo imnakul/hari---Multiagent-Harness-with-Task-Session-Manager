@@ -266,7 +266,10 @@ export function BoardSessionCard({
  * catalog only on an exact match, otherwise its last segment is shown, so an
  * unknown id never borrows another model's name.
  */
-function boardModelLabel(harness: HarnessId | null, stored: string): string {
+export function boardModelLabel(
+  harness: HarnessId | null,
+  stored: string,
+): string {
   if (!stored.includes(":")) return stored;
   if (harness) {
     const resolved = resolveModel(harness, stored);

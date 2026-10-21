@@ -60,3 +60,29 @@ export function saveFocusGroupByProject(on: boolean): void {
     // Storage unavailable: the choice still holds for this run.
   }
 }
+
+/**
+ * The chat to focus after the focused one leaves the grid (L-146): the
+ * nearest chat of the same project, so grouped Focus stays on that project,
+ * else the nearest chat at all. Nearest is by grid order, before or after.
+ */
+export function focusAfterClose(
+  grid: FocusGrid,
+  closedId: string,
+  cwdOf: (id: string) => string | undefined,
+): string | undefined {
+  const ids = focusGridIds(grid);
+  const at = ids.indexOf(closedId);
+  if (at < 0) return undefined;
+  const rest = ids.filter((id) => id !== closedId);
+  const byDistance = rest
+    .map((id) => ({ id, distance: Math.abs(ids.indexOf(id) - at) }))
+    .sort((a, b) => a.distance - b.distance);
+  const closedCwd = cwdOf(closedId);
+  const key = closedCwd ? projectKey(closedCwd) : "";
+  const sameProject = byDistance.find(({ id }) => {
+    const cwd = cwdOf(id);
+    return (cwd ? projectKey(cwd) : "") === key;
+  });
+  return (sameProject ?? byDistance[0])?.id;
+}

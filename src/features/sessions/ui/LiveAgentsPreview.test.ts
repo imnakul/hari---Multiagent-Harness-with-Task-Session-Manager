@@ -108,6 +108,42 @@ describe("LiveAgentsPreview", () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith("b");
   });
 
+  it("dismisses a card without opening it (L-150)", () => {
+    const onSelect = vi.fn();
+    const onDismiss = vi.fn();
+    const done = agent("b", "/repo/b", { done: true, activity: "Done" });
+    render({
+      agents: [agent("a", "/repo/a"), done],
+      onSelect,
+      onDismiss,
+      groupLabels: {},
+      groupColors: {},
+      groupCustomColors: {},
+      groupMascots: {},
+    });
+
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Dismiss Agent b from Working"]',
+        )!
+        .click(),
+    );
+    expect(onDismiss).toHaveBeenCalledExactlyOnceWith(done);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("has no dismiss button without a handler", () => {
+    render({
+      agents: [agent("a", "/repo/a"), agent("b", "/repo/b")],
+      groupLabels: {},
+      groupColors: {},
+      groupCustomColors: {},
+      groupMascots: {},
+    });
+    expect(container.querySelector('button[aria-label^="Dismiss"]')).toBeNull();
+  });
+
   it("keeps elapsed timers out of its live region", () => {
     render({
       agents: [agent("a", "/repo/a"), agent("b", "/repo/b")],
