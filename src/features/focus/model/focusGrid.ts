@@ -100,6 +100,34 @@ export function swapInFocusGrid(grid: FocusGrid, a: string, b: string): FocusGri
 }
 
 /**
+ * Puts `order`'s chats, in that order, into the places they hold now (fork,
+ * L-159): the grid keeps its shape and every other chat stays put. Returns
+ * the grid unchanged unless `order` lists distinct chats that are all in it.
+ */
+export function reorderFocusGrid(
+  grid: FocusGrid,
+  order: readonly string[],
+): FocusGrid {
+  const members = new Set(order);
+  if (members.size !== order.length || !order.every((id) => focusGridHas(grid, id)))
+    return grid;
+  let next = 0;
+  const place = (id: string) => (members.has(id) ? order[next++] : id);
+  return {
+    columns: grid.columns.map((column) => column.map(place)),
+    overflow: grid.overflow.map(place),
+  };
+}
+
+/** `items` with the entry at `from` moved to index `to`. */
+export function moveListItem<T>(items: readonly T[], from: number, to: number): T[] {
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  if (moved !== undefined) next.splice(to, 0, moved);
+  return next;
+}
+
+/**
  * Drops `id` on `targetId`'s edge: left/right make a column beside the
  * target's, top/bottom share the target's column, and center swaps the two.
  * Returns null when the drop would make a 5th column or a 3rd row.

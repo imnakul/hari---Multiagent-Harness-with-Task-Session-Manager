@@ -42,6 +42,8 @@ import {
   focusColumnCap,
   focusGridHas,
   moveInFocusGrid,
+  moveListItem,
+  reorderFocusGrid,
   swapInFocusGrid,
   visibleFocusGrid,
   type FocusDropEdge,
@@ -802,6 +804,14 @@ export function FocusView({
               const group = groups.find((entry) => entry.key === key);
               if (group) onClosePanes(group.ids);
             }}
+            onReorder={(key, to) => {
+              const from = groups.findIndex((entry) => entry.key === key);
+              if (from < 0) return;
+              const order = moveListItem(groups, from, to).flatMap(
+                (group) => group.ids,
+              );
+              onGridChange(reorderFocusGrid(grid, order));
+            }}
             controls={gridRegionId}
           />
           <FocusTabRow
@@ -810,6 +820,12 @@ export function FocusView({
             selectedId={focusedId}
             onSelect={showChat}
             onClose={onClosePane}
+            onReorder={(id, to) => {
+              const ids = activeGroup.ids;
+              const from = ids.indexOf(id);
+              if (from < 0) return;
+              onGridChange(reorderFocusGrid(grid, moveListItem(ids, from, to)));
+            }}
             controls={gridRegionId}
           />
         </>

@@ -6,9 +6,11 @@ import {
   focusGridIds,
   loadFocusGrid,
   moveInFocusGrid,
+  moveListItem,
   parseFocusGrid,
   pruneFocusGrid,
   removeFromFocusGrid,
+  reorderFocusGrid,
   saveFocusGrid,
   swapInFocusGrid,
   visibleFocusGrid,
@@ -169,5 +171,32 @@ describe("parseFocusGrid", () => {
     const grid = gridOf(6);
     saveFocusGrid(grid);
     expect(loadFocusGrid()).toEqual(grid);
+  });
+});
+
+describe("reorderFocusGrid (L-159)", () => {
+  const grid = { columns: [["a1", "b1"], ["a2"], ["b2"]], overflow: ["a3"] };
+
+  it("moves the listed chats through their own places only", () => {
+    expect(reorderFocusGrid(grid, ["a3", "a1", "a2"])).toEqual({
+      columns: [["a3", "b1"], ["a1"], ["b2"]],
+      overflow: ["a2"],
+    });
+  });
+
+  it("can reorder every chat while the grid keeps its shape", () => {
+    expect(
+      reorderFocusGrid(grid, ["b1", "b2", "a1", "a2", "a3"]),
+    ).toEqual({ columns: [["b1", "b2"], ["a1"], ["a2"]], overflow: ["a3"] });
+  });
+
+  it("ignores an order with unknown or repeated chats", () => {
+    expect(reorderFocusGrid(grid, ["a1", "zz"])).toBe(grid);
+    expect(reorderFocusGrid(grid, ["a1", "a1"])).toBe(grid);
+  });
+
+  it("moves a list entry to a new index", () => {
+    expect(moveListItem(["a", "b", "c"], 0, 2)).toEqual(["b", "c", "a"]);
+    expect(moveListItem(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
   });
 });

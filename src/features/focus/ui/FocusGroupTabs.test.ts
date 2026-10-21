@@ -24,7 +24,11 @@ afterEach(() => {
   host.remove();
 });
 
-function render(onClose?: (id: string) => void, onSelect = vi.fn()) {
+function render(
+  onClose?: (id: string) => void,
+  onSelect = vi.fn(),
+  onReorder?: (id: string, to: number) => void,
+) {
   act(() =>
     root.render(
       createElement(FocusTabRow, {
@@ -33,6 +37,7 @@ function render(onClose?: (id: string) => void, onSelect = vi.fn()) {
         selectedId: "alpha",
         onSelect,
         onClose,
+        onReorder,
       }),
     ),
   );
@@ -69,5 +74,70 @@ describe("FocusTabRow close buttons (L-158)", () => {
   it("has no close buttons when the row cannot close tabs", () => {
     render();
     expect(host.querySelector("[data-focus-tab-close]")).toBeNull();
+  });
+});
+
+describe("FocusTabRow drag to reorder (L-159)", () => {
+  const pointer = (type: string, clientX: number) =>
+    new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX });
+
+  beforeEach(() => {
+    HTMLElement.prototype.setPointerCapture = () => {};
+    // Tabs 80px wide with the row's 4px gap: centres at 40 and 124.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        const index = TABS.findIndex((tab) => tab.id === this.dataset.focusTab);
+        return DOMRect.fromRect({ x: Math.max(index, 0) * 84, y: 0, width: 80, height: 24 });
+      },
+    );
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("drops a dragged tab past its neighbour without selecting it", () => {
+    const onReorder = vi.fn();
+    const onSelect = render(undefined, vi.fn(), onReorder);
+    const tab = host.querySelector<HTMLButtonElement>('[role="tab"]');
+    if (!tab) throw new Error("no tab");
+    act(() => {
+      tab.dispatchEvent(pointer("pointerdown", 40));
+      tab.dispatchEvent(pointer("pointermove", 140));
+    });
+    const beta = host.querySelector<HTMLElement>('[data-focus-tab="beta"]');
+    expect(beta?.style.transform).toBe("translateX(-84px)");
+    act(() => {
+      tab.dispatchEvent(pointer("pointerup", 140));
+      tab.click();
+    });
+    expect(onReorder).toHaveBeenCalledWith("alpha", 1);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(beta?.style.transform).toBe("");
+  });
+
+  it("treats a short press as a click", () => {
+    const onReorder = vi.fn();
+    const onSelect = render(undefined, vi.fn(), onReorder);
+    const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    act(() => {
+      tabs[1].dispatchEvent(pointer("pointerdown", 124));
+      tabs[1].dispatchEvent(pointer("pointermove", 126));
+      tabs[1].dispatchEvent(pointer("pointerup", 126));
+      tabs[1].click();
+    });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("beta");
+  });
+
+  it("moves the focused tab with Ctrl+Shift+Arrow", () => {
+    const onReorder = vi.fn();
+    render(undefined, vi.fn(), onReorder);
+    const tab = host.querySelector<HTMLButtonElement>('[role="tab"]');
+    const key = (k: string) =>
+      new KeyboardEvent("keydown", { key: k, ctrlKey: true, shiftKey: true, bubbles: true });
+    act(() => {
+      tab?.dispatchEvent(key("ArrowLeft"));
+      tab?.dispatchEvent(key("ArrowRight"));
+    });
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(onReorder).toHaveBeenCalledWith("alpha", 1);
   });
 });

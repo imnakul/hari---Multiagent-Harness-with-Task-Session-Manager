@@ -1,10 +1,17 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 16:11 IST — Drag to reorder Focus project and chat tabs (L-159)
+- Type: feature
+- What: With Group by project on in Focus mode, project tabs and chat tabs can be dragged left or right to change their order; the other tabs slide aside while you drag. Moving a chat tab also moves its pane. With a tab focused, Ctrl+Shift+Left/Right moves it. A short press still just selects the tab.
+- Why: User request: reorder the Focus tabs from the top bar.
+- Files: [FocusGroupTabs.tsx](../../src/features/focus/ui/FocusGroupTabs.tsx:1), [FocusView.tsx (lines 807–830)](../../src/features/focus/ui/FocusView.tsx:807), [focusGrid.ts (line 107)](../../src/features/focus/model/focusGrid.ts:107), [FocusGroupTabs.test.ts](../../src/features/focus/ui/FocusGroupTabs.test.ts:1), [focusGrid.test.ts](../../src/features/focus/model/focusGrid.test.ts:1)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (focus 69 + app 476 passed) build —; desktop check manual
 ## 2026-10-21 14:38 IST — Close buttons on Focus project and chat tabs (L-158)
 - Type: feature
 - What: With Group by project on in Focus mode, hovering a project tab or a chat tab shows a small × at its right end. A chat's × removes that chat from Focus; a project's × removes all of that project's chats at once. With a tab focused, Delete does the same. The chats keep running; they only leave Focus.
 - Why: User request: closing a project with three chats took three clicks.
 - Files: [FocusGroupTabs.tsx](../../src/features/focus/ui/FocusGroupTabs.tsx:1), [FocusView.tsx (lines 118, 801)](../../src/features/focus/ui/FocusView.tsx:118), [App.tsx (lines 5543, 16518)](../../src/app/App.tsx:5543), [FocusGroupTabs.test.ts](../../src/features/focus/ui/FocusGroupTabs.test.ts:1), [FocusView.test.ts](../../src/features/focus/ui/FocusView.test.ts:1), [FocusViewResize.test.ts](../../src/features/focus/ui/FocusViewResize.test.ts:1)
-- Commit: uncommitted
+- Commit: d75325b8
 - Verified: tsc ✅ tests ✅ (focus + app: 538 passed) build —; desktop check manual
 ## 2026-10-21 14:30 IST — 0.16.0-local6 Windows build, rebuilt with L-156 and L-157
 - Type: chore
