@@ -44,6 +44,7 @@ mod mono_transcript;
 mod notes;
 mod notifications;
 mod pasteboard;
+mod perf_probe;
 mod pi_usage;
 mod process_gpu;
 mod process_metrics;
@@ -790,6 +791,9 @@ pub fn run() {
             window_transfer::take_window_transfer,
             chat_background::save_chat_background,
             resources::resource_usage,
+            perf_probe::perf_ping_main,
+            perf_probe::perf_ping_pool,
+            perf_probe::perf_ping_db,
             resources::resource_processes,
             resources::resource_stop_tool,
             chat_background::remove_chat_background,

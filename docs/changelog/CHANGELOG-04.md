@@ -41,6 +41,13 @@
 - Files: [FocusPicker.tsx (lines 128–186, 304–315)](../../src/features/focus/ui/FocusPicker.tsx:128), [FocusPicker.test.ts (lines 63–90)](../../src/features/focus/ui/FocusPicker.test.ts:63)
 - Commit: uncommitted
 - Verified: tsc ✅ lint — (repo has no linter) tests ✅ (focus 70) build —; desktop check manual
+## 2026-10-21 17:20 IST — Backend call timing in the Performance log (L-161)
+- Type: chore
+- What: A Performance log (Ctrl+Alt+Shift+P → Start log) now also records how long every backend call takes, what else was waiting at the time, and once a second how quickly the main thread, the background workers and the database answer. Slow file loads are listed too. It only runs while a log records.
+- Why: Clicks across the app (Copy to Notes, first open of Settings, Automations and Tasks, New task, attaching files) got slow. Database cost and CPU were ruled out; this log shows which queue the calls wait in, so the real cause can be fixed.
+- Files: [perf_probe.rs](../../src-tauri/src/perf_probe.rs:1), [lib.rs (lines 47, 794–796)](../../src-tauri/src/lib.rs:47), [backendTiming.ts](../../src/shared/debug/backendTiming.ts:1), [perfRecorder.ts (lines 123, 328)](../../src/shared/debug/perfRecorder.ts:123), [backendTiming.test.ts](../../src/shared/debug/backendTiming.test.ts:1)
+- Commit: uncommitted
+- Verified: tsc ✅ lint — (repo has no linter) tests ✅ (debug 9) cargo check ✅ rustfmt ✅ build —
 ## 2026-10-21 16:55 IST — WebView2 crash recovery and saved composer drafts (L-160)
 - Type: fix
 - What: On Windows, when the part of WebView2 that draws the window crashes (it went blank before), MonoCode now reloads the window by itself and says so in a short notice. It tries at most 3 times in 2 minutes. Text typed in a chat box but not sent is now kept across any reload or crash, for 14 days. Crashes are written to `webview-crashes.log` in the app data folder. Text typed in a chat box no longer vanishes when you go in or out of Focus mode.

@@ -1,11 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { homeDir } from "../../platform/tauri/fs";
+import {
+  backendReportLines,
+  startBackendTiming,
+  type BackendTiming,
+} from "./backendTiming";
 import type { HoverDebugEvent } from "./perfDebug";
 
 /**
  * Performance log recorder for the Performance overlay. While recording it
  * samples once a second (FPS, worst frame, stutters, long tasks, and where
- * the pointer is), keeps every hover-glide event, and on stop writes a
+ * the pointer is), keeps every hover-glide event, times backend calls
+ * (backendTiming.ts), and on stop writes a
  * Markdown report to Downloads that can be shared as-is.
  */
 
@@ -37,7 +43,8 @@ type Recording = {
   samples: Sample[];
   events: HoverDebugEvent[];
   longTasks: LongTask[];
-  stop: () => void;
+  /** Stops everything and returns the backend timing. */
+  stop: () => BackendTiming;
 };
 
 export type RecorderState =
@@ -113,6 +120,7 @@ export function startPerfRecording(): void {
     });
     observer.observe({ type: "longtask" });
   }
+  const stopBackend = startBackendTiming(startedPerf);
   let taskCursor = 0;
   const timer = window.setInterval(() => {
     const now = performance.now();
@@ -155,6 +163,7 @@ export function startPerfRecording(): void {
         capture: true,
       });
       observer?.disconnect();
+      return stopBackend();
     },
   };
   setState({ status: "recording", startedPerf });
@@ -164,10 +173,10 @@ export function startPerfRecording(): void {
 export async function stopPerfRecording(): Promise<string | null> {
   const current = recording;
   if (!current) return null;
-  current.stop();
+  const backend = current.stop();
   recording = null;
   setState({ status: "saving" });
-  const report = buildPerfReport(current, new Date());
+  const report = buildPerfReport(current, new Date(), backend);
   const name = `monocode-perf-${fileStamp(current.startedAt)}.md`;
   try {
     const home = (await homeDir()).replace(/[\\/]+$/, "");
@@ -233,13 +242,14 @@ function cell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\s+/g, " ");
 }
 
-/** Markdown report: environment, per-area summary, timeline, events. */
+/** Markdown report: environment, per-area summary, timeline, backend calls, events. */
 export function buildPerfReport(
   data: Pick<
     Recording,
     "startedAt" | "startedPerf" | "samples" | "events" | "longTasks"
   >,
   stoppedAt: Date,
+  backend?: BackendTiming,
 ): string {
   const { samples, events, longTasks } = data;
   const seconds = Math.round(
@@ -314,6 +324,8 @@ export function buildPerfReport(
         `| ${task.t.toFixed(1)} | ${Math.round(task.durationMs)}ms | ${cell(task.source)} |`,
       );
   }
+
+  if (backend) lines.push(...backendReportLines(backend));
 
   lines.push("", "## Hover events", "");
   for (const event of events) {
