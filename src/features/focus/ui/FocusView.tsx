@@ -114,6 +114,8 @@ type Props = {
   onGridChange: (grid: FocusGrid) => void;
   onFocusPane: (sessionId: string) => void;
   onClosePane: (sessionId: string) => void;
+  /** Takes every listed chat out of Focus at once (a project tab's close, L-158). */
+  onClosePanes: (sessionIds: readonly string[]) => void;
   /** How many columns the window has room for, as it resizes. */
   onColumnCapChange: (cap: number) => void;
   onExit: () => void;
@@ -175,6 +177,7 @@ export function FocusView({
   onGridChange,
   onFocusPane,
   onClosePane,
+  onClosePanes,
   onColumnCapChange,
   onExit,
   onNewChat,
@@ -346,6 +349,7 @@ export function FocusView({
     ].filter(Boolean);
     return {
       id: group.key,
+      closeLabel: `Remove ${name} from Focus`,
       title: [
         `${name}, ${count} ${count === 1 ? "chat" : "chats"}`,
         ...statusText,
@@ -383,6 +387,7 @@ export function FocusView({
     const tag = tagOf(id);
     return {
       id,
+      closeLabel: `Remove ${title} from Focus`,
       title: tag ? `${title}, ${tag.label}` : title,
       content: (
         <>
@@ -793,6 +798,10 @@ export function FocusView({
             tabs={projectTabs}
             selectedId={activeGroup.key}
             onSelect={showProject}
+            onClose={(key) => {
+              const group = groups.find((entry) => entry.key === key);
+              if (group) onClosePanes(group.ids);
+            }}
             controls={gridRegionId}
           />
           <FocusTabRow
@@ -800,6 +809,7 @@ export function FocusView({
             tabs={chatTabs}
             selectedId={focusedId}
             onSelect={showChat}
+            onClose={onClosePane}
             controls={gridRegionId}
           />
         </>

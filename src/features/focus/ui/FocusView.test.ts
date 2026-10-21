@@ -45,6 +45,7 @@ function render(
       onGridChange: noop,
       onFocusPane: noop,
       onClosePane: noop,
+      onClosePanes: noop,
       onColumnCapChange: noop,
       onExit: noop,
       onNewChat: noop,
@@ -84,6 +85,16 @@ describe("FocusView group by project (L-128)", () => {
     expect(html).toContain(
       'aria-pressed="true" title="Group chats by project"',
     );
+  });
+});
+
+describe("FocusView tab close buttons (L-158)", () => {
+  it("offers a close on each project tab and each chat tab", () => {
+    const html = render(true, "a2");
+    expect(html).toContain('aria-label="Remove alpha from Focus"');
+    expect(html).toContain('aria-label="Remove beta from Focus"');
+    expect(html).toContain('data-focus-tab-close="a1"');
+    expect(html).toContain('data-focus-tab-close="a2"');
   });
 });
 

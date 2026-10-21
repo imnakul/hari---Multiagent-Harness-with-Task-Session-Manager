@@ -5535,6 +5535,28 @@ function Workspace({
     }
     setFocusGrid((grid) => removeFromFocusGrid(grid, sessionId));
   }, []);
+  /**
+   * Fork (L-158): a Focus project tab's close takes all of its chats out at
+   * once. When the focused chat is among them, focus moves to the nearest chat
+   * that stays, worked out on the grid without the others being closed.
+   */
+  const onCloseFocusPanes = useCallback((sessionIds: readonly string[]) => {
+    const focused = focusPaneIdRef.current;
+    if (focused && sessionIds.includes(focused)) {
+      const remaining = sessionIds.reduce(
+        (grid, id) => (id === focused ? grid : removeFromFocusGrid(grid, id)),
+        focusGridRef.current,
+      );
+      setFocusPaneChoice(
+        focusAfterClose(remaining, focused, (id) =>
+          sessionsRef.current.find((session) => session.id === id)?.cwd,
+        ),
+      );
+    }
+    setFocusGrid((grid) =>
+      sessionIds.reduce((next, id) => removeFromFocusGrid(next, id), grid),
+    );
+  }, []);
 
   /**
    * Puts a chat in the grid and focuses it. When it would land out of sight
@@ -16493,6 +16515,7 @@ function Workspace({
       onGridChange={setFocusGrid}
       onFocusPane={onFocusFocusPane}
       onClosePane={onCloseFocusPane}
+      onClosePanes={onCloseFocusPanes}
       onColumnCapChange={onFocusColumnCapChange}
       onExit={onToggleFocusMode}
       onNewChat={onFocusNewChat}

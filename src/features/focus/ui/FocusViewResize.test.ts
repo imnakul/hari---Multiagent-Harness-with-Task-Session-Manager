@@ -51,6 +51,7 @@ beforeEach(() => {
         onGridChange: noop,
         onFocusPane: noop,
         onClosePane: noop,
+        onClosePanes: noop,
         onColumnCapChange: noop,
         onExit: noop,
         onNewChat: noop,

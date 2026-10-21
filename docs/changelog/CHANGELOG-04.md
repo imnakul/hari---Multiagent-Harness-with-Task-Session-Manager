@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 14:38 IST — Close buttons on Focus project and chat tabs (L-158)
+- Type: feature
+- What: With Group by project on in Focus mode, hovering a project tab or a chat tab shows a small × at its right end. A chat's × removes that chat from Focus; a project's × removes all of that project's chats at once. With a tab focused, Delete does the same. The chats keep running; they only leave Focus.
+- Why: User request: closing a project with three chats took three clicks.
+- Files: [FocusGroupTabs.tsx](../../src/features/focus/ui/FocusGroupTabs.tsx:1), [FocusView.tsx (lines 118, 801)](../../src/features/focus/ui/FocusView.tsx:118), [App.tsx (lines 5543, 16518)](../../src/app/App.tsx:5543), [FocusGroupTabs.test.ts](../../src/features/focus/ui/FocusGroupTabs.test.ts:1), [FocusView.test.ts](../../src/features/focus/ui/FocusView.test.ts:1), [FocusViewResize.test.ts](../../src/features/focus/ui/FocusViewResize.test.ts:1)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (focus + app: 538 passed) build —; desktop check manual
 ## 2026-10-21 14:30 IST — 0.16.0-local6 Windows build, rebuilt with L-156 and L-157
 - Type: chore
 - What: The 0.16.0-local6 installer was rebuilt at the same version and file name, now with smooth Focus pane resizing (L-156) and the hover sidebar tint that follows Sidebar opacity (L-157). Run it over the current install; it replaces the earlier local6 file.
