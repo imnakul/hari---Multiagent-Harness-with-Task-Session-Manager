@@ -166,14 +166,34 @@ fn take_due(
     Ok(due)
 }
 
-#[tauri::command(async)]
-pub fn reminder_list(store: State<'_, SessionStore>) -> Result<Vec<Reminder>, String> {
+#[tauri::command]
+pub async fn reminder_list(app: tauri::AppHandle) -> Result<Vec<Reminder>, String> {
+    crate::background_work::store(app, move |app| {
+        reminder_list_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn reminder_list_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<Reminder>, String> {
     let conn = store.lock_conn()?;
     list(&conn).map_err(|error| error.to_string())
 }
 
-#[tauri::command(async)]
-pub fn reminder_set(
+#[tauri::command]
+pub async fn reminder_set(
+    app: tauri::AppHandle,
+    session_ids: Vec<String>,
+    due_at: i64,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        reminder_set_blocking(app.clone(), tauri::Manager::state(app), session_ids, due_at)
+    })
+    .await
+}
+
+pub(crate) fn reminder_set_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     session_ids: Vec<String>,
@@ -186,8 +206,24 @@ pub fn reminder_set(
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn reminder_clear(
+#[tauri::command]
+pub async fn reminder_clear(
+    app: tauri::AppHandle,
+    session_ids: Vec<String>,
+    expected_due_at: Option<i64>,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        reminder_clear_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            session_ids,
+            expected_due_at,
+        )
+    })
+    .await
+}
+
+pub(crate) fn reminder_clear_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     session_ids: Vec<String>,

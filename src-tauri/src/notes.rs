@@ -125,21 +125,47 @@ pub fn ensure_notes_table(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn notes_list(store: State<'_, SessionStore>) -> Result<Vec<Note>, String> {
-    let conn = store.lock_conn()?;
-    list_notes(&conn).map_err(|e| e.to_string())
+#[tauri::command]
+pub async fn notes_list(app: tauri::AppHandle) -> Result<Vec<Note>, String> {
+    crate::background_work::store(app, move |app| {
+        notes_list_blocking(tauri::Manager::state(app))
+    })
+    .await
 }
 
-#[tauri::command(async)]
-pub fn notes_get(store: State<'_, SessionStore>, id: String) -> Result<Option<Note>, String> {
+pub(crate) fn notes_list_blocking(store: State<'_, SessionStore>) -> Result<Vec<Note>, String> {
+    store.read(|conn| list_notes(conn).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub async fn notes_get(app: tauri::AppHandle, id: String) -> Result<Option<Note>, String> {
+    crate::background_work::store(app, move |app| {
+        notes_get_blocking(tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn notes_get_blocking(
+    store: State<'_, SessionStore>,
+    id: String,
+) -> Result<Option<Note>, String> {
     validate_id(&id, "note")?;
     let conn = store.lock_conn()?;
     get_note(&conn, &id).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn notes_upsert(store: State<'_, SessionStore>, note: NoteUpsert) -> Result<Note, String> {
+#[tauri::command]
+pub async fn notes_upsert(app: tauri::AppHandle, note: NoteUpsert) -> Result<Note, String> {
+    crate::background_work::store(app, move |app| {
+        notes_upsert_blocking(tauri::Manager::state(app), note)
+    })
+    .await
+}
+
+pub(crate) fn notes_upsert_blocking(
+    store: State<'_, SessionStore>,
+    note: NoteUpsert,
+) -> Result<Note, String> {
     save_content(store, note, "note", None)
 }
 
@@ -162,8 +188,15 @@ pub(crate) fn save_content(
     upsert_content(&conn, &note, kind, artifact_kind).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn notes_delete(
+#[tauri::command]
+pub async fn notes_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        notes_delete_blocking(app.clone(), tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn notes_delete_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     id: String,

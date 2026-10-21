@@ -663,14 +663,33 @@ fn apply_run_summary(automation: &mut Automation, run: &AutomationRun) {
     }
 }
 
-#[tauri::command(async)]
-pub fn automations_list(store: State<'_, SessionStore>) -> Result<Vec<Automation>, String> {
+#[tauri::command]
+pub async fn automations_list(app: tauri::AppHandle) -> Result<Vec<Automation>, String> {
+    crate::background_work::store(app, move |app| {
+        automations_list_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn automations_list_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<Automation>, String> {
     let conn = store.lock_conn()?;
     list(&conn)
 }
 
-#[tauri::command(async)]
-pub fn automations_upsert(
+#[tauri::command]
+pub async fn automations_upsert(
+    app: tauri::AppHandle,
+    automation: AutomationUpsert,
+) -> Result<Automation, String> {
+    crate::background_work::store(app, move |app| {
+        automations_upsert_blocking(app.clone(), tauri::Manager::state(app), automation)
+    })
+    .await
+}
+
+pub(crate) fn automations_upsert_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     automation: AutomationUpsert,
@@ -735,8 +754,15 @@ pub fn automations_upsert(
     Ok(saved)
 }
 
-#[tauri::command(async)]
-pub fn automations_delete(
+#[tauri::command]
+pub async fn automations_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        automations_delete_blocking(app.clone(), tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn automations_delete_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     id: String,
@@ -750,8 +776,18 @@ pub fn automations_delete(
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn automation_runs_list(
+#[tauri::command]
+pub async fn automation_runs_list(
+    app: tauri::AppHandle,
+    automation_id: String,
+) -> Result<Vec<AutomationRun>, String> {
+    crate::background_work::store(app, move |app| {
+        automation_runs_list_blocking(tauri::Manager::state(app), automation_id)
+    })
+    .await
+}
+
+pub(crate) fn automation_runs_list_blocking(
     store: State<'_, SessionStore>,
     automation_id: String,
 ) -> Result<Vec<AutomationRun>, String> {
@@ -766,8 +802,24 @@ pub fn automation_runs_list(
     Ok(runs)
 }
 
-#[tauri::command(async)]
-pub fn automation_runs_recover(
+#[tauri::command]
+pub async fn automation_runs_recover(
+    app: tauri::AppHandle,
+    started_before: i64,
+    now: i64,
+) -> Result<Vec<DueAutomationRun>, String> {
+    crate::background_work::store(app, move |app| {
+        automation_runs_recover_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            started_before,
+            now,
+        )
+    })
+    .await
+}
+
+pub(crate) fn automation_runs_recover_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     started_before: i64,
@@ -843,8 +895,19 @@ pub fn automation_runs_recover(
     Ok(due)
 }
 
-#[tauri::command(async)]
-pub fn automation_run_now(
+#[tauri::command]
+pub async fn automation_run_now(
+    app: tauri::AppHandle,
+    automation_id: String,
+    now: i64,
+) -> Result<AutomationRun, String> {
+    crate::background_work::store(app, move |app| {
+        automation_run_now_blocking(app.clone(), tauri::Manager::state(app), automation_id, now)
+    })
+    .await
+}
+
+pub(crate) fn automation_run_now_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     automation_id: String,
@@ -868,8 +931,28 @@ pub fn automation_run_now(
     Ok(run)
 }
 
-#[tauri::command(async)]
-pub fn automations_claim_due(
+#[tauri::command]
+pub async fn automations_claim_due(
+    app: tauri::AppHandle,
+    automation_id: String,
+    expected_next_run_at: i64,
+    next_run_at: i64,
+    now: i64,
+) -> Result<Option<DueAutomationRun>, String> {
+    crate::background_work::store(app, move |app| {
+        automations_claim_due_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            automation_id,
+            expected_next_run_at,
+            next_run_at,
+            now,
+        )
+    })
+    .await
+}
+
+pub(crate) fn automations_claim_due_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     automation_id: String,
@@ -929,8 +1012,26 @@ pub fn automations_claim_due(
     Ok(Some(DueAutomationRun { automation, run }))
 }
 
-#[tauri::command(async)]
-pub fn automations_claim_event(
+#[tauri::command]
+pub async fn automations_claim_event(
+    app: tauri::AppHandle,
+    automation_id: String,
+    claim: AutomationEventClaim,
+    now: i64,
+) -> Result<Option<DueAutomationRun>, String> {
+    crate::background_work::store(app, move |app| {
+        automations_claim_event_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            automation_id,
+            claim,
+            now,
+        )
+    })
+    .await
+}
+
+pub(crate) fn automations_claim_event_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     automation_id: String,
@@ -996,8 +1097,30 @@ pub fn automations_claim_event(
     Ok(Some(DueAutomationRun { automation, run }))
 }
 
-#[tauri::command(async)]
-pub fn automation_run_update(
+#[tauri::command]
+pub async fn automation_run_update(
+    app: tauri::AppHandle,
+    run_id: String,
+    status: String,
+    session_id: Option<String>,
+    error: Option<String>,
+    now: i64,
+) -> Result<AutomationRun, String> {
+    crate::background_work::store(app, move |app| {
+        automation_run_update_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            run_id,
+            status,
+            session_id,
+            error,
+            now,
+        )
+    })
+    .await
+}
+
+pub(crate) fn automation_run_update_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     run_id: String,

@@ -276,7 +276,7 @@ pub fn claude_interactive_start(
         .map(|f| f.source_provider_session_id.as_str())
         .unwrap_or(&input.native_id);
     let transcript = if input.resume || input.fork.is_some() {
-        let conversation = crate::provider_sessions::provider_sessions_resolve(
+        let conversation = crate::provider_sessions::provider_sessions_resolve_blocking(
             app.clone(),
             app.state(),
             crate::provider_sessions::Provider::Claude,

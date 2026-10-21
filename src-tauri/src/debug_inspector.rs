@@ -35,8 +35,18 @@ pub struct SessionIdentity {
 
 /// Reads bounded identity columns only. In particular, this never invokes the
 /// general session loader or Mono's transcript migration/repair path.
-#[tauri::command(async)]
-pub fn debug_inspector_session_identity(
+#[tauri::command]
+pub async fn debug_inspector_session_identity(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<SessionIdentity, String> {
+    crate::background_work::store(app, move |app| {
+        debug_inspector_session_identity_blocking(tauri::Manager::state(app), session_id)
+    })
+    .await
+}
+
+pub(crate) fn debug_inspector_session_identity_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
 ) -> Result<SessionIdentity, String> {

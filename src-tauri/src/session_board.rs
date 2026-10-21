@@ -64,8 +64,17 @@ pub(crate) fn ensure_session_board_table(conn: &Connection) -> rusqlite::Result<
     )
 }
 
-#[tauri::command(async)]
-pub fn session_board_list(store: State<'_, SessionStore>) -> Result<Vec<SessionBoardCard>, String> {
+#[tauri::command]
+pub async fn session_board_list(app: tauri::AppHandle) -> Result<Vec<SessionBoardCard>, String> {
+    crate::background_work::store(app, move |app| {
+        session_board_list_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn session_board_list_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<SessionBoardCard>, String> {
     let mut conn = store.lock_conn()?;
     prune_missing_sessions(&conn, now_millis()).map_err(|error| error.to_string())?;
     list_current_cards(&mut conn).map_err(|error| error.to_string())
@@ -73,8 +82,15 @@ pub fn session_board_list(store: State<'_, SessionStore>) -> Result<Vec<SessionB
 
 /// Drops the card of a deleted chat (Session Manager never shows a session
 /// that cannot be opened). Removing a card that does not exist is harmless.
-#[tauri::command(async)]
-pub fn session_board_remove(
+#[tauri::command]
+pub async fn session_board_remove(app: tauri::AppHandle, session_id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_board_remove_blocking(tauri::Manager::state(app), session_id)
+    })
+    .await
+}
+
+pub(crate) fn session_board_remove_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
 ) -> Result<(), String> {
@@ -114,8 +130,18 @@ fn prune_missing_sessions(conn: &Connection, now: i64) -> rusqlite::Result<usize
     Ok(removed)
 }
 
-#[tauri::command(async)]
-pub fn session_board_upsert(
+#[tauri::command]
+pub async fn session_board_upsert(
+    app: tauri::AppHandle,
+    card: SessionBoardCard,
+) -> Result<SessionBoardCard, String> {
+    crate::background_work::store(app, move |app| {
+        session_board_upsert_blocking(tauri::Manager::state(app), card)
+    })
+    .await
+}
+
+pub(crate) fn session_board_upsert_blocking(
     store: State<'_, SessionStore>,
     card: SessionBoardCard,
 ) -> Result<SessionBoardCard, String> {
@@ -127,8 +153,19 @@ pub fn session_board_upsert(
 /// Atomically applies all run-scoped hide/show requests, then returns the full
 /// current card list so callers can replace their local snapshot. A stale
 /// request for an earlier run leaves the current card untouched.
-#[tauri::command(async)]
-pub fn session_board_hide(
+#[tauri::command]
+pub async fn session_board_hide(
+    app: tauri::AppHandle,
+    cards: Vec<SessionBoardHideRequest>,
+    hidden: bool,
+) -> Result<Vec<SessionBoardCard>, String> {
+    crate::background_work::store(app, move |app| {
+        session_board_hide_blocking(tauri::Manager::state(app), cards, hidden)
+    })
+    .await
+}
+
+pub(crate) fn session_board_hide_blocking(
     store: State<'_, SessionStore>,
     cards: Vec<SessionBoardHideRequest>,
     hidden: bool,

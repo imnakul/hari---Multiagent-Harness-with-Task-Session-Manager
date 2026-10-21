@@ -244,8 +244,18 @@ fn page(
     })
 }
 
-#[tauri::command(async)]
-pub fn mono_session_get(
+#[tauri::command]
+pub async fn mono_session_get(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Option<MonoRecord>, String> {
+    crate::background_work::store(app, move |app| {
+        mono_session_get_blocking(tauri::Manager::state(app), session_id)
+    })
+    .await
+}
+
+pub(crate) fn mono_session_get_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
 ) -> Result<Option<MonoRecord>, String> {
@@ -273,8 +283,27 @@ pub fn mono_session_get(
     }))
 }
 
-#[tauri::command(async)]
-pub fn mono_session_page(
+#[tauri::command]
+pub async fn mono_session_page(
+    app: tauri::AppHandle,
+    session_id: String,
+    before: Option<i64>,
+    before_block_id: Option<String>,
+    around_block_id: Option<String>,
+) -> Result<MonoPage, String> {
+    crate::background_work::store(app, move |app| {
+        mono_session_page_blocking(
+            tauri::Manager::state(app),
+            session_id,
+            before,
+            before_block_id,
+            around_block_id,
+        )
+    })
+    .await
+}
+
+pub(crate) fn mono_session_page_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
     before: Option<i64>,
@@ -282,8 +311,24 @@ pub fn mono_session_page(
     around_block_id: Option<String>,
 ) -> Result<MonoPage, String> {
     session_store::validate_id(&session_id, "session")?;
+    let around = around_block_id.as_deref();
+    // Fork (L-168): an indexed transcript is read on the list connection. A
+    // legacy one still needs `migrate_transcript`, which writes.
+    if store.read(|conn| is_indexed(conn, &session_id).map_err(|e| e.to_string()))? {
+        return store.read(|conn| page_at(conn, &session_id, before, before_block_id, around));
+    }
     let conn = store.lock_conn()?;
     migrate_transcript(&conn, &session_id).map_err(|e| e.to_string())?;
+    page_at(&conn, &session_id, before, before_block_id, around)
+}
+
+fn page_at(
+    conn: &Connection,
+    session_id: &str,
+    before: Option<i64>,
+    before_block_id: Option<String>,
+    around_block_id: Option<&str>,
+) -> Result<MonoPage, String> {
     let before = if let Some(block) = before_block_id {
         Some(
             conn.query_row(
@@ -296,28 +341,40 @@ pub fn mono_session_page(
     } else {
         before
     };
-    page(&conn, &session_id, before, around_block_id.as_deref()).map_err(|e| e.to_string())
+    page(conn, session_id, before, around_block_id).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn mono_session_find(
+#[tauri::command]
+pub async fn mono_session_find(
+    app: tauri::AppHandle,
+    session_id: String,
+    query: String,
+) -> Result<Vec<String>, String> {
+    crate::background_work::store(app, move |app| {
+        mono_session_find_blocking(tauri::Manager::state(app), session_id, query)
+    })
+    .await
+}
+
+pub(crate) fn mono_session_find_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
     query: String,
 ) -> Result<Vec<String>, String> {
     session_store::validate_id(&session_id, "session")?;
-    let conn = store.lock_conn()?;
-    let mut statement = conn.prepare("SELECT block_id FROM mono_blocks WHERE session_id = ?1 AND instr(search_text, ?2) > 0 ORDER BY seq LIMIT 1000").map_err(|e| e.to_string())?;
-    let needle = query.trim().to_lowercase();
-    if needle.is_empty() {
-        return Ok(Vec::new());
-    }
-    let ids = statement
-        .query_map(params![session_id, needle], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|e| e.to_string())?;
-    Ok(ids)
+    store.read(|conn| {
+        let mut statement = conn.prepare("SELECT block_id FROM mono_blocks WHERE session_id = ?1 AND instr(search_text, ?2) > 0 ORDER BY seq LIMIT 1000").map_err(|e| e.to_string())?;
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = statement
+            .query_map(params![session_id, needle], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())?;
+        Ok(ids)
+    })
 }
 
 /// Replace only the changed suffix. Anchors prevent a partially loaded client
@@ -325,6 +382,7 @@ pub fn mono_session_find(
 fn upsert_with_mode(
     conn: &Connection,
     session: &SessionUpsert,
+    git: &crate::fs::GitInfo,
     after: Option<&str>,
     from: Option<&str>,
     changed: bool,
@@ -334,7 +392,7 @@ fn upsert_with_mode(
     let tx = conn.unchecked_transaction()?;
     let mut header = session.clone();
     header.blocks = json!([]);
-    let mut summary = session_store::upsert_session(&tx, &header)?;
+    let mut summary = session_store::upsert_session_with_git(&tx, &header, git)?;
     tx.execute(
         "INSERT OR IGNORE INTO mono_transcripts(session_id) VALUES (?1)",
         [&session.id],
@@ -398,8 +456,29 @@ fn upsert_with_mode(
     Ok(summary)
 }
 
-#[tauri::command(async)]
-pub fn mono_session_upsert(
+#[tauri::command]
+pub async fn mono_session_upsert(
+    app: tauri::AppHandle,
+    session: SessionUpsert,
+    after_block_id: Option<String>,
+    from_block_id: Option<String>,
+    blocks_changed: bool,
+    append_only: bool,
+) -> Result<SessionSummary, String> {
+    crate::background_work::store(app, move |app| {
+        mono_session_upsert_blocking(
+            tauri::Manager::state(app),
+            session,
+            after_block_id,
+            from_block_id,
+            blocks_changed,
+            append_only,
+        )
+    })
+    .await
+}
+
+pub(crate) fn mono_session_upsert_blocking(
     store: State<'_, SessionStore>,
     session: SessionUpsert,
     after_block_id: Option<String>,
@@ -424,10 +503,13 @@ pub fn mono_session_upsert(
     {
         return Err("Invalid Mono session".into());
     }
+    // Fork (L-163): git runs before the shared store lock.
+    let git = session_store::session_git_info(&session);
     let conn = store.lock_conn()?;
     upsert_with_mode(
         &conn,
         &session,
+        &git,
         after_block_id.as_deref(),
         from_block_id.as_deref(),
         blocks_changed,
@@ -450,7 +532,15 @@ mod tests {
         from: Option<&str>,
         changed: bool,
     ) -> rusqlite::Result<SessionSummary> {
-        upsert_with_mode(conn, session, after, from, changed, false)
+        upsert_with_mode(
+            conn,
+            session,
+            &session_store::session_git_info(session),
+            after,
+            from,
+            changed,
+            false,
+        )
     }
 
     fn sample(id: &str, turns: usize) -> SessionUpsert {
@@ -495,6 +585,45 @@ mod tests {
             page(&conn, "queued-mono", None, None).unwrap().blocks,
             history.blocks
         );
+    }
+
+    #[test]
+    fn indexed_pages_read_on_the_list_connection_while_a_write_holds_the_store() {
+        let path = std::env::temp_dir().join(format!(
+            "monocode-mono-read-lane-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = SessionStore::open(path.clone()).unwrap();
+        {
+            let conn = store.lock_conn().unwrap();
+            upsert(&conn, &sample("indexed", 25), None, None, true).unwrap();
+            session_store::upsert_session(&conn, &sample("legacy", 3)).unwrap();
+        }
+        let writer = store.lock_conn().unwrap();
+        let indexed = |id: &str| {
+            store
+                .read(|conn| is_indexed(conn, id).map_err(|e| e.to_string()))
+                .unwrap()
+        };
+        assert!(indexed("indexed"));
+        assert!(
+            !indexed("legacy"),
+            "a legacy transcript takes the writer path"
+        );
+        let latest = store
+            .read(|conn| page_at(conn, "indexed", None, Some("u20".into()), None))
+            .unwrap();
+        assert_eq!(latest.blocks.len(), 20);
+        assert_eq!(latest.blocks.last().unwrap()["id"], "a19");
+        drop(writer);
+        drop(store);
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
     }
 
     #[test]
@@ -659,7 +788,8 @@ mod tests {
         session.blocks = json!([]);
         upsert(&conn, &session, None, Some("u10"), true).unwrap();
         session.blocks = json!([{ "id":"fresh", "role":"user", "text":"Fresh" }]);
-        upsert_with_mode(&conn, &session, None, None, true, true).unwrap();
+        let git = session_store::session_git_info(&session);
+        upsert_with_mode(&conn, &session, &git, None, None, true, true).unwrap();
         assert_eq!(
             page(&conn, "mono", None, Some("a0")).unwrap().blocks[1]["text"],
             "Answer 0"

@@ -491,8 +491,30 @@ pub struct ConversationFindRequest {
     pub project_cwd: Option<String>,
 }
 
-#[tauri::command(async)]
-pub fn provider_sessions_list(
+#[tauri::command]
+pub async fn provider_sessions_list(
+    app: tauri::AppHandle,
+    provider: Provider,
+    account_id: Option<String>,
+    include_archived: bool,
+    limit: u32,
+    offset: usize,
+) -> Result<ConversationPage, String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_list_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            provider,
+            account_id,
+            include_archived,
+            limit,
+            offset,
+        )
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_list_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     provider: Provider,
@@ -501,7 +523,7 @@ pub fn provider_sessions_list(
     limit: u32,
     offset: usize,
 ) -> Result<ConversationPage, String> {
-    provider_sessions_find(
+    provider_sessions_find_blocking(
         app,
         store,
         provider,
@@ -516,8 +538,26 @@ pub fn provider_sessions_list(
     )
 }
 
-#[tauri::command(async)]
-pub fn provider_sessions_find(
+#[tauri::command]
+pub async fn provider_sessions_find(
+    app: tauri::AppHandle,
+    provider: Provider,
+    account_id: Option<String>,
+    request: ConversationFindRequest,
+) -> Result<ConversationPage, String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_find_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            provider,
+            account_id,
+            request,
+        )
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_find_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     provider: Provider,
@@ -581,8 +621,26 @@ fn resolve_from_rows(
     }
 }
 
-#[tauri::command(async)]
-pub fn provider_sessions_resolve(
+#[tauri::command]
+pub async fn provider_sessions_resolve(
+    app: tauri::AppHandle,
+    provider: Provider,
+    account_id: Option<String>,
+    native_id: String,
+) -> Result<ProviderConversation, String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_resolve_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            provider,
+            account_id,
+            native_id,
+        )
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_resolve_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     provider: Provider,
@@ -606,7 +664,18 @@ fn set_archive(conn: &Connection, key: &str, archived: bool) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn provider_sessions_set_archived(
+pub async fn provider_sessions_set_archived(
+    app: tauri::AppHandle,
+    key: String,
+    archived: bool,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_set_archived_blocking(tauri::Manager::state(app), key, archived)
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_set_archived_blocking(
     store: State<'_, SessionStore>,
     key: String,
     archived: bool,
@@ -616,7 +685,26 @@ pub fn provider_sessions_set_archived(
 }
 
 #[tauri::command]
-pub fn provider_sessions_bind(
+pub async fn provider_sessions_bind(
+    app: tauri::AppHandle,
+    key: String,
+    session_id: String,
+    cwd: String,
+    account_id: Option<String>,
+) -> Result<String, String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_bind_blocking(
+            tauri::Manager::state(app),
+            key,
+            session_id,
+            cwd,
+            account_id,
+        )
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_bind_blocking(
     store: State<'_, SessionStore>,
     key: String,
     session_id: String,
@@ -697,7 +785,17 @@ fn bind(
 }
 
 #[tauri::command]
-pub fn provider_sessions_for_session(
+pub async fn provider_sessions_for_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Option<NativeBinding>, String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_for_session_blocking(tauri::Manager::state(app), session_id)
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_for_session_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
 ) -> Result<Option<NativeBinding>, String> {
@@ -713,7 +811,17 @@ pub fn provider_sessions_for_session(
 }
 
 #[tauri::command]
-pub fn provider_sessions_unbind(
+pub async fn provider_sessions_unbind(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        provider_sessions_unbind_blocking(tauri::Manager::state(app), session_id)
+    })
+    .await
+}
+
+pub(crate) fn provider_sessions_unbind_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
 ) -> Result<(), String> {
@@ -768,7 +876,17 @@ fn validate_cloud(value: &CloudSession) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn provider_cloud_save(
+pub async fn provider_cloud_save(
+    app: tauri::AppHandle,
+    session: CloudSession,
+) -> Result<CloudSession, String> {
+    crate::background_work::store(app, move |app| {
+        provider_cloud_save_blocking(tauri::Manager::state(app), session)
+    })
+    .await
+}
+
+pub(crate) fn provider_cloud_save_blocking(
     store: State<'_, SessionStore>,
     session: CloudSession,
 ) -> Result<CloudSession, String> {
@@ -791,7 +909,18 @@ fn save_cloud(conn: &Connection, mut session: CloudSession) -> Result<CloudSessi
 }
 
 #[tauri::command]
-pub fn provider_cloud_list(
+pub async fn provider_cloud_list(
+    app: tauri::AppHandle,
+    provider: Provider,
+    account_id: Option<String>,
+) -> Result<Vec<CloudSession>, String> {
+    crate::background_work::store(app, move |app| {
+        provider_cloud_list_blocking(tauri::Manager::state(app), provider, account_id)
+    })
+    .await
+}
+
+pub(crate) fn provider_cloud_list_blocking(
     store: State<'_, SessionStore>,
     provider: Provider,
     account_id: Option<String>,
@@ -1063,17 +1192,23 @@ pub(crate) fn copy_claude_session_at(
     Ok(())
 }
 
+/// Copies a transcript plus its sub-agent folder, which can be large; runs on
+/// the blocking pool so the main thread keeps answering the window (L-171).
 #[tauri::command]
-pub fn claude_copy_session(
+pub async fn claude_copy_session(
     app: AppHandle,
     from_account: String,
     to_account: String,
     session_id: String,
     cwd: String,
 ) -> Result<(), String> {
-    let from = root_for(&app, &Provider::Claude, &from_account)?;
-    let to = root_for(&app, &Provider::Claude, &to_account)?;
-    copy_claude_session_at(&from, &to, &session_id, &cwd)
+    tauri::async_runtime::spawn_blocking(move || {
+        let from = root_for(&app, &Provider::Claude, &from_account)?;
+        let to = root_for(&app, &Provider::Claude, &to_account)?;
+        copy_claude_session_at(&from, &to, &session_id, &cwd)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]

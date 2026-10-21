@@ -197,28 +197,61 @@ pub fn ensure_tasks_table(conn: &Connection) -> rusqlite::Result<()> {
     tx.commit()
 }
 
-#[tauri::command(async)]
-pub fn tasks_list(store: State<'_, SessionStore>) -> Result<Vec<Task>, String> {
-    let conn = store.lock_conn()?;
-    list_tasks(&conn).map_err(|error| error.to_string())
+#[tauri::command]
+pub async fn tasks_list(app: tauri::AppHandle) -> Result<Vec<Task>, String> {
+    crate::background_work::store(app, move |app| {
+        tasks_list_blocking(tauri::Manager::state(app))
+    })
+    .await
 }
 
-#[tauri::command(async)]
-pub fn tasks_get(store: State<'_, SessionStore>, id: String) -> Result<Option<Task>, String> {
+pub(crate) fn tasks_list_blocking(store: State<'_, SessionStore>) -> Result<Vec<Task>, String> {
+    store.read(|conn| list_tasks(conn).map_err(|error| error.to_string()))
+}
+
+#[tauri::command]
+pub async fn tasks_get(app: tauri::AppHandle, id: String) -> Result<Option<Task>, String> {
+    crate::background_work::store(app, move |app| {
+        tasks_get_blocking(tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn tasks_get_blocking(
+    store: State<'_, SessionStore>,
+    id: String,
+) -> Result<Option<Task>, String> {
     validate_id(&id, "task")?;
     let conn = store.lock_conn()?;
     get_task(&conn, &id).map_err(|error| error.to_string())
 }
 
-#[tauri::command(async)]
-pub fn tasks_upsert(store: State<'_, SessionStore>, task: TaskUpsert) -> Result<Task, String> {
+#[tauri::command]
+pub async fn tasks_upsert(app: tauri::AppHandle, task: TaskUpsert) -> Result<Task, String> {
+    crate::background_work::store(app, move |app| {
+        tasks_upsert_blocking(tauri::Manager::state(app), task)
+    })
+    .await
+}
+
+pub(crate) fn tasks_upsert_blocking(
+    store: State<'_, SessionStore>,
+    task: TaskUpsert,
+) -> Result<Task, String> {
     validate_task_upsert(&task)?;
     let conn = store.lock_conn()?;
     upsert_task(&conn, &task).map_err(|error| error.to_string())
 }
 
-#[tauri::command(async)]
-pub fn tasks_delete(
+#[tauri::command]
+pub async fn tasks_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        tasks_delete_blocking(app.clone(), tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn tasks_delete_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     id: String,

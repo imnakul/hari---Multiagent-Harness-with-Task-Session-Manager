@@ -3,6 +3,30 @@
 Working roadmap for the personal fork. The north star first, the ladder to reach it second,
 current state third, and suggestions/quick wins on top at the end.
 
+## Responsiveness follow-ups — selected 2026-10-22
+
+Left over from the responsiveness work (L-160 to L-172; spec:
+[backend-responsiveness-plan.md](specs/backend-responsiveness-plan.md), research:
+[perf-patterns-t3-orca.md](notes/perf-patterns-t3-orca.md)). Ask Claude to "do the Soon
+responsiveness items" when there is usage to spare.
+
+**Soon** (real gain, small to medium):
+- [ ] Git process cap with a fast user lane (pattern 5). Background git reads (branch labels,
+  status, diff stats) share a small limit; a git action the user clicked (commit, checkout,
+  push) skips the queue. Stops a burst of background git from slowing a click.
+- [ ] SQLite `synchronous=NORMAL` on the WAL store. Fewer disk flushes per save, so saves get
+  faster. Tradeoff (your call before doing it): a power cut or OS crash can lose the last few
+  saves; an app crash cannot. The database never corrupts either way.
+
+**Deferred** (worth it only if the Performance log still shows the problem):
+- [ ] WAL checkpoint on its own thread, so a large checkpoint never lands inside a save.
+- [ ] Parse provider history (Claude/Codex transcripts) in a worker, not on the command thread,
+  for very long sessions.
+- [ ] Virtualized transcript: render only the visible messages in very long chats. Risks to
+  handle: find-in-page, scroll anchoring when new output arrives, and the PromptOutline jumps.
+- [ ] Bounded stream buffers: cap how much unread agent output queues in memory per session, so
+  a runaway agent cannot grow memory without limit.
+
 ## Antigravity CLI follow-ups — selected 2026-10-06
 
 Keep these items for the separate `antigravity-cli` provider; preserve ACP:

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -32,6 +32,16 @@ CREATE INDEX IF NOT EXISTS sessions_cwd_updated_idx
 pub struct SessionStore {
     conn: Mutex<Connection>,
     read_conn: Mutex<Option<Connection>>,
+    /// Fork (L-168): query-only connection for list and page reads, apart from
+    /// `read_conn` so a long search scan does not hold them up either.
+    list_conn: Mutex<Option<Connection>>,
+}
+
+fn open_query_only(path: &Path) -> Result<Connection, String> {
+    let conn = Connection::open(path).map_err(|e| e.to_string())?;
+    conn.execute_batch("PRAGMA query_only = ON; PRAGMA busy_timeout = 5000;")
+        .map_err(|e| e.to_string())?;
+    Ok(conn)
 }
 
 impl SessionStore {
@@ -44,13 +54,10 @@ impl SessionStore {
             .map_err(|e| e.to_string())?;
         migrate(&conn).map_err(|e| e.to_string())?;
         crate::worktrees::reconcile_removals(&conn)?;
-        let read_conn = Connection::open(&path).map_err(|e| e.to_string())?;
-        read_conn
-            .execute_batch("PRAGMA query_only = ON; PRAGMA busy_timeout = 5000;")
-            .map_err(|e| e.to_string())?;
         Ok(Self {
             conn: Mutex::new(conn),
-            read_conn: Mutex::new(Some(read_conn)),
+            read_conn: Mutex::new(Some(open_query_only(&path)?)),
+            list_conn: Mutex::new(Some(open_query_only(&path)?)),
         })
     }
 
@@ -63,6 +70,7 @@ impl SessionStore {
         Ok(Self {
             conn: Mutex::new(conn),
             read_conn: Mutex::new(None),
+            list_conn: Mutex::new(None),
         })
     }
 
@@ -70,6 +78,28 @@ impl SessionStore {
         self.conn
             .lock()
             .map_err(|_| "Session store is locked".into())
+    }
+
+    /// Runs a pure read on the query-only list connection (L-168), so it does
+    /// not wait for a write in progress: WAL serves the last committed state.
+    /// Without a database file (in-memory tests) it uses the writer. `work`
+    /// must not write; the list connection rejects it.
+    pub(crate) fn read<T>(
+        &self,
+        work: impl FnOnce(&Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let list_conn = self
+            .list_conn
+            .lock()
+            .map_err(|_| "Session read store is locked")?;
+        match list_conn.as_ref() {
+            Some(conn) => work(conn),
+            None => {
+                drop(list_conn);
+                let conn = self.lock_conn()?;
+                work(&conn)
+            }
+        }
     }
 }
 
@@ -231,8 +261,18 @@ pub struct SessionRecord {
     pub updated_at: i64,
 }
 
-#[tauri::command(async)]
-pub fn session_upsert(
+#[tauri::command]
+pub async fn session_upsert(
+    app: tauri::AppHandle,
+    session: SessionUpsert,
+) -> Result<SessionSummary, String> {
+    crate::background_work::store(app, move |app| {
+        session_upsert_blocking(tauri::Manager::state(app), session)
+    })
+    .await
+}
+
+pub(crate) fn session_upsert_blocking(
     store: State<'_, SessionStore>,
     session: SessionUpsert,
 ) -> Result<SessionSummary, String> {
@@ -275,8 +315,10 @@ pub fn session_upsert(
         return Err("blocks must be an array".into());
     }
 
+    // Fork (L-163): git runs before the lock; see `upsert_session_with_git`.
+    let git = session_git_info(&session);
     let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    let summary = upsert_session(&conn, &session).map_err(|e| e.to_string())?;
+    let summary = upsert_session_with_git(&conn, &session, &git).map_err(|e| e.to_string())?;
     Ok(summary)
 }
 
@@ -296,38 +338,74 @@ fn generated_image_paths(blocks: &Value) -> Vec<String> {
         .collect()
 }
 
-#[tauri::command(async)]
-pub fn session_list_by_project(
+#[tauri::command]
+pub async fn session_list_by_project(
+    app: tauri::AppHandle,
+    cwd: String,
+) -> Result<Vec<SessionSummary>, String> {
+    crate::background_work::store(app, move |app| {
+        session_list_by_project_blocking(tauri::Manager::state(app), cwd)
+    })
+    .await
+}
+
+pub(crate) fn session_list_by_project_blocking(
     store: State<'_, SessionStore>,
     cwd: String,
 ) -> Result<Vec<SessionSummary>, String> {
     if cwd.trim().is_empty() {
         return Err("cwd is required".into());
     }
-    let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    list_by_project(&conn, &cwd).map_err(|e| e.to_string())
+    // Fork (L-163): git runs before the lock; see `upsert_session_with_git`.
+    let git = crate::fs::git_info_for(&crate::fs::expand_home(&cwd));
+    store.read(|conn| list_by_project_with_git(conn, &cwd, &git).map_err(|e| e.to_string()))
 }
 
 /// Projectless chats live one per directory, so no single project query can
 /// reach them. One prefix scan over both separators instead — the Chat panel
 /// needs every scratch session ever persisted, not one folder's.
-#[tauri::command(async)]
-pub fn session_list_scratch(store: State<'_, SessionStore>) -> Result<Vec<SessionSummary>, String> {
-    let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    list_scratch(&conn).map_err(|e| e.to_string())
+#[tauri::command]
+pub async fn session_list_scratch(app: tauri::AppHandle) -> Result<Vec<SessionSummary>, String> {
+    crate::background_work::store(app, move |app| {
+        session_list_scratch_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn session_list_scratch_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<SessionSummary>, String> {
+    store.read(|conn| list_scratch(conn).map_err(|e| e.to_string()))
 }
 
 /// Saved sidechats retain their project cwd, so Chats uses a separate list.
-#[tauri::command(async)]
-pub fn session_list_sidechats(
-    store: State<'_, SessionStore>,
-) -> Result<Vec<SessionSummary>, String> {
-    let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    list_sidechats(&conn).map_err(|e| e.to_string())
+#[tauri::command]
+pub async fn session_list_sidechats(app: tauri::AppHandle) -> Result<Vec<SessionSummary>, String> {
+    crate::background_work::store(app, move |app| {
+        session_list_sidechats_blocking(tauri::Manager::state(app))
+    })
+    .await
 }
 
-#[tauri::command(async)]
-pub fn session_rebase_project(
+pub(crate) fn session_list_sidechats_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<SessionSummary>, String> {
+    store.read(|conn| list_sidechats(conn).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub async fn session_rebase_project(
+    app: tauri::AppHandle,
+    from_cwd: String,
+    to_cwd: String,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_rebase_project_blocking(tauri::Manager::state(app), from_cwd, to_cwd)
+    })
+    .await
+}
+
+pub(crate) fn session_rebase_project_blocking(
     store: State<'_, SessionStore>,
     from_cwd: String,
     to_cwd: String,
@@ -347,20 +425,38 @@ fn rebase_project(conn: &Connection, from_cwd: &str, to_cwd: &str) -> rusqlite::
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn session_list_linked(store: State<'_, SessionStore>) -> Result<Vec<SessionSummary>, String> {
-    let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    list_linked(&conn).map_err(|e| e.to_string())
+#[tauri::command]
+pub async fn session_list_linked(app: tauri::AppHandle) -> Result<Vec<SessionSummary>, String> {
+    crate::background_work::store(app, move |app| {
+        session_list_linked_blocking(tauri::Manager::state(app))
+    })
+    .await
 }
 
-#[tauri::command(async)]
-pub fn session_get(
+pub(crate) fn session_list_linked_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<SessionSummary>, String> {
+    store.read(|conn| list_linked(conn).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub async fn session_get(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Option<SessionRecord>, String> {
+    crate::background_work::store(app, move |app| {
+        session_get_blocking(tauri::Manager::state(app), session_id)
+    })
+    .await
+}
+
+pub(crate) fn session_get_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
 ) -> Result<Option<SessionRecord>, String> {
     validate_id(&session_id, "session")?;
-    let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    let mut record = get_session(&conn, &session_id).map_err(|e| e.to_string())?;
+    let mut record =
+        store.read(|conn| get_session(conn, &session_id).map_err(|e| e.to_string()))?;
     if let Some(record) = record.as_mut() {
         crate::tool_detail::omit_large_details(&mut record.blocks);
     }
@@ -368,17 +464,30 @@ pub fn session_get(
 }
 
 /// Output the transcript omitted on load, fetched when its row is expanded.
-#[tauri::command(async)]
-pub fn session_tool_detail(
+#[tauri::command]
+pub async fn session_tool_detail(
+    app: tauri::AppHandle,
+    session_id: String,
+    block_id: String,
+    step_id: Option<String>,
+) -> Result<Option<String>, String> {
+    crate::background_work::store(app, move |app| {
+        session_tool_detail_blocking(tauri::Manager::state(app), session_id, block_id, step_id)
+    })
+    .await
+}
+
+pub(crate) fn session_tool_detail_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
     block_id: String,
     step_id: Option<String>,
 ) -> Result<Option<String>, String> {
     validate_id(&session_id, "session")?;
-    let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
-    crate::tool_detail::stored_detail(&conn, &session_id, &block_id, step_id.as_deref())
-        .map_err(|e| e.to_string())
+    store.read(|conn| {
+        crate::tool_detail::stored_detail(conn, &session_id, &block_id, step_id.as_deref())
+            .map_err(|e| e.to_string())
+    })
 }
 
 const MAX_SEARCH_SCAN: usize = 400;
@@ -522,8 +631,18 @@ pub struct SessionSearchResult {
     pub truncated: bool,
 }
 
-#[tauri::command(async)]
-pub fn session_search(
+#[tauri::command]
+pub async fn session_search(
+    app: tauri::AppHandle,
+    options: SessionSearchOptions,
+) -> Result<SessionSearchResult, String> {
+    crate::background_work::store(app, move |app| {
+        session_search_blocking(tauri::Manager::state(app), options)
+    })
+    .await
+}
+
+pub(crate) fn session_search_blocking(
     store: State<'_, SessionStore>,
     options: SessionSearchOptions,
 ) -> Result<SessionSearchResult, String> {
@@ -564,8 +683,24 @@ pub fn cancel_session_search(search_owner: String) {
     cancel_owned_session_search(&search_owner);
 }
 
-#[tauri::command(async)]
-pub fn session_delete(
+#[tauri::command]
+pub async fn session_delete(
+    app: tauri::AppHandle,
+    session_id: String,
+    image_paths: Vec<String>,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_delete_blocking(
+            app.clone(),
+            tauri::Manager::state(app),
+            session_id,
+            image_paths,
+        )
+    })
+    .await
+}
+
+pub(crate) fn session_delete_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     session_id: String,
@@ -594,8 +729,19 @@ pub fn session_delete(
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn session_set_archived(
+#[tauri::command]
+pub async fn session_set_archived(
+    app: tauri::AppHandle,
+    session_id: String,
+    archived: bool,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_set_archived_blocking(tauri::Manager::state(app), session_id, archived)
+    })
+    .await
+}
+
+pub(crate) fn session_set_archived_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
     archived: bool,
@@ -605,8 +751,19 @@ pub fn session_set_archived(
     set_archived(&conn, &session_id, archived).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn session_set_pinned(
+#[tauri::command]
+pub async fn session_set_pinned(
+    app: tauri::AppHandle,
+    session_id: String,
+    pinned: bool,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_set_pinned_blocking(tauri::Manager::state(app), session_id, pinned)
+    })
+    .await
+}
+
+pub(crate) fn session_set_pinned_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
     pinned: bool,
@@ -616,8 +773,23 @@ pub fn session_set_pinned(
     set_pinned(&conn, &session_id, pinned).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn session_set_linked_work_item(
+#[tauri::command]
+pub async fn session_set_linked_work_item(
+    app: tauri::AppHandle,
+    session_id: String,
+    linked_work_item: Option<Value>,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_set_linked_work_item_blocking(
+            tauri::Manager::state(app),
+            session_id,
+            linked_work_item,
+        )
+    })
+    .await
+}
+
+pub(crate) fn session_set_linked_work_item_blocking(
     store: State<'_, SessionStore>,
     session_id: String,
     linked_work_item: Option<Value>,
@@ -634,8 +806,18 @@ pub struct InFlightSession {
     pub cwd: String,
 }
 
-#[tauri::command(async)]
-pub fn session_set_in_flight(
+#[tauri::command]
+pub async fn session_set_in_flight(
+    app: tauri::AppHandle,
+    sessions: Vec<InFlightSession>,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        session_set_in_flight_blocking(tauri::Manager::state(app), sessions)
+    })
+    .await
+}
+
+pub(crate) fn session_set_in_flight_blocking(
     store: State<'_, SessionStore>,
     sessions: Vec<InFlightSession>,
 ) -> Result<(), String> {
@@ -651,8 +833,15 @@ pub fn session_set_in_flight(
 
 /// Read the quit snapshot without clearing it. Vite/dev reloads must not
 /// consume the only copy.
-#[tauri::command(async)]
-pub fn session_list_in_flight(
+#[tauri::command]
+pub async fn session_list_in_flight(app: tauri::AppHandle) -> Result<Vec<InFlightSession>, String> {
+    crate::background_work::store(app, move |app| {
+        session_list_in_flight_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn session_list_in_flight_blocking(
     store: State<'_, SessionStore>,
 ) -> Result<Vec<InFlightSession>, String> {
     let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
@@ -660,8 +849,15 @@ pub fn session_list_in_flight(
 }
 
 /// Read and clear the quit snapshot so a restored window cannot take it twice.
-#[tauri::command(async)]
-pub fn session_take_in_flight(
+#[tauri::command]
+pub async fn session_take_in_flight(app: tauri::AppHandle) -> Result<Vec<InFlightSession>, String> {
+    crate::background_work::store(app, move |app| {
+        session_take_in_flight_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn session_take_in_flight_blocking(
     store: State<'_, SessionStore>,
 ) -> Result<Vec<InFlightSession>, String> {
     let mut conn = store.conn.lock().map_err(|_| "Session store is locked")?;
@@ -670,8 +866,15 @@ pub fn session_take_in_flight(
 
 const WORKSPACE_SNAPSHOT_MAX_BYTES: usize = 2_000_000;
 
-#[tauri::command(async)]
-pub fn workspace_set_snapshot(
+#[tauri::command]
+pub async fn workspace_set_snapshot(app: tauri::AppHandle, snapshot: Value) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        workspace_set_snapshot_blocking(tauri::Manager::state(app), snapshot)
+    })
+    .await
+}
+
+pub(crate) fn workspace_set_snapshot_blocking(
     store: State<'_, SessionStore>,
     snapshot: Value,
 ) -> Result<(), String> {
@@ -686,8 +889,17 @@ pub fn workspace_set_snapshot(
     set_workspace_snapshot(&conn, &json).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn workspace_get_snapshot(store: State<'_, SessionStore>) -> Result<Option<Value>, String> {
+#[tauri::command]
+pub async fn workspace_get_snapshot(app: tauri::AppHandle) -> Result<Option<Value>, String> {
+    crate::background_work::store(app, move |app| {
+        workspace_get_snapshot_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn workspace_get_snapshot_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Option<Value>, String> {
     let conn = store.conn.lock().map_err(|_| "Session store is locked")?;
     let json = get_workspace_snapshot(&conn).map_err(|e| e.to_string())?;
     match json {
@@ -1242,9 +1454,35 @@ fn orchestration_summary(conn: &Connection, id: &str) -> rusqlite::Result<Option
     ))
 }
 
+/// Branch and repo label for a saved session: its worktree when it has one.
+/// Reads `.git` files; git itself only runs in the background (L-167).
+pub(crate) fn session_git_info(session: &SessionUpsert) -> crate::fs::GitInfo {
+    crate::fs::git_info_for(&crate::fs::expand_home(
+        session
+            .worktree_cwd
+            .as_deref()
+            .filter(|cwd| !cwd.is_empty())
+            .unwrap_or(&session.cwd),
+    ))
+}
+
+/// Test-only: it runs git while the caller holds the store lock (L-163).
+#[cfg(test)]
 pub(crate) fn upsert_session(
     conn: &Connection,
     session: &SessionUpsert,
+) -> rusqlite::Result<SessionSummary> {
+    upsert_session_with_git(conn, session, &session_git_info(session))
+}
+
+/// Fork (L-163): `git` is looked up by the caller, before it takes the store
+/// lock. Every task, note, reminder and session write shares that one lock, so
+/// git spawns held under it (0.3–0.6 s on Windows, unbounded on a slow disk)
+/// queued unrelated clicks such as New task and Delete behind them.
+pub(crate) fn upsert_session_with_git(
+    conn: &Connection,
+    session: &SessionUpsert,
+    git: &crate::fs::GitInfo,
 ) -> rusqlite::Result<SessionSummary> {
     let now = now_millis();
     let model_settings = serde_json::to_string(&session.model_settings)
@@ -1298,13 +1536,6 @@ pub(crate) fn upsert_session(
         .map(serde_json::to_string)
         .transpose()
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-    let git = crate::fs::git_info_for(&crate::fs::expand_home(
-        session
-            .worktree_cwd
-            .as_deref()
-            .filter(|cwd| !cwd.is_empty())
-            .unwrap_or(&session.cwd),
-    ));
     let branch = if session.worktree_removed {
         None
     } else {
@@ -1450,7 +1681,7 @@ pub(crate) fn upsert_session(
         branch: branch.map(str::to_owned),
         worktree_cwd: worktree_cwd.map(str::to_owned),
         worktree_removed: session.worktree_removed,
-        repo: git.repo,
+        repo: git.repo.clone(),
         additions: 0,
         deletions: 0,
         created_at,
@@ -1898,8 +2129,18 @@ pub(crate) fn project_cwd_candidates_platform(cwd: &str, is_windows: bool) -> Ve
     candidates
 }
 
+#[cfg(test)]
 fn list_by_project(conn: &Connection, cwd: &str) -> rusqlite::Result<Vec<SessionSummary>> {
     let git = crate::fs::git_info_for(&crate::fs::expand_home(cwd));
+    list_by_project_with_git(conn, cwd, &git)
+}
+
+/// Fork (L-163): `git` comes from the caller, looked up before the store lock.
+fn list_by_project_with_git(
+    conn: &Connection,
+    cwd: &str,
+    git: &crate::fs::GitInfo,
+) -> rusqlite::Result<Vec<SessionSummary>> {
     let candidates = project_cwd_candidates(cwd);
     if candidates.is_empty() {
         return Ok(Vec::new());
@@ -3918,6 +4159,65 @@ mod tests {
     }
 
     #[test]
+    fn list_reads_use_the_list_connection_while_a_write_holds_the_store() {
+        let path = std::env::temp_dir().join(format!(
+            "monocode-session-list-conn-{}-{}.db",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = SessionStore::open(path.clone()).unwrap();
+        upsert_session(
+            &store.conn.lock().unwrap(),
+            &sample("s1", "/tmp/a", "Listed title"),
+        )
+        .unwrap();
+
+        // Held for the whole test: a read that fell back to the writer would hang.
+        let writer = store.lock_conn().unwrap();
+        let git = crate::fs::GitInfo::default();
+        let listed = store
+            .read(|conn| list_by_project_with_git(conn, "/tmp/a", &git).map_err(|e| e.to_string()))
+            .unwrap();
+        assert!(listed.iter().any(|session| session.id == "s1"));
+        store
+            .read(|conn| list_scratch(conn).map_err(|e| e.to_string()))
+            .unwrap();
+        store
+            .read(|conn| list_sidechats(conn).map_err(|e| e.to_string()))
+            .unwrap();
+        store
+            .read(|conn| list_linked(conn).map_err(|e| e.to_string()))
+            .unwrap();
+        let record = store
+            .read(|conn| get_session(conn, "s1").map_err(|e| e.to_string()))
+            .unwrap();
+        assert_eq!(
+            record.map(|record| record.title),
+            Some("Listed title".into())
+        );
+        store
+            .read(|conn| {
+                crate::tool_detail::stored_detail(conn, "s1", "missing", None)
+                    .map_err(|e| e.to_string())
+            })
+            .unwrap();
+        assert!(store
+            .read(|conn| {
+                conn.execute("UPDATE sessions SET title = 'nope' WHERE id = 's1'", [])
+                    .map_err(|e| e.to_string())
+            })
+            .is_err());
+        drop(writer);
+        drop(store);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("db-wal"));
+        let _ = std::fs::remove_file(path.with_extension("db-shm"));
+    }
+
+    #[test]
     fn session_search_uses_a_query_only_read_connection() {
         let path = std::env::temp_dir().join(format!(
             "monocode-session-read-conn-{}-{}.db",
@@ -5096,5 +5396,24 @@ mod tests {
         let unix_candidates =
             project_cwd_candidates_platform(r"/home/user/project\with\backslash", false);
         assert_eq!(unix_candidates, vec![r"/home/user/project\with\backslash"]);
+    }
+
+    // L-163: the commands look git up before taking the shared store lock and
+    // hand it in, so the locked work must use what the caller looked up.
+    #[test]
+    fn upsert_and_list_use_the_git_info_the_caller_looked_up() {
+        let store = SessionStore::open_in_memory().unwrap();
+        let conn = store.conn.lock().unwrap();
+        let git = crate::fs::GitInfo {
+            branch: Some("from-caller".into()),
+            repo: Some("owner/caller".into()),
+        };
+        let saved = upsert_session_with_git(&conn, &sample("s1", "/tmp/a", "A"), &git).unwrap();
+        assert_eq!(saved.branch.as_deref(), Some("from-caller"));
+        assert_eq!(saved.repo.as_deref(), Some("owner/caller"));
+
+        let listed = list_by_project_with_git(&conn, "/tmp/a", &git).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].repo.as_deref(), Some("owner/caller"));
     }
 }

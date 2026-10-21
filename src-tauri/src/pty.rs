@@ -231,16 +231,23 @@ impl Drop for PtyHost {
     }
 }
 
+/// Runs on the blocking pool: starting a shell (ConPTY on Windows) and the
+/// worktree spawn reservation can take a moment, and a plain sync command
+/// would hold the main thread that answers the window (L-171).
 #[tauri::command]
-pub fn pty_spawn(
+pub async fn pty_spawn(
     app: AppHandle,
-    host: State<PtyHost>,
     id: String,
     cwd: String,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    spawn_with_program(app, host, id, cwd, cols, rows, None)
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<PtyHost>();
+        spawn_with_program(app.clone(), host, id, cwd, cols, rows, None)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// Internal only: providers pass an executable and argv, never shell text.

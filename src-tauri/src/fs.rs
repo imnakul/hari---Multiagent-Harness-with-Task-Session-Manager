@@ -789,40 +789,106 @@ fn git_ls_files(root: &Path, cancel: Option<&AtomicBool>) -> Option<Vec<ProjectF
     Some(files)
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct GitInfo {
     pub branch: Option<String>,
     pub repo: Option<String>,
 }
 
-/// `git_info_for` costs up to three `git` subprocesses, and it sits inside
-/// both `session_upsert` (which runs every time a transcript is persisted) and
-/// `list_by_project` (every project switch). Caching it for a beat keeps a
-/// busy session from respawning git on every keystroke-driven save; the branch
-/// can lag by at most `GIT_INFO_TTL`, which only affects a label.
+/// `git_info_for` sits inside both `session_upsert` (which runs every time a
+/// transcript is persisted) and `list_by_project` (every project switch).
+/// Caching it for a beat keeps a busy session from rereading on every
+/// keystroke-driven save; the branch can lag by at most `GIT_INFO_TTL`, which
+/// only affects a label.
 const GIT_INFO_TTL: Duration = Duration::from_secs(3);
+
+/// Fork (L-167): entries younger than this stay as the last known value while
+/// a background git refresh runs; older ones are dropped.
+const GIT_INFO_KEEP: Duration = Duration::from_secs(600);
+
+/// Fork (L-167): each git call of the background refresh gives up after this.
+const GIT_INFO_GIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 static GIT_INFO_CACHE: Mutex<Option<HashMap<PathBuf, (Instant, GitInfo)>>> = Mutex::new(None);
 
+/// Folders whose background refresh is running, so callers share one (L-167).
+static GIT_INFO_REFRESHING: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
+
+/// Branch and repo label for a folder. Never starts git on the caller's thread
+/// (L-167): the `.git` files settle almost every case in microseconds. When
+/// they cannot (detached HEAD, reftable, config includes or URL rewrites), it
+/// returns the last known value, or the files' best guess, and refreshes with
+/// git on a background thread; a later call picks the result up.
 pub(crate) fn git_info_for(root: &Path) -> GitInfo {
+    let mut last_known = None;
     if let Ok(mut guard) = GIT_INFO_CACHE.lock() {
         let cache = guard.get_or_insert_with(HashMap::new);
-        cache.retain(|_, (at, _)| at.elapsed() < GIT_INFO_TTL);
-        if let Some((_, info)) = cache.get(root) {
-            return info.clone();
+        cache.retain(|_, (at, _)| at.elapsed() < GIT_INFO_KEEP);
+        if let Some((at, info)) = cache.get(root) {
+            if at.elapsed() < GIT_INFO_TTL {
+                return info.clone();
+            }
+            last_known = Some(info.clone());
         }
     }
-    let info = git_info_uncached(root);
+    match git_info_from_files(root) {
+        GitFilesInfo::Known(info) => {
+            cache_git_info(root, &info);
+            info
+        }
+        GitFilesInfo::Partial(guess) => {
+            refresh_git_info_in_background(root);
+            last_known.unwrap_or(guess)
+        }
+    }
+}
+
+fn cache_git_info(root: &Path, info: &GitInfo) {
     if let Ok(mut guard) = GIT_INFO_CACHE.lock() {
         guard
             .get_or_insert_with(HashMap::new)
             .insert(root.to_path_buf(), (Instant::now(), info.clone()));
     }
-    info
+}
+
+/// Held while a folder's refresh runs; dropping it lets the next one start.
+struct GitInfoRefreshClaim(PathBuf);
+
+impl Drop for GitInfoRefreshClaim {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = GIT_INFO_REFRESHING.lock() {
+            if let Some(running) = guard.as_mut() {
+                running.remove(&self.0);
+            }
+        }
+    }
+}
+
+/// `None` while another refresh of `root` is running.
+fn claim_git_info_refresh(root: &Path) -> Option<GitInfoRefreshClaim> {
+    let mut guard = GIT_INFO_REFRESHING.lock().ok()?;
+    guard
+        .get_or_insert_with(HashSet::new)
+        .insert(root.to_path_buf())
+        .then(|| GitInfoRefreshClaim(root.to_path_buf()))
+}
+
+fn refresh_git_info_in_background(root: &Path) {
+    let Some(claim) = claim_git_info_refresh(root) else {
+        return;
+    };
+    // A failed spawn drops the claim with the closure, so a later call retries.
+    let _ = thread::Builder::new()
+        .name("git-info-refresh".to_string())
+        .spawn(move || {
+            let info = git_info_uncached(&claim.0);
+            cache_git_info(&claim.0, &info);
+        });
 }
 
 fn git_info_uncached(root: &Path) -> GitInfo {
-    let Some(top) = git_stdout(root, &["rev-parse", "--show-toplevel"])
+    let read = |dir: &Path, args: &[&str]| git_stdout_within(dir, args, GIT_INFO_GIT_TIMEOUT);
+    let Some(top) = read(root, &["rev-parse", "--show-toplevel"])
         .map(PathBuf::from)
         .filter(|path| path.is_dir())
     else {
@@ -831,10 +897,183 @@ fn git_info_uncached(root: &Path) -> GitInfo {
             repo: file_name(root),
         };
     };
-    GitInfo {
-        branch: git_branch(&top),
-        repo: git_origin_repo(&top).or_else(|| file_name(&top)),
+    let branch = read(&top, &["symbolic-ref", "--short", "HEAD"])
+        .filter(|branch| branch != "HEAD")
+        .or_else(|| read(&top, &["rev-parse", "--short", "HEAD"]));
+    let repo = read(&top, &["remote", "get-url", "origin"])
+        .and_then(|url| git_url_repo_name(&url))
+        .or_else(|| file_name(&top));
+    GitInfo { branch, repo }
+}
+
+/// What a folder's `.git` files say about its branch and repo (L-167).
+#[derive(Debug, PartialEq, Eq)]
+enum GitFilesInfo {
+    /// The files settle both, with the same answer git would give.
+    Known(GitInfo),
+    /// Only git can settle it; this is the best guess until it does.
+    Partial(GitInfo),
+}
+
+/// Reads HEAD, `commondir` (linked worktrees) and the config's
+/// `[remote "origin"] url` the way `rev-parse --show-toplevel`,
+/// `symbolic-ref --short HEAD` and `remote get-url origin` would, without
+/// starting a process. Fork (L-167).
+fn git_info_from_files(root: &Path) -> GitFilesInfo {
+    let not_a_repo = || {
+        GitFilesInfo::Known(GitInfo {
+            branch: None,
+            repo: file_name(root),
+        })
+    };
+    if !root.is_dir() {
+        return not_a_repo();
     }
+    let Some((top, git_dir)) = find_git_dir(root) else {
+        return not_a_repo();
+    };
+    let folder = file_name(&top);
+    let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD")) else {
+        return GitFilesInfo::Partial(GitInfo {
+            branch: None,
+            repo: folder,
+        });
+    };
+    let common_dir = match std::fs::read_to_string(git_dir.join("commondir")) {
+        Ok(relative) => git_dir.join(relative.trim()),
+        Err(_) => git_dir.clone(),
+    };
+    let config = std::fs::read_to_string(common_dir.join("config")).unwrap_or_default();
+    let origin = git_config_origin_url(&config);
+    // `extensions.worktreeConfig` layers this file over the shared config.
+    let worktree_config_decides = std::fs::read_to_string(git_dir.join("config.worktree"))
+        .map(|worktree| matches!(git_config_origin_url(&worktree), Ok(None)))
+        .unwrap_or(true);
+    let repo = origin
+        .clone()
+        .ok()
+        .flatten()
+        .and_then(|url| git_url_repo_name(&url))
+        .or(folder);
+    let head = head.trim();
+    let branch = head
+        .strip_prefix("ref:")
+        .map(str::trim)
+        .and_then(|reference| reference.strip_prefix("refs/heads/"))
+        .filter(|branch| !branch.is_empty() && *branch != ".invalid" && *branch != "HEAD")
+        .map(str::to_owned);
+    let decided = branch.is_some() && origin.is_ok() && worktree_config_decides;
+    let info = GitInfo {
+        // A detached HEAD holds the commit id; git abbreviates it to at least 7.
+        branch: branch.or_else(|| {
+            (head.len() >= 40 && head.bytes().all(|byte| byte.is_ascii_hexdigit()))
+                .then(|| head[..7].to_string())
+        }),
+        repo,
+    };
+    if decided {
+        GitFilesInfo::Known(info)
+    } else {
+        GitFilesInfo::Partial(info)
+    }
+}
+
+/// The nearest `.git` at or above `root`: a directory, or a file holding
+/// `gitdir: <path>` (linked worktrees, submodules). Returns the work tree's
+/// top folder and the git directory.
+fn find_git_dir(root: &Path) -> Option<(PathBuf, PathBuf)> {
+    root.ancestors().find_map(|dir| {
+        let dot_git = dir.join(".git");
+        if dot_git.is_dir() {
+            return Some((dir.to_path_buf(), dot_git));
+        }
+        let pointer = std::fs::read_to_string(&dot_git).ok()?;
+        let target = pointer.trim().strip_prefix("gitdir:")?.trim();
+        Some((dir.to_path_buf(), dir.join(target)))
+    })
+}
+
+/// The first `[remote "origin"] url` in a git config file. `Err` when the file
+/// uses something only git resolves: includes, `url.*` rewrites, reftable
+/// (`extensions.refStorage`), `core.worktree`, or a value this reader does
+/// not parse. Section and key names are case-insensitive, the subsection is
+/// not (git's own rules).
+fn git_config_origin_url(config: &str) -> Result<Option<String>, ()> {
+    let mut section = String::new();
+    let mut subsection: Option<String> = None;
+    let mut url = None;
+    for raw in config.lines() {
+        let mut line = raw.trim();
+        if let Some(header) = line.strip_prefix('[') {
+            let end = header.find(']').ok_or(())?;
+            let (name, sub) = git_config_section(&header[..end]).ok_or(())?;
+            if name.starts_with("include") || name == "url" {
+                return Err(());
+            }
+            section = name;
+            subsection = sub;
+            line = header[end + 1..].trim();
+        }
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if line.ends_with('\\') {
+            return Err(());
+        }
+        let (key, value) = match line.split_once('=') {
+            Some((key, value)) => (key.trim().to_ascii_lowercase(), Some(value)),
+            None => (line.to_ascii_lowercase(), None),
+        };
+        match (section.as_str(), subsection.as_deref(), key.as_str()) {
+            ("extensions", None, "refstorage") | ("core", None, "worktree") => return Err(()),
+            ("remote", Some("origin"), "url") if url.is_none() => {
+                url = Some(git_config_value(value.ok_or(())?).ok_or(())?);
+            }
+            _ => {}
+        }
+    }
+    Ok(url.filter(|url| !url.is_empty()))
+}
+
+/// `remote "origin"` → (`remote`, `origin`); legacy `remote.origin` →
+/// (`remote`, `origin`), whose subsection git lowercases.
+fn git_config_section(header: &str) -> Option<(String, Option<String>)> {
+    let header = header.trim();
+    if let Some((name, rest)) = header.split_once(char::is_whitespace) {
+        let quoted = rest.trim().strip_prefix('"')?.strip_suffix('"')?;
+        let mut sub = String::new();
+        let mut chars = quoted.chars();
+        while let Some(c) = chars.next() {
+            sub.push(if c == '\\' { chars.next()? } else { c });
+        }
+        return Some((name.to_ascii_lowercase(), Some(sub)));
+    }
+    let lower = header.to_ascii_lowercase();
+    Some(match lower.split_once('.') {
+        Some((name, sub)) => (name.to_string(), Some(sub.to_string())),
+        None => (lower, None),
+    })
+}
+
+/// A config value with quotes, escapes and trailing comments resolved.
+fn git_config_value(raw: &str) -> Option<String> {
+    let mut value = String::new();
+    let mut quoted = false;
+    let mut chars = raw.trim().chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => quoted = !quoted,
+            '\\' => value.push(match chars.next()? {
+                'n' => '\n',
+                't' => '\t',
+                escaped @ ('"' | '\\') => escaped,
+                _ => return None,
+            }),
+            '#' | ';' if !quoted => break,
+            c => value.push(c),
+        }
+    }
+    (!quoted).then(|| value.trim_end().to_string())
 }
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq, Eq)]
@@ -4626,19 +4865,83 @@ fn git_run(root: &Path, args: &[&str]) -> Option<String> {
 }
 
 fn git_output(root: &Path, args: &[&str]) -> Option<Vec<u8>> {
-    let output = git_cmd_for_args(args)
-        .arg("--no-pager")
+    let mut cmd = git_cmd_for_args(args);
+    cmd.arg("--no-pager")
         .arg("-C")
         .arg(root)
         .args(args)
         .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .output()
+        .env("GIT_TERMINAL_PROMPT", "0");
+    let timeout = if args.first() == Some(&"fetch") {
+        GIT_FETCH_TIMEOUT
+    } else {
+        GIT_READ_TIMEOUT
+    };
+    let (stdout, status) = git_output_within(cmd, timeout)?;
+    git_status_ok(&status, args).then_some(stdout)
+}
+
+/// Fork (L-167): a git read gives up after this, so a hung git (credential
+/// prompt, network drive, stale lock file) cannot hold its caller forever.
+const GIT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Fork (L-167): `fetch` waits on the network, so it gets longer.
+const GIT_FETCH_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Runs `cmd` with stdin and stderr closed and returns its stdout and exit
+/// status, or `None` when it fails to start or outlives `timeout`. A timed-out
+/// child is killed; its stdout reader is left detached, because a descendant
+/// (a hook's shell, ssh) can keep the pipe open after git itself exits.
+/// Fork (L-167).
+fn git_output_within(
+    mut cmd: Command,
+    timeout: Duration,
+) -> Option<(Vec<u8>, std::process::ExitStatus)> {
+    let deadline = Instant::now() + timeout;
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
         .ok()?;
-    if git_status_ok(&output.status, args) {
-        return Some(output.stdout);
+    let stop = |child: &mut std::process::Child| {
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+    let Some(mut stdout) = child.stdout.take() else {
+        stop(&mut child);
+        return None;
+    };
+    let (sender, receiver) = mpsc::channel();
+    let reader = thread::Builder::new()
+        .name("git-output-reader".to_string())
+        .spawn(move || {
+            let mut buf = Vec::new();
+            let _ = sender.send(stdout.read_to_end(&mut buf).map(|_| buf));
+        });
+    if reader.is_err() {
+        stop(&mut child);
+        return None;
     }
-    None
+    let Ok(Ok(output)) = receiver.recv_timeout(timeout) else {
+        stop(&mut child);
+        return None;
+    };
+    // Stdout closed, so git is exiting; wait for it without passing the deadline.
+    let mut pause = Duration::from_millis(1);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some((output, status)),
+            Ok(None) if Instant::now() < deadline => {
+                thread::sleep(pause);
+                pause = (pause * 2).min(Duration::from_millis(20));
+            }
+            _ => {
+                stop(&mut child);
+                return None;
+            }
+        }
+    }
 }
 
 /// Queued 8 KiB chunks allowed between the git reader and the consumer.
@@ -4969,10 +5272,6 @@ fn git_branch_name(root: &Path, name: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-fn git_origin_repo(root: &Path) -> Option<String> {
-    git_url_repo_name(&git_stdout(root, &["remote", "get-url", "origin"])?)
-}
-
 #[derive(Default)]
 struct GitSync {
     remote: Option<String>,
@@ -5090,11 +5389,20 @@ fn git_ahead_behind(root: &Path, base: &str) -> (i64, i64) {
 }
 
 fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
-    let output = git_cmd().arg("-C").arg(root).args(args).output().ok()?;
-    if !output.status.success() {
+    git_stdout_within(root, args, GIT_READ_TIMEOUT)
+}
+
+fn git_stdout_within(root: &Path, args: &[&str], timeout: Duration) -> Option<String> {
+    let mut cmd = git_cmd();
+    cmd.arg("-C")
+        .arg(root)
+        .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0");
+    let (stdout, status) = git_output_within(cmd, timeout)?;
+    if !status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let text = String::from_utf8_lossy(&stdout).trim().to_string();
     if text.is_empty() {
         None
     } else {
@@ -7708,6 +8016,131 @@ mod tests {
             info.repo.as_deref(),
             dir.0.file_name().and_then(|name| name.to_str())
         );
+    }
+
+    #[test]
+    fn git_info_files_match_git_for_repo_subfolder_worktree_and_plain_folder() {
+        let dir = tmp("git-files-info");
+        if !init_git_commit(&dir.0, &[("a.txt", "a\n")])
+            || !git(
+                &dir.0,
+                &["remote", "add", "origin", "git@github.com:acme/widget.git"],
+            )
+        {
+            return;
+        }
+        let sub = dir.0.join("src");
+        std::fs::create_dir(&sub).unwrap();
+        let linked = tmp("git-files-info-wt");
+        let worktree = linked.0.join("feature-wt");
+        assert!(git(
+            &dir.0,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "feature",
+                &worktree.to_string_lossy()
+            ],
+        ));
+        let plain = tmp("git-files-info-plain");
+        let missing = plain.0.join("missing");
+        for folder in [&dir.0, &sub, &worktree, &plain.0, &missing] {
+            assert_eq!(
+                git_info_from_files(folder),
+                GitFilesInfo::Known(git_info_uncached(folder)),
+                "{}",
+                folder.display()
+            );
+        }
+        assert_eq!(
+            git_info_from_files(&worktree),
+            GitFilesInfo::Known(GitInfo {
+                branch: Some("feature".into()),
+                repo: Some("widget".into()),
+            })
+        );
+    }
+
+    #[test]
+    fn git_info_defers_a_detached_head_to_a_background_refresh() {
+        let dir = tmp("git-files-detached");
+        if !init_git_commit(&dir.0, &[("a.txt", "a\n")]) || !git(&dir.0, &["checkout", "--detach"])
+        {
+            return;
+        }
+        let GitFilesInfo::Partial(guess) = git_info_from_files(&dir.0) else {
+            panic!("a detached HEAD needs git");
+        };
+        assert_eq!(guess.branch.as_ref().map(String::len), Some(7));
+
+        assert_eq!(git_info_for(&dir.0), guess);
+        let cached = || {
+            GIT_INFO_CACHE
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|cache| cache.contains_key(&dir.0))
+        };
+        let started = Instant::now();
+        while !cached() && started.elapsed() < Duration::from_secs(10) {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(git_info_for(&dir.0), git_info_uncached(&dir.0));
+    }
+
+    #[test]
+    fn git_info_refresh_runs_once_per_folder() {
+        let folder = Path::new("/monocode-test/refresh-claim");
+        let claim = claim_git_info_refresh(folder).unwrap();
+        assert!(claim_git_info_refresh(folder).is_none());
+        drop(claim);
+        assert!(claim_git_info_refresh(folder).is_some());
+    }
+
+    #[test]
+    fn git_config_origin_url_follows_git_rules() {
+        let config = "[core]\n\tbare = false\n[Remote \"origin\"]\n\tURL = \"git@github.com:acme/widget.git\" ; note\n\turl = https://example.com/second.git\n";
+        assert_eq!(
+            git_config_origin_url(config),
+            Ok(Some("git@github.com:acme/widget.git".into()))
+        );
+        assert_eq!(
+            git_config_origin_url("[remote \"Origin\"]\n url = x\n"),
+            Ok(None)
+        );
+        assert_eq!(
+            git_config_origin_url("[remote.ORIGIN]\nurl = y # note\n"),
+            Ok(Some("y".into()))
+        );
+        assert_eq!(git_config_origin_url(""), Ok(None));
+        for needs_git in [
+            "[includeIf \"gitdir:~/work/\"]\n\tpath = work.gitconfig\n",
+            "[include]\n\tpath = more.gitconfig\n",
+            "[url \"git@github.com:\"]\n\tinsteadOf = https://github.com/\n",
+            "[extensions]\n\trefStorage = reftable\n",
+            "[core]\n\tworktree = ../elsewhere\n",
+            "[remote \"origin\"]\n\turl = \"unterminated\n",
+        ] {
+            assert_eq!(git_config_origin_url(needs_git), Err(()), "{needs_git}");
+        }
+    }
+
+    #[test]
+    fn git_stdout_within_kills_a_hung_git() {
+        let dir = tmp("git-stdout-timeout");
+        if !init_git_commit(&dir.0, &[("a.txt", "a\n")]) {
+            return;
+        }
+        let started = Instant::now();
+        let result = git_stdout_within(
+            &dir.0,
+            &["-c", "alias.slow=!sleep 5", "slow"],
+            Duration::from_millis(300),
+        );
+        assert!(result.is_none());
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(git_stdout(&dir.0, &["rev-parse", "--is-inside-work-tree"]).is_some());
     }
 
     fn git(dir: &Path, args: &[&str]) -> bool {

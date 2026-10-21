@@ -133,14 +133,33 @@ fn mark_used(conn: &Connection, id: &str, now: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn prompts_list(store: State<'_, SessionStore>) -> Result<Vec<SavedPrompt>, String> {
+#[tauri::command]
+pub async fn prompts_list(app: tauri::AppHandle) -> Result<Vec<SavedPrompt>, String> {
+    crate::background_work::store(app, move |app| {
+        prompts_list_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn prompts_list_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<SavedPrompt>, String> {
     let conn = store.lock_conn()?;
     list(&conn).map_err(|error| error.to_string())
 }
 
-#[tauri::command(async)]
-pub fn prompts_upsert(
+#[tauri::command]
+pub async fn prompts_upsert(
+    app: tauri::AppHandle,
+    prompt: SavedPromptUpsert,
+) -> Result<SavedPrompt, String> {
+    crate::background_work::store(app, move |app| {
+        prompts_upsert_blocking(app.clone(), tauri::Manager::state(app), prompt)
+    })
+    .await
+}
+
+pub(crate) fn prompts_upsert_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     prompt: SavedPromptUpsert,
@@ -153,8 +172,15 @@ pub fn prompts_upsert(
     Ok(saved)
 }
 
-#[tauri::command(async)]
-pub fn prompts_delete(
+#[tauri::command]
+pub async fn prompts_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        prompts_delete_blocking(app.clone(), tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn prompts_delete_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     id: String,
@@ -170,8 +196,18 @@ pub fn prompts_delete(
 
 /// Counts an insert so frequently used prompts rise in the picker. Quiet: the
 /// order changes on the next list, not while a picker is open.
-#[tauri::command(async)]
-pub fn prompts_mark_used(store: State<'_, SessionStore>, id: String) -> Result<(), String> {
+#[tauri::command]
+pub async fn prompts_mark_used(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        prompts_mark_used_blocking(tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn prompts_mark_used_blocking(
+    store: State<'_, SessionStore>,
+    id: String,
+) -> Result<(), String> {
     validate_id(&id, "prompt")?;
     let conn = store.lock_conn()?;
     mark_used(&conn, &id, now_millis()).map_err(|error| error.to_string())

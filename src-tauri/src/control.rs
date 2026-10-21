@@ -550,7 +550,18 @@ pub fn control_reply(
 }
 
 #[tauri::command]
-pub fn control_save(
+pub async fn control_save(
+    app: tauri::AppHandle,
+    lead_id: String,
+    state: String,
+) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        control_save_blocking(tauri::Manager::state(app), lead_id, state)
+    })
+    .await
+}
+
+pub(crate) fn control_save_blocking(
     store: State<'_, crate::session_store::SessionStore>,
     lead_id: String,
     state: String,
@@ -565,7 +576,17 @@ pub fn control_save(
 }
 
 #[tauri::command]
-pub fn control_load(
+pub async fn control_load(
+    app: tauri::AppHandle,
+    lead_id: String,
+) -> Result<Option<String>, String> {
+    crate::background_work::store(app, move |app| {
+        control_load_blocking(tauri::Manager::state(app), lead_id)
+    })
+    .await
+}
+
+pub(crate) fn control_load_blocking(
     store: State<'_, crate::session_store::SessionStore>,
     lead_id: String,
 ) -> Result<Option<String>, String> {

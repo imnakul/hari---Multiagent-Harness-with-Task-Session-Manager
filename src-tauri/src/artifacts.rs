@@ -67,14 +67,30 @@ impl Artifact {
     }
 }
 
-#[tauri::command(async)]
-pub fn artifacts_list(store: State<'_, SessionStore>) -> Result<Vec<Artifact>, String> {
+#[tauri::command]
+pub async fn artifacts_list(app: tauri::AppHandle) -> Result<Vec<Artifact>, String> {
+    crate::background_work::store(app, move |app| {
+        artifacts_list_blocking(tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn artifacts_list_blocking(
+    store: State<'_, SessionStore>,
+) -> Result<Vec<Artifact>, String> {
     let conn = store.lock_conn()?;
     list_artifacts(&conn).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn artifacts_get(
+#[tauri::command]
+pub async fn artifacts_get(app: tauri::AppHandle, id: String) -> Result<Option<Artifact>, String> {
+    crate::background_work::store(app, move |app| {
+        artifacts_get_blocking(tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn artifacts_get_blocking(
     store: State<'_, SessionStore>,
     id: String,
 ) -> Result<Option<Artifact>, String> {
@@ -83,8 +99,15 @@ pub fn artifacts_get(
     get_artifact(&conn, &id).map_err(|e| e.to_string())
 }
 
-#[tauri::command(async)]
-pub fn artifacts_delete(
+#[tauri::command]
+pub async fn artifacts_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    crate::background_work::store(app, move |app| {
+        artifacts_delete_blocking(app.clone(), tauri::Manager::state(app), id)
+    })
+    .await
+}
+
+pub(crate) fn artifacts_delete_blocking(
     app: AppHandle,
     store: State<'_, SessionStore>,
     id: String,
@@ -168,8 +191,18 @@ pub(crate) fn retain_existing_cards<'a>(
     Ok(cleaned)
 }
 
-#[tauri::command(async)]
-pub fn artifacts_upsert(
+#[tauri::command]
+pub async fn artifacts_upsert(
+    app: tauri::AppHandle,
+    artifact: ArtifactUpsert,
+) -> Result<Artifact, String> {
+    crate::background_work::store(app, move |app| {
+        artifacts_upsert_blocking(tauri::Manager::state(app), artifact)
+    })
+    .await
+}
+
+pub(crate) fn artifacts_upsert_blocking(
     store: State<'_, SessionStore>,
     artifact: ArtifactUpsert,
 ) -> Result<Artifact, String> {

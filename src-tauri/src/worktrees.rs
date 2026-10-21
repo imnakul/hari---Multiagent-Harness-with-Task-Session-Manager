@@ -127,8 +127,18 @@ fn default_root(main: &Path) -> PathBuf {
     main.with_file_name(format!("{name}-worktrees"))
 }
 
-#[tauri::command(async)]
-pub fn git_worktrees(cwd: String, store: State<'_, SessionStore>) -> Result<Worktrees, String> {
+#[tauri::command]
+pub async fn git_worktrees(app: tauri::AppHandle, cwd: String) -> Result<Worktrees, String> {
+    crate::background_work::store(app, move |app| {
+        git_worktrees_blocking(cwd, tauri::Manager::state(app))
+    })
+    .await
+}
+
+pub(crate) fn git_worktrees_blocking(
+    cwd: String,
+    store: State<'_, SessionStore>,
+) -> Result<Worktrees, String> {
     let mut worktrees = list(&expand_home(&cwd))?;
     let main = worktrees.first().ok_or("No working copies found")?;
     let default_root = path_to_js(&default_root(Path::new(&main.path)));
@@ -661,34 +671,69 @@ pub(crate) fn reconcile_removals(conn: &rusqlite::Connection) -> Result<(), Stri
     Ok(())
 }
 
-fn remove_with_sessions(
-    conn: &rusqlite::Connection,
+/// Removals still run one at a time, as they did when they held the store
+/// lock throughout; saves no longer wait for them (L-170).
+static REMOVING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Detaches the sessions, removes the worktree with git, then clears the
+/// journal. `connect` is called once per database step and its guard dropped
+/// before git runs: `git worktree remove` can take seconds on Windows (a
+/// `node_modules` tree), and every save in the app shares the store lock
+/// (L-170). The journal written by `prepare_removal` covers the gap, and the
+/// caller's removal reservation keeps terminals and agents out of the path.
+fn remove_with_sessions<C>(
+    connect: impl Fn() -> Result<C, String>,
     root: &Path,
     path: &Path,
     force: bool,
     keep_sessions: bool,
-) -> Result<WorktreeRemoval, String> {
+) -> Result<WorktreeRemoval, String>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection>,
+{
+    remove_with_sessions_using(connect, root, path, keep_sessions, |main| {
+        remove(main, path, force)
+    })
+}
+
+fn remove_with_sessions_using<C>(
+    connect: impl Fn() -> Result<C, String>,
+    root: &Path,
+    path: &Path,
+    keep_sessions: bool,
+    remove_tree: impl FnOnce(&Path) -> Result<(), String>,
+) -> Result<WorktreeRemoval, String>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection>,
+{
+    let _one_at_a_time = REMOVING.lock().unwrap_or_else(|e| e.into_inner());
     let tree = removal_target(root, path)?;
     let worktrees = list(root)?;
     let main = worktrees
         .iter()
         .find(|tree| tree.is_main)
         .ok_or("No main working copy found")?;
-    let ids = session_ids(conn, path)?;
-    if !keep_sessions && !ids.is_empty() {
-        return Err("Sessions still use this worktree. Move or delete those sessions first (including archived sessions).".into());
-    }
-    let saved = prepare_removal(conn, Path::new(&tree.path), &main.path, &ids)?;
+    let (ids, saved) = {
+        let conn = connect()?;
+        let ids = session_ids(&conn, path)?;
+        if !keep_sessions && !ids.is_empty() {
+            return Err("Sessions still use this worktree. Move or delete those sessions first (including archived sessions).".into());
+        }
+        let saved = prepare_removal(&conn, Path::new(&tree.path), &main.path, &ids)?;
+        (ids, saved)
+    };
     // Use the main copy even if Settings was opened directly on the target.
-    if let Err(error) = remove(Path::new(&main.path), path, force) {
-        finish_removal(conn, &tree.path, &saved).map_err(|restore| {
-            format!("{error}. Sessions remain detached until recovery on restart: {restore}")
-        })?;
+    if let Err(error) = remove_tree(Path::new(&main.path)) {
+        connect()
+            .and_then(|conn| finish_removal(&conn, &tree.path, &saved))
+            .map_err(|restore| {
+                format!("{error}. Sessions remain detached until recovery on restart: {restore}")
+            })?;
         return Err(error);
     }
     // Git has succeeded and the sessions are already durably detached. A
     // cleanup failure must not tell the UI to resume them in the deleted path.
-    if let Err(error) = finish_removal(conn, &tree.path, &[]) {
+    if let Err(error) = connect().and_then(|conn| finish_removal(&conn, &tree.path, &[])) {
         eprintln!("Worktree removed; recovery journal cleanup will retry on restart: {error}");
     }
     Ok(WorktreeRemoval {
@@ -697,8 +742,29 @@ fn remove_with_sessions(
     })
 }
 
-#[tauri::command(async)]
-pub fn git_worktree_remove(
+#[tauri::command]
+pub async fn git_worktree_remove(
+    app: tauri::AppHandle,
+    cwd: String,
+    path: String,
+    force: bool,
+    keep_sessions: Option<bool>,
+) -> Result<WorktreeRemoval, String> {
+    crate::background_work::store(app, move |app| {
+        git_worktree_remove_blocking(
+            cwd,
+            path,
+            force,
+            keep_sessions,
+            tauri::Manager::state(app),
+            tauri::Manager::state(app),
+            tauri::Manager::state(app),
+        )
+    })
+    .await
+}
+
+pub(crate) fn git_worktree_remove_blocking(
     cwd: String,
     path: String,
     force: bool,
@@ -712,9 +778,8 @@ pub fn git_worktree_remove(
     if terminals.has_working_dir(&path) || agents.has_working_dir(&path) {
         return Err("Close the terminals and agent processes using this worktree first.".into());
     }
-    let conn = store.lock_conn()?;
     remove_with_sessions(
-        &conn,
+        || store.lock_conn(),
         &expand_home(&cwd),
         &path,
         force,
@@ -722,8 +787,25 @@ pub fn git_worktree_remove(
     )
 }
 
-#[tauri::command(async)]
-pub fn git_orchestration_worktree_remove(
+#[tauri::command]
+pub async fn git_orchestration_worktree_remove(
+    app: tauri::AppHandle,
+    cwd: String,
+    path: String,
+) -> Result<WorktreeRemoval, String> {
+    crate::background_work::store(app, move |app| {
+        git_orchestration_worktree_remove_blocking(
+            cwd,
+            path,
+            tauri::Manager::state(app),
+            tauri::Manager::state(app),
+            tauri::Manager::state(app),
+        )
+    })
+    .await
+}
+
+pub(crate) fn git_orchestration_worktree_remove_blocking(
     cwd: String,
     path: String,
     store: State<'_, SessionStore>,
@@ -738,8 +820,7 @@ pub fn git_orchestration_worktree_remove(
     }
     let tree = removal_target(&root, &path)?;
     let branch = tree.branch.clone();
-    let conn = store.lock_conn()?;
-    let removed = remove_with_sessions(&conn, &root, &path, true, true)?;
+    let removed = remove_with_sessions(|| store.lock_conn(), &root, &path, true, true)?;
     if let Some(branch) = branch {
         if branch.starts_with("mc/orch-") {
             if let Err(error) = git(Path::new(&removed.project_cwd), &["branch", "-D", &branch]) {
@@ -806,6 +887,81 @@ mod tests {
         )
         .unwrap();
         Repo(dir)
+    }
+
+    /// Hands an already-locked test connection to `remove_with_sessions`.
+    fn held<'a>(
+        conn: &'a rusqlite::Connection,
+    ) -> impl Fn() -> Result<&'a rusqlite::Connection, String> + 'a {
+        move || Ok(conn)
+    }
+
+    /// A store guard that records whether it is alive.
+    struct Probe<'a> {
+        conn: std::sync::MutexGuard<'a, rusqlite::Connection>,
+        held: &'a std::sync::atomic::AtomicBool,
+    }
+    impl std::ops::Deref for Probe<'_> {
+        type Target = rusqlite::Connection;
+        fn deref(&self) -> &rusqlite::Connection {
+            &self.conn
+        }
+    }
+    impl Drop for Probe<'_> {
+        fn drop(&mut self) {
+            self.held.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn removal_releases_the_store_lock_while_git_removes_the_tree() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let repo = repo();
+        let root = repo.0.join("repo");
+        let tree = create(&root, "feature", "main", false).unwrap();
+        let store = SessionStore::open_in_memory().unwrap();
+        store
+            .lock_conn()
+            .unwrap()
+            .execute(
+                "INSERT INTO sessions (id, cwd, harness, model, runtime_mode, title, created_at, updated_at)
+                 VALUES ('s1', ?1, 'codex', 'test', 'supervised', 'Keep title', 10, 20)",
+                [&tree.path],
+            )
+            .unwrap();
+        let held = AtomicBool::new(false);
+        let connect = || {
+            let conn = store.lock_conn()?;
+            held.store(true, Ordering::SeqCst);
+            Ok(Probe { conn, held: &held })
+        };
+        let mut git_ran = false;
+        let removed =
+            remove_with_sessions_using(connect, &root, Path::new(&tree.path), true, |main| {
+                assert!(!held.load(Ordering::SeqCst), "git ran under the store lock");
+                git_ran = true;
+                remove(main, Path::new(&tree.path), true)
+            })
+            .unwrap();
+        assert!(git_ran);
+        assert!(!held.load(Ordering::SeqCst));
+        assert_eq!(removed.session_ids, ["s1"]);
+        assert!(!Path::new(&tree.path).exists());
+        let conn = store.lock_conn().unwrap();
+        let detached: bool = conn
+            .query_row(
+                "SELECT worktree_removed FROM sessions WHERE id = 's1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(detached);
+        let pending: i64 = conn
+            .query_row("SELECT COUNT(*) FROM worktree_removals", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(pending, 0);
     }
 
     #[test]
@@ -1017,12 +1173,12 @@ mod tests {
                 rusqlite::params![id, cwd, blocks, worktree, archived],
             ).unwrap();
         }
-        assert!(remove_with_sessions(&conn, &root, path, true, false).is_err());
+        assert!(remove_with_sessions(held(&conn), &root, path, true, false).is_err());
         // An actual Git removal failure must roll back the database changes.
         std::fs::write(path.join("dirty"), "uncommitted").unwrap();
-        assert!(remove_with_sessions(&conn, &root, path, false, true).is_err());
+        assert!(remove_with_sessions(held(&conn), &root, path, false, true).is_err());
         assert_eq!(session_ids(&conn, path).unwrap().len(), 3);
-        let mut removed = remove_with_sessions(&conn, path, path, true, true).unwrap();
+        let mut removed = remove_with_sessions(held(&conn), path, path, true, true).unwrap();
         removed.session_ids.sort();
         assert_eq!(removed.session_ids, vec!["archived", "direct", "shared"]);
         // Git omits the verbatim prefix added by canonicalize() on Windows.
@@ -1165,7 +1321,9 @@ mod tests {
              BEGIN SELECT RAISE(ABORT, 'journal unavailable'); END;",
         )
         .unwrap();
-        assert!(remove_with_sessions(&conn, &root, Path::new(&tree.path), true, true).is_err());
+        assert!(
+            remove_with_sessions(held(&conn), &root, Path::new(&tree.path), true, true).is_err()
+        );
         assert!(Path::new(&tree.path).exists());
         assert_eq!(session_ids(&conn, Path::new(&tree.path)).unwrap(), ["s1"]);
         conn.execute_batch("DROP TRIGGER fail_prepare").unwrap();
@@ -1175,7 +1333,7 @@ mod tests {
         )
         .unwrap();
         let removed =
-            remove_with_sessions(&conn, &root, Path::new(&tree.path), true, true).unwrap();
+            remove_with_sessions(held(&conn), &root, Path::new(&tree.path), true, true).unwrap();
         assert_eq!(removed.session_ids, ["s1"]);
         assert!(!Path::new(&tree.path).exists());
         let detached: bool = conn
