@@ -1,17 +1,24 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-22 03:15 IST — 0.16.0-local8 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local8: 0.16.0-local7 plus L-173 to L-176. Dragging any resize line (workspace splits, Focus pane edges, the Git graph, the Session Manager divider, Tasks table columns) is smooth and text re-wraps live, saving when you let go. Chats started from another chat show a coloured icon on a tree line. Focus chat search picks a project from a menu beside Model, without duplicate projects.
+- Why: User asked to commit, push and build a new version after the smooth-resize change.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local8-live-resize-sidechat-icons_x64.exe` (15,118,381 bytes, SHA-256 BFD53DD4261585BCC3AB5D01B9FE862C6F7D03F4D6E6CA90DEA2D729131C308D, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 40d1da11
+- Verified: tsc ✅ vitest ✅ (7674 passed, 2 skipped) build ✅ (npm run build:windows); cargo test not run (no Rust changes since local7); desktop check manual
 ## 2026-10-22 03:10 IST — Smooth live resizing in Focus, the Git graph, Session Manager and Tasks (L-176)
 - Type: feature
 - What: Every drag handle that still re-rendered the app on each mouse move now works like the workspace split from the last change: the panes move once per frame and text re-wraps as you drag, and the size saves when you let go. In Focus mode, chats no longer freeze at their old size while you drag an edge; they re-wrap live. Esc during a Focus drag puts the old layout back. The same applies to the Git graph height, the line between the Session Manager board and the open session, and Tasks table column widths.
 - Why: User feedback 22 Oct: the T3 Code split technique was the smoothest of the three tried; use it everywhere something is resized by dragging.
 - Files: [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx) (`focusBoxes`, `previewLayout`), [FocusSash.tsx](../../src/features/focus/ui/FocusSash.tsx) (`sashId`), [index.css](../../src/styles/index.css) (`[data-focus-resizing]`), [GitHistoryGraph.tsx](../../src/features/source-control/ui/GitHistoryGraph.tsx) (`GraphResizeSash`), [GitChangesPanel.tsx](../../src/features/source-control/ui/GitChangesPanel.tsx) (`graphPanelRef`), [SessionBoardView.tsx](../../src/features/session-board/ui/SessionBoardView.tsx) (`resize`), [ResizeHandle.tsx](../../src/shared/ui/ResizeHandle.tsx), [TaskTable.tsx](../../src/features/tasks/ui/TaskTable.tsx) (`previewWidth`); test `FocusViewResize.test.ts` rewritten for live reflow
-- Commit: uncommitted
+- Commit: 40d1da11
 - Verified: tsc ✅ vitest ✅ (7674 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
 ## 2026-10-22 02:21 IST — Sidechat icons and tree rail, Focus project menu, smooth split resize (L-173, L-174, L-175)
 - Type: feature
 - What: In the sidebar, chats started from another chat show a small coloured icon (blue sidechat, violet fork, green second opinion) instead of a text label, and hang off a tree line with a curve into each one, so it is clear which are siblings and which are children. In Focus chat search, the project filter is now the same menu as Notes "File note under…", placed before Model in the search row, and a project opened through a Windows `\\?\` path no longer shows twice. Dragging the line between split panes in the normal workspace no longer re-renders the app every frame: text still re-wraps as you drag, and the size saves when you let go (the approach T3 Code uses).
 - Why: User feedback 22 Oct: confusing sidechat nesting and labels, a native project dropdown on its own line with duplicates, and laggy split resizing in Normal mode.
 - Files: [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (`renderSessionCard`, `SessionLinkIcon`), [index.css](../../src/styles/index.css) (`.session-link-rail`), [FocusPicker.tsx](../../src/features/focus/ui/FocusPicker.tsx) (`ProjectFilterMenu`), [Popover.tsx](../../src/shared/ui/Popover.tsx) (`useDismissLayer`), [ExplorerMenu.tsx](../../src/features/files/ui/ExplorerMenu.tsx) (`ignore`), [paths.ts](../../src/shared/lib/paths.ts) (`pathKey`), [PaneTree.tsx](../../src/features/workspace/ui/PaneTree.tsx) (`previewLayout`); tests `Popover.dismiss.test.ts`, `FocusPicker.test.ts`, `paths.test.ts`
-- Commit: uncommitted
+- Commit: 40d1da11
 - Verified: tsc ✅ vitest ✅ (7674 passed, 2 skipped) lint — (no ESLint config) build —; desktop check manual
 ## 2026-10-22 01:05 IST — 0.16.0-local7 Windows build
 - Type: chore
