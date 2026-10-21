@@ -11721,6 +11721,14 @@ function Workspace({
       sessionsRef.current = nextSessions;
       setSessions(nextSessions);
 
+      // Fork (L-164): Focus hides the tabs, so a sidechat, handoff or second
+      // opinion opened from a Focus pane joins the Focus grid instead.
+      if (focusModeRef.current) {
+        placeInFocus(session.id);
+        if (!focusComposer) setComposerFocused(false);
+        return;
+      }
+
       const tab = tabsRef.current.find((entry) =>
         leafIds(entry.layout).includes(sourceId),
       );
@@ -11747,7 +11755,7 @@ function Workspace({
       setProjectTerminalFocused(false);
       setComposerFocused(focusComposer);
     },
-    [appendTab],
+    [appendTab, placeInFocus],
   );
 
   const onSecondOpinion = useCallback(
@@ -16498,9 +16506,7 @@ function Workspace({
           onFocus={onFocusFocusPane}
           onClose={onCloseFocusPane}
           onOpenDiff={onFocusOpenDiff}
-          // Both open in a tab of their own, which Focus hides.
-          onSecondOpinion={undefined}
-          onHandoff={undefined}
+          // Handoff and Second opinion open as Focus panes (L-164).
           visible
           focused={session.id === focusPaneId && !projectTerminalFocused}
           inSplit={false}

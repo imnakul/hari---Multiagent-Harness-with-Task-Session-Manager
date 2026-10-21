@@ -84,6 +84,21 @@ it("adds saved sidechats only under a listed parent, from their own row", () => 
   expect(tree.children.has("orphan")).toBe(false);
 });
 
+it("nests a sidechat of a sidechat under its shown parent (L-165)", () => {
+  const sidechat = (id: string, source: string) =>
+    row(id, { sidechat: { sourceSessionId: source, sourceTitle: source } });
+  // Listed newest first, so the deepest chat comes before its parent.
+  const tree = nestLinkedSessions(
+    [row("main")],
+    [sidechat("third", "second"), sidechat("second", "main"), sidechat("lost", "gone")],
+    {},
+  );
+  expect(ids(tree.top)).toEqual(["main"]);
+  expect(ids(tree.children.get("main")!.map((c) => c.session))).toEqual(["second"]);
+  expect(ids(tree.children.get("second")!.map((c) => c.session))).toEqual(["third"]);
+  expect(tree.children.has("gone")).toBe(false);
+});
+
 it("saves links, notifies subscribers and ignores malformed entries", () => {
   const onChange = vi.fn();
   const stop = subscribeSessionLinks(onChange);

@@ -139,14 +139,19 @@ export function nestLinkedSessions(
     }
     if (current && seen.has(current)) parentOf.delete(id);
   }
-  // An extra row shows only under a listed row; a listed row never nests under
+  // An extra row shows only when its parent chain reaches a listed row, so a
+  // sidechat of a sidechat nests too (L-165); a listed row never nests under
   // an extra row that is itself hidden, so listed chats can never disappear.
+  // Loops were broken above, so every chain ends.
+  const reachesListedRow = (id: string): boolean => {
+    let current = parentOf.get(id)?.parentId;
+    while (current && extraIds.has(current))
+      current = parentOf.get(current)?.parentId;
+    return current !== undefined;
+  };
   const shownExtra = new Set<string>();
-  for (const id of extraIds) {
-    const parent = parentOf.get(id)?.parentId;
-    if (parent && !extraIds.has(parent)) shownExtra.add(id);
-    else parentOf.delete(id);
-  }
+  for (const id of extraIds) if (reachesListedRow(id)) shownExtra.add(id);
+  for (const id of extraIds) if (!shownExtra.has(id)) parentOf.delete(id);
   for (const [id, link] of parentOf)
     if (extraIds.has(link.parentId) && !shownExtra.has(link.parentId))
       parentOf.delete(id);

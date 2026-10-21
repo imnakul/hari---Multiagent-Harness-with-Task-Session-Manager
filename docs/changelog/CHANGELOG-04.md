@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 21:16 IST — Sidechats, Handoff and Second opinion in Focus mode; deeper sidechats in the sidebar (L-164, L-165)
+- Type: fix
+- What: In Focus mode, Ask in sidechat now opens the sidechat as a Focus pane straight away; before, it only showed after leaving Focus. Handoff and Second opinion now show under replies in Focus and open as Focus panes too. In the project sidebar, a sidechat started from another sidechat now nests under it at any depth; before, the third level was missing.
+- Why: User report with screenshots.
+- Files: [App.tsx (lines 11724–11730, 16509)](../../src/app/App.tsx:11724), [sessionLinks.ts (lines 141–153)](../../src/features/sessions/model/sessionLinks.ts:141), [sessionLinks.test.ts (line 87)](../../src/features/sessions/model/sessionLinks.test.ts:87)
+- Commit: uncommitted
+- Verified: tsc ✅ lint — (repo has no linter) tests ✅ (web 7665) build —; desktop check manual
 ## 2026-10-21 17:34 IST — Project dropdown in Focus chat search (L-162)
 - Type: feature
 - What: In Focus mode's chat search (New ⌄ → Continue, + more, and the empty screen), the row of project tabs is replaced by one Filter by project dropdown under the search box: All projects, then each project. The chosen project's logo shows beside it. Two projects with the same folder name show their full paths. The Model toggle is unchanged.
