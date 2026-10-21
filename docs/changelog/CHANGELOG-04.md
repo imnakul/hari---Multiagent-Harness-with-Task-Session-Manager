@@ -6,6 +6,13 @@
 - Files: [worktrees.rs](../../src-tauri/src/worktrees.rs) (`remove_with_sessions`, `remove_with_sessions_using`, test `removal_releases_the_store_lock_while_git_removes_the_tree`), [pty.rs](../../src-tauri/src/pty.rs) (`pty_spawn`), [provider_sessions.rs](../../src-tauri/src/provider_sessions.rs) (`claude_copy_session`), [background_work.rs](../../src-tauri/src/background_work.rs) (`store_command_guard`), [PLANNED.md — Responsiveness follow-ups](../PLANNED.md), [backend-responsiveness-plan.md](../specs/backend-responsiveness-plan.md)
 - Commit: uncommitted
 - Verified: cargo test --lib 832 passed, 2 failed (the same two macOS PATH tests in `fs.rs` that fail on Windows before this change) rustfmt ✅ tsc ✅ vitest ✅ (7665) lint — (no ESLint config) build —; desktop check manual
+## 2026-10-22 00:45 IST — Notes "File note under…" menu lists every project (L-169)
+- Type: fix
+- What: The Notes `+` menu showed at most six projects, so others could not be picked and the menu never got long enough to scroll. It now lists every remembered project (current project first, Personal last) and scrolls when it is taller than the window.
+- Why: User report: the Notes dropdown did not show all projects and did not scroll.
+- Files: [notes.ts](../../src/features/notes/notes.ts) (`noteProjectChoices`), [notes.test.ts (lines 100–127)](../../src/features/notes/notes.test.ts:100)
+- Commit: uncommitted
+- Verified: tsc ✅ vitest ✅ (notes 65, all 7665) lint — (no ESLint config) build —; desktop check manual
 ## 2026-10-21 23:22 IST — Saves never wait for git; store work off the window's threads; reads beside writes (L-166, L-167, L-168)
 - Type: fix
 - What: Notes, tasks, chats and other saved data now load and save on background threads, so the window's buttons (minimize, maximize, clicks) answer even while saves queue. A chat's branch and repo are read straight from the project's `.git` folder; git itself only runs in the background when the folder cannot tell (for example a detached HEAD), and every git read now has a time limit. Chat lists, transcript pages, tasks and notes load on their own database connection, so they no longer wait behind a save.

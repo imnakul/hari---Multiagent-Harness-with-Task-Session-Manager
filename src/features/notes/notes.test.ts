@@ -97,7 +97,7 @@ describe("noteProjectChoices", () => {
     expect(choices[2]).toMatchObject({ kind: "personal", current: false });
   });
 
-  it("dedupes across separators and caps the list", () => {
+  it("dedupes across separators and lists every project", () => {
     const recents = [
       { path: "E:\\a\\one" },
       { path: "E:/a/one" },
@@ -110,8 +110,16 @@ describe("noteProjectChoices", () => {
     ];
     const choices = noteProjectChoices(undefined, recents);
     const projects = choices.filter((choice) => choice.kind === "project");
-    // One separator-variant duplicate removed, then capped at six.
-    expect(projects).toHaveLength(6);
+    // One separator-variant duplicate removed; no cap (L-169).
+    expect(projects.map((choice) => choice.id)).toEqual([
+      "project:E:\\a\\one",
+      "project:/b/two",
+      "project:/c/three",
+      "project:/d/four",
+      "project:/e/five",
+      "project:/f/six",
+      "project:/g/seven",
+    ]);
     expect(choices[choices.length - 1]).toMatchObject({
       id: "personal",
       current: true,

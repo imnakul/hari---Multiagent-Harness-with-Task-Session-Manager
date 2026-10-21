@@ -247,12 +247,11 @@ export type NoteProjectChoice =
   | { id: string; kind: "project"; path: string; current: boolean }
   | { id: "personal"; kind: "personal"; current: boolean };
 
-const MAX_CREATE_PROJECT_CHOICES = 6;
-
 /** Where a new note can be filed: the current project first (when there is
- * one), then recent projects, then Personal (unbound). Pure so the Notes
- * `+` menu stays a thin picker over it; the pick flows into `createNote`
- * unchanged, so capture-time provenance rules are untouched. */
+ * one), then every remembered project, then Personal (unbound). The list is
+ * not capped (L-169): the menu scrolls when it is taller than the window.
+ * Pure so the Notes `+` menu stays a thin picker over it; the pick flows into
+ * `createNote` unchanged, so capture-time provenance rules are untouched. */
 export function noteProjectChoices(
   cwd: string | undefined,
   recents: { path: string }[],
@@ -262,15 +261,12 @@ export function noteProjectChoices(
   const key = (path: string): string =>
     path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   const hasCurrent = Boolean(cwd && looksLikeProject(cwd));
-  let projects = 0;
   if (hasCurrent) {
     const path = cwd as string;
     choices.push({ id: `project:${path}`, kind: "project", path, current: true });
     seen.add(key(path));
-    projects += 1;
   }
   for (const recent of recents) {
-    if (projects >= MAX_CREATE_PROJECT_CHOICES) break;
     if (!recent.path || !looksLikeProject(recent.path)) continue;
     const fingerprint = key(recent.path);
     if (seen.has(fingerprint)) continue;
@@ -281,7 +277,6 @@ export function noteProjectChoices(
       path: recent.path,
       current: false,
     });
-    projects += 1;
   }
   choices.push({
     id: "personal",
