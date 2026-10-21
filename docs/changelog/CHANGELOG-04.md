@@ -1,4 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 14:24 IST — Hover sidebar tint follows Sidebar opacity (L-157)
+- Type: feature
+- What: In dark mode, the floating hover sidebar's tint now uses the Sidebar opacity slider in Settings > Appearance > Translucency, instead of a fixed value. Lower shows more of the window behind it. Light mode keeps its own light tint, because light mode turns translucency off.
+- Why: User request: reuse the existing setting instead of tuning the tint by hand.
+- Files: [index.css (line 873)](../../src/styles/index.css:873)
+- Commit: uncommitted
+- Verified: CSS only; tsc ✅ (unchanged) tests — (no CSS tests); desktop check manual
+## 2026-10-21 14:12 IST — Smooth Focus pane resizing (L-156) and darker hover sidebar tint (L-154)
+- Type: fix
+- What: Dragging the edge between Focus panes no longer stutters. During the drag each chat keeps its size (the card crops it or shows a little empty space), and it re-wraps once when you let go. The hover sidebar's dark-mode tint goes from 0.5 to 0.8, so less of the window shows through.
+- Why: User report with a perf log: resizing ran at 16–36 FPS with 65–90 ms of work per frame, because every chat transcript re-wrapped at the new width on every frame. User asked for the 0.8 tint.
+- Files: [FocusView.tsx (lines 139–150, 204–241, 693)](../../src/features/focus/ui/FocusView.tsx:139), [FocusViewResize.test.ts](../../src/features/focus/ui/FocusViewResize.test.ts:1), [FocusView.test.ts (line 118)](../../src/features/focus/ui/FocusView.test.ts:118), [index.css (line 872)](../../src/styles/index.css:872)
+- Commit: uncommitted
+- Verified: tsc ✅ tests ✅ (focus + app: 534 passed) build —; desktop check manual
 ## 2026-10-21 13:49 IST — 0.16.0-local6 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local6: 0.16.0-local5 plus L-143 to L-155. Focus panes resize by dragging and are rounded cards whose focus ring glides between them. The Continue picker has project chips and a Model toggle. Project tabs show status dots. In the new layout, Focus always uses the hover sidebar, and you can drag a session from the sidebar into Focus. The hover sidebar is frosted without a live blur. Settings is in the sidebar views list instead of the project menu. Working cards have a dismiss button.

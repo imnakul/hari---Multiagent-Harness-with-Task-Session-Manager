@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
@@ -134,6 +135,19 @@ type Props = {
   footer?: ReactNode;
 };
 
+/** A pane body held at its pre-resize size, contained so it never reflows. */
+function frozenBodyStyle(
+  size: { width: number; height: number } | undefined,
+): CSSProperties | undefined {
+  if (!size) return undefined;
+  return {
+    flex: "none",
+    width: size.width,
+    height: size.height,
+    contain: "layout paint",
+  };
+}
+
 function paneTitle(
   session: Session | undefined,
   card: BoardCard | undefined,
@@ -188,7 +202,39 @@ export function FocusView({
   const [layout, setLayout] = useState<FocusLayout>(loadFocusLayout);
   /** A resize in progress; the saved layout returns if it is cancelled. */
   const [draftLayout, setDraftLayout] = useState<FocusLayout | null>(null);
+  /**
+   * Fork (L-156): each pane body's pixel size when a resize began. While an
+   * edge is dragged the bodies hold that size (the card clips or shows its
+   * background), so transcripts and terminals reflow once on release instead
+   * of on every frame.
+   */
+  const [frozenBodies, setFrozenBodies] = useState<ReadonlyMap<
+    string,
+    { width: number; height: number }
+  > | null>(null);
+  const previewLayout = (next: FocusLayout) => {
+    if (!frozenBodies) {
+      const measured = new Map<string, { width: number; height: number }>();
+      paneArea.current
+        ?.querySelectorAll<HTMLElement>("[data-focus-pane-body]")
+        .forEach((body) => {
+          const id = body.dataset.focusPaneBody;
+          if (id)
+            measured.set(id, {
+              width: body.offsetWidth,
+              height: body.offsetHeight,
+            });
+        });
+      setFrozenBodies(measured);
+    }
+    setDraftLayout(next);
+  };
+  const cancelLayout = () => {
+    setFrozenBodies(null);
+    setDraftLayout(null);
+  };
   const commitLayout = (next: FocusLayout) => {
+    setFrozenBodies(null);
     setDraftLayout(null);
     setLayout(next);
     saveFocusLayout(next);
@@ -516,9 +562,9 @@ export function FocusView({
           bottom: 0,
         }}
         measure={() => areaSpan(true)}
-        onPreview={(value) => setDraftLayout(resize(value))}
+        onPreview={(value) => previewLayout(resize(value))}
         onCommit={(value) => commitLayout(resize(value))}
-        onCancel={() => setDraftLayout(null)}
+        onCancel={cancelLayout}
         onReset={resetLayout}
       />
     );
@@ -544,9 +590,9 @@ export function FocusView({
           height: PANE_GAP * 2,
         }}
         measure={() => areaSpan(false)}
-        onPreview={(value) => setDraftLayout(resize(value))}
+        onPreview={(value) => previewLayout(resize(value))}
         onCommit={(value) => commitLayout(resize(value))}
-        onCancel={() => setDraftLayout(null)}
+        onCancel={cancelLayout}
         onReset={resetLayout}
       />,
     ];
@@ -644,9 +690,11 @@ export function FocusView({
               never remounts a transcript; App lays out the focused one. */}
           <div
             ref={focused && dockInPane ? dockGridRef : undefined}
+            data-focus-pane-body={id}
             className={`min-h-0 min-w-0 flex-1 ${
               focused && dockInPane ? "grid" : "flex flex-col"
             }`}
+            style={frozenBodyStyle(frozenBodies?.get(id))}
           >
             {focused && dockInPane ? dock : null}
             <div

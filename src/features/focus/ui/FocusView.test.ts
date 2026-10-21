@@ -115,7 +115,7 @@ describe("FocusView terminal dock and active outline (L-136, L-137)", () => {
     );
     // The dock and the pane body are siblings in one grid, so App lays them out.
     expect(html).toMatch(
-      /<div class="min-h-0 min-w-0 flex-1 grid"><div data-dock-shown="">dock<\/div><div class="[^"]*" style="grid-area:main"><p data-pane-body="b1">/,
+      /<div data-focus-pane-body="b1" class="min-h-0 min-w-0 flex-1 grid"><div data-dock-shown="">dock<\/div><div class="[^"]*" style="grid-area:main"><p data-pane-body="b1">/,
     );
   });
 

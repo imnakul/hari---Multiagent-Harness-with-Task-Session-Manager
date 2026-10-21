@@ -864,12 +864,13 @@ html.is-windows.has-app-wallpaper.theme-light {
    over the live workspace, so the blur was recomputed whenever anything under
    or inside it repainted, and the row hover glide dropped to about 30 FPS.
    Fork (L-154): the frost is faked instead, all of it cheap to composite: a
-   see-through tint (--peek-frost-alpha; lower shows more of the workspace),
+   see-through tint (--peek-frost-alpha; lower shows more of the workspace;
+   in dark mode it follows Settings > Sidebar opacity, L-157),
    a grain tile (its opacity= value; stronger hides more of what is behind)
    the browser draws once and reuses (an image, not a filter on
    the element, and no blend mode), and a light inner edge. */
 .sidebar-peek {
-  --peek-frost-alpha: 0.5;
+  --peek-frost-alpha: var(--sidebar-opacity, 0.8);
   --peek-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.14'/%3E%3C/svg%3E");
   --peek-edge: rgb(255 255 255 / 0.07);
   border-color: color-mix(in srgb, var(--color-content) 9%, transparent);
