@@ -3,6 +3,7 @@ import { swapInFocusGrid, visibleFocusGrid, type FocusGrid } from "./focusGrid";
 import {
   focusAfterClose,
   focusProjectGroups,
+  moveInProjectFocusGrid,
   projectFocusGrid,
 } from "./focusGroups";
 
@@ -76,6 +77,76 @@ describe("projectFocusGrid (L-128)", () => {
     );
     expect(after.columns.flat()).toContain("a3");
     expect(after.hidden).toEqual(["a2"]);
+  });
+});
+
+describe("moveInProjectFocusGrid (L-177)", () => {
+  const groupOf = (grid: FocusGrid, cwd: string) => {
+    const group = focusProjectGroups(grid, cwdOf).find((g) => g.cwd === cwd);
+    if (!group) throw new Error(`no group for ${cwd}`);
+    return group;
+  };
+  /** Project key -> that project's own grid, alpha left out. */
+  const otherViews = (grid: FocusGrid) =>
+    new Map(
+      focusProjectGroups(grid, cwdOf)
+        .filter((g) => g.cwd !== "C:/work/alpha")
+        .map((g) => [g.key, projectFocusGrid(grid, g)]),
+    );
+
+  it("puts a project's stacked chats side by side, leaving other projects alone", () => {
+    const grid: FocusGrid = { columns: [["a1", "a2"], ["b1"]], overflow: [] };
+    const next = moveInProjectFocusGrid(
+      grid,
+      groupOf(grid, "C:/work/alpha"),
+      "a2",
+      "a1",
+      "right",
+    );
+    expect(next).toEqual({ columns: [["a1"], ["a2"], ["b1"]], overflow: [] });
+  });
+
+  it("keeps the project's run where its first column was", () => {
+    const grid: FocusGrid = { columns: [["b1"], ["a1", "a2"]], overflow: [] };
+    const next = moveInProjectFocusGrid(
+      grid,
+      groupOf(grid, "C:/work/alpha"),
+      "a1",
+      "a2",
+      "left",
+    );
+    expect(next).toEqual({ columns: [["b1"], ["a1"], ["a2"]], overflow: [] });
+  });
+
+  it("stacks into the project's own grid and every other project's grid is unchanged", () => {
+    const alpha = groupOf(FULL, "C:/work/alpha");
+    const next = moveInProjectFocusGrid(FULL, alpha, "a2", "a1", "bottom");
+    if (!next) throw new Error("drop rejected");
+    expect(projectFocusGrid(next, groupOf(next, "C:/work/alpha"))).toEqual({
+      columns: [["a1", "a2"], ["a3"]],
+      overflow: [],
+    });
+    expect(otherViews(next)).toEqual(otherViews(FULL));
+    expect(next.columns.length).toBeLessThanOrEqual(4);
+  });
+
+  it("swaps in place on a center drop", () => {
+    const alpha = groupOf(FULL, "C:/work/alpha");
+    expect(moveInProjectFocusGrid(FULL, alpha, "a1", "a2", "center")).toEqual(
+      swapInFocusGrid(FULL, "a1", "a2"),
+    );
+  });
+
+  it("rejects a chat of another project or a move that does not fit", () => {
+    const alpha = groupOf(FULL, "C:/work/alpha");
+    expect(moveInProjectFocusGrid(FULL, alpha, "b1", "a1", "left")).toBeNull();
+    const full: FocusGrid = {
+      columns: [["a1", "a2"], ["a3"]],
+      overflow: [],
+    };
+    expect(
+      moveInProjectFocusGrid(full, groupOf(full, "C:/work/alpha"), "a3", "a1", "top"),
+    ).toBeNull();
   });
 });
 

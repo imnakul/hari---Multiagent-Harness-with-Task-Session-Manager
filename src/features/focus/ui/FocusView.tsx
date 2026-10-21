@@ -51,6 +51,7 @@ import {
 import {
   focusProjectGroups,
   loadFocusGroupByProject,
+  moveInProjectFocusGrid,
   projectFocusGrid,
   saveFocusGroupByProject,
 } from "../model/focusGroups";
@@ -288,6 +289,8 @@ export function FocusView({
     : undefined;
   // The focused chat's project; the first one until a chat is focused.
   const activeGroup = grouped ? (focusedGroup ?? groups[0]) : undefined;
+  const activeGroupRef = useRef(activeGroup);
+  activeGroupRef.current = activeGroup;
   /** Project key -> the chat last focused in it, for returning to a project. */
   const lastFocused = useRef(new Map<string, string>());
   useEffect(() => {
@@ -482,8 +485,7 @@ export function FocusView({
       ["bottom", 1 - ry],
     ];
     const [side, distance] = sides.reduce((a, b) => (b[1] < a[1] ? b : a));
-    // Grouped, a side drop could move chats of hidden projects: swap only.
-    const edge = groupedRef.current || distance > EDGE_ZONE ? "center" : side;
+    const edge = distance > EDGE_ZONE ? "center" : side;
     // A drop that would make a 5th column or a 3rd row shows no target.
     return planDrop(fromId, overId, edge) ? { overId, edge } : null;
   };
@@ -496,10 +498,10 @@ export function FocusView({
     const current = gridRef.current;
     if (!groupedRef.current)
       return moveInFocusGrid(current, fromId, overId, edge);
-    return fromId !== overId &&
-      focusGridHas(current, fromId) &&
-      focusGridHas(current, overId)
-      ? swapInFocusGrid(current, fromId, overId)
+    // Grouped (L-177): the move is made on this project's grid only.
+    const group = activeGroupRef.current;
+    return group
+      ? moveInProjectFocusGrid(current, group, fromId, overId, edge)
       : null;
   };
 
@@ -673,7 +675,7 @@ export function FocusView({
         >
           <header
             data-focus-pane-header
-            title={grouped ? "Drag onto a chat to swap" : "Drag to move"}
+            title="Drag to move"
             onPointerDown={(event) => startDrag(id, event)}
             className={`flex h-8 shrink-0 cursor-grab select-none items-center gap-2 border-b border-stroke pr-1 pl-1.5 text-[12px] transition-colors duration-100 ${
               focused ? "bg-content/5" : ""

@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-22 03:31 IST — Grouped Focus drags offer every drop again (L-177)
+- Type: fix
+- What: With Group by project on, dragging a Focus pane only swapped two chats. Now it offers the same drops as with grouping off: beside a chat, or above or below it. The move stays inside the project you are looking at; other projects' chats keep their own layout.
+- Why: User report 22 Oct: grouped Focus was stuck on the swap target and could not stack or split panes.
+- Files: [focusGroups.ts](../../src/features/focus/model/focusGroups.ts) (`moveInProjectFocusGrid`), [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx) (`dropAt`, `planDrop`), [focusGroups.test.ts](../../src/features/focus/model/focusGroups.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ vitest ✅ (7679 passed, 2 skipped) build —; desktop check manual
 ## 2026-10-22 03:15 IST — 0.16.0-local8 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local8: 0.16.0-local7 plus L-173 to L-176. Dragging any resize line (workspace splits, Focus pane edges, the Git graph, the Session Manager divider, Tasks table columns) is smooth and text re-wraps live, saving when you let go. Chats started from another chat show a coloured icon on a tree line. Focus chat search picks a project from a menu beside Model, without duplicate projects.
