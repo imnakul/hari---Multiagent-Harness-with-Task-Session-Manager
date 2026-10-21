@@ -1,11 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 16:15 IST — 0.16.0-local6 Windows build, rebuilt with L-158 and L-159
+- Type: chore
+- What: The 0.16.0-local6 installer was rebuilt at the same version and file name, now with close buttons on Focus project and chat tabs (L-158) and drag to reorder those tabs (L-159). Run it over the current install; it replaces the earlier local6 file.
+- Why: User asked to commit, push and rebuild under the same installer name.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,913,304 bytes, SHA-256 47FC78DC70DC5500B62535D1590DD31009F2E80213C63255F1B5649C9813B5EB, NotSigned)
+- Commit: built from 168bf7b5
+- Verified: build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-21 16:11 IST — Drag to reorder Focus project and chat tabs (L-159)
 - Type: feature
 - What: With Group by project on in Focus mode, project tabs and chat tabs can be dragged left or right to change their order; the other tabs slide aside while you drag. Moving a chat tab also moves its pane. With a tab focused, Ctrl+Shift+Left/Right moves it. A short press still just selects the tab.
 - Why: User request: reorder the Focus tabs from the top bar.
 - Files: [FocusGroupTabs.tsx](../../src/features/focus/ui/FocusGroupTabs.tsx:1), [FocusView.tsx (lines 807–830)](../../src/features/focus/ui/FocusView.tsx:807), [focusGrid.ts (line 107)](../../src/features/focus/model/focusGrid.ts:107), [FocusGroupTabs.test.ts](../../src/features/focus/ui/FocusGroupTabs.test.ts:1), [focusGrid.test.ts](../../src/features/focus/model/focusGrid.test.ts:1)
-- Commit: uncommitted
-- Verified: tsc ✅ tests ✅ (focus 69 + app 476 passed) build —; desktop check manual
+- Commit: 168bf7b5
+- Verified: tsc ✅ tests ✅ (focus 69 + app 476 passed) build ✅; desktop check manual
 ## 2026-10-21 14:38 IST — Close buttons on Focus project and chat tabs (L-158)
 - Type: feature
 - What: With Group by project on in Focus mode, hovering a project tab or a chat tab shows a small × at its right end. A chat's × removes that chat from Focus; a project's × removes all of that project's chats at once. With a tab focused, Delete does the same. The chats keep running; they only leave Focus.
