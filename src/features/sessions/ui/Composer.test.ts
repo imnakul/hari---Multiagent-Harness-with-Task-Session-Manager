@@ -890,6 +890,76 @@ describe("Composer question focus", () => {
     expect(textarea.value).toBe("/btw");
   });
 
+  // Focus mode (L-160): the workspace pane stays mounted, hidden, while the
+  // Focus pane shows a second composer for the same chat.
+  it("keeps text typed in a second composer for the same chat", async () => {
+    const sessionId = "focus-shared";
+    clearComposerDraft(sessionId);
+    const pane = (focusOpen: boolean, render: number) =>
+      createElement(
+        "div",
+        null,
+        createElement(Composer, {
+          key: "workspace",
+          "data-render": render,
+          enabled: !focusOpen,
+          focused: !focusOpen,
+          harness: "claude",
+          model: "claude-sonnet",
+          runtimeMode: "supervised",
+          executionCwd: "/repo",
+          sessionId,
+          initialDraft: getComposerDraft(sessionId),
+          // A fresh callback every render, as SessionPane passes it.
+          onDraftChange: (text: string) => setComposerDraft(sessionId, text),
+          hideProjectPicker: true,
+          hideBranchPicker: true,
+          onFocus: () => {},
+          onCwdChange: () => {},
+          onModelChange: () => {},
+          onRuntimeModeChange: () => {},
+          onSubmit: () => {},
+        } as Parameters<typeof Composer>[0]),
+        focusOpen
+          ? createElement(Composer, {
+              key: "focus",
+              focused: true,
+              harness: "claude",
+              model: "claude-sonnet",
+              runtimeMode: "supervised",
+              executionCwd: "/repo",
+              sessionId,
+              initialDraft: getComposerDraft(sessionId),
+              onDraftChange: (text: string) => setComposerDraft(sessionId, text),
+              hideProjectPicker: true,
+              hideBranchPicker: true,
+              onFocus: () => {},
+              onCwdChange: () => {},
+              onModelChange: () => {},
+              onRuntimeModeChange: () => {},
+              onSubmit: () => {},
+            })
+          : null,
+      );
+
+    await act(async () => root.render(pane(false, 0)));
+    const workspace = () => container.querySelectorAll("textarea")[0]!;
+    await typeInto(workspace(), "typed before Focus");
+
+    await act(async () => root.render(pane(true, 1)));
+    const focusBox = container.querySelectorAll("textarea")[1]!;
+    expect(focusBox.value).toBe("typed before Focus");
+    await typeInto(focusBox, "typed in Focus");
+    // Anything else in the app re-renders the hidden workspace pane.
+    await act(async () => root.render(pane(true, 2)));
+    expect(getComposerDraft(sessionId)).toBe("typed in Focus");
+
+    await act(async () => root.render(pane(false, 3)));
+    expect(workspace().value).toBe("typed in Focus");
+    expect(getComposerDraft(sessionId)).toBe("typed in Focus");
+    clearComposerDraft(sessionId);
+  });
+
   it("clears the draft when the reset token advances", async () => {
     const onDraftChange = vi.fn();
     const props = {

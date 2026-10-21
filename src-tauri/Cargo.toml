@@ -59,6 +59,8 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 tauri-winrt-notification = "0.8"
 # WinRT toast settings (Windows.UI.Notifications) to read the per-app block.
 windows = { version = "0.62", features = ["UI_Notifications"] }
+# WebView2 ProcessFailed handler for crash recovery (L-160). Same version Tauri's wry already uses.
+webview2-com = "0.38"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }

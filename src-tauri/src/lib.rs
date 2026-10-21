@@ -73,6 +73,7 @@ mod tool_detail;
 mod trackpad_zoom;
 #[cfg(target_os = "windows")]
 mod tray;
+mod webview_recovery;
 mod window;
 mod window_transfer;
 #[cfg(windows)]
@@ -352,6 +353,7 @@ pub fn run() {
         .manage(pty::PtyHost::new())
         .manage(claude_interactive::InteractiveHost::default())
         .manage(process_stats::ProcessStats::default())
+        .manage(webview_recovery::WebviewRecovery::default())
         .manage(remote::RemoteConnections::default())
         .manage(window_transfer::WindowTransferState::new())
         .setup(|app| {
@@ -387,6 +389,7 @@ pub fn run() {
             {
                 if let Some(window) = app.get_webview_window("main") {
                     window::prepare_windows_window(&window);
+                    webview_recovery::install(&window);
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -734,6 +737,7 @@ pub fn run() {
             window::quit_decision,
             window::quit_ready,
             window::set_window_glass_enabled,
+            webview_recovery::take_webview_recovery,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             quick_composer::quick_composer_set_enabled,
             #[cfg(any(target_os = "macos", target_os = "windows"))]

@@ -131,6 +131,7 @@ import { FocusModeToggle } from "./shell/focusModeToggle";
 import { ApprovalToasts } from "../features/sessions/ui/ApprovalToasts";
 import { HarnessUpdateNotice } from "../features/providers/ui/HarnessUpdateNotice";
 import { NewLayoutNotice } from "./shell/NewLayoutNotice";
+import { WebviewRecoveryNotice } from "./shell/WebviewRecoveryNotice";
 import { WhatsNewDialog } from "./shell/WhatsNewDialog";
 import { ProviderSignInDialog } from "../features/sessions/ui/ProviderSignInDialog";
 import {
@@ -17252,6 +17253,7 @@ function Workspace({
             }
             onHeightChange={setNewLayoutNoticeHeight}
           />
+          <WebviewRecoveryNotice />
 
           <ApprovalToasts
             notices={hiddenApprovalToasts}

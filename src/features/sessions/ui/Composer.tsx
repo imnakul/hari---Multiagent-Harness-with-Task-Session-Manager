@@ -216,6 +216,8 @@ import {
 } from "../model/mcpPicker";
 import {
   COMPOSER_INPUT_RESTORE_EVENT,
+  getComposerDraft,
+  getComposerDraftRevision,
   getComposerMcpTags,
   setComposerDraft,
   setComposerMcpTags,
@@ -1090,9 +1092,41 @@ export function Composer({
     return () => observer.disconnect();
   }, [enabled]);
 
+  // Fork (L-160): a hidden composer (the workspace pane behind Focus mode)
+  // must not write its older text over what the visible one for the same
+  // chat saved; once shown again, it takes up that newer text.
+  const sharedDraftSeenRef = useRef(
+    sessionId === undefined ? 0 : getComposerDraftRevision(sessionId),
+  );
+  const hiddenSinceReportRef = useRef(!enabled);
   useEffect(() => {
+    if (!enabled) {
+      hiddenSinceReportRef.current = true;
+      return;
+    }
+    const wasHidden = hiddenSinceReportRef.current;
+    hiddenSinceReportRef.current = false;
+    if (wasHidden && sessionId !== undefined) {
+      const revision = getComposerDraftRevision(sessionId);
+      const shared = getComposerDraft(sessionId) ?? "";
+      if (revision !== sharedDraftSeenRef.current && shared !== draft) {
+        sharedDraftSeenRef.current = revision;
+        draftRevisionRef.current += 1;
+        const el = ref.current;
+        if (el) {
+          el.value = shared;
+          resizeComposer(el);
+          el.setSelectionRange(shared.length, shared.length);
+        }
+        setDraft(shared);
+        syncHasValue(shared, attachmentsRef.current);
+        return;
+      }
+    }
     onDraftChange?.(draft);
-  }, [draft, onDraftChange]);
+    if (sessionId !== undefined)
+      sharedDraftSeenRef.current = getComposerDraftRevision(sessionId);
+  }, [draft, enabled, onDraftChange, sessionId, syncHasValue]);
   useEffect(() => {
     if (
       draftResetToken == null ||

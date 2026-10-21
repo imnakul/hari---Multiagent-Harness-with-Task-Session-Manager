@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-10-21 16:47 | [Review — WebView2 crash recovery and saved composer drafts (L-160)](webview-crash-recovery-plan.md) | On Windows a crashed WebView2 page reloads by itself (3 per 2 minutes at most) with a short notice; unsent composer text is saved in localStorage and comes back after any reload. Desktop check manual. |
 | 2026-10-20 18:25 | [Review — Inset sidebar: project slots (L-132)](inset-project-slots-plan.md) | Up to four project slots in the inset top row: + adds one, click switches, ⌄ is the usual project menu. Desktop check manual. |
 | 2026-10-20 15:55 | [Review — Inset sidebar: project tabs with Ctrl+click (L-130)](inset-project-tabs-plan.md) | Ctrl+click in Switch project adds a tab beside the project name; click a tab to switch. Superseded by L-132. |
 | 2026-10-20 15:41 | [Review — Focus mode: group by project (L-128)](focus-group-by-project-plan.md) | Top-bar toggle adds a project tab row and a chat tab row; the grid shows one project at a time. Desktop check manual. |

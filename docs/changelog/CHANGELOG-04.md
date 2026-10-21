@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 16:55 IST — WebView2 crash recovery and saved composer drafts (L-160)
+- Type: fix
+- What: On Windows, when the part of WebView2 that draws the window crashes (it went blank before), MonoCode now reloads the window by itself and says so in a short notice. It tries at most 3 times in 2 minutes. Text typed in a chat box but not sent is now kept across any reload or crash, for 14 days. Crashes are written to `webview-crashes.log` in the app data folder. Text typed in a chat box no longer vanishes when you go in or out of Focus mode.
+- Why: The window went blank after WebView2 renderer crashes under memory pressure (crash dumps 20–21 Oct), and unsent text was lost. Separately, Focus mode keeps the hidden workspace copy of a chat's composer, which kept writing its older text over what was typed in Focus.
+- Files: [webview_recovery.rs](../../src-tauri/src/webview_recovery.rs:1), [lib.rs (lines 76, 356, 392, 740)](../../src-tauri/src/lib.rs:76), [window.rs (line 125)](../../src-tauri/src/window.rs:125), [Cargo.toml (line 63)](../../src-tauri/Cargo.toml:63), [draftCache.ts (lines 43–150)](../../src/features/sessions/model/draftCache.ts:43), [Composer.tsx (lines 1095–1129)](../../src/features/sessions/ui/Composer.tsx:1095), [Composer.test.ts (line 895)](../../src/features/sessions/ui/Composer.test.ts:895), [WebviewRecoveryNotice.tsx](../../src/app/shell/WebviewRecoveryNotice.tsx:1), [App.tsx (lines 134, 17256)](../../src/app/App.tsx:17256), [draftCache.persist.test.ts](../../src/features/sessions/model/draftCache.persist.test.ts:1), [spec](../specs/webview-crash-recovery-plan.md)
+- Commit: uncommitted
+- Verified: tsc ✅ lint — (repo has no linter) tests ✅ (web 89 in draft and composer files, plus the Focus draft regression test; Rust webview_recovery 4) cargo check ✅; build —; desktop check manual
 ## 2026-10-21 16:15 IST — 0.16.0-local6 Windows build, rebuilt with L-158 and L-159
 - Type: chore
 - What: The 0.16.0-local6 installer was rebuilt at the same version and file name, now with close buttons on Focus project and chat tabs (L-158) and drag to reorder those tabs (L-159). Run it over the current install; it replaces the earlier local6 file.

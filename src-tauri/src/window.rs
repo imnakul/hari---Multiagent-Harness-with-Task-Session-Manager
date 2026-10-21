@@ -120,7 +120,10 @@ pub fn open_session_window(app: &AppHandle, reveal: bool) -> Result<WebviewWindo
     }
 
     #[cfg(target_os = "windows")]
-    prepare_windows_window(&window);
+    {
+        prepare_windows_window(&window);
+        crate::webview_recovery::install(&window);
+    }
 
     if reveal {
         let _ = window.set_focus();
