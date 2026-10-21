@@ -1,10 +1,17 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 13:49 IST — 0.16.0-local6 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local6: 0.16.0-local5 plus L-143 to L-155. Focus panes resize by dragging and are rounded cards whose focus ring glides between them. The Continue picker has project chips and a Model toggle. Project tabs show status dots. In the new layout, Focus always uses the hover sidebar, and you can drag a session from the sidebar into Focus. The hover sidebar is frosted without a live blur. Settings is in the sidebar views list instead of the project menu. Working cards have a dismiss button.
+- Why: User asked to commit, push and build a new version.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,922,893 bytes, SHA-256 ACCED1BB6628DE895F9CD7E915BFFDA141CAE8396E4DFE6239957F1B845CB93B, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from bb22fe20
+- Verified: tsc ✅ tests ✅ (full suite: 7,638 passed, 2 skipped) build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-21 13:31 IST — No Settings in the project tab menu (L-155)
 - Type: feature
 - What: In the new sidebar layout, the project tab's dropdown no longer lists Settings. Settings is always in the list of views at the top of the sidebar.
 - Why: User request: the dropdown entry duplicated the always-visible Settings row.
 - Files: [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (`headerProject`); test in `SidebarRename.test.ts` ("leaves Settings out of the project tab menu (L-155)")
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (sidebar, source-control: 279 passed) build —; desktop check manual
 
 ## 2026-10-21 13:25 IST — Frosted hover sidebar without a live blur (L-154)
@@ -12,7 +19,7 @@
 - What: The hover sidebar looks frosted again: a see-through tint, a faint grain and a light top edge. Tuned to the user's values: tint 50% dark, 30% light; the window behind is dimmed 30% dark, 20% light; a stronger grain in dark mode mutes what shows through. It is drawn without a real background blur, so hovering stays smooth.
 - Why: User request: get the frosted look back without losing the L-148 frame-rate fix.
 - Files: [index.css](../../src/styles/index.css) (`.sidebar-peek`, `--peek-frost-alpha`)
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (app, focus: 531 passed) build ✅; desktop check manual
 
 ## 2026-10-21 13:13 IST — Drag a session into Focus (L-153)
@@ -20,7 +27,7 @@
 - What: In Focus mode, drag a session from the sidebar (including the hover sidebar) onto the Focus panes and let go to open it there, the same as picking it from Continue. An "Open in Focus" highlight shows while you hold it over the panes.
 - Why: User request: open an existing session in Focus by drag and drop.
 - Files: [focusSessionDrop.ts](../../src/features/focus/model/focusSessionDrop.ts); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (`onOpenSessionInFocus`); [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx) (drop area and hint); [App.tsx](../../src/app/App.tsx); tests in `focusSessionDrop.test.ts`, `SidebarRename.test.ts`, `FocusView.test.ts`
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (app, focus, sessions: 2425 passed) build —; desktop check manual
 
 ## 2026-10-21 13:13 IST — Focus uses the hover sidebar in the new layout (L-152)
@@ -28,7 +35,7 @@
 - What: With the new sidebar layout on, Focus mode always shows the sidebar on hover, even if you keep it pinned open. Leaving Focus brings back whatever you had before.
 - Why: User request: Focus should get the full width without changing the saved sidebar choice.
 - Files: [App.tsx](../../src/app/App.tsx) (`sidebarPinnedShown`, toggle guard)
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ build —; desktop check manual
 
 ## 2026-10-21 12:51 IST — Focus ring glides between panes (L-151)
@@ -36,7 +43,7 @@
 - What: In Focus mode, the accent edge and glow around the focused pane now slide smoothly to the next pane you focus, instead of jumping. Dragging a resize edge keeps it in place without lag, and reduced motion turns the slide off.
 - Why: User request: a smooth gliding effect when moving between session panes.
 - Files: [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx) (`focusRing`); [index.css](../../src/styles/index.css) (`.focus-ring`); tests in `FocusView.test.ts`
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (focus: 53 passed) build —; desktop check manual
 
 ## 2026-10-21 12:46 IST — Dismiss Working cards (L-150)
@@ -44,7 +51,7 @@
 - What: Each card in the sidebar's Working list shows a × on hover. Clicking it hides that card, for example a finished automation report you don't need to open. The chat shows up again the next time it works.
 - Why: User request: a Done card could only be cleared by opening the chat.
 - Files: [LiveAgentsPreview.tsx](../../src/features/sessions/ui/LiveAgentsPreview.tsx); [App.tsx](../../src/app/App.tsx) (`dismissedLiveRuns`); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx), [ProjectRail.tsx](../../src/app/shell/ProjectRail.tsx) (pass-through); tests in `LiveAgentsPreview.test.ts`
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (sessions, app: 2367 passed) build —; desktop check manual
 
 ## 2026-10-21 12:42 IST — Pages show every project; views above project tabs (L-149)
@@ -52,7 +59,7 @@
 - What: In the new layout, Inbox, Notes and Automations show items from all projects, whichever project is open. The sidebar now shows Search and the page list at the top, then the project tabs, then the sessions; only the sessions scroll.
 - Why: User request: checking another project's automations meant switching projects, and the project tabs belong with the sessions they switch.
 - Files: [App.tsx](../../src/app/App.tsx) (`appViewScope`); [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (views placement); test in `SidebarRename.test.ts`
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (app, focus, notes, automations, inbox: 976 passed) build —; desktop check manual
 
 ## 2026-10-21 12:37 IST — New layout sidebar: Settings row, pages leave Focus, smooth floating sidebar (L-148)
@@ -60,7 +67,7 @@
 - What: The new layout sidebar shows Settings under Session Manager. Opening Automations, Notes, Task Manager, Settings and the other sidebar pages from Focus mode now leaves Focus so the page is visible. Focus no longer repeats those buttons in its header in the new layout. The floating sidebar is now a solid card instead of blurred glass, so hovering its rows stays smooth.
 - Why: User request: the hover sidebar already reaches those pages, pages opened from it in Focus were hidden behind Focus, and the perf log showed about 30 FPS while hovering the floating sidebar.
 - Files: [Sidebar.tsx](../../src/app/shell/Sidebar.tsx) (Views list); [App.tsx](../../src/app/App.tsx) (`sidebarPages`, Focus props); [index.css](../../src/styles/index.css) (`.sidebar-peek`)
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (focus, app: 523 passed) build —; desktop check manual
 
 ## 2026-10-21 12:15 IST — Focus project tabs show status (L-147)
@@ -68,7 +75,7 @@
 - What: In Focus mode grouped by project, a project tab shimmers while one of its chats works and shows an amber dot when a chat needs you or a green dot when all its chats are finished. A working chat tab shimmers its title. The tab names and counts now line up with the project icon.
 - Why: User request: see at a glance which project needs attention, and the project tab text sat off the icon's line.
 - Files: [focusPaneTag.ts](../../src/features/focus/model/focusPaneTag.ts) (`focusProjectStatus`); [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx) (project and chat tabs); tests in `focusPaneTag.test.ts`, `FocusView.test.ts`
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (focus, app: 523 passed) build —; desktop check manual
 
 ## 2026-10-21 12:08 IST — Closing a Focus pane stays on its project (L-146)
@@ -76,14 +83,14 @@
 - What: In Focus mode grouped by project, closing the focused chat now focuses another chat of the same project, so the view stays on that project instead of jumping to the first one.
 - Why: User report: closing a pane in freeproductshub switched the view to portfolio2.
 - Files: [focusGroups.ts](../../src/features/focus/model/focusGroups.ts) (`focusAfterClose`); [App.tsx](../../src/app/App.tsx) (`onCloseFocusPane`); [focusGroups.test.ts](../../src/features/focus/model/focusGroups.test.ts)
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (focus, app: 519 passed) build —; desktop check manual
 ## 2026-10-21 12:06 IST — Resizable Focus panes, glowing focused card, Continue filters (L-143–L-145)
 - Type: feature
 - What: In Focus mode, drag the gap between columns to make one wider, or the gap between two stacked chats to make one taller; double-click a gap for equal sizes, and sizes are remembered. Panes are now rounded cards with small gaps, and the focused one has an accent edge with a soft glow. The Continue chat list has project chips at the top to show one project's chats, and a Model toggle that shows each chat's model.
 - Why: User request with screenshots: adjustable pane sizes, a nicer focused pane, and a project filter plus model display in Continue.
 - Files: [focusLayout.ts](../../src/features/focus/model/focusLayout.ts); [FocusSash.tsx](../../src/features/focus/ui/FocusSash.tsx); [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx); [FocusPicker.tsx](../../src/features/focus/ui/FocusPicker.tsx); [BoardSessionCard.tsx](../../src/features/session-board/ui/BoardSessionCard.tsx) (`boardModelLabel` exported); [index.css](../../src/styles/index.css) (`.focus-pane`); tests in focusLayout.test.ts, FocusView.test.ts, FocusPicker.test.ts
-- Commit: uncommitted
+- Commit: bb22fe20
 - Verified: tsc ✅ tests ✅ (focus, session board: 108 passed) build —; desktop check manual
 ## 2026-10-21 02:02 IST — 0.16.0-local5 Windows build
 - Type: chore
