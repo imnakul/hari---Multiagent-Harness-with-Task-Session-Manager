@@ -60,10 +60,28 @@ describe("Continue picker filters (L-145)", () => {
     ]);
   });
 
-  it("offers project chips only when chats span projects", () => {
-    expect(render(ITEMS)).toContain('aria-label="Filter by project"');
-    expect(render(ITEMS)).toContain('aria-pressed="true"');
+  it("offers a project dropdown only when chats span projects (L-162)", () => {
+    const html = render(ITEMS);
+    expect(html).toContain('<select aria-label="Filter by project"');
+    expect(html).toContain('<option value="" selected="">All projects</option>');
+    expect(html).toContain('<option value="c:/work/alpha">alpha</option>');
+    expect(html).toContain('<option value="c:/work/beta">beta</option>');
+    expect(html).not.toContain("aria-pressed=\"true\"");
     expect(render(ITEMS.slice(0, 1))).not.toContain("Filter by project");
+  });
+
+  it("names projects that share a folder name by their full path (L-162)", () => {
+    const html = render([
+      ...ITEMS,
+      {
+        id: "c1",
+        label: "Other alpha",
+        project: { key: "d:/alpha", cwd: "D:/alpha" },
+      },
+    ]);
+    expect(html).toContain('<option value="c:/work/alpha">C:/work/alpha</option>');
+    expect(html).toContain('<option value="d:/alpha">D:/alpha</option>');
+    expect(html).toContain('<option value="c:/work/beta">beta</option>');
   });
 
   it("shows models only when the toggle is on", () => {

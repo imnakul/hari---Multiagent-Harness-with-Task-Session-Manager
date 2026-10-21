@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-21 17:34 IST — Project dropdown in Focus chat search (L-162)
+- Type: feature
+- What: In Focus mode's chat search (New ⌄ → Continue, + more, and the empty screen), the row of project tabs is replaced by one Filter by project dropdown under the search box: All projects, then each project. The chosen project's logo shows beside it. Two projects with the same folder name show their full paths. The Model toggle is unchanged.
+- Why: User request: the horizontal project tabs did not fit; a dropdown filter instead.
+- Files: [FocusPicker.tsx (lines 128–186, 304–315)](../../src/features/focus/ui/FocusPicker.tsx:128), [FocusPicker.test.ts (lines 63–90)](../../src/features/focus/ui/FocusPicker.test.ts:63)
+- Commit: uncommitted
+- Verified: tsc ✅ lint — (repo has no linter) tests ✅ (focus 70) build —; desktop check manual
 ## 2026-10-21 16:55 IST — WebView2 crash recovery and saved composer drafts (L-160)
 - Type: fix
 - What: On Windows, when the part of WebView2 that draws the window crashes (it went blank before), MonoCode now reloads the window by itself and says so in a short notice. It tries at most 3 times in 2 minutes. Text typed in a chat box but not sent is now kept across any reload or crash, for 14 days. Crashes are written to `webview-crashes.log` in the app data folder. Text typed in a chat box no longer vanishes when you go in or out of Focus mode.

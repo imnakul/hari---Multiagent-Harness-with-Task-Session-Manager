@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { projectKey, projectName } from "../../../shared/lib/paths";
-import { Search } from "../../../shared/ui/icons";
+import { ChevronDown, Search } from "../../../shared/ui/icons";
 import { isHarnessId } from "../../sessions/model/models";
 import { sessionDisplayTitle } from "../../sessions/model/session";
 import type { RecentProject } from "../../projects/model/recents";
@@ -126,10 +126,68 @@ export function focusContinueItems(
 }
 
 /**
+ * The project filter (L-162). A native select on purpose: these lists sit
+ * inside popovers, and a second popover would count as an outside click and
+ * share their Escape handler, closing both. The native menu takes its own
+ * clicks and Escape, and gets keyboard and screen reader support for free.
+ */
+function ProjectFilterSelect({
+  projects,
+  value,
+  onChange,
+}: {
+  projects: readonly { key: string; cwd: string; icon?: ReactNode }[];
+  value: string | null;
+  onChange: (key: string | null) => void;
+}): ReactNode {
+  const names = projects.map((entry) => projectName(entry.cwd));
+  // Two projects with one folder name show their full paths instead.
+  const optionLabel = (index: number, cwd: string): string => {
+    const name = names[index] ?? cwd;
+    return names.indexOf(name) === names.lastIndexOf(name) ? name : cwd;
+  };
+  const selected = projects.find((entry) => entry.key === value);
+  return (
+    <span className="relative inline-flex min-w-0 max-w-full items-center">
+      {selected?.icon ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-2 grid size-3 place-items-center"
+        >
+          {selected.icon}
+        </span>
+      ) : null}
+      <select
+        aria-label="Filter by project"
+        title={selected?.cwd ?? "Filter by project"}
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value || null)}
+        className={`h-6 min-w-0 max-w-full cursor-pointer appearance-none truncate rounded-md pr-6 text-[11px] font-medium outline-none transition-[background-color,color,scale] duration-100 hover:bg-content/8 hover:text-content focus-visible:bg-content/8 active:scale-96 motion-reduce:active:scale-100 ${
+          selected?.icon ? "pl-6" : "pl-2"
+        } ${selected ? "bg-selection text-content" : "bg-transparent text-content/60"}`}
+      >
+        <option value="">All projects</option>
+        {projects.map((entry, index) => (
+          <option key={entry.key} value={entry.key}>
+            {optionLabel(index, entry.cwd)}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute right-1.5 size-3 text-content/45"
+        strokeWidth={1.75}
+      />
+    </span>
+  );
+}
+
+/**
  * A search box over a list, with the combobox keyboard contract: arrows and
  * Home/End move, Enter picks. Escape is left to the surface around it.
- * Items from more than one project get project chips to narrow the list, and
- * items with a model get a "Model" toggle that shows it on each row (L-145).
+ * Items from more than one project get a project dropdown to narrow the list
+ * (L-162), and items with a model get a "Model" toggle that shows it on each
+ * row (L-145).
  */
 export function FocusSearchList({
   items,
@@ -244,40 +302,16 @@ export function FocusSearchList({
         ) : null}
       </label>
       {projects.length > 1 ? (
-        <div
-          role="group"
-          aria-label="Filter by project"
-          className="flex shrink-0 gap-1 overflow-x-auto border-b border-stroke px-1.5 py-1 [scrollbar-width:none]"
-        >
-          {[null, ...projects].map((entry) => {
-            const key = entry?.key ?? null;
-            const selected = project === key;
-            return (
-              <button
-                key={key ?? ""}
-                type="button"
-                aria-pressed={selected}
-                title={entry?.cwd}
-                onClick={() => {
-                  setProjectFilter(key);
-                  setActive(0);
-                  input.current?.focus();
-                }}
-                className={`flex h-6 max-w-[140px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium transition-[background-color,color,scale] duration-100 hover:bg-content/8 hover:text-content focus-visible:bg-content/8 focus-visible:outline-none active:scale-96 motion-reduce:active:scale-100 ${
-                  selected ? "bg-selection text-content" : "text-content/55"
-                }`}
-              >
-                {entry?.icon ? (
-                  <span className="grid size-3 shrink-0 place-items-center">
-                    {entry.icon}
-                  </span>
-                ) : null}
-                <span className="truncate">
-                  {entry ? projectName(entry.cwd) : "All"}
-                </span>
-              </button>
-            );
-          })}
+        <div className="flex h-8 shrink-0 items-center border-b border-stroke px-1.5">
+          <ProjectFilterSelect
+            projects={projects}
+            value={project}
+            onChange={(key) => {
+              setProjectFilter(key);
+              setActive(0);
+              input.current?.focus();
+            }}
+          />
         </div>
       ) : null}
       <div
