@@ -1,66 +1,73 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-22 01:05 IST — 0.16.0-local7 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local7: 0.16.0-local6 plus L-160 to L-172. Buttons across the app answer while saves run (saved data loads and saves on background threads, saves never wait for git, lists read beside writes, worktree removal no longer blocks saves, terminals open off the main thread). On Windows a crashed display reloads by itself and unsent composer text survives. Focus chat search filters by project with a dropdown; sidechats, Handoff and Second opinion open as Focus panes; deeper sidechats nest in the sidebar. The Notes `+` menu lists every project. The Performance log also times backend calls.
+- Why: User asked to commit, push and build a new main version to start using.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local7-responsive-saves-crash-recovery-notes_x64.exe` (15,128,186 bytes, SHA-256 84F9BE963800E856335DB9D52FB04C668F9EE69DD88335D048E4B9CB31601858, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from d3984130
+- Verified: cargo test --lib 832 passed, 2 failed (pre-existing macOS PATH tests in `fs.rs`) tsc ✅ vitest ✅ (7665 passed, 2 skipped) build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-22 00:57 IST — Worktree removal, terminal start and Claude copy stop blocking the app; store guardrail test (L-170, L-171, L-172)
 - Type: fix
 - What: Removing a worktree used to hold the shared database lock while git deleted the folder, which can take several seconds on Windows, so every save in the app waited. It now takes the lock only for the quick database steps before and after. Opening a terminal and continuing a Claude chat on another account now run on background threads instead of the main thread. A new test fails if any backend command touches saved data on the window's threads again. The leftover responsiveness ideas (Soon and Deferred) are listed in PLANNED.md.
 - Why: User request: do the three "do now" follow-ups from the T3 Code and Orca study and record the rest.
 - Files: [worktrees.rs](../../src-tauri/src/worktrees.rs) (`remove_with_sessions`, `remove_with_sessions_using`, test `removal_releases_the_store_lock_while_git_removes_the_tree`), [pty.rs](../../src-tauri/src/pty.rs) (`pty_spawn`), [provider_sessions.rs](../../src-tauri/src/provider_sessions.rs) (`claude_copy_session`), [background_work.rs](../../src-tauri/src/background_work.rs) (`store_command_guard`), [PLANNED.md — Responsiveness follow-ups](../PLANNED.md), [backend-responsiveness-plan.md](../specs/backend-responsiveness-plan.md)
-- Commit: uncommitted
+- Commit: fa76cdf3
 - Verified: cargo test --lib 832 passed, 2 failed (the same two macOS PATH tests in `fs.rs` that fail on Windows before this change) rustfmt ✅ tsc ✅ vitest ✅ (7665) lint — (no ESLint config) build —; desktop check manual
 ## 2026-10-22 00:45 IST — Notes "File note under…" menu lists every project (L-169)
 - Type: fix
 - What: The Notes `+` menu showed at most six projects, so others could not be picked and the menu never got long enough to scroll. It now lists every remembered project (current project first, Personal last) and scrolls when it is taller than the window.
 - Why: User report: the Notes dropdown did not show all projects and did not scroll.
 - Files: [notes.ts](../../src/features/notes/notes.ts) (`noteProjectChoices`), [notes.test.ts (lines 100–127)](../../src/features/notes/notes.test.ts:100)
-- Commit: uncommitted
+- Commit: d3984130
 - Verified: tsc ✅ vitest ✅ (notes 65, all 7665) lint — (no ESLint config) build —; desktop check manual
 ## 2026-10-21 23:22 IST — Saves never wait for git; store work off the window's threads; reads beside writes (L-166, L-167, L-168)
 - Type: fix
 - What: Notes, tasks, chats and other saved data now load and save on background threads, so the window's buttons (minimize, maximize, clicks) answer even while saves queue. A chat's branch and repo are read straight from the project's `.git` folder; git itself only runs in the background when the folder cannot tell (for example a detached HEAD), and every git read now has a time limit. Chat lists, transcript pages, tasks and notes load on their own database connection, so they no longer wait behind a save.
 - Why: User report of slow buttons across the app after L-163; patterns 0–4 and 6 from the T3 Code and Orca study.
 - Files: [background_work.rs (lines 51–66)](../../src-tauri/src/background_work.rs:51), [fs.rs](../../src-tauri/src/fs.rs) (`git_info_for`, `git_info_from_files`, `git_output_within`), [session_store.rs](../../src-tauri/src/session_store.rs) (`SessionStore::read`, store commands), [mono_transcript.rs](../../src-tauri/src/mono_transcript.rs) (`page_at`), tasks.rs, notes.rs, reminders.rs, session_board.rs, automations.rs, prompts.rs, artifacts.rs, control.rs, provider_sessions.rs, claude_interactive.rs, worktrees.rs, debug_inspector.rs, window.rs, perf_probe.rs; spec [backend-responsiveness-plan.md](../specs/backend-responsiveness-plan.md)
-- Commit: uncommitted
+- Commit: fa76cdf3
 - Verified: cargo check ✅ cargo test --lib 829 passed, 2 failed (`fs::tests::read_only_git_cmd_path_adds_fixed_dirs_to_inherited_path`, `local_git_never_resolves_login_shell_path`: expect macOS Homebrew dirs, fail on Windows before this change too) tsc ✅ vitest ✅ lint — (no ESLint config) build — (not asked); desktop check manual
 ## 2026-10-21 22:43 IST — Performance patterns from T3 Code and Orca (research)
 - Type: docs
 - What: Read how T3 Code and Orca keep their apps responsive (where blocking work runs, how they get the git branch, how they limit and time out git, how they save state), and ranked which patterns fit MonoCode. Rechecked against both projects' latest code (T3 680152e2, Orca 84a9f995, both 2026-10-21), which added a new top pattern: a save never waits for git. No code changed.
 - Why: User request after the L-163 slowdown, to learn better patterns before fixing more.
 - Files: [perf-patterns-t3-orca.md](../notes/perf-patterns-t3-orca.md)
-- Commit: uncommitted
+- Commit: fa76cdf3
 - Verified: docs only
 ## 2026-10-21 21:16 IST — Sidechats, Handoff and Second opinion in Focus mode; deeper sidechats in the sidebar (L-164, L-165)
 - Type: fix
 - What: In Focus mode, Ask in sidechat now opens the sidechat as a Focus pane straight away; before, it only showed after leaving Focus. Handoff and Second opinion now show under replies in Focus and open as Focus panes too. In the project sidebar, a sidechat started from another sidechat now nests under it at any depth; before, the third level was missing.
 - Why: User report with screenshots.
 - Files: [App.tsx (lines 11724–11730, 16509)](../../src/app/App.tsx:11724), [sessionLinks.ts (lines 141–153)](../../src/features/sessions/model/sessionLinks.ts:141), [sessionLinks.test.ts (line 87)](../../src/features/sessions/model/sessionLinks.test.ts:87)
-- Commit: uncommitted
+- Commit: b49c327b
 - Verified: tsc ✅ lint — (repo has no linter) tests ✅ (web 7665) build —; desktop check manual
 ## 2026-10-21 21:10 IST — Saves stop holding the database while git runs (L-163)
 - Type: fix
 - What: Saving a chat and listing a project's chats used to look up the git branch and repo while holding the one database lock that every save in the app shares. That lookup starts up to three git processes. New task, Delete and other saves had to wait behind it, often several times in a row. The lookup now happens before the lock is taken, so those saves only wait for the database itself.
 - Why: User report: Delete took about 20 s and New task showed a spinner for about 10 s.
 - Files: [session_store.rs (lines 235, 302, 1251–1280, 1931)](../../src-tauri/src/session_store.rs:1251), [mono_transcript.rs (lines 325, 428)](../../src-tauri/src/mono_transcript.rs:428), test at [session_store.rs (line 5137)](../../src-tauri/src/session_store.rs:5137)
-- Commit: uncommitted
+- Commit: fa76cdf3
 - Verified: cargo test ✅ (session_store, mono_transcript, artifacts: 98) rustfmt ✅ tsc ✅ web tests ✅ (7665) build —
 ## 2026-10-21 17:34 IST — Project dropdown in Focus chat search (L-162)
 - Type: feature
 - What: In Focus mode's chat search (New ⌄ → Continue, + more, and the empty screen), the row of project tabs is replaced by one Filter by project dropdown under the search box: All projects, then each project. The chosen project's logo shows beside it. Two projects with the same folder name show their full paths. The Model toggle is unchanged.
 - Why: User request: the horizontal project tabs did not fit; a dropdown filter instead.
 - Files: [FocusPicker.tsx (lines 128–186, 304–315)](../../src/features/focus/ui/FocusPicker.tsx:128), [FocusPicker.test.ts (lines 63–90)](../../src/features/focus/ui/FocusPicker.test.ts:63)
-- Commit: uncommitted
+- Commit: e703d3f9
 - Verified: tsc ✅ lint — (repo has no linter) tests ✅ (focus 70) build —; desktop check manual
 ## 2026-10-21 17:20 IST — Backend call timing in the Performance log (L-161)
 - Type: chore
 - What: A Performance log (Ctrl+Alt+Shift+P → Start log) now also records how long every backend call takes, what else was waiting at the time, and once a second how quickly the main thread, the background workers and the database answer. Slow file loads are listed too. It only runs while a log records.
 - Why: Clicks across the app (Copy to Notes, first open of Settings, Automations and Tasks, New task, attaching files) got slow. Database cost and CPU were ruled out; this log shows which queue the calls wait in, so the real cause can be fixed.
 - Files: [perf_probe.rs](../../src-tauri/src/perf_probe.rs:1), [lib.rs (lines 47, 794–796)](../../src-tauri/src/lib.rs:47), [backendTiming.ts](../../src/shared/debug/backendTiming.ts:1), [perfRecorder.ts (lines 123, 328)](../../src/shared/debug/perfRecorder.ts:123), [backendTiming.test.ts](../../src/shared/debug/backendTiming.test.ts:1)
-- Commit: uncommitted
+- Commit: d0d1d06f
 - Verified: tsc ✅ lint — (repo has no linter) tests ✅ (debug 9) cargo check ✅ rustfmt ✅ build —
 ## 2026-10-21 16:55 IST — WebView2 crash recovery and saved composer drafts (L-160)
 - Type: fix
 - What: On Windows, when the part of WebView2 that draws the window crashes (it went blank before), MonoCode now reloads the window by itself and says so in a short notice. It tries at most 3 times in 2 minutes. Text typed in a chat box but not sent is now kept across any reload or crash, for 14 days. Crashes are written to `webview-crashes.log` in the app data folder. Text typed in a chat box no longer vanishes when you go in or out of Focus mode.
 - Why: The window went blank after WebView2 renderer crashes under memory pressure (crash dumps 20–21 Oct), and unsent text was lost. Separately, Focus mode keeps the hidden workspace copy of a chat's composer, which kept writing its older text over what was typed in Focus.
 - Files: [webview_recovery.rs](../../src-tauri/src/webview_recovery.rs:1), [lib.rs (lines 76, 356, 392, 740)](../../src-tauri/src/lib.rs:76), [window.rs (line 125)](../../src-tauri/src/window.rs:125), [Cargo.toml (line 63)](../../src-tauri/Cargo.toml:63), [draftCache.ts (lines 43–150)](../../src/features/sessions/model/draftCache.ts:43), [Composer.tsx (lines 1095–1129)](../../src/features/sessions/ui/Composer.tsx:1095), [Composer.test.ts (line 895)](../../src/features/sessions/ui/Composer.test.ts:895), [WebviewRecoveryNotice.tsx](../../src/app/shell/WebviewRecoveryNotice.tsx:1), [App.tsx (lines 134, 17256)](../../src/app/App.tsx:17256), [draftCache.persist.test.ts](../../src/features/sessions/model/draftCache.persist.test.ts:1), [spec](../specs/webview-crash-recovery-plan.md)
-- Commit: uncommitted
+- Commit: 78e6fa96
 - Verified: tsc ✅ lint — (repo has no linter) tests ✅ (web 89 in draft and composer files, plus the Focus draft regression test; Rust webview_recovery 4) cargo check ✅; build —; desktop check manual
 ## 2026-10-21 16:15 IST — 0.16.0-local6 Windows build, rebuilt with L-158 and L-159
 - Type: chore

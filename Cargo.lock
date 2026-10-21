@@ -2773,7 +2773,7 @@ dependencies = [
 
 [[package]]
 name = "monocode"
-version = "0.16.0-local6"
+version = "0.16.0-local7"
 dependencies = [
  "arboard",
  "base64 0.22.1",
