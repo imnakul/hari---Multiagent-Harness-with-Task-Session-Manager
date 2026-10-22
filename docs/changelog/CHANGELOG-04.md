@@ -1,10 +1,17 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-22 17:59 IST — 0.16.0-local10 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local10: 0.16.0-local9 plus upstream round 17 (phone app fixes, chats stream to the phone as they are written), L-179 (background git reads capped, clicked git actions skip the queue) and L-178 (saves flush to disk less often; watch it, see the L-178 entry).
+- Why: User asked to commit, push and build after round 17, L-178 and L-179.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local10-upstream-r17-git-cap-sqlite-normal_x64.exe` (15,135,196 bytes, SHA-256 1CD82E0EE35731F5F5EA5E955AF56727C27CD1D35D1D006BB707E17B2930DEBE, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 8c23f7d6
+- Verified: build ✅ (npm run build:windows); tsc, vitest and cargo test as recorded in the three entries below (same code); desktop and phone checks manual
 ## 2026-10-22 17:39 IST — Background git reads capped; clicked git actions skip the queue (L-179)
 - Type: feature
 - What: Branch labels, status checks, diff stats and other background git reads now run at most four at a time (a fetch at most two), instead of starting as many git processes as the app asks for. Anything you click (stage, commit, checkout, push, pull, discard) never waits for that queue, so it starts straight away even during a burst.
 - Why: PLANNED "Soon" item (pattern 5 from the T3/Orca research); user asked to do it with the round-17 intake.
 - Files: [git_admission.rs](../../src-tauri/src/git_admission.rs) (new), [fs.rs](../../src-tauri/src/fs.rs) (`git_output`, `git_stdout_within`, `git_output_capped`, test `a_clicked_git_action_skips_a_full_read_lane`), [worktrees.rs](../../src-tauri/src/worktrees.rs) (`git_worktrees_blocking`), [lib.rs](../../src-tauri/src/lib.rs)
-- Commit: uncommitted
+- Commit: 08055637
 - Verified: cargo fmt ✅ clippy ❌ (7 pre-existing only, none new) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16); desktop check manual
 ## 2026-10-22 17:39 IST — Saves flush to disk less often (L-178)
 - Type: feature
@@ -14,7 +21,7 @@
 - How to watch: open the Performance log (Ctrl+Alt+Shift+P, L-161). `perf_ping_db` and the timings of save-type backend calls should be the same or lower than before; spikes that line up with saves mean the change did not help. After any power cut or Windows crash, check the last chat and recent settings are still there, and note it here if anything was lost.
 - How to revert: in `SessionStore::open` (`src-tauri/src/session_store.rs`) delete `PRAGMA synchronous = NORMAL;` from the `execute_batch` string (SQLite falls back to FULL), and change the test `writer_connection_uses_wal_with_normal_sync` to expect 2. No data migration: the setting is per connection, so the next app start uses FULL with the same file.
 - Files: [session_store.rs](../../src-tauri/src/session_store.rs) (`SessionStore::open`, test `writer_connection_uses_wal_with_normal_sync`)
-- Commit: uncommitted
+- Commit: 8c23f7d6
 - Decision: durability for speed: accept losing the last few saves on a power cut or OS crash, in return for no forced disk flush per save. Kept in LOCAL-FEATURES L-178 (no DECISIONS.md in this repo); follow-up to watch it in PLANNED.
 - Verified: cargo fmt ✅ clippy ❌ (7 pre-existing only, none new) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16)
 ## 2026-10-22 17:39 IST — Upstream round 17: main through 74b8139c
@@ -22,7 +29,7 @@
 - What: Brought in upstream's 14 commits after 0.16.0: Android fixes for the phone app, and chats now stream to the phone as they are written. No conflicts; no fork feature touched. Also re-formatted two fork Rust files so the format check passes again. Local `mobile/app.json` (never committed): user chose upstream's version (its blocked audio/foreground-service permissions win over the local WIP list); only the local Android `package` id was added back. The old local file is kept in `git stash` as "local mobile/app.json before round 17".
 - Why: User asked to bring the new upstream changes in, keeping every fork change.
 - Files: 43 upstream paths (mostly `mobile/`; desktop side `crates/mobile-link`, `src-tauri/src/mobile_access.rs`, `src/features/mobile/`); fmt only: `src-tauri/src/interactive_delivery.rs`, `src-tauri/src/mcp.rs`. Record: [upstream-merge-2026-10-22-017.md](../notes/archive/upstream-merge-2026-10-22-017.md)
-- Commit: uncommitted
+- Commit: b78f2b74
 - Verified: tsc ✅ vitest ✅ (7,680 passed, 2 skipped) build ✅ cargo fmt ✅ clippy ❌ (7 pre-existing, none in merged code) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16); desktop/phone check manual
 ## 2026-10-22 03:38 IST — 0.16.0-local9 Windows build
 - Type: chore
