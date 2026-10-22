@@ -1,3 +1,4 @@
+import { requestSessionMetadataEdit } from "../../features/sessions/model/sessionMetadata";
 import {
   loadSessionOpeningBehavior,
   newTabClick,
@@ -211,6 +212,11 @@ import {
 import { FileTree } from "../../features/files/ui/FileTree";
 import { HarnessIcon } from "../../features/sessions/ui/HarnessIcon";
 import { SessionCardPreview } from "../../features/sessions/ui/SessionCardPreview";
+import { useSessionMetadataHoverCard } from "../../features/sessions/ui/SessionMetadataHoverCard";
+import {
+  useSessionHoverMetadata,
+  useSessionLabel,
+} from "../../features/sessions/ui/useSessionMetadata";
 import { LiveAgentsPreview } from "../../features/sessions/ui/LiveAgentsPreview";
 import { ProjectRail } from "./ProjectRail";
 import type { ProviderRailEntry } from "./ProviderRail";
@@ -1684,6 +1690,16 @@ function SidebarComponent({
       ? [
           {
             kind: "item" as const,
+            id: "session-metadata",
+            label: "Session metadata…",
+            description: "Label and notes",
+          },
+        ]
+      : []),
+    ...(!multipleMenuSessions
+      ? [
+          {
+            kind: "item" as const,
             id: "copy-session-id",
             label: "Copy session ID",
             submenu: [
@@ -1839,6 +1855,10 @@ function SidebarComponent({
     }
     if (id === "rename") {
       setRenamingSessionId(sessionId);
+      return;
+    }
+    if (id === "session-metadata") {
+      requestSessionMetadataEdit(sessionId, menuSessions[0]?.title ?? "");
       return;
     }
     if (id === "copy-harness-session-id" || id === "copy-monocode-session-id") {
@@ -5399,7 +5419,17 @@ export const SessionCard = memo(function SessionCard({
   const orchestrationDone =
     orchestration?.tasks.filter((task) => task.status === "completed").length ??
     0;
-  const title = sessionDisplayTitle(session.title, session.harness);
+  // Fork (L-181): a saved label stands in for the title, in accent.
+  const chatTitle = sessionDisplayTitle(session.title, session.harness);
+  const sessionLabel = useSessionLabel(session.id);
+  const title = sessionLabel ?? chatTitle;
+  const titleTone = sessionLabel ? "session-label-text" : "text-content";
+  const hoverMetadata = useSessionHoverMetadata(session.id);
+  const metadataHover = useSessionMetadataHoverCard({
+    sessionId: dense ? null : session.id,
+    title: chatTitle,
+    side: "right",
+  });
   const gitLabel = session.worktreeRemoved
     ? NO_BRANCH_LABEL
     : formatGitLabel(session.repo, session.branch);
@@ -5804,11 +5834,13 @@ export const SessionCard = memo(function SessionCard({
                   className={`line-clamp-1 min-w-0 flex-1 leading-tight ${
                     nested
                       ? `text-[13px] ${
-                          isActive || isSelected
-                            ? "text-content"
-                            : "text-content/55 group-hover:text-content/80"
+                          sessionLabel
+                            ? "session-label-text"
+                            : isActive || isSelected
+                              ? "text-content"
+                              : "text-content/55 group-hover:text-content/80"
                         }`
-                      : "text-sm font-medium text-content"
+                      : `text-sm font-medium ${titleTone}`
                   }`}
                 />
                 <span className="flex shrink-0 items-center gap-1">
@@ -5946,7 +5978,7 @@ export const SessionCard = memo(function SessionCard({
                 ) : null}
                 <ParticleText
                   text={title}
-                  className="line-clamp-1 text-[13px] font-semibold leading-snug text-content"
+                  className={`line-clamp-1 text-[13px] font-semibold leading-snug ${titleTone}`}
                 />
                 {headerRow ? null : (
                   <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
@@ -6085,6 +6117,7 @@ export const SessionCard = memo(function SessionCard({
             id={previewId}
             session={session}
             status={status}
+            metadata={hoverMetadata}
             onClose={closePreview}
             onPointerEnter={cancelPreviewClose}
             onPointerLeave={schedulePreviewClose}
@@ -6170,7 +6203,8 @@ export const SessionCard = memo(function SessionCard({
   ) : (
     <div className="group relative">
       <div
-        title={title}
+        title={metadataHover.active ? undefined : title}
+        aria-describedby={metadataHover.anchorProps["aria-describedby"]}
         data-session-card={session.id}
         data-orchestration-card={orchestration ? "true" : undefined}
         data-session-selected={isSelected ? "true" : undefined}
@@ -6187,9 +6221,20 @@ export const SessionCard = memo(function SessionCard({
             : undefined
         }
         data-tauri-drag-region="false"
-        onPointerDown={onPointerDown}
-        onPointerEnter={schedulePrefetch}
-        onPointerLeave={cancelScheduledPrefetch}
+        onPointerDown={(event) => {
+          metadataHover.anchorProps.onPointerDown();
+          onPointerDown(event);
+        }}
+        onPointerEnter={(event) => {
+          metadataHover.anchorProps.onPointerEnter(event);
+          schedulePrefetch();
+        }}
+        onPointerLeave={() => {
+          metadataHover.anchorProps.onPointerLeave();
+          cancelScheduledPrefetch();
+        }}
+        onFocus={metadataHover.anchorProps.onFocus}
+        onBlur={metadataHover.anchorProps.onBlur}
         onClick={(event) => {
           if (performance.now() < skipClickUntil.current) return;
           onSelect(session.id, event);
@@ -6249,7 +6294,7 @@ export const SessionCard = memo(function SessionCard({
             ) : null}
             <ParticleText
               text={title}
-              className="line-clamp-1 text-[13px] font-semibold leading-snug text-content"
+              className={`line-clamp-1 text-[13px] font-semibold leading-snug ${titleTone}`}
             />
             <span className="ml-auto flex shrink-0 items-center gap-1.5">
               {linkedUpdateDot}
@@ -6380,6 +6425,7 @@ export const SessionCard = memo(function SessionCard({
           </span>
         ) : null}
       </div>
+      {metadataHover.card}
       {onDismissWorking ? (
         <button
           type="button"

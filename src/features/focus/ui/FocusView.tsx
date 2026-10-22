@@ -37,6 +37,11 @@ import {
   sessionDisplayTitle,
   type Session,
 } from "../../sessions/model/session";
+import { SessionMetadataHover } from "../../sessions/ui/SessionMetadataHoverCard";
+import {
+  useSessionMetadataMap,
+  useShowSessionLabels,
+} from "../../sessions/ui/useSessionMetadata";
 import {
   focusColumnCap,
   focusGridHas,
@@ -275,6 +280,11 @@ export function FocusView({
     [sessions],
   );
   const cards = useMemo(() => newestBoardCards(boardCards), [boardCards]);
+  // Fork (L-181): a saved label stands in for a chat's title, in accent.
+  const metadataById = useSessionMetadataMap();
+  const showLabels = useShowSessionLabels();
+  const labelOf = (id: string): string | null =>
+    (showLabels && metadataById.get(id)?.label) || null;
   const [grouped, setGrouped] = useState(loadFocusGroupByProject);
   const groupedRef = useRef(grouped);
   groupedRef.current = grouped;
@@ -355,7 +365,7 @@ export function FocusView({
     const cwd = session?.cwd ?? cards.get(id)?.cwd;
     return {
       id,
-      label: paneTitle(session, cards.get(id)),
+      label: labelOf(id) ?? paneTitle(session, cards.get(id)),
       detail: cwd ? projectName(cwd) : undefined,
       icon: cwd ? <ProjectIcon cwd={cwd} {...marks} /> : undefined,
       group: "Not shown",
@@ -436,20 +446,29 @@ export function FocusView({
   const chatTabs: FocusTab[] = (activeGroup?.ids ?? []).map((id) => {
     const session = byId.get(id);
     const card = cards.get(id);
-    const title = paneTitle(session, card);
+    const chatTitle = paneTitle(session, card);
+    const label = labelOf(id);
+    const title = label ?? chatTitle;
     const tag = tagOf(id);
+    const tone = label ? " session-label-text" : "";
     return {
       id,
       closeLabel: `Remove ${title} from Focus`,
       title: tag ? `${title}, ${tag.label}` : title,
+      session: { id, title: chatTitle },
       content: (
         <>
           {tag?.label === "Working…" ? (
-            <Shimmer duration={1.4} className={`${TAB_TEXT} min-w-0 truncate`}>
+            <Shimmer
+              duration={1.4}
+              className={`${TAB_TEXT} min-w-0 truncate${tone}`}
+            >
               {title}
             </Shimmer>
           ) : (
-            <span className={`${TAB_TEXT} min-w-0 truncate`}>{title}</span>
+            <span className={`${TAB_TEXT} min-w-0 truncate${tone}`}>
+              {title}
+            </span>
           )}
           {tag ? (
             <span className="flex shrink-0 text-[11px]">
@@ -654,7 +673,9 @@ export function FocusView({
     column.map((id, rowIndex) => {
       const session = byId.get(id);
       const card = cards.get(id);
-      const title = paneTitle(session, card);
+      const chatTitle = paneTitle(session, card);
+      const label = labelOf(id);
+      const title = label ?? chatTitle;
       const focused = id === focusedId;
       const tag = session ? focusPaneTag(session, card) : null;
       const cwd = session?.cwd ?? card?.cwd;
@@ -691,13 +712,22 @@ export function FocusView({
                 <ProjectMark cwd={cwd} {...marks} />
               </span>
             ) : null}
-            <span
-              className={`min-w-0 flex-1 truncate ${
-                focused ? "text-content" : "text-content/65"
-              }`}
-            >
-              {title}
-            </span>
+            <SessionMetadataHover sessionId={id} title={chatTitle}>
+              {(hover) => (
+                <span
+                  {...hover.anchorProps}
+                  className={`min-w-0 flex-1 truncate ${
+                    label
+                      ? "session-label-text"
+                      : focused
+                        ? "text-content"
+                        : "text-content/65"
+                  }`}
+                >
+                  {title}
+                </span>
+              )}
+            </SessionMetadataHover>
             {tag ? (
               <span className="flex shrink-0 text-[11px]">
                 <BoardCardTag

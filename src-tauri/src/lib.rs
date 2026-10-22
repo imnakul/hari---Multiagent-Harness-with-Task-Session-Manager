@@ -66,6 +66,7 @@ mod resources;
 mod search;
 mod session_board;
 mod session_import;
+mod session_metadata;
 mod session_store;
 mod skills;
 pub mod ssh_askpass;
@@ -442,6 +443,8 @@ pub fn run() {
             prompts::prompts_upsert,
             prompts::prompts_delete,
             prompts::prompts_mark_used,
+            session_metadata::session_metadata_list,
+            session_metadata::session_metadata_upsert,
             reminders::reminder_list,
             reminders::reminder_set,
             reminders::reminder_clear,

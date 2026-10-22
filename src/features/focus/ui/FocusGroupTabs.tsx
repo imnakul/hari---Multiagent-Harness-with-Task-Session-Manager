@@ -1,4 +1,5 @@
 import { X } from "../../../shared/ui/icons";
+import { SessionMetadataHover } from "../../sessions/ui/SessionMetadataHoverCard";
 import {
   useRef,
   useState,
@@ -15,6 +16,11 @@ export type FocusTab = {
   title: string;
   /** Name of the tab's hover close button, when the row can close tabs. */
   closeLabel?: string;
+  /**
+   * The chat a tab shows, with its own title (L-181): its hover shows the
+   * chat's metadata when "Show metadata on hover" is on.
+   */
+  session?: { id: string; title: string };
 };
 
 /** Pointer travel before a press on a tab becomes a drag. */
@@ -119,7 +125,10 @@ export function FocusTabRow({
     onSelect(tab.id);
   };
 
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>, index: number) => {
+  const onPointerDown = (
+    event: PointerEvent<HTMLDivElement>,
+    index: number,
+  ) => {
     if (!onReorder || event.button !== 0 || tabs.length < 2) return;
     if (
       event.target instanceof Element &&
@@ -127,7 +136,8 @@ export function FocusTabRow({
     )
       return;
     const wrappers = [
-      ...(rowRef.current?.querySelectorAll<HTMLElement>("[data-focus-tab]") ?? []),
+      ...(rowRef.current?.querySelectorAll<HTMLElement>("[data-focus-tab]") ??
+        []),
     ];
     const rects = wrappers.map((el) => el.getBoundingClientRect());
     pressRef.current = {
@@ -171,8 +181,10 @@ export function FocusTabRow({
   const shiftOf = (index: number): number => {
     if (!drag || index === drag.from) return 0;
     const step = drag.width + TAB_GAP_PX;
-    if (drag.from < drag.to && index > drag.from && index <= drag.to) return -step;
-    if (drag.from > drag.to && index >= drag.to && index < drag.from) return step;
+    if (drag.from < drag.to && index > drag.from && index <= drag.to)
+      return -step;
+    if (drag.from > drag.to && index >= drag.to && index < drag.from)
+      return step;
     return 0;
   };
 
@@ -213,35 +225,43 @@ export function FocusTabRow({
                   : ""
             }`}
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-controls={controls}
-              tabIndex={tab.id === tabStop ? 0 : -1}
-              title={tab.title}
-              aria-label={tab.title}
-              data-tauri-drag-region="false"
-              onClick={() => onSelect(tab.id)}
-              className={`flex h-6 min-w-0 flex-1 items-center rounded-md px-2 text-[12px] transition-[background-color,color,scale] duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-96 motion-reduce:active:scale-100 ${
-                dragging
-                  ? "bg-content/10 text-content shadow-[0_1px_4px_rgb(0_0_0/0.25)]"
-                  : selected
-                    ? "bg-content/8 text-content"
-                    : "text-content/60 hover:bg-content/5 hover:text-content/85"
-              }`}
+            <SessionMetadataHover
+              sessionId={tab.session?.id}
+              title={tab.session?.title ?? tab.title}
             >
-              {/* The tab's end fades under the close button while it shows. */}
-              <span
-                className={`flex min-w-0 items-center gap-1.5${
-                  closable
-                    ? " group-focus-within/tab:[mask-image:linear-gradient(to_left,transparent_18px,black_30px)] group-hover/tab:[mask-image:linear-gradient(to_left,transparent_18px,black_30px)]"
-                    : ""
-                }`}
-              >
-                {tab.content}
-              </span>
-            </button>
+              {(hover) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={controls}
+                  tabIndex={tab.id === tabStop ? 0 : -1}
+                  title={hover.active ? undefined : tab.title}
+                  aria-label={tab.title}
+                  {...hover.anchorProps}
+                  data-tauri-drag-region="false"
+                  onClick={() => onSelect(tab.id)}
+                  className={`flex h-6 min-w-0 flex-1 items-center rounded-md px-2 text-[12px] transition-[background-color,color,scale] duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 active:scale-96 motion-reduce:active:scale-100 ${
+                    dragging
+                      ? "bg-content/10 text-content shadow-[0_1px_4px_rgb(0_0_0/0.25)]"
+                      : selected
+                        ? "bg-content/8 text-content"
+                        : "text-content/60 hover:bg-content/5 hover:text-content/85"
+                  }`}
+                >
+                  {/* The tab's end fades under the close button while it shows. */}
+                  <span
+                    className={`flex min-w-0 items-center gap-1.5${
+                      closable
+                        ? " group-focus-within/tab:[mask-image:linear-gradient(to_left,transparent_18px,black_30px)] group-hover/tab:[mask-image:linear-gradient(to_left,transparent_18px,black_30px)]"
+                        : ""
+                    }`}
+                  >
+                    {tab.content}
+                  </span>
+                </button>
+              )}
+            </SessionMetadataHover>
             {closable ? (
               <button
                 type="button"

@@ -1,3 +1,4 @@
+import { requestSessionMetadataEdit } from "../model/sessionMetadata";
 import {
   Fragment,
   useEffect,
@@ -165,6 +166,12 @@ export function ChatPanel({
           },
         ]
       : []),
+    {
+      kind: "item" as const,
+      id: "session-metadata",
+      label: "Session metadata…",
+      description: "Label and notes",
+    },
     { kind: "sep" as const },
     {
       kind: "item" as const,
@@ -211,6 +218,10 @@ export function ChatPanel({
     }
     if (id === "rename") {
       setRenamingId(sessionId);
+      return;
+    }
+    if (id === "session-metadata") {
+      requestSessionMetadataEdit(sessionId, menuChat?.title ?? "");
       return;
     }
     if (id === "folder-new") {

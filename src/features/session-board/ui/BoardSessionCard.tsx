@@ -18,6 +18,8 @@ import {
   type HarnessId,
 } from "../../sessions/model/session";
 import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
+import { useSessionMetadataHoverCard } from "../../sessions/ui/SessionMetadataHoverCard";
+import { useSessionLabel } from "../../sessions/ui/useSessionMetadata";
 import { formatRelative } from "../../sessions/ui/SessionCard";
 import { TerminalSpinner } from "../../sessions/ui/TerminalSpinner";
 import {
@@ -80,7 +82,16 @@ export function BoardSessionCard({
   const harness = isHarnessId(card.harness) ? card.harness : null;
   // Same labels as the session list: no "Provider · " title prefix, and the
   // model's display name rather than its raw provider id.
-  const title = harness ? sessionDisplayTitle(card.title, harness) : card.title;
+  const chatTitle = harness
+    ? sessionDisplayTitle(card.title, harness)
+    : card.title;
+  // Fork (L-181): a saved label stands in for the title, in accent.
+  const sessionLabel = useSessionLabel(card.sessionId);
+  const title = sessionLabel ?? chatTitle;
+  const metadataHover = useSessionMetadataHoverCard({
+    sessionId: card.sessionId,
+    title: chatTitle,
+  });
   const model = boardModelLabel(harness, card.model);
   const draft = isDraftTodo(card);
   const finished = lane === "done";
@@ -154,12 +165,16 @@ export function BoardSessionCard({
         <button
           type="button"
           data-session-card={card.sessionId}
-          title={title}
+          title={metadataHover.active ? undefined : title}
+          {...metadataHover.anchorProps}
           onClick={(event) => onOpen(newTabClick(event))}
-          className="line-clamp-2 min-w-0 flex-1 rounded-sm text-left text-[13px] font-medium leading-[18px] text-content outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+          className={`line-clamp-2 min-w-0 flex-1 rounded-sm text-left text-[13px] font-medium leading-[18px] outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
+            sessionLabel ? "session-label-text" : "text-content"
+          }`}
         >
           {title}
         </button>
+        {metadataHover.card}
         {/* Time and actions share one grid cell: the slot keeps its width. */}
         <div
           className={`-my-0.5 grid shrink-0 justify-items-end ${

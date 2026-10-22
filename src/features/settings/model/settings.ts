@@ -276,6 +276,18 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     label: "Notes",
     keywords: "notebook markdown rail scratchpad",
   },
+  {
+    id: "session-labels",
+    section: "general",
+    label: "Show label where available",
+    keywords: "session metadata chat label title rename accent cards tabs",
+  },
+  {
+    id: "session-metadata-hover",
+    section: "general",
+    label: "Show metadata on hover",
+    keywords: "session metadata label notes hover tooltip preview cards tabs",
+  },
   ...(IS_MAC || IS_WIN
     ? [
         {
@@ -1676,6 +1688,80 @@ export function subscribeCompactModelLabels(
     window.removeEventListener("storage", onStorage);
   };
 }
+
+/**
+ * A boolean stored as "1"/"0" under `key`, with a same-window change event
+ * and cross-window `storage` events, for `useSyncExternalStore`.
+ */
+function storedToggle(
+  key: string,
+  fallback: boolean,
+  changeEvent: string,
+): {
+  load: () => boolean;
+  save: (value: boolean) => void;
+  subscribe: (onStoreChange: () => void) => () => void;
+} {
+  return {
+    load: () => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw == null) return fallback;
+        return raw === "1" || raw === "true";
+      } catch {
+        return fallback;
+      }
+    },
+    save: (value) => {
+      try {
+        localStorage.setItem(key, value ? "1" : "0");
+      } catch {
+        // private mode / quota
+      }
+      if (typeof window === "undefined") return;
+      window.dispatchEvent(new CustomEvent<boolean>(changeEvent, { detail: value }));
+    },
+    subscribe: (onStoreChange) => {
+      if (typeof window === "undefined") return () => {};
+      const onStorage = (event: StorageEvent): void => {
+        if (event.key === key) onStoreChange();
+      };
+      window.addEventListener(changeEvent, onStoreChange);
+      window.addEventListener("storage", onStorage);
+      return () => {
+        window.removeEventListener(changeEvent, onStoreChange);
+        window.removeEventListener("storage", onStorage);
+      };
+    },
+  };
+}
+
+/**
+ * Session metadata (L-181), Settings → General: a chat's label replaces its
+ * title on cards and tabs. On by default; chats without a label are unchanged.
+ */
+const sessionLabelsSetting = storedToggle(
+  "monocode.sessionLabels",
+  true,
+  "monocode:session-labels-change",
+);
+export const loadSessionLabels = sessionLabelsSetting.load;
+export const saveSessionLabels = sessionLabelsSetting.save;
+export const subscribeSessionLabels = sessionLabelsSetting.subscribe;
+
+/**
+ * Session metadata (L-181): hovering a chat card or tab shows its label and
+ * notes instead of the usual details. On by default; chats without metadata
+ * keep the usual hover.
+ */
+const sessionMetadataHoverSetting = storedToggle(
+  "monocode.sessionMetadataHover",
+  true,
+  "monocode:session-metadata-hover-change",
+);
+export const loadSessionMetadataHover = sessionMetadataHoverSetting.load;
+export const saveSessionMetadataHover = sessionMetadataHoverSetting.save;
+export const subscribeSessionMetadataHover = sessionMetadataHoverSetting.subscribe;
 
 const GPU_TERMINAL_RENDERING_KEY = "monocode.gpuTerminalRendering";
 const GPU_TERMINAL_RENDERING_EVENT = "monocode:gpu-terminal-rendering-change";

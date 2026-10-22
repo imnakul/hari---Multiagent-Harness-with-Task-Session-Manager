@@ -6,7 +6,9 @@ import { NO_BRANCH_LABEL } from "../../source-control/model/worktrees";
 import type { SessionSummary } from "../data/sessionStore";
 import { resolveModel } from "../model/models";
 import { sessionDisplayTitle } from "../model/session";
+import type { SessionMetadata } from "../model/sessionMetadata";
 import { HarnessIcon } from "./HarnessIcon";
+import { SessionMetadataBody } from "./SessionMetadataHoverCard";
 
 export function SessionCardPreview({
   anchor,
@@ -16,11 +18,17 @@ export function SessionCardPreview({
   onClose,
   onPointerEnter,
   onPointerLeave,
+  metadata = null,
 }: {
   anchor: HTMLElement;
   id: string;
   session: SessionSummary;
   status: ReactNode;
+  /**
+   * Fork (L-181): with "Show metadata on hover" on and metadata saved, the
+   * label and notes replace the branch and folder details.
+   */
+  metadata?: SessionMetadata | null;
   onClose: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -53,9 +61,6 @@ export function SessionCardPreview({
     };
   }, [anchor, onClose, session.id]);
 
-  const additions = session.additions ?? 0;
-  const deletions = session.deletions ?? 0;
-
   return (
     <Popover
       anchor={anchor}
@@ -84,6 +89,29 @@ export function SessionCardPreview({
         </span>
         {status}
       </div>
+      {metadata ? (
+        <div className="mt-1.5">
+          <SessionMetadataBody
+            metadata={metadata}
+            title={sessionDisplayTitle(session.title, session.harness)}
+          />
+        </div>
+      ) : (
+        <SessionCardDetails session={session} />
+      )}
+    </Popover>
+  );
+}
+
+function SessionCardDetails({
+  session,
+}: {
+  session: SessionSummary;
+}): ReactNode {
+  const additions = session.additions ?? 0;
+  const deletions = session.deletions ?? 0;
+  return (
+    <>
       <p className="mt-1.5 break-words text-[13px] font-semibold leading-5 text-content">
         {sessionDisplayTitle(session.title, session.harness)}
       </p>
@@ -139,7 +167,7 @@ export function SessionCardPreview({
           </Detail>
         ) : null}
       </dl>
-    </Popover>
+    </>
   );
 }
 

@@ -19,6 +19,8 @@ import {
 } from "./useCompactModelLabels";
 import { paneDropFromPoint, setExternalPaneDrop } from "../../workspace/model/paneDrop";
 import { sessionDisplayTitle } from "../model/session";
+import { useSessionMetadataHoverCard } from "./SessionMetadataHoverCard";
+import { useSessionLabel } from "./useSessionMetadata";
 import type { SessionListDropTarget } from "../model/sessionFolders";
 import type { SessionSummary } from "../data/sessionStore";
 
@@ -90,7 +92,15 @@ export function SessionCard({
 }) {
   const skipClickUntil = useRef(0);
   const [dragging, setDragging] = useState(false);
-  const title = sessionDisplayTitle(session.title, session.harness);
+  // Fork (L-181): a saved label stands in for the title, in accent.
+  const chatTitle = sessionDisplayTitle(session.title, session.harness);
+  const sessionLabel = useSessionLabel(session.id);
+  const title = sessionLabel ?? chatTitle;
+  const metadataHover = useSessionMetadataHoverCard({
+    sessionId: session.id,
+    title: chatTitle,
+    side: "right",
+  });
   const gitLabel = formatGitLabel(session.repo, session.branch);
   const time = formatRelative(session.updatedAt, now);
   const showCompactModel = useCompactModelLabels();
@@ -252,12 +262,22 @@ export function SessionCard({
       data-shared-hover-preserve={
         isActive || needsApproval || dropTarget ? "" : undefined
       }
-      title={title}
+      title={metadataHover.active ? undefined : title}
       aria-current={isActive ? "true" : undefined}
+      aria-describedby={metadataHover.anchorProps["aria-describedby"]}
       data-session-card={session.id}
       data-tauri-drag-region="false"
-      onPointerDown={onPointerDown}
-      onPointerEnter={() => onPrefetch?.(session.id)}
+      onPointerDown={(event) => {
+        metadataHover.anchorProps.onPointerDown();
+        onPointerDown(event);
+      }}
+      onPointerEnter={(event) => {
+        metadataHover.anchorProps.onPointerEnter(event);
+        onPrefetch?.(session.id);
+      }}
+      onPointerLeave={metadataHover.anchorProps.onPointerLeave}
+      onFocus={metadataHover.anchorProps.onFocus}
+      onBlur={metadataHover.anchorProps.onBlur}
       onClick={(event) => {
         if (performance.now() < skipClickUntil.current) return;
         if (event.altKey) onSelect(session.id, { altKey: true });
@@ -307,7 +327,9 @@ export function SessionCard({
         ) : null}
         <ParticleText
           text={title}
-          className="line-clamp-1 text-[13px] font-semibold leading-snug text-content"
+          className={`line-clamp-1 text-[13px] font-semibold leading-snug ${
+            sessionLabel ? "session-label-text" : "text-content"
+          }`}
         />
         {compact ? status : null}
       </span>
@@ -344,6 +366,7 @@ export function SessionCard({
         </span>
       </span>
     </button>
+      {metadataHover.card}
       {onArchive ? (
         <button
           type="button"

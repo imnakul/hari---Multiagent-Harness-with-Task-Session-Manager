@@ -461,6 +461,10 @@ import {
   loadLiveAgentsEnabled,
   loadModelControls,
   loadNotesEnabled,
+  loadSessionLabels,
+  loadSessionMetadataHover,
+  saveSessionLabels,
+  saveSessionMetadataHover,
   loadAllAccountsUsage,
   loadRemainingQuota,
   loadMonosEnabled,
@@ -1188,6 +1192,10 @@ function GeneralPage({
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermission>(cachedNotificationPermission);
   const [notesEnabled, setNotesEnabled] = useState(loadNotesEnabled);
+  const [sessionLabels, setSessionLabels] = useState(loadSessionLabels);
+  const [sessionMetadataHover, setSessionMetadataHover] = useState(
+    loadSessionMetadataHover,
+  );
   const [fileOpeningBehavior, setFileOpeningBehavior] = useState(
     loadFileOpeningBehavior,
   );
@@ -1239,6 +1247,16 @@ function GeneralPage({
   const onNotesEnabled = (next: boolean) => {
     saveNotesEnabled(next);
     setNotesEnabled(next);
+  };
+
+  const onSessionLabels = (next: boolean): void => {
+    saveSessionLabels(next);
+    setSessionLabels(next);
+  };
+
+  const onSessionMetadataHover = (next: boolean): void => {
+    saveSessionMetadataHover(next);
+    setSessionMetadataHover(next);
   };
 
   const onQuickComposerEnabled = (next: boolean) => {
@@ -1387,6 +1405,28 @@ function GeneralPage({
           description="A global markdown notebook on the project rail. Save a finished turn from the transcript, then mention it later with @note or add it to chat."
         >
           <Toggle label="Notes" on={notesEnabled} onChange={onNotesEnabled} />
+        </Row>
+        <Row
+          id="session-labels"
+          label="Show label where available"
+          description="When a chat has a label (right-click a chat → Session metadata…), show it in accent colour in place of the chat title on session cards and tabs."
+        >
+          <Toggle
+            label="Show label where available"
+            on={sessionLabels}
+            onChange={onSessionLabels}
+          />
+        </Row>
+        <Row
+          id="session-metadata-hover"
+          label="Show metadata on hover"
+          description="Hovering a chat card or tab shows its label and notes instead of the branch and folder details. Chats without metadata keep the usual hover."
+        >
+          <Toggle
+            label="Show metadata on hover"
+            on={sessionMetadataHover}
+            onChange={onSessionMetadataHover}
+          />
         </Row>
         {(IS_MAC || IS_WIN) && (
           <Row

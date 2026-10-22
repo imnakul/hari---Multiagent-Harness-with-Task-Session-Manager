@@ -1968,6 +1968,11 @@ html.theme-light .orchestrator-constellation {
   color: var(--user-accent-color, var(--color-accent));
 }
 
+/* Fork (L-181): a chat's saved label, in the accent chosen in Appearance. */
+.session-label-text {
+  color: var(--user-accent-color, var(--color-accent));
+}
+
 .edit-last-turn-button {
   color: var(--user-accent-color, var(--color-accent));
   background: color-mix(

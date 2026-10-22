@@ -1,3 +1,6 @@
+import { requestSessionMetadataEdit } from "../../features/sessions/model/sessionMetadata";
+import { useSessionMetadataHoverCard } from "../../features/sessions/ui/SessionMetadataHoverCard";
+import { useSessionLabel } from "../../features/sessions/ui/useSessionMetadata";
 import {
   CheckCircle,
   ChevronLeft,
@@ -91,6 +94,8 @@ export type Tab = {
   project: string;
   /** Focused conversation title; empty for a fresh session. */
   title: string;
+  /** The focused conversation's id, for its label and metadata (L-181). */
+  sessionId?: string;
   /** Other conversation titles in this tab, focused session omitted. */
   more: string[];
   sessionCount: number;
@@ -388,7 +393,18 @@ function TitleTabItem({
   onContextMenu: (id: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   itemRef?: (el: HTMLDivElement | null) => void;
 }) {
-  const { headline, meta, tooltip } = tabCopy(tab);
+  // Fork (L-181): the focused chat's label stands in for its title, in
+  // accent, and a hover can show its metadata. Not for app views or monos.
+  const sessionId = tab.appView || tab.mono ? undefined : tab.sessionId;
+  const sessionLabel = useSessionLabel(sessionId);
+  const metadataHover = useSessionMetadataHoverCard({
+    sessionId,
+    title: tab.title,
+  });
+  const { headline, meta, tooltip } = tabCopy(
+    sessionLabel ? { ...tab, title: sessionLabel } : tab,
+  );
+  const labelled = sessionLabel !== null && headline === sessionLabel;
   const fileIcon = tab.files[0];
   const AppViewIcon = tab.appView ? APP_VIEW_ICONS[tab.appView] : null;
   const accessibleTooltip =
@@ -428,8 +444,9 @@ function TitleTabItem({
     >
       <button
         type="button"
-        title={accessibleTooltip}
+        title={metadataHover.active ? undefined : accessibleTooltip}
         aria-label={accessibleTooltip}
+        {...metadataHover.anchorProps}
         data-tauri-drag-region="false"
         data-title-tab
         data-title-tab-active={active || undefined}
@@ -481,6 +498,8 @@ function TitleTabItem({
           <span className="flex min-w-0 items-center gap-1">
             <TabLabel
               className={`leading-tight ${tab.previewFileId ? "italic" : ""} ${
+                labelled ? "session-label-text" : ""
+              } ${
                 meta
                   ? "text-[13px] @min-[11rem]:text-[10px] @min-[11rem]:font-medium"
                   : "text-[13px]"
@@ -520,6 +539,7 @@ function TitleTabItem({
           <X className="size-3" strokeWidth={1.75} />
         </button>
       ) : null}
+      {metadataHover.card}
     </div>
   );
 }
@@ -1027,6 +1047,20 @@ function TitleBarComponent({
               },
             ]
           : []),
+        ...(contextTab.sessionId
+          ? [
+              { kind: "sep" as const },
+              {
+                kind: "item" as const,
+                id: "session-metadata",
+                label: "Session metadata…",
+                description:
+                  contextTab.sessionCount > 1
+                    ? "Label and notes of the focused conversation"
+                    : "Label and notes",
+              },
+            ]
+          : []),
         ...(contextTab.sessionCount > 0 && (onArchiveTab || onDeleteTab)
           ? [
               { kind: "sep" as const },
@@ -1067,6 +1101,11 @@ function TitleBarComponent({
     setTabMenu(null);
     if (id === "close") {
       onClose(contextTab.id);
+      return;
+    }
+    if (id === "session-metadata") {
+      if (contextTab.sessionId)
+        requestSessionMetadataEdit(contextTab.sessionId, contextTab.title);
       return;
     }
     if (id === "archive") {

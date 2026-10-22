@@ -1335,6 +1335,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     crate::reminders::ensure_table(conn)?;
     crate::automations::ensure_tables(conn)?;
     crate::prompts::ensure_table(conn)?;
+    crate::session_metadata::ensure_table(conn)?;
     crate::provider_sessions::ensure_table(conn)?;
     ensure_orchestration_history(conn)?;
     crate::mono_transcript::ensure_tables(conn)?;
@@ -2540,6 +2541,8 @@ fn delete_session(conn: &Connection, session_id: &str) -> rusqlite::Result<()> {
         "DELETE FROM orchestration_workers WHERE session_id = ?1 OR lead_id = ?1",
         [session_id],
     )?;
+    // Fork (L-181): the chat's label and notes go with it.
+    crate::session_metadata::delete(&tx, session_id)?;
     tx.execute("DELETE FROM sessions WHERE id = ?1", [session_id])?;
     tx.commit()
 }
@@ -3547,6 +3550,28 @@ mod tests {
         delete_session(&conn, "s1").unwrap();
         assert!(get_session(&conn, "s1").unwrap().is_none());
         assert!(list_by_project(&conn, "/tmp/a").unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_removes_session_metadata() {
+        let store = SessionStore::open_in_memory().unwrap();
+        let conn = store.conn.lock().unwrap();
+        upsert_session(&conn, &sample("s1", "/tmp/a", "First")).unwrap();
+        conn.execute(
+            "INSERT INTO session_metadata (session_id, label, notes, updated_at)
+             VALUES ('s1', 'Label', '', 1), ('s2', 'Other', '', 1)",
+            [],
+        )
+        .unwrap();
+        delete_session(&conn, "s1").unwrap();
+        let left: Vec<String> = conn
+            .prepare("SELECT session_id FROM session_metadata")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(left, ["s2"]);
     }
 
     #[test]

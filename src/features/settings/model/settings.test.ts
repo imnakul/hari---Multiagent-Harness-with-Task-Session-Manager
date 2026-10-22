@@ -68,6 +68,11 @@ import {
   subscribeFollowUpBehavior,
   subscribeRemainingQuota,
   subscribeCompactModelLabels,
+  loadSessionLabels,
+  loadSessionMetadataHover,
+  saveSessionLabels,
+  saveSessionMetadataHover,
+  subscribeSessionLabels,
   AI_HELPER_CHANGE_EVENT,
   loadAiHelperSettings,
   parseAiHelperSettings,
@@ -961,6 +966,46 @@ describe("compact model labels setting", () => {
       unsubscribe();
       saveCompactModelLabels(true);
       expect(calls).toBe(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("session metadata settings (L-181)", () => {
+  beforeEach(mockLocalStorage);
+  afterEach(() => {
+    localStorage.removeItem("monocode.sessionLabels");
+    localStorage.removeItem("monocode.sessionMetadataHover");
+  });
+
+  it("both default on and persist their values", () => {
+    expect(loadSessionLabels()).toBe(true);
+    expect(loadSessionMetadataHover()).toBe(true);
+    saveSessionLabels(false);
+    saveSessionMetadataHover(false);
+    expect(localStorage.getItem("monocode.sessionLabels")).toBe("0");
+    expect(loadSessionLabels()).toBe(false);
+    expect(loadSessionMetadataHover()).toBe(false);
+  });
+
+  it("are searchable in Settings", () => {
+    const ids = searchSettings("metadata").map((entry) => entry.settingId);
+    expect(ids).toContain("session-labels");
+    expect(ids).toContain("session-metadata-hover");
+  });
+
+  it("notifies subscribers when the label setting changes", () => {
+    const target = new EventTarget();
+    vi.stubGlobal("window", target);
+    try {
+      let calls = 0;
+      const unsubscribe = subscribeSessionLabels(() => calls++);
+      saveSessionLabels(false);
+      expect(calls).toBe(1);
+      unsubscribe();
+      saveSessionLabels(true);
+      expect(calls).toBe(1);
     } finally {
       vi.unstubAllGlobals();
     }
