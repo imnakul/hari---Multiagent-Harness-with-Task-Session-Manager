@@ -4877,6 +4877,7 @@ fn git_output(root: &Path, args: &[&str]) -> Option<Vec<u8>> {
     } else {
         GIT_READ_TIMEOUT
     };
+    let _slot = crate::git_admission::admit(crate::git_admission::GitLane::for_read(args));
     let (stdout, status) = git_output_within(cmd, timeout)?;
     git_status_ok(&status, args).then_some(stdout)
 }
@@ -4964,6 +4965,8 @@ pub(crate) fn git_output_capped(
     max_bytes: usize,
     cancel: Option<&AtomicBool>,
 ) -> Option<(Vec<u8>, bool)> {
+    // Held until return: the read's whole lifetime, including a cancelled one.
+    let _slot = crate::git_admission::admit(crate::git_admission::GitLane::Read);
     let mut child = git_cmd()
         .arg("--no-pager")
         .arg("-C")
@@ -5398,6 +5401,7 @@ fn git_stdout_within(root: &Path, args: &[&str], timeout: Duration) -> Option<St
         .arg(root)
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0");
+    let _slot = crate::git_admission::admit(crate::git_admission::GitLane::for_read(args));
     let (stdout, status) = git_output_within(cmd, timeout)?;
     if !status.success() {
         return None;
@@ -8141,6 +8145,25 @@ mod tests {
         assert!(result.is_none());
         assert!(started.elapsed() < Duration::from_secs(3));
         assert!(git_stdout(&dir.0, &["rev-parse", "--is-inside-work-tree"]).is_some());
+    }
+
+    #[test]
+    fn a_clicked_git_action_skips_a_full_read_lane() {
+        let dir = tmp("git-action-lane");
+        let root = dir.0.clone();
+        // Every read slot taken, as during a burst of background status reads.
+        let held: Vec<_> = (0..crate::git_admission::READ_LIMIT)
+            .map(|_| crate::git_admission::admit(crate::git_admission::GitLane::Read))
+            .collect();
+        let (done, finished) = std::sync::mpsc::channel();
+        let action = thread::spawn(move || {
+            let _ = done.send(git_checked(&root, &["init", "--quiet"]));
+        });
+        let result = finished.recv_timeout(Duration::from_secs(30));
+        drop(held);
+        action.join().unwrap();
+        assert_eq!(result, Ok(Ok(())));
+        assert!(dir.0.join(".git").is_dir());
     }
 
     fn git(dir: &Path, args: &[&str]) -> bool {

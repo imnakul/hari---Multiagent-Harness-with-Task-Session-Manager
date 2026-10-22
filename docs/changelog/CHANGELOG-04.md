@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-22 17:39 IST — Background git reads capped; clicked git actions skip the queue (L-179)
+- Type: feature
+- What: Branch labels, status checks, diff stats and other background git reads now run at most four at a time (a fetch at most two), instead of starting as many git processes as the app asks for. Anything you click (stage, commit, checkout, push, pull, discard) never waits for that queue, so it starts straight away even during a burst.
+- Why: PLANNED "Soon" item (pattern 5 from the T3/Orca research); user asked to do it with the round-17 intake.
+- Files: [git_admission.rs](../../src-tauri/src/git_admission.rs) (new), [fs.rs](../../src-tauri/src/fs.rs) (`git_output`, `git_stdout_within`, `git_output_capped`, test `a_clicked_git_action_skips_a_full_read_lane`), [worktrees.rs](../../src-tauri/src/worktrees.rs) (`git_worktrees_blocking`), [lib.rs](../../src-tauri/src/lib.rs)
+- Commit: uncommitted
+- Verified: cargo fmt ✅ clippy ❌ (7 pre-existing only, none new) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16); desktop check manual
 ## 2026-10-22 17:39 IST — Upstream round 17: main through 74b8139c
 - Type: chore
 - What: Brought in upstream's 14 commits after 0.16.0: Android fixes for the phone app, and chats now stream to the phone as they are written. No conflicts; no fork feature touched. Also re-formatted two fork Rust files so the format check passes again. Local `mobile/app.json` (never committed): user chose upstream's version (its blocked audio/foreground-service permissions win over the local WIP list); only the local Android `package` id was added back. The old local file is kept in `git stash` as "local mobile/app.json before round 17".

@@ -152,6 +152,8 @@ pub(crate) fn git_worktrees_blocking(
         let path = Path::new(&tree.path);
         tree.missing = !path.is_dir();
         if !tree.missing {
+            // Fork (L-179): one pair per worktree, so these share the read lane.
+            let _slot = crate::git_admission::admit(crate::git_admission::GitLane::Read);
             tree.dirty = git(path, &["status", "--porcelain", "--untracked-files=normal"])
                 .ok()
                 .map(|status| !status.is_empty());

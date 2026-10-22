@@ -20,6 +20,7 @@ mod devin_config;
 mod devin_usage;
 mod external_editor;
 mod fs;
+mod git_admission;
 mod gitlab;
 mod harness;
 mod harness_updates;
