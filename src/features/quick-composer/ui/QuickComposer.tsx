@@ -83,6 +83,8 @@ import { QuickModelSelector } from "./QuickModelSelector";
 import { QuickPermissionIcon, QuickPermissions } from "./QuickPermissions";
 import { SavedPromptMenu } from "../../prompts/ui/SavedPromptMenu";
 import { useSavedPromptMenu } from "../../prompts/ui/useSavedPromptMenu";
+import { TaskPickerMenu } from "../../tasks/ui/TaskPickerMenu";
+import { useTaskPickerMenu } from "../../tasks/ui/useTaskPickerMenu";
 import { useQuickPickerMotion } from "./useQuickPickerMotion";
 import {
   CLOUD_LAUNCH_OUTCOME_EVENT,
@@ -512,21 +514,25 @@ export function QuickComposer({
     closePicker();
   };
 
+  const applyInsertedText = (next: string, cursor: number): void => {
+    setPrompt(next);
+    requestAnimationFrame(() => {
+      const field = promptRef.current;
+      if (!field) return;
+      field.focus({ preventScroll: true });
+      field.setSelectionRange(cursor, cursor);
+    });
+  };
   // `!` inserts a saved prompt (Settings → Prompts) at the caret.
-  const promptMenu = useSavedPromptMenu({
-    apply: (next, cursor) => {
-      setPrompt(next);
-      requestAnimationFrame(() => {
-        const field = promptRef.current;
-        if (!field) return;
-        field.focus({ preventScroll: true });
-        field.setSelectionRange(cursor, cursor);
-      });
-    },
-  });
+  const promptMenu = useSavedPromptMenu({ apply: applyInsertedText });
+  // `#` inserts a Todo task of the chosen project or Personal (L-180).
+  const taskMenu = useTaskPickerMenu({ cwd, apply: applyInsertedText });
 
   const syncPromptCommand = (field: HTMLTextAreaElement) => {
-    if (!taskMode) promptMenu.sync(field);
+    if (!taskMode) {
+      promptMenu.sync(field);
+      taskMenu.sync(field);
+    }
     const token =
       field.selectionStart === field.selectionEnd
         ? slashTokenAt(field.value, field.selectionStart)
@@ -555,6 +561,7 @@ export function QuickComposer({
     setKindChoice(next);
     saveQuickComposerKind(next);
     promptMenu.close();
+    taskMenu.close();
     setPicker(null);
     setSlash(null);
     setError(null);
@@ -674,6 +681,7 @@ export function QuickComposer({
   const onPromptKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
     if (!taskMode && promptMenu.onKeyDown(event)) return;
+    if (!taskMode && taskMenu.onKeyDown(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       if (picker) closePicker();
@@ -1290,6 +1298,11 @@ export function QuickComposer({
       {promptMenu.open && !picker && !taskMode ? (
         <div className="p-1.5 pt-0">
           <SavedPromptMenu state={promptMenu} floating={false} />
+        </div>
+      ) : null}
+      {taskMenu.open && !promptMenu.open && !picker && !taskMode ? (
+        <div className="p-1.5 pt-0">
+          <TaskPickerMenu state={taskMenu} floating={false} />
         </div>
       ) : null}
       {picker && picker !== "attachments" ? (

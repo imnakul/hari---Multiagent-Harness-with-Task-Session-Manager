@@ -146,20 +146,22 @@ export type PromptToken = { start: number; end: number; query: string };
 /**
  * `!` starts a token only at the start of the text or after whitespace, so
  * `Done!` and `a != b` never open the picker. The token runs to the next
- * whitespace; the menu closes again once nothing matches.
+ * whitespace; the menu closes again once nothing matches. `trigger` lets
+ * the `#` task picker share this rule (`##` never opens it).
  */
 export function promptTokenAt(
   text: string,
   cursor: number,
+  trigger: string = PROMPT_TRIGGER,
 ): PromptToken | null {
   const at = Math.max(0, Math.min(cursor, text.length));
   let start = at;
   while (start > 0 && !/\s/.test(text[start - 1]!)) start -= 1;
-  if (text[start] !== PROMPT_TRIGGER || start === at) return null;
+  if (text[start] !== trigger || start === at) return null;
   let end = start + 1;
   while (end < text.length && !/\s/.test(text[end]!)) end += 1;
   const query = text.slice(start + 1, at);
-  if (query.includes(PROMPT_TRIGGER)) return null;
+  if (query.includes(trigger)) return null;
   return { start, end, query };
 }
 

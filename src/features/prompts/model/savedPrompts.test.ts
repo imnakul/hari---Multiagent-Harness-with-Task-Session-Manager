@@ -47,6 +47,18 @@ describe("promptTokenAt", () => {
     expect(promptTokenAt("say !hi", 4)).toBeNull();
     expect(promptTokenAt("!rev now", 8)).toBeNull();
   });
+
+  it("uses another trigger when given one, and leaves ! alone then (L-180)", () => {
+    expect(promptTokenAt("fix #lo", 7, "#")).toEqual({
+      start: 4,
+      end: 7,
+      query: "lo",
+    });
+    expect(promptTokenAt("##", 2, "#")).toBeNull();
+    expect(promptTokenAt("# Heading", 9, "#")).toBeNull();
+    expect(promptTokenAt("issue#12", 8, "#")).toBeNull();
+    expect(promptTokenAt("!rev", 4, "#")).toBeNull();
+  });
 });
 
 describe("insertSavedPrompt", () => {
