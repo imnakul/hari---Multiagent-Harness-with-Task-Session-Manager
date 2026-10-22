@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-22 17:39 IST — Upstream round 17: main through 74b8139c
+- Type: chore
+- What: Brought in upstream's 14 commits after 0.16.0: Android fixes for the phone app, and chats now stream to the phone as they are written. No conflicts; no fork feature touched. Also re-formatted two fork Rust files so the format check passes again. Local `mobile/app.json` (never committed): user chose upstream's version (its blocked audio/foreground-service permissions win over the local WIP list); only the local Android `package` id was added back. The old local file is kept in `git stash` as "local mobile/app.json before round 17".
+- Why: User asked to bring the new upstream changes in, keeping every fork change.
+- Files: 43 upstream paths (mostly `mobile/`; desktop side `crates/mobile-link`, `src-tauri/src/mobile_access.rs`, `src/features/mobile/`); fmt only: `src-tauri/src/interactive_delivery.rs`, `src-tauri/src/mcp.rs`. Record: [upstream-merge-2026-10-22-017.md](../notes/archive/upstream-merge-2026-10-22-017.md)
+- Commit: uncommitted
+- Verified: tsc ✅ vitest ✅ (7,680 passed, 2 skipped) build ✅ cargo fmt ✅ clippy ❌ (7 pre-existing, none in merged code) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16); desktop/phone check manual
 ## 2026-10-22 03:38 IST — 0.16.0-local9 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local9: 0.16.0-local8 plus L-177. With Group by project on, dragging a Focus pane can put it beside, above or below another chat again, not only swap.

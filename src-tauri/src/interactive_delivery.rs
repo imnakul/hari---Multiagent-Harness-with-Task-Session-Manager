@@ -145,15 +145,30 @@ mod tests {
     fn output_during_ingest_or_a_paste_repaint_resets_settlement() {
         let minimum = Duration::from_secs(9);
         assert_eq!(
-            check_paste(Duration::from_secs(8), minimum, true, Duration::from_secs(2)),
+            check_paste(
+                Duration::from_secs(8),
+                minimum,
+                true,
+                Duration::from_secs(2)
+            ),
             PasteCheck::Wait
         );
         assert_eq!(
-            check_paste(Duration::from_secs(10), minimum, true, Duration::from_millis(100)),
+            check_paste(
+                Duration::from_secs(10),
+                minimum,
+                true,
+                Duration::from_millis(100)
+            ),
             PasteCheck::Wait
         );
         assert_eq!(
-            check_paste(Duration::from_secs(11), minimum, true, Duration::from_millis(1500)),
+            check_paste(
+                Duration::from_secs(11),
+                minimum,
+                true,
+                Duration::from_millis(1500)
+            ),
             PasteCheck::Settled(PasteSettle::Quiet)
         );
     }

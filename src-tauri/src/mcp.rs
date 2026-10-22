@@ -92,7 +92,11 @@ fn server_from_json(provider: &str, name: &str, config: &str) -> Result<(String,
         .and_then(Value::as_str)
         .is_some_and(|s| !s.is_empty());
     let url = server
-        .get(if provider == "antigravity-cli" { "serverUrl" } else { "url" })
+        .get(if provider == "antigravity-cli" {
+            "serverUrl"
+        } else {
+            "url"
+        })
         .and_then(Value::as_str)
         .is_some_and(|s| !s.is_empty());
     if command == url {
@@ -845,15 +849,24 @@ mod tests {
         let root = std::env::temp_dir().join(format!("monocode-mcp-agy-{}", uuid::Uuid::new_v4()));
         let path = root.join(".agents/mcp_config.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, r#"{"mcpServers":{"old":{"command":"node","disabled":true}}}"#)
-            .unwrap();
-        let (name, server) =
-            server_from_json("antigravity-cli", "", r#"{"mcpServers":{"new":{"command":"npx"}}}"#)
-                .unwrap();
+        std::fs::write(
+            &path,
+            r#"{"mcpServers":{"old":{"command":"node","disabled":true}}}"#,
+        )
+        .unwrap();
+        let (name, server) = server_from_json(
+            "antigravity-cli",
+            "",
+            r#"{"mcpServers":{"new":{"command":"npx"}}}"#,
+        )
+        .unwrap();
         write_json_server(&path, &name, server).unwrap();
         let mut rows = Vec::new();
         add_json_file(&mut rows, "antigravity-cli", "project", &path, "mcpServers");
-        let names: Vec<_> = rows.iter().map(|row| (row.name.as_str(), row.enabled)).collect();
+        let names: Vec<_> = rows
+            .iter()
+            .map(|row| (row.name.as_str(), row.enabled))
+            .collect();
         assert_eq!(names, [("new", true), ("old", false)]);
         std::fs::remove_dir_all(root).unwrap();
     }
