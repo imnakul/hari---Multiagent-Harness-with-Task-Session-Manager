@@ -6,6 +6,17 @@
 - Files: [git_admission.rs](../../src-tauri/src/git_admission.rs) (new), [fs.rs](../../src-tauri/src/fs.rs) (`git_output`, `git_stdout_within`, `git_output_capped`, test `a_clicked_git_action_skips_a_full_read_lane`), [worktrees.rs](../../src-tauri/src/worktrees.rs) (`git_worktrees_blocking`), [lib.rs](../../src-tauri/src/lib.rs)
 - Commit: uncommitted
 - Verified: cargo fmt ✅ clippy ❌ (7 pre-existing only, none new) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16); desktop check manual
+## 2026-10-22 17:39 IST — Saves flush to disk less often (L-178)
+- Type: feature
+- What: The app's database now writes saves to disk in batches instead of forcing each one to disk, so saves finish faster. If the app crashes nothing is lost; only a power cut or Windows crash could lose the last few seconds of saves, and the database cannot be damaged either way.
+- Why: PLANNED "Soon" item; user accepted the power-cut tradeoff and asked for it on 22 Oct.
+- Risk: new behaviour we have not run for long. What can go wrong: after a power cut, forced shutdown or Windows crash (not an app crash), the last few saves before it may be missing (a chat's newest messages, a rename, a settings change). The file itself stays readable; a "database disk image is malformed" error is not an expected result of this change and should be reported as a separate bug.
+- How to watch: open the Performance log (Ctrl+Alt+Shift+P, L-161). `perf_ping_db` and the timings of save-type backend calls should be the same or lower than before; spikes that line up with saves mean the change did not help. After any power cut or Windows crash, check the last chat and recent settings are still there, and note it here if anything was lost.
+- How to revert: in `SessionStore::open` (`src-tauri/src/session_store.rs`) delete `PRAGMA synchronous = NORMAL;` from the `execute_batch` string (SQLite falls back to FULL), and change the test `writer_connection_uses_wal_with_normal_sync` to expect 2. No data migration: the setting is per connection, so the next app start uses FULL with the same file.
+- Files: [session_store.rs](../../src-tauri/src/session_store.rs) (`SessionStore::open`, test `writer_connection_uses_wal_with_normal_sync`)
+- Commit: uncommitted
+- Decision: durability for speed: accept losing the last few saves on a power cut or OS crash, in return for no forced disk flush per save. Kept in LOCAL-FEATURES L-178 (no DECISIONS.md in this repo); follow-up to watch it in PLANNED.
+- Verified: cargo fmt ✅ clippy ❌ (7 pre-existing only, none new) cargo test ✅ 837 + mobile-link 22 (2 known macOS-only fs failures, as in round 16)
 ## 2026-10-22 17:39 IST — Upstream round 17: main through 74b8139c
 - Type: chore
 - What: Brought in upstream's 14 commits after 0.16.0: Android fixes for the phone app, and chats now stream to the phone as they are written. No conflicts; no fork feature touched. Also re-formatted two fork Rust files so the format check passes again. Local `mobile/app.json` (never committed): user chose upstream's version (its blocked audio/foreground-service permissions win over the local WIP list); only the local Android `package` id was added back. The old local file is kept in `git stash` as "local mobile/app.json before round 17".

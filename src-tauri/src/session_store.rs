@@ -50,8 +50,13 @@ impl SessionStore {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let conn = Connection::open(&path).map_err(|e| e.to_string())?;
-        conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")
-            .map_err(|e| e.to_string())?;
+        // Fork (L-178): in WAL mode, NORMAL syncs at checkpoints instead of on
+        // every commit. An app crash still loses nothing; a power cut or OS
+        // crash can drop the last few commits, but never corrupts the file.
+        conn.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;",
+        )
+        .map_err(|e| e.to_string())?;
         migrate(&conn).map_err(|e| e.to_string())?;
         crate::worktrees::reconcile_removals(&conn)?;
         Ok(Self {
@@ -4154,6 +4159,33 @@ mod tests {
             .iter()
             .any(|hit| hit.session_id == "s1" && hit.kind == "conversation"));
         drop(conn);
+        drop(store);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn writer_connection_uses_wal_with_normal_sync() {
+        let path = std::env::temp_dir().join(format!(
+            "monocode-session-sync-{}-{}.db",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = SessionStore::open(path.clone()).unwrap();
+        {
+            let conn = store.lock_conn().unwrap();
+            let mode: String = conn
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+                .unwrap();
+            let sync: i64 = conn
+                .query_row("PRAGMA synchronous", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(mode, "wal");
+            // 1 = NORMAL (0 OFF, 2 FULL, 3 EXTRA).
+            assert_eq!(sync, 1);
+        }
         drop(store);
         let _ = std::fs::remove_file(&path);
     }

@@ -14,9 +14,12 @@ responsiveness items" when there is usage to spare.
 - [x] Git process cap with a fast user lane (pattern 5) — done 2026-10-22 (L-179). Background git reads (branch labels,
   status, diff stats) share a small limit; a git action the user clicked (commit, checkout,
   push) skips the queue. Stops a burst of background git from slowing a click.
-- [ ] SQLite `synchronous=NORMAL` on the WAL store. Fewer disk flushes per save, so saves get
+- [x] SQLite `synchronous=NORMAL` on the WAL store — done 2026-10-22 (L-178). Fewer disk flushes per save, so saves get
   faster. Tradeoff (your call before doing it): a power cut or OS crash can lose the last few
   saves; an app crash cannot. The database never corrupts either way.
+- [ ] Watch L-178 for a few weeks of daily use after the next build: Performance log `perf_ping_db`
+  and save timings, plus any lost recent saves after a power cut or Windows crash. Keep it if
+  saves are faster and nothing is lost; otherwise revert (steps in the L-178 changelog entry).
 
 **Deferred** (worth it only if the Performance log still shows the problem):
 - [ ] WAL checkpoint on its own thread, so a large checkpoint never lands inside a save.
