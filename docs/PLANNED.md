@@ -3,6 +3,36 @@
 Working roadmap for the personal fork. The north star first, the ladder to reach it second,
 current state third, and suggestions/quick wins on top at the end.
 
+## Markdown Live mode (Obsidian-style) — planned 2026-10-23, not started
+
+A third view beside Preview and Source in Notes, Tasks and Session metadata: **Preview | Live |
+Source**. Typing shows formatting as you go (`## ` heading, `**bold**`, `- ` bullet, `- [ ]`
+clickable checkbox, links, images); the Markdown symbols reappear only on the cursor's line.
+Saved text stays exactly the same Markdown, so agents, the `#` picker and copy are unaffected.
+Follows L-182 (double-click to edit, Ctrl+E). Chosen over Tiptap/Milkdown, whose
+Markdown → editor → Markdown conversion is lossy.
+
+**Size: Medium.** No new packages (CodeMirror 6, `@codemirror/lang-markdown` and
+`@lezer/markdown` are installed; lazy-load Live). About 1,000 new lines:
+- [ ] CodeMirror editor component kept in sync with the item's text and autosave.
+- [ ] Live decorations plugin: headings, bold/italic/strike, inline code, links, quotes, lists,
+  task checkboxes, code fences, dividers, images; symbols shown on the cursor line only.
+- [ ] Enter continues lists and checklists.
+- [ ] Theme matching `AgentMarkdown` typography.
+- [ ] Image paste/drop (`useMarkdownImages`): adapter for CodeMirror selection instead of the textarea.
+- [ ] `MarkdownViewMode` gains `live`; three tabs; `useMarkdownEditGestures` handles Live.
+
+**Preview-only in the first version:** Mermaid, syntax-highlighted code, table layout,
+file-link context menus, link preview cards (they show as tidy plain text in Live).
+**Phase 2:** tables and Mermaid in Live; Live for `.md` files in the file viewer.
+**Risks to test:** cursor jumps when symbols hide (use atomic ranges), IME input, very long notes.
+
+**Decisions to confirm before building** (recommended):
+1. Existing items open in Preview; new or empty items open in Live (instead of Source).
+2. Ctrl+E toggles Preview ↔ the last edit mode used (Live or Source); double-click in Preview
+   opens that mode at the clicked line.
+3. First version covers Notes, Tasks and Session metadata only.
+
 ## Responsiveness follow-ups — selected 2026-10-22
 
 Left over from the responsiveness work (L-160 to L-172; spec:

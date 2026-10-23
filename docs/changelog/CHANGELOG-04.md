@@ -1,4 +1,10 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-23 IST — Planned: Markdown Live mode (Obsidian-style)
+- Type: docs
+- What: Added the Live mode plan (Preview | Live | Source, CodeMirror-based, Markdown text unchanged) with size, tasks, risks and open decisions to `docs/PLANNED.md`. Not started.
+- Files: `docs/PLANNED.md` (top section)
+- Verified: docs only
+- Commit: see git log
 ## 2026-10-23 09:36 IST — Double-click to edit and Ctrl+E in Markdown views (L-182)
 - Type: feature
 - What: In Notes, Tasks and the Session metadata dialog, Ctrl+E (Cmd+E on macOS) toggles Preview and Source, and double-clicking text in Preview opens Source with the caret on the clicked line and word. Links, checkboxes and images keep their own double-click; the tabs' tooltip shows the shortcut.
