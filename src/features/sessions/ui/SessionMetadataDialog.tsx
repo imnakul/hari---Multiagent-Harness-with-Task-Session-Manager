@@ -16,6 +16,7 @@ import { AgentMarkdown } from "./AgentMarkdown";
 import { MarkdownDetailTabs } from "./MarkdownDetailTabs";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
 import { MarkdownSourceEditor } from "./MarkdownSourceEditor";
+import { useMarkdownEditGestures } from "./useMarkdownEditGestures";
 
 type SavedState =
   | { status: "loading" }
@@ -81,6 +82,13 @@ function SessionMetadataEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const editGestures = useMarkdownEditGestures({
+    mode,
+    onModeChange: setMode,
+    markdown: notes,
+    textareaRef: notesRef,
+  });
   const labelId = useId();
   const counterId = useId();
 
@@ -201,9 +209,13 @@ function SessionMetadataEditor({
           markdown={notes}
           label="Notes view"
         />
-        <div className="max-h-[45vh] min-h-40 overflow-y-auto rounded-md border border-content/10">
+        <div
+          className="max-h-[45vh] min-h-40 overflow-y-auto rounded-md border border-content/10"
+          onKeyDown={editGestures.onKeyDown}
+        >
           {mode === "source" ? (
             <MarkdownSourceEditor
+              textareaRef={notesRef}
               value={notes}
               onChange={setNotes}
               label="Notes Markdown"
@@ -211,12 +223,17 @@ function SessionMetadataEditor({
               lineNumbers={false}
               className="min-h-40"
             />
-          ) : notes.trim() ? (
-            <div className="px-3 py-2">
-              <AgentMarkdown text={notes} hardBreaks />
-            </div>
           ) : (
-            <p className="px-3 py-2 text-[13px] text-content/45">No notes</p>
+            <div
+              {...editGestures.previewProps}
+              className="min-h-40 px-3 py-2 outline-none"
+            >
+              {notes.trim() ? (
+                <AgentMarkdown text={notes} hardBreaks />
+              ) : (
+                <p className="text-[13px] text-content/45">No notes</p>
+              )}
+            </div>
           )}
         </div>
       </div>

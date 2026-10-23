@@ -45,7 +45,10 @@ export function MarkdownSourceEditor({
                 {index + 1}
               </div>
             ) : null}
-            <div className={`min-h-5 min-w-0 whitespace-pre-wrap wrap-break-word ${lineNumbers ? "pl-3" : "px-3"}`}>
+            <div
+              data-source-line={index}
+              className={`min-h-5 min-w-0 whitespace-pre-wrap wrap-break-word ${lineNumbers ? "pl-3" : "px-3"}`}
+            >
               {line ? <MarkdownSourceHighlight text={line} /> : "\u00a0"}
             </div>
           </Fragment>

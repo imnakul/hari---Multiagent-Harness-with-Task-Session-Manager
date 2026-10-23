@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { MarkdownCopyButton } from "./MarkdownCopyButton";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
+import {
+  MARKDOWN_EDIT_ARIA_SHORTCUT,
+  MARKDOWN_EDIT_SHORTCUT_LABEL,
+} from "./useMarkdownEditGestures";
 
 /** Underline Preview/Source tab strip with a copy button, shared by Notes and Tasks. */
 export function MarkdownDetailTabs({
@@ -57,6 +61,8 @@ function DetailTab({
       type="button"
       role="tab"
       aria-selected={selected}
+      aria-keyshortcuts={MARKDOWN_EDIT_ARIA_SHORTCUT}
+      title={`${label} (${MARKDOWN_EDIT_SHORTCUT_LABEL} switches views)`}
       onClick={onSelect}
       className={`relative flex h-9 items-center text-[12px] leading-none ${
         selected ? "text-content" : "text-content/50 hover:text-content"

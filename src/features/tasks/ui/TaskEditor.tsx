@@ -24,6 +24,7 @@ import {
 import { AgentMarkdown } from "../../sessions/ui/AgentMarkdown";
 import { MarkdownDetailTabs } from "../../sessions/ui/MarkdownDetailTabs";
 import { useMarkdownMode } from "../../sessions/ui/MarkdownModeToggle";
+import { useMarkdownEditGestures } from "../../sessions/ui/useMarkdownEditGestures";
 import {
   taskMarkdown,
   updateTask,
@@ -92,6 +93,12 @@ export function TaskEditor({
   const body = edits.body ?? task.body;
   const tags = edits.tags ?? task.tags;
   const status = edits.status ?? task.status;
+  const editGestures = useMarkdownEditGestures({
+    mode,
+    onModeChange: setMode,
+    markdown: body,
+    textareaRef: source,
+  });
   const focusDate =
     edits.focusDate === null ? undefined : (edits.focusDate ?? task.focusDate);
   const today = useLocalDay();
@@ -580,6 +587,7 @@ export function TaskEditor({
               : "border-transparent"
           }`}
           {...images.dropZoneProps}
+          onKeyDown={editGestures.onKeyDown}
         >
           <MarkdownImageOverlay images={images} />
           {mode === "source" ? (
@@ -590,10 +598,14 @@ export function TaskEditor({
               label="Task Markdown"
               onChange={(next) => edit({ body: next })}
             />
-          ) : body.trim() ? (
-            <AgentMarkdown text={body} cwd={project} hardBreaks />
           ) : (
-            <p className="text-[13px] text-content/45">No description</p>
+            <div {...editGestures.previewProps} className="outline-none">
+              {body.trim() ? (
+                <AgentMarkdown text={body} cwd={project} hardBreaks />
+              ) : (
+                <p className="text-[13px] text-content/45">No description</p>
+              )}
+            </div>
           )}
         </div>
         <TaskTimeline task={task} today={today} />

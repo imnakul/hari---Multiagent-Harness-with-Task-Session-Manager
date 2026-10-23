@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-23 09:36 IST — Double-click to edit and Ctrl+E in Markdown views (L-182)
+- Type: feature
+- What: In Notes, Tasks and the Session metadata dialog, Ctrl+E (Cmd+E on macOS) toggles Preview and Source, and double-clicking text in Preview opens Source with the caret on the clicked line and word. Links, checkboxes and images keep their own double-click; the tabs' tooltip shows the shortcut.
+- Why: User asked for a shortcut and a faster way from reading to editing, without changing the Preview = read / Source = write model.
+- Files: [markdownPreviewSource.ts](../../src/features/sessions/model/markdownPreviewSource.ts) (new, + test), [useMarkdownEditGestures.ts](../../src/features/sessions/ui/useMarkdownEditGestures.ts) (new), [MarkdownSourceEditor.tsx](../../src/features/sessions/ui/MarkdownSourceEditor.tsx) (`data-source-line`), [MarkdownDetailTabs.tsx](../../src/features/sessions/ui/MarkdownDetailTabs.tsx) (tooltip), [NotesView.tsx](../../src/features/notes/ui/NotesView.tsx), [TaskEditor.tsx](../../src/features/tasks/ui/TaskEditor.tsx), [SessionMetadataDialog.tsx](../../src/features/sessions/ui/SessionMetadataDialog.tsx). Spec: [markdown-edit-gestures-plan.md](../specs/markdown-edit-gestures-plan.md)
+- Commit: see git log (L-182)
+- Verified: tsc ✅ vitest ✅ (7,710 passed, 2 skipped; 12 new) — eslint not run (no config in repo); desktop check manual
 ## 2026-10-22 19:53 IST — 0.16.0-local11 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local11: 0.16.0-local10 plus L-180 (type `#` in the composer to insert a whole task) and L-181 (session metadata: a label and notes per chat, shown in your accent colour, with label and hover toggles in Settings → General).

@@ -67,6 +67,7 @@ import { SharedHoverHighlight } from "../../sessions/ui/SharedHoverHighlight";
 import { type NoteProjectChoice } from "../notes";
 
 import { MarkdownSourceEditor } from "../../sessions/ui/MarkdownSourceEditor";
+import { useMarkdownEditGestures } from "../../sessions/ui/useMarkdownEditGestures";
 
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 420;
@@ -611,6 +612,12 @@ function NoteEditor({
   const noteRef = useRef(note);
   const titleFieldRef = useRef<HTMLInputElement>(null);
   const sourceFieldRef = useRef<HTMLTextAreaElement>(null);
+  const editGestures = useMarkdownEditGestures({
+    mode,
+    onModeChange: setMode,
+    markdown: body,
+    textareaRef: sourceFieldRef,
+  });
   const skipSave = useRef(false);
   const saveTimer = useRef<number | null>(null);
   // Title the user finished typing (blur/close). Any later title edit drops
@@ -884,6 +891,7 @@ function NoteEditor({
               : "border-transparent"
           }`}
           {...images.dropZoneProps}
+          onKeyDown={editGestures.onKeyDown}
         >
           <MarkdownImageOverlay images={images} />
           {mode === "source" ? (
@@ -897,10 +905,17 @@ function NoteEditor({
                 scheduleSave();
               }}
             />
-          ) : body.trim() ? (
-            <AgentMarkdown text={body} cwd={sourceCwd} hardBreaks />
           ) : (
-            <p className="text-[13px] text-content/45">No description</p>
+            <div
+              {...editGestures.previewProps}
+              className="min-h-[448px] outline-none"
+            >
+              {body.trim() ? (
+                <AgentMarkdown text={body} cwd={sourceCwd} hardBreaks />
+              ) : (
+                <p className="text-[13px] text-content/45">No description</p>
+              )}
+            </div>
           )}
         </div>
       </div>
