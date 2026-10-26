@@ -157,8 +157,12 @@ export async function languageForPath(path: string): Promise<Extension | null> {
     return svelte();
   }
   if ([".md", ".mdx", ".markdown"].includes(extension)) {
-    const { markdown } = await import("@codemirror/lang-markdown");
-    return markdown();
+    // GFM base: tables, strikethrough and task lists parse, which Live mode
+    // (markdownLive.ts) formats.
+    const { markdown, markdownLanguage } = await import(
+      "@codemirror/lang-markdown"
+    );
+    return markdown({ base: markdownLanguage });
   }
   if (extension === ".rs") {
     const { rustLanguage } = await import("@codemirror/lang-rust");

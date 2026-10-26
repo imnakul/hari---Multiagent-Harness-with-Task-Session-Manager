@@ -238,6 +238,11 @@ it("refreshes an open note after an Operator write", async () => {
 it("keeps a note's consecutive lines on their own lines", async () => {
   stored = { ...stored, body: "> first line\n> second line\n> third line" };
   await render();
+  // Notes open in Live; the line breaks are a Preview concern.
+  const previewTab = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+    (tab) => tab.textContent === "Preview",
+  )!;
+  await act(async () => previewTab.click());
 
   const preview = container.querySelector<HTMLElement>('[data-streamdown="blockquote"]')!;
   expect(preview.querySelector("p")?.innerHTML).toBe(

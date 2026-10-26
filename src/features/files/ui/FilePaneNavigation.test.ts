@@ -106,7 +106,7 @@ describe("file pane source navigation", () => {
     });
   }
 
-  it("shows Markdown source and navigates to its referenced line", async () => {
+  it("shows Markdown in the editor (Live) and navigates to its referenced line", async () => {
     const view = await render("/repo/navigation.md", 2);
     await act(async () =>
       vi.waitFor(() => expect(view.state.selection.main.head).toBe(12)),
@@ -115,7 +115,7 @@ describe("file pane source navigation", () => {
       container.querySelector(
         '[aria-label="Markdown view"] [role="tab"][aria-selected="true"]',
       )?.textContent,
-    ).toBe("Source");
+    ).toBe("Live");
     expect(view.state.doc.toString()).toBe(
       "first line\nsecond line\nthird line",
     );

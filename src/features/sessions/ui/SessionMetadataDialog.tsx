@@ -15,8 +15,8 @@ import {
 import { AgentMarkdown } from "./AgentMarkdown";
 import { MarkdownDetailTabs } from "./MarkdownDetailTabs";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
-import { MarkdownSourceEditor } from "./MarkdownSourceEditor";
-import { useMarkdownEditGestures } from "./useMarkdownEditGestures";
+import type { MarkdownCaretTarget } from "./markdownCaret";
+import { MarkdownEditorPanel } from "./MarkdownEditorPanel";
 
 type SavedState =
   | { status: "loading" }
@@ -78,17 +78,11 @@ function SessionMetadataEditor({
   });
   const [label, setLabel] = useState("");
   const [notes, setNotes] = useState("");
-  const [mode, setMode] = useState<MarkdownViewMode>("source");
+  const [mode, setMode] = useState<MarkdownViewMode>("live");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
-  const notesRef = useRef<HTMLTextAreaElement>(null);
-  const editGestures = useMarkdownEditGestures({
-    mode,
-    onModeChange: setMode,
-    markdown: notes,
-    textareaRef: notesRef,
-  });
+  const notesRef = useRef<MarkdownCaretTarget | null>(null);
   const labelId = useId();
   const counterId = useId();
 
@@ -99,8 +93,6 @@ function SessionMetadataEditor({
         if (cancelled) return;
         setLabel(saved?.label ?? "");
         setNotes(saved?.notes ?? "");
-        // Existing notes open read-first; empty ones open ready to type.
-        setMode(saved?.notes.trim() ? "preview" : "source");
         setSavedState({ status: "ready", saved });
       })
       .catch((reason: unknown) => {
@@ -209,32 +201,21 @@ function SessionMetadataEditor({
           markdown={notes}
           label="Notes view"
         />
-        <div
-          className="max-h-[45vh] min-h-40 overflow-y-auto rounded-md border border-content/10"
-          onKeyDown={editGestures.onKeyDown}
-        >
-          {mode === "source" ? (
-            <MarkdownSourceEditor
-              textareaRef={notesRef}
-              value={notes}
-              onChange={setNotes}
-              label="Notes Markdown"
-              placeholder="Plans, links, what is left… (Markdown)"
-              lineNumbers={false}
-              className="min-h-40"
-            />
-          ) : (
-            <div
-              {...editGestures.previewProps}
-              className="min-h-40 px-3 py-2 outline-none"
-            >
-              {notes.trim() ? (
-                <AgentMarkdown text={notes} hardBreaks />
-              ) : (
-                <p className="text-[13px] text-content/45">No notes</p>
-              )}
-            </div>
-          )}
+        <div className="max-h-[45vh] min-h-40 overflow-y-auto rounded-md border border-content/10">
+          <MarkdownEditorPanel
+            mode={mode}
+            onModeChange={setMode}
+            value={notes}
+            onChange={setNotes}
+            caretRef={notesRef}
+            label="Notes Markdown"
+            placeholder="Plans, links, what is left…"
+            lineNumbers={false}
+            minHeightClass="min-h-40"
+            paddingClass="px-3 py-2"
+            preview={<AgentMarkdown text={notes} hardBreaks />}
+            emptyPreview={<p className="text-[13px] text-content/45">No notes</p>}
+          />
         </div>
       </div>
       {error ? (

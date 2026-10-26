@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, useRef, useState } from "react";
+import { act, createElement, useCallback, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -7,6 +7,10 @@ import {
   pastedImages,
   useMarkdownImages,
 } from "./useMarkdownImages";
+import {
+  textareaCaretTarget,
+  type MarkdownCaretTarget,
+} from "../../sessions/ui/markdownCaret";
 
 const save = vi.hoisted(() => vi.fn());
 vi.mock("../noteImages", async (original) => ({
@@ -23,12 +27,15 @@ let errors: (string | null)[];
 
 function Editor() {
   const [value, setValue] = useState("Before\n\nAfter");
-  const field = useRef<HTMLTextAreaElement>(null);
+  const caret = useRef<MarkdownCaretTarget | null>(null);
+  const field = useCallback((element: HTMLTextAreaElement | null) => {
+    caret.current = element ? textareaCaretTarget(element) : null;
+  }, []);
   const valueRef = useRef(value);
   valueRef.current = value;
   const images = useMarkdownImages({
     ownerId: "task-1",
-    fieldRef: field,
+    caretRef: caret,
     getValue: () => valueRef.current,
     onInsert: setValue,
     onError: (message) => errors.push(message),

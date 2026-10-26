@@ -651,6 +651,19 @@ function ProjectMarkdownImage({
 
 const noteImageSrcCache = new Map<string, string>();
 
+/**
+ * Displayable src for a Notes/Tasks image (`note-assets/…`), cached for the
+ * session. Shared by the preview and the Live editor.
+ */
+export async function loadNoteImageSrc(asset: string): Promise<string> {
+  const cached = noteImageSrcCache.get(asset);
+  if (cached) return cached;
+  const path = await invoke<string>("notes_image_path", { asset });
+  const src = convertFileSrc(path);
+  noteImageSrcCache.set(asset, src);
+  return src;
+}
+
 function NoteAssetImage({
   asset,
   alt,
@@ -661,10 +674,8 @@ function NoteAssetImage({
   useEffect(() => {
     if (src) return;
     let cancelled = false;
-    void invoke<string>("notes_image_path", { asset })
-      .then((path) => {
-        const next = convertFileSrc(path);
-        noteImageSrcCache.set(asset, next);
+    void loadNoteImageSrc(asset)
+      .then((next) => {
         if (!cancelled) setSrc(next);
       })
       .catch(() => undefined);

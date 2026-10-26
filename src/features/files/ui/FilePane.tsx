@@ -1,10 +1,12 @@
 import { lazySurface } from "../../../shared/ui/lazySurface";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { memo, useSyncExternalStore } from "react";
+import { memo, useRef, useSyncExternalStore } from "react";
 import {
   MarkdownViewShell,
   useMarkdownMode,
 } from "../../sessions/ui/MarkdownModeToggle";
+import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
+import { MarkdownLiveEditor } from "../../sessions/ui/MarkdownLiveEditor";
 import { SurfaceTabs } from "../../workspace/ui/SurfaceTabs";
 import {
   isAgentTab,
@@ -314,7 +316,8 @@ function PlanSurface({
   ) => void;
 }) {
   const plan = file.plan;
-  const [mode, setMode] = useMarkdownMode(file.path);
+  const [mode, setMode] = useMarkdownMode(file.path, "live");
+  const liveCaretRef = useRef<MarkdownCaretTarget | null>(null);
   const session = plan
     ? sessions.find((entry) => entry.id === plan.sessionId)
     : undefined;
@@ -333,6 +336,11 @@ function PlanSurface({
     );
   }
 
+  const editLocked =
+    remote ||
+    block.plan?.status === "streaming" ||
+    block.plan?.status === "building" ||
+    block.plan?.status === "built";
   const buildDisabled =
     !!session?.busy ||
     !block.text.trim() ||
@@ -386,17 +394,25 @@ function PlanSurface({
             ) : null}
           </div>
         }
+        live={
+          <div className="h-full overflow-auto px-5 pb-5 pt-14">
+            <MarkdownLiveEditor
+              value={block.text}
+              onChange={(next) => onUpdatePlan(plan.sessionId, block.id, next)}
+              caretRef={liveCaretRef}
+              label="Plan markdown"
+              readOnly={editLocked}
+              className={editLocked ? "opacity-70" : ""}
+            />
+          </div>
+        }
+        caretRef={liveCaretRef}
         source={
           <textarea
             aria-label="Plan markdown"
             spellCheck={false}
             value={block.text}
-            disabled={
-              remote ||
-              block.plan?.status === "streaming" ||
-              block.plan?.status === "building" ||
-              block.plan?.status === "built"
-            }
+            disabled={editLocked}
             onChange={(event) =>
               onUpdatePlan(plan.sessionId, block.id, event.currentTarget.value)
             }

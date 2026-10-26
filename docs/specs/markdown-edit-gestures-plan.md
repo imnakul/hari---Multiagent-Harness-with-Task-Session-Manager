@@ -1,5 +1,8 @@
 # Review — Double-click to edit and Ctrl+E in Markdown views (L-182)
 
+> Changed by L-183 ([markdown-live-mode-plan.md](markdown-live-mode-plan.md)): double-click in
+> Preview now opens Live, and Ctrl+E toggles Live ↔ Preview. The line mapping below is reused.
+
 Created 2026-10-23 09:36 IST. Tier: Medium. All platforms.
 Branch `ccr-b2ff3f4a-btpy2f`, base `23320ae8` (`nakul/windows-support-upstream-0.16.0`).
 

@@ -66,8 +66,8 @@ import { loadRecents } from "../../projects/model/recents";
 import { SharedHoverHighlight } from "../../sessions/ui/SharedHoverHighlight";
 import { type NoteProjectChoice } from "../notes";
 
-import { MarkdownSourceEditor } from "../../sessions/ui/MarkdownSourceEditor";
-import { useMarkdownEditGestures } from "../../sessions/ui/useMarkdownEditGestures";
+import { MarkdownEditorPanel } from "../../sessions/ui/MarkdownEditorPanel";
+import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
 
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 420;
@@ -594,7 +594,8 @@ function NoteEditor({
   const lockOverscroll = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
   const blank = !note.body.trim() && note.title === "Untitled";
-  const [mode, setMode] = useMarkdownMode(note.id);
+  // Live is the default view: read and edit in one place.
+  const [mode, setMode] = useMarkdownMode(note.id, "live");
   type Edits = Partial<Pick<Note, "title" | "body" | "tags">>;
   const [edits, setEdits] = useState<Edits>({});
   const title = edits.title ?? note.title;
@@ -611,13 +612,7 @@ function NoteEditor({
   const projectChangeRef = useRef(projectChange);
   const noteRef = useRef(note);
   const titleFieldRef = useRef<HTMLInputElement>(null);
-  const sourceFieldRef = useRef<HTMLTextAreaElement>(null);
-  const editGestures = useMarkdownEditGestures({
-    mode,
-    onModeChange: setMode,
-    markdown: body,
-    textareaRef: sourceFieldRef,
-  });
+  const editorRef = useRef<MarkdownCaretTarget | null>(null);
   const skipSave = useRef(false);
   const saveTimer = useRef<number | null>(null);
   // Title the user finished typing (blur/close). Any later title edit drops
@@ -630,8 +625,8 @@ function NoteEditor({
   const time = formatRelativeTime(new Date(note.updatedAt).toISOString());
 
   useEffect(() => {
-    if (blank) setMode("source");
-    // New untitled notes open in source so typing isn't behind the preview.
+    if (blank) setMode("live");
+    // New untitled notes open ready to type, not behind the preview.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -728,7 +723,7 @@ function NoteEditor({
 
   const images = useMarkdownImages({
     ownerId: note.id,
-    fieldRef: sourceFieldRef,
+    caretRef: editorRef,
     getValue: () => bodyRef.current,
     onInsert: (next) => {
       editNote({ body: next });
@@ -891,59 +886,29 @@ function NoteEditor({
               : "border-transparent"
           }`}
           {...images.dropZoneProps}
-          onKeyDown={editGestures.onKeyDown}
         >
           <MarkdownImageOverlay images={images} />
-          {mode === "source" ? (
-            <MarkdownSourceEditor
-              label="Note Markdown"
-              textareaRef={sourceFieldRef}
-              autoFocus={blank}
-              value={body}
-              onChange={(next) => {
-                editNote({ body: next });
-                scheduleSave();
-              }}
-            />
-          ) : (
-            <div
-              {...editGestures.previewProps}
-              className="min-h-[448px] outline-none"
-            >
-              {body.trim() ? (
-                <AgentMarkdown text={body} cwd={sourceCwd} hardBreaks />
-              ) : (
-                <p className="text-[13px] text-content/45">No description</p>
-              )}
-            </div>
-          )}
+          <MarkdownEditorPanel
+            mode={mode}
+            onModeChange={setMode}
+            value={body}
+            onChange={(next) => {
+              editNote({ body: next });
+              scheduleSave();
+            }}
+            caretRef={editorRef}
+            label="Note Markdown"
+            placeholder="Write…"
+            autoFocus={blank}
+            minHeightClass="min-h-[448px]"
+            preview={<AgentMarkdown text={body} cwd={sourceCwd} hardBreaks />}
+            emptyPreview={
+              <p className="text-[13px] text-content/45">No description</p>
+            }
+          />
         </div>
       </div>
     </div>
-  );
-}
-
-export function NoteSource({
-  label = "Note Markdown",
-  value,
-  onChange,
-  textareaRef,
-  autoFocus = false,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  textareaRef: { current: HTMLTextAreaElement | null };
-  label?: string;
-  autoFocus?: boolean;
-}) {
-  return (
-    <MarkdownSourceEditor
-      label={label}
-      value={value}
-      onChange={onChange}
-      textareaRef={textareaRef}
-      autoFocus={autoFocus}
-    />
   );
 }
 

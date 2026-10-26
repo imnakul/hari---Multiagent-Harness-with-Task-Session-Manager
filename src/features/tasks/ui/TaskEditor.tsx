@@ -15,7 +15,7 @@ import {
 } from "../../projects/model/recents";
 import { SearchableProjectPicker } from "../../projects/ui/SearchableProjectPicker";
 import { useProjectMarks } from "../../projects/ui/ProjectMark";
-import { NoteSource, NoteTagsEditor } from "../../notes/ui/NotesView";
+import { NoteTagsEditor } from "../../notes/ui/NotesView";
 import {
   InsertImageButton,
   MarkdownImageOverlay,
@@ -24,7 +24,8 @@ import {
 import { AgentMarkdown } from "../../sessions/ui/AgentMarkdown";
 import { MarkdownDetailTabs } from "../../sessions/ui/MarkdownDetailTabs";
 import { useMarkdownMode } from "../../sessions/ui/MarkdownModeToggle";
-import { useMarkdownEditGestures } from "../../sessions/ui/useMarkdownEditGestures";
+import { MarkdownEditorPanel } from "../../sessions/ui/MarkdownEditorPanel";
+import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
 import {
   taskMarkdown,
   updateTask,
@@ -85,20 +86,15 @@ export function TaskEditor({
   const observedTaskValues = useRef<Record<string, unknown>>({});
   const creatingAnother = useRef(false);
   const [creatingAnotherTask, setCreatingAnotherTask] = useState(false);
-  const source = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<MarkdownCaretTarget | null>(null);
   const lock = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
-  const [mode, setMode] = useMarkdownMode(`task:${task.id}`);
+  // Live is the default view: read and edit in one place.
+  const [mode, setMode] = useMarkdownMode(`task:${task.id}`, "live");
   const title = edits.title ?? task.title;
   const body = edits.body ?? task.body;
   const tags = edits.tags ?? task.tags;
   const status = edits.status ?? task.status;
-  const editGestures = useMarkdownEditGestures({
-    mode,
-    onModeChange: setMode,
-    markdown: body,
-    textareaRef: source,
-  });
   const focusDate =
     edits.focusDate === null ? undefined : (edits.focusDate ?? task.focusDate);
   const today = useLocalDay();
@@ -261,7 +257,7 @@ export function TaskEditor({
   taskBody.current = task.body;
   const images = useMarkdownImages({
     ownerId: task.id,
-    fieldRef: source,
+    caretRef: editorRef,
     getValue: () => editsRef.current.body ?? taskBody.current,
     onInsert: (next) => edit({ body: next }),
     onError: setActionError,
@@ -279,7 +275,7 @@ export function TaskEditor({
   }, [autoFocusTitle, task.id]);
   useEffect(() => {
     alive.current = true;
-    if (!task.body.trim() && task.title === "Untitled") setMode("source");
+    if (!task.body.trim() && task.title === "Untitled") setMode("live");
     return () => {
       alive.current = false;
       clearTimeout(timer.current);
@@ -587,26 +583,23 @@ export function TaskEditor({
               : "border-transparent"
           }`}
           {...images.dropZoneProps}
-          onKeyDown={editGestures.onKeyDown}
         >
           <MarkdownImageOverlay images={images} />
-          {mode === "source" ? (
-            <NoteSource
-              value={body}
-              textareaRef={source}
-              autoFocus={!autoFocusTitle && !body.trim()}
-              label="Task Markdown"
-              onChange={(next) => edit({ body: next })}
-            />
-          ) : (
-            <div {...editGestures.previewProps} className="outline-none">
-              {body.trim() ? (
-                <AgentMarkdown text={body} cwd={project} hardBreaks />
-              ) : (
-                <p className="text-[13px] text-content/45">No description</p>
-              )}
-            </div>
-          )}
+          <MarkdownEditorPanel
+            mode={mode}
+            onModeChange={setMode}
+            value={body}
+            onChange={(next) => edit({ body: next })}
+            caretRef={editorRef}
+            label="Task Markdown"
+            placeholder="Write…"
+            autoFocus={!autoFocusTitle && !body.trim()}
+            minHeightClass="min-h-40"
+            preview={<AgentMarkdown text={body} cwd={project} hardBreaks />}
+            emptyPreview={
+              <p className="text-[13px] text-content/45">No description</p>
+            }
+          />
         </div>
         <TaskTimeline task={task} today={today} />
       </div>

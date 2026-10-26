@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { ImagePlus } from "../../../shared/ui/icons";
+import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
 import {
   insertNoteImagesMarkdown,
   saveNoteImagesFromFiles,
@@ -36,20 +37,21 @@ export type MarkdownImages = {
 /**
  * Image drop, paste and pick for a Markdown body. Images are copied into
  * `note-assets/<ownerId>/` (notes and tasks share this store, keyed by their id)
- * and inserted as Markdown at the source field's selection.
+ * and inserted as Markdown at the editor's selection (Live or Source).
  *
  * Both the native Tauri drop event and the DOM drop can fire for one drop; the
  * second within 250 ms is ignored.
  */
 export function useMarkdownImages({
   ownerId,
-  fieldRef,
+  caretRef,
   getValue,
   onInsert,
   onError,
 }: {
   ownerId: string;
-  fieldRef: RefObject<HTMLTextAreaElement | null>;
+  /** The editor on screen; null in Preview, where images go at the end. */
+  caretRef: RefObject<MarkdownCaretTarget | null>;
   getValue: () => string;
   onInsert: (value: string) => void;
   onError: (message: string | null) => void;
@@ -62,13 +64,13 @@ export function useMarkdownImages({
   latest.current = { getValue, onInsert, onError };
 
   const insertionRange = useCallback((): Range => {
-    const field = fieldRef.current;
-    if (!field) {
+    const editor = caretRef.current;
+    if (!editor) {
       const end = latest.current.getValue().length;
       return { start: end, end };
     }
-    return { start: field.selectionStart, end: field.selectionEnd };
-  }, [fieldRef]);
+    return editor.selection();
+  }, [caretRef]);
 
   const add = useCallback(
     async (load: () => Promise<NoteImageAsset[]>, range: Range) => {
@@ -85,10 +87,7 @@ export function useMarkdownImages({
         latest.current.onInsert(inserted.value);
         latest.current.onError(null);
         window.requestAnimationFrame(() => {
-          const field = fieldRef.current;
-          if (!field) return;
-          field.focus();
-          field.setSelectionRange(inserted.cursor, inserted.cursor);
+          caretRef.current?.focusAt(inserted.cursor);
         });
       } catch (err: unknown) {
         latest.current.onError(err instanceof Error ? err.message : String(err));
@@ -96,7 +95,7 @@ export function useMarkdownImages({
         setBusy(false);
       }
     },
-    [fieldRef],
+    [caretRef],
   );
 
   const addFiles = useCallback(

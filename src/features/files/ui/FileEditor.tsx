@@ -15,6 +15,7 @@ import {
   StateField,
   Transaction,
   type EditorState,
+  type Extension,
   type Text,
 } from "@codemirror/state";
 import {
@@ -34,7 +35,13 @@ import {
 } from "../../../shared/ui/icons";
 import { formatInteger } from "../../../shared/lib/numbers";
 import { minimalSetup } from "codemirror";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   MarkdownViewShell,
   useMarkdownMode,
@@ -96,6 +103,9 @@ import { editorLint } from "../editor/editorLint";
 import { editorSearch } from "../editor/editorSearch";
 import { editorScrollbar } from "../editor/editorScrollbar";
 import { FilePreviewSearch } from "./FilePreviewSearch";
+import { markdownLive } from "../editor/markdownLive";
+import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
+import { openMarkdownLink } from "../../sessions/ui/MarkdownLiveEditorView";
 
 type EditorNavigationRequest = EditorNavigation & { token: number };
 
@@ -103,6 +113,19 @@ export const FILE_EDITOR_AUTOSAVE_DELAY_MS = 1_000;
 
 const editorScheme = new Compartment();
 const editorGitConfig = new Compartment();
+// Live mode (Markdown files) swaps the gutters for formatted text.
+const editorGutters = new Compartment();
+const editorLiveConfig = new Compartment();
+
+function gutterExtensions(showDiff: boolean): Extension {
+  // Diff tabs put the fold arrows first so each line number sits right
+  // beside its +/- glyph.
+  return showDiff ? [foldGutter(), lineNumbers()] : [lineNumbers(), foldGutter()];
+}
+
+function liveExtensions(live: boolean): Extension {
+  return live ? markdownLive({ openLink: openMarkdownLink }) : [];
+}
 
 type Props = {
   path: string;
@@ -152,6 +175,12 @@ export function FileEditor({
     showDiff ? `review:${path}` : path,
     showDiff ? "source" : loadFileViewMode(),
   );
+  // Live reuses the editor (one CodeMirror), so only editable Markdown files
+  // outside a diff offer it.
+  const liveAvailable = markdown && !showDiff;
+  const editorCaretRef = useRef<MarkdownCaretTarget | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const sourceNavigationToken = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (
@@ -161,8 +190,10 @@ export function FileEditor({
     )
       return;
     sourceNavigationToken.current = navigation.token;
-    setMode("source");
-  }, [markdown, svg, navigation, setMode]);
+    // A jump to a line needs the editor; Live and Source both are one.
+    if (modeRef.current === "preview" || (modeRef.current === "live" && !liveAvailable))
+      setMode(liveAvailable ? "live" : "source");
+  }, [liveAvailable, markdown, svg, navigation, setMode]);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveGeneration = useRef(0);
   const loadGeneration = useRef(0);
@@ -462,6 +493,8 @@ export function FileEditor({
       {markdown || svg ? (
         <MarkdownViewShell
           markdown={markdown ? draft : undefined}
+          live={liveAvailable ? "source" : undefined}
+          caretRef={editorCaretRef}
           mode={mode}
           onModeChange={(next) => {
             setMode(next);
@@ -494,7 +527,9 @@ export function FileEditor({
                 value={loadState.content}
                 showDiff={showDiff}
                 gitOriginal={gitOriginal}
-                active={active && mode === "source"}
+                active={active && mode !== "preview"}
+                live={liveAvailable && mode === "live"}
+                caretRef={editorCaretRef}
                 navigation={navigation}
                 onDirtyChange={dirtyChange}
                 onErrorCountChange={errorCountChange}
@@ -565,6 +600,8 @@ export function CodeMirrorEditor({
   onStageGit,
   onDocChange,
   formatOnSave = true,
+  live = false,
+  caretRef,
 }: {
   path: string;
   commentPath: string;
@@ -580,6 +617,10 @@ export function CodeMirrorEditor({
   onStageGit?: (contents: string) => Promise<void>;
   onDocChange?: (content: string) => void;
   formatOnSave?: boolean;
+  /** Live Markdown formatting (Markdown files only). */
+  live?: boolean;
+  /** Set to this editor while it exists, for "edit here" gestures. */
+  caretRef?: RefObject<MarkdownCaretTarget | null>;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -593,6 +634,8 @@ export function CodeMirrorEditor({
   const onStageGitRef = useRef(onStageGit);
   const canStage = onStageGit !== undefined;
   const onDocChangeRef = useRef(onDocChange);
+  const liveRef = useRef(live);
+  liveRef.current = live;
   const valueRef = useRef(value);
   const navigationTokenRef = useRef<number | undefined>(undefined);
   const pendingNavigationRef = useRef<EditorNavigationRequest | null>(null);
@@ -783,11 +826,8 @@ export function CodeMirrorEditor({
       extensions: [
         minimalSetup,
         showDiff ? editorGitConfig.of(editorGit(gitOptions)) : [],
-        // Diff tabs put the fold arrows first so each line number sits right
-        // beside its +/- glyph.
-        showDiff
-          ? [foldGutter(), lineNumbers()]
-          : [lineNumbers(), foldGutter()],
+        editorGutters.of(liveRef.current ? [] : gutterExtensions(showDiff)),
+        editorLiveConfig.of(liveExtensions(liveRef.current)),
         highlightActiveLine(),
         highlightActiveLineGutter(),
         EditorView.lineWrapping,
@@ -861,6 +901,24 @@ export function CodeMirrorEditor({
     savedDocumentRef.current = view.state.doc;
     dirtyRef.current = false;
     viewRef.current = view;
+    const caretTarget: MarkdownCaretTarget = {
+      selection: () => {
+        const main = view.state.selection.main;
+        return { start: main.from, end: main.to };
+      },
+      focusAt: (from, to = from) => {
+        const length = view.state.doc.length;
+        const anchor = Math.min(Math.max(0, from), length);
+        const head = Math.min(Math.max(anchor, to), length);
+        view.dispatch({
+          selection: EditorSelection.range(anchor, head),
+          effects: EditorView.scrollIntoView(anchor, { y: "center" }),
+          annotations: sourceNavigation.of(true),
+        });
+        view.focus();
+      },
+    };
+    if (caretRef) caretRef.current = caretTarget;
     lockOverscroll(view.scrollDOM as HTMLDivElement);
     if (showDiff) {
       if (gitOriginalRef.current) {
@@ -888,13 +946,25 @@ export function CodeMirrorEditor({
       window.clearTimeout(autosaveTimer);
       onErrorCountChangeRef.current(0);
       lockOverscroll(null);
+      if (caretRef?.current === caretTarget) caretRef.current = null;
       viewRef.current = null;
       savedDocumentRef.current = null;
       setChunkNav(null);
       setSelectionTarget(null);
       view.destroy();
     };
-  }, [formatOnSave, lockOverscroll, path, showDiff, syncChunkNav]);
+  }, [caretRef, formatOnSave, lockOverscroll, path, showDiff, syncChunkNav]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: [
+        editorGutters.reconfigure(live ? [] : gutterExtensions(showDiff)),
+        editorLiveConfig.reconfigure(liveExtensions(live)),
+      ],
+    });
+  }, [live, showDiff]);
 
   useEffect(() => {
     const view = viewRef.current;

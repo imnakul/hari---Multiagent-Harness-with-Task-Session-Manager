@@ -3,7 +3,12 @@
 Working roadmap for the personal fork. The north star first, the ladder to reach it second,
 current state third, and suggestions/quick wins on top at the end.
 
-## Markdown Live mode (Obsidian-style) — planned 2026-10-23, not started
+## Markdown Live mode (Obsidian-style) — planned 2026-10-23, built 2026-10-26 (L-183)
+
+Built for every editable Markdown view (Notes, Tasks, Session metadata, `.md` files, plan
+panes); spec [markdown-live-mode-plan.md](specs/markdown-live-mode-plan.md). Decisions taken:
+Live is the default; double-click Preview → Live; Ctrl+E Live ↔ Preview. Open items: the
+desktop check, then **Phase 2** below.
 
 A third view beside Preview and Source in Notes, Tasks and Session metadata: **Preview | Live |
 Source**. Typing shows formatting as you go (`## ` heading, `**bold**`, `- ` bullet, `- [ ]`
@@ -14,17 +19,18 @@ Markdown → editor → Markdown conversion is lossy.
 
 **Size: Medium.** No new packages (CodeMirror 6, `@codemirror/lang-markdown` and
 `@lezer/markdown` are installed; lazy-load Live). About 1,000 new lines:
-- [ ] CodeMirror editor component kept in sync with the item's text and autosave.
-- [ ] Live decorations plugin: headings, bold/italic/strike, inline code, links, quotes, lists,
+- [x] CodeMirror editor component kept in sync with the item's text and autosave.
+- [x] Live decorations plugin: headings, bold/italic/strike, inline code, links, quotes, lists,
   task checkboxes, code fences, dividers, images; symbols shown on the cursor line only.
-- [ ] Enter continues lists and checklists.
-- [ ] Theme matching `AgentMarkdown` typography.
-- [ ] Image paste/drop (`useMarkdownImages`): adapter for CodeMirror selection instead of the textarea.
-- [ ] `MarkdownViewMode` gains `live`; three tabs; `useMarkdownEditGestures` handles Live.
+- [x] Enter continues lists and checklists.
+- [x] Theme matching `AgentMarkdown` typography.
+- [x] Image paste/drop (`useMarkdownImages`): adapter for CodeMirror selection instead of the textarea.
+- [x] `MarkdownViewMode` gains `live`; three tabs; `useMarkdownEditGestures` handles Live.
 
 **Preview-only in the first version:** Mermaid, syntax-highlighted code, table layout,
 file-link context menus, link preview cards (they show as tidy plain text in Live).
-**Phase 2:** tables and Mermaid in Live; Live for `.md` files in the file viewer.
+**Phase 2:** tables and Mermaid drawn in Live; project-relative images in `.md` files shown in
+Live. (Live for `.md` files in the file viewer was pulled into the first version.)
 **Risks to test:** cursor jumps when symbols hide (use atomic ranges), IME input, very long notes.
 
 **Decisions to confirm before building** (recommended):
