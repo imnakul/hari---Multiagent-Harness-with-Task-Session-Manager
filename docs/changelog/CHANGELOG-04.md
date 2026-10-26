@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-26 11:24 IST — 0.16.0-local13 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local13: 0.16.0-local12 plus the Status-ring glide fix, only the focused pane ringed in the Status style, and the static border's glow moved inward (L-184).
+- Why: User asked to commit, push and build with the ring changes.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local13-pane-ring-focused-only_x64.exe` (15,141,736 bytes, SHA-256 5C4DD994A760793FE81BB4D243206D0CAE1932312F24706B05E41666FF713720, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 90f4d66e + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest ✅ at 90f4d66e; desktop check manual
 ## 2026-10-26 11:19 IST — Only the focused pane is ringed in Status style; static glow inward (L-184)
 - Type: style
 - What: In the Status ring style, panes that are not focused no longer show a coloured edge; only the focused pane has a ring, as with the static border. The static border's glow now falls inside the focused pane instead of spilling outside it.
