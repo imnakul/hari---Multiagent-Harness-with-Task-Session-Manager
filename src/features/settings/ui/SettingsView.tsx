@@ -3215,11 +3215,10 @@ const ACTIVE_PANE_STYLE_OPTIONS: Record<
   { label: string; description: string }
 > = {
   static: { label: "Static border", description: "An accent outline with a soft glow." },
-  gradient: { label: "Gradient border", description: "A two-tone accent outline." },
   status: {
     label: "Status ring",
     description:
-      "Shows the chat's state: a light runs around it while working, amber when it needs you, red after an error, green when done. Other panes get a thin edge.",
+      "Shows each chat's state: accent while working (with a moving light on the focused pane), amber when it needs you, red when it failed or was stopped, green when done.",
   },
 };
 

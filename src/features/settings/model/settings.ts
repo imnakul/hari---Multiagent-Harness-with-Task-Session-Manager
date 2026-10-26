@@ -1798,10 +1798,11 @@ function storedChoice<T extends string>(
 /**
  * How the focused pane is outlined in workspace splits and Focus mode (L-184),
  * Settings → Appearance. `static` is the accent border from L-137/L-144;
- * `gradient` a two-tone accent border; `status` a ring showing the chat's
- * state (working, waiting on you, error), with a thin edge on other panes.
+ * `status` a ring showing the chat's state (working, waiting on you, error,
+ * done), with a thin edge on other panes. A stored `gradient` (an option for
+ * one build) reads as `static`.
  */
-export const ACTIVE_PANE_STYLES = ["static", "gradient", "status"] as const;
+export const ACTIVE_PANE_STYLES = ["static", "status"] as const;
 export type ActivePaneStyle = (typeof ACTIVE_PANE_STYLES)[number];
 
 const activePaneStyleSetting = storedChoice<ActivePaneStyle>(

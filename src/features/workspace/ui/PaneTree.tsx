@@ -495,9 +495,11 @@ function PaneTreeComponent({
         ":scope > [data-pane-content]",
       );
       if (!content) return;
+      // A split pane's card sits inside its margin.
+      const inset = content.dataset.paneCard === undefined ? 0 : PANE_CARD_GAP * 2;
       content.style.flex = "none";
-      content.style.width = `${rect.w * box.width}px`;
-      content.style.height = `${rect.h * box.height}px`;
+      content.style.width = `${rect.w * box.width - inset}px`;
+      content.style.height = `${rect.h * box.height - inset}px`;
       element.style.alignItems =
         edge === "left" ? "flex-end" : edge === "fade" ? "center" : "";
       element.style.justifyContent =
@@ -505,7 +507,8 @@ function PaneTreeComponent({
       // The dividers wait for the final layout; this edge stands in for
       // the one the pane rides.
       element.style.zIndex = "1";
-      element.style.boxShadow = edgeShadow(edge);
+      // Flush panes ride a divider line; cards have their own border.
+      if (!inset) element.style.boxShadow = edgeShadow(edge);
       pinned.push(element);
     };
     // The sliding file's contents fade with it.
@@ -772,20 +775,31 @@ function PaneTreeComponent({
             {drop && drop.overId === leaf.id && drop.fromId !== leaf.id ? (
               <PaneDropHint edge={drop.edge} />
             ) : null}
-            {paneStyle === "status" && inSplit && !leaving ? (
-              <PaneStatusEdge
-                paneId={leaf.id}
-                status={statusOf(leaf.id)}
-                hidden={focusedId === leaf.id}
-              />
-            ) : null}
             <div
               data-pane-content=""
+              data-pane-card={inSplit ? "" : undefined}
               data-pane-enter={
                 leaving ? undefined : enteringPanes.current.get(leaf.id)
               }
-              className="flex min-h-0 min-w-0 flex-1 flex-col"
+              // Fork (L-184): split panes are rounded cards like Focus mode's;
+              // the focused card leaves its edge to the gliding ring.
+              className={`flex min-h-0 min-w-0 flex-1 flex-col${
+                inSplit
+                  ? ` focus-pane relative m-[3px] overflow-hidden rounded-[10px] border ${
+                      !leaving && focusedId === leaf.id
+                        ? "border-transparent"
+                        : "border-stroke"
+                    }`
+                  : ""
+              }`}
             >
+              {paneStyle === "status" && inSplit && !leaving ? (
+                <PaneStatusEdge
+                  paneId={leaf.id}
+                  status={statusOf(leaf.id)}
+                  hidden={focusedId === leaf.id}
+                />
+              ) : null}
               {editorPane ? (
                 <FilePane
                   pane={editorPane}
@@ -906,9 +920,8 @@ function PaneTreeComponent({
           paneId={focusedLeaf.id}
           paneStyle={paneStyle}
           status={statusOf(focusedLeaf.id)}
-          variant="inset"
           className="pane-ring-glide absolute z-20"
-          style={ringRectStyle(focusedLeaf.rect)}
+          style={ringRectStyle(focusedLeaf.rect, PANE_CARD_GAP)}
         />
       ) : null}
       {sashes.map((sash) => (
@@ -952,13 +965,16 @@ function paneRectStyle(rect: LayoutRect): Record<string, string> {
   };
 }
 
-/** The focused-pane ring's box: the pane's rect, nothing else. */
-function ringRectStyle(rect: LayoutRect): Record<string, string> {
+/** Margin around a split pane's card, as in Focus mode (6 px between cards). */
+const PANE_CARD_GAP = 3;
+
+/** The focused-pane ring's box: the pane's rect less its card margin. */
+function ringRectStyle(rect: LayoutRect, gap: number): Record<string, string> {
   return {
-    left: `${rect.x * 100}%`,
-    top: `${rect.y * 100}%`,
-    width: `${rect.w * 100}%`,
-    height: `${rect.h * 100}%`,
+    left: `calc(${rect.x * 100}% + ${gap}px)`,
+    top: `calc(${rect.y * 100}% + ${gap}px)`,
+    width: `calc(${rect.w * 100}% - ${gap * 2}px)`,
+    height: `calc(${rect.h * 100}% - ${gap * 2}px)`,
   };
 }
 
@@ -1015,7 +1031,7 @@ function previewLayout(tree: HTMLElement | null, layout: LayoutNode): void {
     const style = pane
       ? paneRectStyle(pane.rect)
       : ring
-        ? ringRectStyle(ring.rect)
+        ? ringRectStyle(ring.rect, PANE_CARD_GAP)
         : sash
           ? sashStyle(sash)
           : null;
@@ -1185,9 +1201,8 @@ function Sash({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(boundary * 100)}
-      className={
-        row ? "absolute z-10 w-px bg-stroke" : "absolute z-10 h-px bg-stroke"
-      }
+      // The gap between the rounded cards is the divider (L-184); no line.
+      className={row ? "absolute z-10 w-px" : "absolute z-10 h-px"}
       style={sashStyle(sash)}
     >
       <div

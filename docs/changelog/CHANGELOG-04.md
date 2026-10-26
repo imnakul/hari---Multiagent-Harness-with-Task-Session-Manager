@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-26 09:30 IST — Focused pane follow-up: rounded workspace cards, status colours, edge fix (L-184)
+- Type: feature + fix
+- What: Workspace split panes are now rounded cards with gaps like Focus mode, with the gliding ring matching. Fixed the right and bottom ring edges looking doubled (the focused card's grey border showed beside the ring; it is transparent now). Removed the Gradient border option. Status ring colours: accent while working, green when done, red when failed or stopped, amber when it needs you (incl. paused/held queue).
+- Why: User feedback after the first desktop look (screenshot): status ring and dimming kept; gradient dropped.
+- Files: [PaneTree.tsx](../../src/features/workspace/ui/PaneTree.tsx), [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx), [PaneRing.tsx](../../src/features/workspace/ui/PaneRing.tsx) (+ test), [paneStatus.ts](../../src/features/sessions/model/paneStatus.ts) (+ test), [settings.ts](../../src/features/settings/model/settings.ts) (+ test), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [index.css](../../src/styles/index.css) (`.active-pane-ring` removed)
+- Verified: tsc ✅ vitest ✅ (7,745 passed, 2 skipped) vite build ✅ — eslint not run (no config in repo); desktop check manual
+- Commit: see git log (L-184 follow-up)
 ## 2026-10-26 08:39 IST — Focused pane styles: glide everywhere, gradient, status ring, dimming (L-184)
 - Type: feature
 - What: The focused-pane ring now glides between panes in workspace splits too (was Focus mode only). Settings → Appearance → **Focused pane style**: Static border (default, unchanged look), Gradient border, or Status ring (light travels while working, amber when it needs you, red after an error, green flash when done; thin edge on unfocused panes). **Dim other panes**: Off / Subtle / Strong; hovering a pane restores it.

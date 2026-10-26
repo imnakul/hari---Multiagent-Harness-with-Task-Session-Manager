@@ -997,7 +997,7 @@ describe("focused pane settings (L-184)", () => {
   });
 
   it("ignore unknown stored values", () => {
-    localStorage.setItem("monocode.activePaneStyle", "neon");
+    localStorage.setItem("monocode.activePaneStyle", "gradient");
     localStorage.setItem("monocode.inactivePaneDim", "max");
     expect(loadActivePaneStyle()).toBe("static");
     expect(loadInactivePaneDim()).toBe("off");

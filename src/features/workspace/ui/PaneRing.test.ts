@@ -36,7 +36,6 @@ async function ring(
         paneId,
         paneStyle,
         status,
-        variant: "inset",
       }),
     ),
   );
@@ -44,32 +43,33 @@ async function ring(
 }
 
 describe("PaneFocusRing", () => {
-  it("keeps the original classes for the static style", async () => {
+  it("keeps the original ring for the static style", async () => {
     const element = await ring("a", "working", "static");
-    expect(element.classList.contains("active-pane-ring")).toBe(true);
+    expect(element.classList.contains("focus-ring")).toBe(true);
     expect(element.dataset.paneStatus).toBeUndefined();
     expect(element.querySelector(".pane-ring-edge")).toBeNull();
   });
 
-  it("draws a gradient edge without status", async () => {
-    const element = await ring("a", "attention", "gradient");
-    expect(element.dataset.ringKind).toBe("gradient");
-    expect(element.dataset.paneStatus).toBeUndefined();
-    expect(element.querySelector(".pane-ring-edge")).not.toBeNull();
+  it("colours the status ring by state", async () => {
+    for (const status of ["working", "attention", "error", "done", "idle"] as const) {
+      const element = await ring("a", status);
+      expect(element.dataset.paneStatus).toBe(status);
+      expect(element.querySelector(".pane-ring-edge")).not.toBeNull();
+    }
   });
 
-  it("shows the status and flashes when a turn finishes", async () => {
+  it("pulses once when a turn finishes", async () => {
     await ring("a", "working");
-    const element = await ring("a", "idle");
-    expect(element.dataset.paneStatus).toBe("idle");
+    const element = await ring("a", "done");
+    expect(element.dataset.paneStatus).toBe("done");
     expect(element.dataset.paneFlash).toBe("");
     await act(async () => vi.advanceTimersByTime(1_700));
     expect(element.dataset.paneFlash).toBeUndefined();
   });
 
-  it("does not flash when focus moves from a working pane to an idle one", async () => {
+  it("does not pulse when focus moves from a working pane to a done one", async () => {
     await ring("a", "working");
-    const element = await ring("b", "idle");
+    const element = await ring("b", "done");
     expect(element.dataset.paneFlash).toBeUndefined();
   });
 });
@@ -82,15 +82,18 @@ describe("PaneStatusEdge", () => {
     return container.querySelector<HTMLElement>(".pane-status-edge");
   }
 
-  it("draws nothing for an idle or focused pane", async () => {
+  it("draws nothing where nothing ran, or for the focused pane", async () => {
     expect(await edge("idle")).toBeNull();
     expect(await edge("attention", true)).toBeNull();
   });
 
-  it("shows a pane waiting on you, and a finish flash", async () => {
+  it("shows waiting, failed and done panes, and pulses on finishing", async () => {
     expect((await edge("attention"))?.dataset.paneStatus).toBe("attention");
+    expect((await edge("error"))?.dataset.paneStatus).toBe("error");
     await edge("working");
-    expect((await edge("idle"))?.dataset.paneFlash).toBe("");
+    const done = await edge("done");
+    expect(done?.dataset.paneStatus).toBe("done");
+    expect(done?.dataset.paneFlash).toBe("");
   });
 });
 

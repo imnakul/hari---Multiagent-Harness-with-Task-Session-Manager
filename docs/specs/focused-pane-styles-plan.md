@@ -37,6 +37,17 @@ looks, including a ring that shows the chat's state.
 - `index.css`: styles. Gradient/status draw a masked edge so the border can be a gradient;
   working animates one registered angle; attention pulses opacity twice; reduced motion off.
 
+## Follow-up 2026-10-26 (after the first desktop look)
+
+- Gradient border removed (not useful); a stored `gradient` reads as `static`.
+- Workspace split panes became rounded cards with 3 px margins like Focus mode; the ring
+  matches them.
+- Right and bottom edges looked doubled: the focused card's own grey border showed beside the
+  ring on fractional pixels. The focused card's border is now transparent (both views).
+- Status colours: accent only while working (moving light on the focused pane), green done
+  (persistent), red failed or stopped, amber needs you (also a paused or held queue). The
+  finish moment is a pulse, no longer a colour of its own.
+
 ## Risks
 
 - `mask-composite` and `@property` need current WebView2/WebKit (supported; older WebKit shows

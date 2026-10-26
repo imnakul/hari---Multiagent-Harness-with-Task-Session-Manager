@@ -38,8 +38,9 @@ export function useInactivePaneDim(): InactivePaneDim {
 }
 
 /**
- * True for a moment after the pane `paneId` stops working. Keyed by pane, so
- * the gliding ring moving from a working pane to an idle one does not flash.
+ * True for a moment after the pane `paneId` finishes a turn (working → done).
+ * Keyed by pane, so the gliding ring moving from a working pane to a done one
+ * does not pulse.
  */
 function useFinishFlash(paneId: string, status: PaneStatus): boolean {
   const previous = useRef({ paneId, status });
@@ -51,7 +52,7 @@ function useFinishFlash(paneId: string, status: PaneStatus): boolean {
       setFlashing(false);
       return;
     }
-    if (before.status !== "working" || status !== "idle") return;
+    if (before.status !== "working" || status !== "done") return;
     setFlashing(true);
     const timer = window.setTimeout(() => setFlashing(false), FINISH_FLASH_MS);
     return () => window.clearTimeout(timer);
@@ -60,23 +61,18 @@ function useFinishFlash(paneId: string, status: PaneStatus): boolean {
 }
 
 /**
- * The one ring over the focused pane (L-137/L-144, gliding per L-151 and now
- * in workspace splits too). The caller positions it (`className`, `style`)
- * and moves it; this draws the chosen style:
+ * The one ring over the focused pane (L-137/L-144, gliding per L-151, and in
+ * workspace splits too since L-184). The caller positions it (`className`,
+ * `style`) over the pane's rounded card and moves it; this draws the style:
  * - `static`: the accent border and glow the app always had;
- * - `gradient`: a two-tone accent border;
- * - `status`: the chat's state — accent when idle, a light travelling the
- *   border while working, amber when it waits on you, red after an error,
- *   a green flash when a turn finishes.
- *
- * `inset` suits flush workspace panes (glow inside), `card` the rounded Focus
- * panes (glow outside).
+ * - `status`: the chat's state — accent while working (a light travels the
+ *   border), amber when it waits on you, red after a failed or stopped turn,
+ *   green when done, plain accent before anything ran.
  */
 export function PaneFocusRing({
   paneId,
   paneStyle,
   status,
-  variant,
   className = "",
   style,
   ringAttribute,
@@ -84,40 +80,33 @@ export function PaneFocusRing({
   paneId: string;
   paneStyle: ActivePaneStyle;
   status: PaneStatus;
-  variant: "inset" | "card";
   className?: string;
   style?: CSSProperties;
   /** Marks the element for DOM-only moves while a divider is dragged. */
   ringAttribute: "data-pane-ring" | "data-focus-ring";
 }): ReactElement {
   const flashing = useFinishFlash(paneId, status);
-  const legacy =
-    paneStyle === "static"
-      ? variant === "card"
-        ? " focus-ring"
-        : " active-pane-ring"
-      : "";
+  const statusStyle = paneStyle === "status";
   return (
     <div
       aria-hidden
       {...{ [ringAttribute]: paneId }}
       data-ring-kind={paneStyle}
-      data-ring-variant={variant}
-      data-pane-status={paneStyle === "status" ? status : undefined}
-      data-pane-flash={paneStyle === "status" && flashing ? "" : undefined}
-      className={`pane-ring pointer-events-none${legacy} ${className}`}
+      data-pane-status={statusStyle ? status : undefined}
+      data-pane-flash={statusStyle && flashing ? "" : undefined}
+      className={`pane-ring pointer-events-none rounded-[10px]${statusStyle ? "" : " focus-ring"} ${className}`}
       style={style}
     >
-      {paneStyle === "static" ? null : <span className="pane-ring-edge" />}
+      {statusStyle ? <span className="pane-ring-edge" /> : null}
     </div>
   );
 }
 
 /**
  * A thin status edge on a pane that is not focused, for the `status` style:
- * so a chat waiting on you, failing or finishing shows without focusing it.
- * Idle panes draw nothing. Keep it mounted (with `hidden` while the pane is
- * focused) so it notices a turn finishing.
+ * working, waiting on you, failed or done shows without focusing the pane.
+ * Panes where nothing ran draw nothing. Keep it mounted (with `hidden` while
+ * the pane is focused) so it notices a turn finishing.
  */
 export function PaneStatusEdge({
   paneId,
@@ -131,7 +120,7 @@ export function PaneStatusEdge({
   className?: string;
 }): ReactElement | null {
   const flashing = useFinishFlash(paneId, status);
-  if (hidden || (status === "idle" && !flashing)) return null;
+  if (hidden || status === "idle") return null;
   return (
     <span
       aria-hidden

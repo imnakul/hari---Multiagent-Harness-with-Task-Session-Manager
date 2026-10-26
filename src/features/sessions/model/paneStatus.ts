@@ -1,8 +1,16 @@
 import { sessionNeedsInput, type Session } from "./session";
 import { isSessionWorking } from "./workingSessions";
 
-/** What the status pane ring (L-184) shows for a chat. */
-export type PaneStatus = "idle" | "working" | "attention" | "error";
+/**
+ * What the status pane ring (L-184) shows for a chat:
+ * - `working`: a turn is running (accent);
+ * - `attention`: it waits on you — a permission, a question, or a paused or
+ *   held queue (amber);
+ * - `error`: its latest turn failed or was stopped (red);
+ * - `done`: its latest turn finished (green);
+ * - `idle`: nothing has run yet, or it is a file pane.
+ */
+export type PaneStatus = "idle" | "working" | "attention" | "error" | "done";
 
 type StatusSession = Pick<
   Session,
@@ -11,26 +19,31 @@ type StatusSession = Pick<
   | "blocks"
   | "pendingQuestion"
   | "worktreeRemoved"
+  | "queueStatus"
 >;
 
-/**
- * A pane's status, most urgent first: waiting on you (permission or
- * question), then working, then a last turn that ended on an error notice.
- * File panes and empty chats are idle.
- */
+/** A pane's status, most urgent first. */
 export function paneStatus(session: StatusSession | undefined): PaneStatus {
   if (!session) return "idle";
   if (sessionNeedsInput(session)) return "attention";
+  if (session.queueStatus === "held" || session.queueStatus === "paused")
+    return "attention";
   if (isSessionWorking(session)) return "working";
-  return lastTurnFailed(session.blocks) ? "error" : "idle";
+  return latestTurnOutcome(session.blocks);
 }
 
-/** True when the newest system notice since the last user turn is an error. */
-function lastTurnFailed(blocks: StatusSession["blocks"]): boolean {
+/**
+ * How the newest turn ended: an error or interruption notice after the last
+ * user message makes it `error`; any other finished turn is `done`; a chat
+ * with no sent user message is `idle`.
+ */
+function latestTurnOutcome(blocks: StatusSession["blocks"]): PaneStatus {
   for (let index = blocks.length - 1; index >= 0; index -= 1) {
     const block = blocks[index];
-    if (!block || block.role === "user") return false;
-    if (block.notice === "error") return true;
+    // An unsent draft is not a turn.
+    if (!block || (block.role === "user" && block.draft)) continue;
+    if (block.role === "user") return "done";
+    if (block.notice === "error" || block.notice === "interrupt") return "error";
   }
-  return false;
+  return "idle";
 }

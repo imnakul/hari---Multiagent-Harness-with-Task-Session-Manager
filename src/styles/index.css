@@ -1904,16 +1904,6 @@ html.theme-light .orchestrator-constellation {
   outline-offset: 1px;
 }
 
-/* Focused pane outline (L-137): the user accent, with a faint inner glow.
-   The `static` style of the workspace ring (PaneFocusRing, L-184). */
-.active-pane-ring {
-  box-shadow:
-    inset 0 0 0 1px
-      color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 75%, transparent),
-    inset 0 0 16px -6px
-      color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 35%, transparent);
-}
-
 /* Focus pane cards (L-144): rounded, with the inset card's soft lift. The
    focused one takes the accent edge and an outer glow, the turn-mode halo's
    recipe at a calmer strength, held while it stays focused. Fork (L-151): the
@@ -1955,11 +1945,13 @@ html.theme-light .orchestrator-constellation {
 }
 
 /* Focused pane styles (L-184), Settings → Appearance. One .pane-ring glides
-   over the focused pane in workspace splits ([data-pane-ring]) and Focus mode
-   ([data-focus-ring]); `static` keeps the classes above. Gradient and status
-   draw a masked edge (.pane-ring-edge) so the border can be a gradient, with
-   the glow on the ring itself. Only opacity and one registered angle animate;
-   reduced motion turns all of it off. */
+   over the focused pane's rounded card in workspace splits ([data-pane-ring])
+   and Focus mode ([data-focus-ring]). `static` is .focus-ring above; `status`
+   draws a masked edge (.pane-ring-edge) in the chat's state colour, with the
+   glow on the ring itself. Only opacity and one registered angle animate;
+   reduced motion turns all of it off. Status colours use the 400 shade, like
+   the Session Manager tags: accent working, amber asks, red failed, emerald
+   done. */
 .pane-ring-glide {
   transition-property: left, top, width, height;
   transition-duration: 260ms;
@@ -1970,10 +1962,20 @@ html.theme-light .orchestrator-constellation {
   transition: none;
 }
 
-.pane-ring {
-  --pane-ring-accent: var(--user-accent-color, var(--color-accent));
-  --pane-ring-color: var(--pane-ring-accent);
-  border-radius: inherit;
+[data-pane-status] {
+  --pane-ring-color: var(--user-accent-color, var(--color-accent));
+}
+
+[data-pane-status="attention"] {
+  --pane-ring-color: var(--color-amber-400, #fbbf24);
+}
+
+[data-pane-status="error"] {
+  --pane-ring-color: var(--color-red-400, #f87171);
+}
+
+[data-pane-status="done"] {
+  --pane-ring-color: var(--color-emerald-400, #34d399);
 }
 
 .pane-ring-edge {
@@ -1989,52 +1991,9 @@ html.theme-light .orchestrator-constellation {
   mask-composite: exclude;
 }
 
-.pane-ring[data-ring-variant="card"] {
-  border-radius: 10px;
+.pane-ring[data-ring-kind="status"] {
   box-shadow: 0 0 18px 2px color-mix(in srgb, var(--pane-ring-color) 22%, transparent);
-}
-
-.pane-ring[data-ring-variant="inset"] {
-  box-shadow: inset 0 0 16px -6px color-mix(in srgb, var(--pane-ring-color) 35%, transparent);
-}
-
-.pane-ring[data-ring-kind="static"] {
-  box-shadow: none;
-}
-
-.pane-ring[data-ring-kind="static"].focus-ring {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--pane-ring-accent) 28%, transparent),
-    0 0 18px 2px color-mix(in srgb, var(--pane-ring-accent) 22%, transparent);
-}
-
-.pane-ring[data-ring-kind="static"].active-pane-ring {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--pane-ring-accent) 75%, transparent),
-    inset 0 0 16px -6px color-mix(in srgb, var(--pane-ring-accent) 35%, transparent);
-}
-
-/* Gradient: the accent blending into a cooler partner and back. */
-.pane-ring[data-ring-kind="gradient"] {
-  --pane-ring-fill: linear-gradient(
-    135deg,
-    var(--pane-ring-accent),
-    color-mix(in oklch, var(--pane-ring-accent) 45%, #c084fc) 50%,
-    color-mix(in oklch, var(--pane-ring-accent) 70%, #38bdf8)
-  );
-}
-
-/* Status: colours match the Session Manager tags (amber asks, emerald done). */
-[data-pane-status="attention"] {
-  --pane-ring-color: var(--color-amber-400, #fbbf24);
-}
-
-[data-pane-status="error"] {
-  --pane-ring-color: var(--color-red-400, #f87171);
-}
-
-[data-pane-flash] {
-  --pane-ring-color: var(--color-emerald-400, #34d399);
+  transition: box-shadow 200ms var(--motion-ease-out);
 }
 
 @property --pane-ring-angle {
@@ -2043,8 +2002,8 @@ html.theme-light .orchestrator-constellation {
   initial-value: 0deg;
 }
 
-/* Working: a short bright arc travels the border. */
-.pane-ring[data-pane-status="working"]:not([data-pane-flash]) .pane-ring-edge {
+/* The focused pane while working: a short bright arc travels the border. */
+.pane-ring[data-pane-status="working"] .pane-ring-edge {
   --pane-ring-fill: conic-gradient(
     from var(--pane-ring-angle),
     color-mix(in srgb, var(--pane-ring-color) 45%, transparent) 0deg 250deg,
@@ -2064,34 +2023,22 @@ html.theme-light .orchestrator-constellation {
 /* Waiting on you: two soft pulses, then a steady amber edge. */
 .pane-ring[data-pane-status="attention"],
 .pane-status-edge[data-pane-status="attention"] {
-  animation: pane-ring-attention 900ms ease-in-out 2;
+  animation: pane-ring-pulse 900ms ease-in-out 2;
 }
 
-@keyframes pane-ring-attention {
+/* A turn just finished: one pulse as it turns green. */
+[data-pane-flash] {
+  animation: pane-ring-pulse 700ms ease-in-out 2;
+}
+
+@keyframes pane-ring-pulse {
   50% {
     opacity: 0.35;
   }
 }
 
-[data-pane-flash] {
-  animation: pane-ring-finish 1600ms ease-out both;
-}
-
-@keyframes pane-ring-finish {
-  0% {
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.85;
-  }
-}
-
-/* Unfocused panes in the status style: a thinner, quieter edge. */
+/* Panes that are not focused, in the status style: a thinner, quieter edge. */
 .pane-status-edge {
-  --pane-ring-color: var(--user-accent-color, var(--color-accent));
   border-radius: inherit;
   opacity: 0.6;
 }
@@ -2100,7 +2047,7 @@ html.theme-light .orchestrator-constellation {
   padding: 1px;
 }
 
-.pane-status-edge[data-pane-status="working"]:not([data-pane-flash]) {
+.pane-status-edge[data-pane-status="working"] {
   animation: pane-status-breathe 2.4s ease-in-out infinite;
 }
 
@@ -2130,7 +2077,8 @@ html.theme-light .orchestrator-constellation {
 
 @media (prefers-reduced-motion: reduce) {
   .pane-ring-glide,
-  .pane-dimmable {
+  .pane-dimmable,
+  .pane-ring {
     transition: none;
   }
 

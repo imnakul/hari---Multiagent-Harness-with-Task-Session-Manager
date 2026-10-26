@@ -675,7 +675,6 @@ export function FocusView({
         paneId={focusedId}
         paneStyle={paneStyle}
         status={paneStatus(byId.get(focusedId))}
-        variant="card"
         className="focus-ring-glide absolute z-[1] rounded-[10px]"
         style={boxes.pane(
           ringColumn,
@@ -704,7 +703,11 @@ export function FocusView({
             if (!focused) onFocusPane(id);
           }}
           data-pane-dim={paneDimAttribute(paneDim, focused, outlined)}
-          className={`focus-pane pane-dimmable absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-stroke${
+          // The focused card leaves its edge to the ring (L-184), so the two
+          // never show side by side on a fractional pixel.
+          className={`focus-pane pane-dimmable absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border ${
+            focused && outlined ? "border-transparent" : "border-stroke"
+          }${
             focused && outlined ? " focus-pane-active z-[1]" : ""
           }${drag?.fromId === id ? " opacity-40" : ""}`}
           style={boxes.pane(columnIndex, rowIndex)}
