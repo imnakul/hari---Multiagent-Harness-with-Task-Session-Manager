@@ -3,6 +3,10 @@ import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ConnectionsSettings } from "../../connections/ui/ConnectionsSettings";
 import { MobileSettings } from "../../mobile/ui/MobileSettings";
+import {
+  useActivePaneStyle,
+  useInactivePaneDim,
+} from "../../workspace/ui/PaneRing";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   ArrowDownCircle,
@@ -465,6 +469,10 @@ import {
   loadSessionMetadataHover,
   saveSessionLabels,
   saveSessionMetadataHover,
+  ACTIVE_PANE_STYLES,
+  INACTIVE_PANE_DIMS,
+  saveActivePaneStyle,
+  saveInactivePaneDim,
   loadAllAccountsUsage,
   loadRemainingQuota,
   loadMonosEnabled,
@@ -3201,8 +3209,34 @@ function useAppearanceSettings(
   };
 }
 
+/** Labels and hints for the Focused pane style menu (L-184). */
+const ACTIVE_PANE_STYLE_OPTIONS: Record<
+  (typeof ACTIVE_PANE_STYLES)[number],
+  { label: string; description: string }
+> = {
+  static: { label: "Static border", description: "An accent outline with a soft glow." },
+  gradient: { label: "Gradient border", description: "A two-tone accent outline." },
+  status: {
+    label: "Status ring",
+    description:
+      "Shows the chat's state: a light runs around it while working, amber when it needs you, red after an error, green when done. Other panes get a thin edge.",
+  },
+};
+
+const INACTIVE_PANE_DIM_LABELS: Record<(typeof INACTIVE_PANE_DIMS)[number], string> = {
+  off: "Off",
+  subtle: "Subtle",
+  strong: "Strong",
+};
+
+function isActivePaneStyle(value: string): value is (typeof ACTIVE_PANE_STYLES)[number] {
+  return (ACTIVE_PANE_STYLES as readonly string[]).includes(value);
+}
+
 function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
   const percent = Math.round(appearance.opacity * 100);
+  const activePaneStyle = useActivePaneStyle();
+  const inactivePaneDim = useInactivePaneDim();
   const glassDisabled = useColorScheme() === "light";
   // The inset workspace takes its colours from the workspace theme and has a
   // fixed tint and blur, so the tint and translucency groups only belong to
@@ -3346,6 +3380,40 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
           <AccentColorPicker
             value={appearance.accentColor}
             onChange={appearance.onAccentColor}
+          />
+        </Row>
+        <Row
+          id="active-pane-style"
+          label="Focused pane style"
+          description="How the focused chat or file is outlined when panes are split and in Focus mode. It glides to the pane you focus."
+        >
+          <div className="w-48">
+            <Select
+              label="Focused pane style"
+              value={activePaneStyle}
+              options={ACTIVE_PANE_STYLES.map((value) => ({
+                value,
+                ...ACTIVE_PANE_STYLE_OPTIONS[value],
+              }))}
+              onChange={(value) => {
+                if (isActivePaneStyle(value)) saveActivePaneStyle(value);
+              }}
+            />
+          </div>
+        </Row>
+        <Row
+          id="inactive-pane-dim"
+          label="Dim other panes"
+          description="Fade the panes you are not working in, so the focused one stands out. Hovering a pane brings it back."
+        >
+          <Segmented
+            label="Dim other panes"
+            value={inactivePaneDim}
+            options={INACTIVE_PANE_DIMS.map((value) => ({
+              value,
+              label: INACTIVE_PANE_DIM_LABELS[value],
+            }))}
+            onChange={saveInactivePaneDim}
           />
         </Row>
         <Row

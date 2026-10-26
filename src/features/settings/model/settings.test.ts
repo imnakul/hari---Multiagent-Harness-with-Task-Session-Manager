@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  loadActivePaneStyle,
+  loadInactivePaneDim,
+  saveActivePaneStyle,
+  saveInactivePaneDim,
   COMPOSER_RUNNER_DEFAULT,
   COMPACT_MODEL_LABELS_DEFAULT,
   DETAILED_CONTEXT_DEFAULT,
@@ -969,6 +973,40 @@ describe("compact model labels setting", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("focused pane settings (L-184)", () => {
+  beforeEach(mockLocalStorage);
+  afterEach(() => {
+    localStorage.removeItem("monocode.activePaneStyle");
+    localStorage.removeItem("monocode.inactivePaneDim");
+  });
+
+  it("default to today's static border with no dimming", () => {
+    expect(loadActivePaneStyle()).toBe("static");
+    expect(loadInactivePaneDim()).toBe("off");
+  });
+
+  it("persist a choice", () => {
+    saveActivePaneStyle("status");
+    saveInactivePaneDim("strong");
+    expect(localStorage.getItem("monocode.activePaneStyle")).toBe("status");
+    expect(loadActivePaneStyle()).toBe("status");
+    expect(loadInactivePaneDim()).toBe("strong");
+  });
+
+  it("ignore unknown stored values", () => {
+    localStorage.setItem("monocode.activePaneStyle", "neon");
+    localStorage.setItem("monocode.inactivePaneDim", "max");
+    expect(loadActivePaneStyle()).toBe("static");
+    expect(loadInactivePaneDim()).toBe("off");
+  });
+
+  it("are searchable in Settings", () => {
+    expect(searchSettings("pane").map((entry) => entry.settingId)).toEqual(
+      expect.arrayContaining(["active-pane-style", "inactive-pane-dim"]),
+    );
   });
 });
 

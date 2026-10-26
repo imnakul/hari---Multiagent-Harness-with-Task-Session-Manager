@@ -83,6 +83,14 @@ import {
   type FocusPickItem,
 } from "./FocusPicker";
 import { FocusSash } from "./FocusSash";
+import { paneStatus } from "../../sessions/model/paneStatus";
+import {
+  PaneFocusRing,
+  PaneStatusEdge,
+  paneDimAttribute,
+  useActivePaneStyle,
+  useInactivePaneDim,
+} from "../../workspace/ui/PaneRing";
 import {
   FOCUS_NEW_OPTIONS,
   FocusMoreButton,
@@ -588,6 +596,9 @@ export function FocusView({
   };
 
   const outlined = shown.columns.flat().length > 1;
+  // Fork (L-184): Settings → Appearance styles for the focused pane.
+  const paneStyle = useActivePaneStyle();
+  const paneDim = useInactivePaneDim();
   // The dock opens inside the focused pane; with that pane hidden (another
   // project's tab, or "+N more") it falls back to the whole pane region.
   const dockInPane = shown.columns.some((column) =>
@@ -658,14 +669,17 @@ export function FocusView({
     ? shown.columns.findIndex((column) => column.includes(focusedId ?? ""))
     : -1;
   const focusRing =
-    ringColumn >= 0 ? (
-      <div
-        aria-hidden
-        data-focus-ring
-        className="focus-ring focus-ring-glide pointer-events-none absolute z-[1] rounded-[10px]"
+    ringColumn >= 0 && focusedId ? (
+      <PaneFocusRing
+        ringAttribute="data-focus-ring"
+        paneId={focusedId}
+        paneStyle={paneStyle}
+        status={paneStatus(byId.get(focusedId))}
+        variant="card"
+        className="focus-ring-glide absolute z-[1] rounded-[10px]"
         style={boxes.pane(
           ringColumn,
-          shown.columns[ringColumn].indexOf(focusedId ?? ""),
+          shown.columns[ringColumn].indexOf(focusedId),
         )}
       />
     ) : null;
@@ -689,11 +703,19 @@ export function FocusView({
           onPointerDownCapture={() => {
             if (!focused) onFocusPane(id);
           }}
-          className={`focus-pane absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-stroke${
+          data-pane-dim={paneDimAttribute(paneDim, focused, outlined)}
+          className={`focus-pane pane-dimmable absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[10px] border border-stroke${
             focused && outlined ? " focus-pane-active z-[1]" : ""
           }${drag?.fromId === id ? " opacity-40" : ""}`}
           style={boxes.pane(columnIndex, rowIndex)}
         >
+          {paneStyle === "status" && outlined ? (
+            <PaneStatusEdge
+              paneId={id}
+              status={paneStatus(session)}
+              hidden={focused}
+            />
+          ) : null}
           <header
             data-focus-pane-header
             title="Drag to move"

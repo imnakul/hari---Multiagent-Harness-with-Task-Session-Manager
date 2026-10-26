@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-26 08:39 IST — Focused pane styles: glide everywhere, gradient, status ring, dimming (L-184)
+- Type: feature
+- What: The focused-pane ring now glides between panes in workspace splits too (was Focus mode only). Settings → Appearance → **Focused pane style**: Static border (default, unchanged look), Gradient border, or Status ring (light travels while working, amber when it needs you, red after an error, green flash when done; thin edge on unfocused panes). **Dim other panes**: Off / Subtle / Strong; hovering a pane restores it.
+- Why: User asked for a richer active-session visual, applied everywhere, chosen from a setting.
+- Files: [PaneRing.tsx](../../src/features/workspace/ui/PaneRing.tsx) (new, + test), [paneStatus.ts](../../src/features/sessions/model/paneStatus.ts) (new, + test), [PaneTree.tsx](../../src/features/workspace/ui/PaneTree.tsx), [FocusView.tsx](../../src/features/focus/ui/FocusView.tsx), [settings.ts](../../src/features/settings/model/settings.ts) (+ test), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [session.ts](../../src/features/sessions/model/session.ts) (`sessionNeedsInput` param narrowed), [index.css](../../src/styles/index.css); `src/shared/ui/ActivePaneRing.tsx` deleted. Spec: [focused-pane-styles-plan.md](../specs/focused-pane-styles-plan.md)
+- Verified: tsc ✅ vitest ✅ (7,743 passed, 2 skipped; 16 new) vite build ✅ — eslint not run (no config in repo); desktop check manual
+- Commit: see git log (L-184)
 ## 2026-10-26 07:58 IST — Markdown Live mode everywhere Markdown is edited (L-183)
 - Type: feature
 - What: New **Live** view (Obsidian-style), now the default, beside Preview and Source in Notes, Tasks, Session metadata, `.md` files from the explorer and plan panes: formatted while you type, Markdown symbols only on the caret's line, clickable checkboxes, note images inline, Enter continues lists. Double-click in Preview opens Live at that line (was Source, L-182); Ctrl+E toggles Live and Preview. Built into the shared Markdown components, not per screen.

@@ -838,7 +838,9 @@ export function hasPendingApproval(blocks: Block[]): boolean {
   return blocks.some((block) => block.approval && !block.approval.decided);
 }
 
-export function sessionNeedsInput(session: Session): boolean {
+export function sessionNeedsInput(
+  session: Pick<Session, "worktreeRemoved" | "blocks" | "pendingQuestion">,
+): boolean {
   return (
     !session.worktreeRemoved &&
     (hasPendingApproval(session.blocks) || session.pendingQuestion != null)

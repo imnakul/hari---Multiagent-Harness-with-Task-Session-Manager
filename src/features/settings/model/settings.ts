@@ -364,6 +364,19 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "highlight bubble send button tint",
   },
   {
+    id: "active-pane-style",
+    section: "appearance",
+    label: "Focused pane style",
+    keywords:
+      "active session pane split focus border outline ring gradient status glow highlight",
+  },
+  {
+    id: "inactive-pane-dim",
+    section: "appearance",
+    label: "Dim other panes",
+    keywords: "inactive unfocused fade spotlight split focus mode dim",
+  },
+  {
     id: "diff-colors",
     section: "appearance",
     label: "Diff colors",
@@ -1735,6 +1748,88 @@ function storedToggle(
     },
   };
 }
+
+/** Like `storedToggle`, for a setting with a fixed list of string choices. */
+function storedChoice<T extends string>(
+  key: string,
+  choices: readonly T[],
+  fallback: T,
+  changeEvent: string,
+): {
+  load: () => T;
+  save: (value: T) => void;
+  subscribe: (onStoreChange: () => void) => () => void;
+} {
+  const isChoice = (value: string | null): value is T =>
+    value !== null && (choices as readonly string[]).includes(value);
+  return {
+    load: () => {
+      try {
+        const raw = localStorage.getItem(key);
+        return isChoice(raw) ? raw : fallback;
+      } catch {
+        return fallback;
+      }
+    },
+    save: (value) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // private mode / quota
+      }
+      if (typeof window === "undefined") return;
+      window.dispatchEvent(new CustomEvent<T>(changeEvent, { detail: value }));
+    },
+    subscribe: (onStoreChange) => {
+      if (typeof window === "undefined") return () => {};
+      const onStorage = (event: StorageEvent): void => {
+        if (event.key === key) onStoreChange();
+      };
+      window.addEventListener(changeEvent, onStoreChange);
+      window.addEventListener("storage", onStorage);
+      return () => {
+        window.removeEventListener(changeEvent, onStoreChange);
+        window.removeEventListener("storage", onStorage);
+      };
+    },
+  };
+}
+
+/**
+ * How the focused pane is outlined in workspace splits and Focus mode (L-184),
+ * Settings → Appearance. `static` is the accent border from L-137/L-144;
+ * `gradient` a two-tone accent border; `status` a ring showing the chat's
+ * state (working, waiting on you, error), with a thin edge on other panes.
+ */
+export const ACTIVE_PANE_STYLES = ["static", "gradient", "status"] as const;
+export type ActivePaneStyle = (typeof ACTIVE_PANE_STYLES)[number];
+
+const activePaneStyleSetting = storedChoice<ActivePaneStyle>(
+  "monocode.activePaneStyle",
+  ACTIVE_PANE_STYLES,
+  "static",
+  "monocode:active-pane-style-change",
+);
+export const loadActivePaneStyle = activePaneStyleSetting.load;
+export const saveActivePaneStyle = activePaneStyleSetting.save;
+export const subscribeActivePaneStyle = activePaneStyleSetting.subscribe;
+
+/**
+ * Fades panes other than the focused one (L-184), with any pane style. Off by
+ * default; hovering a dimmed pane brings it back to full strength.
+ */
+export const INACTIVE_PANE_DIMS = ["off", "subtle", "strong"] as const;
+export type InactivePaneDim = (typeof INACTIVE_PANE_DIMS)[number];
+
+const inactivePaneDimSetting = storedChoice<InactivePaneDim>(
+  "monocode.inactivePaneDim",
+  INACTIVE_PANE_DIMS,
+  "off",
+  "monocode:inactive-pane-dim-change",
+);
+export const loadInactivePaneDim = inactivePaneDimSetting.load;
+export const saveInactivePaneDim = inactivePaneDimSetting.save;
+export const subscribeInactivePaneDim = inactivePaneDimSetting.subscribe;
 
 /**
  * Session metadata (L-181), Settings → General: a chat's label replaces its

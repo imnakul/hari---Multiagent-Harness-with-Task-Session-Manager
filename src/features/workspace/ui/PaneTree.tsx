@@ -11,7 +11,14 @@ import {
 } from "react";
 import { setGrabbing, suppressTextSelection } from "../../../shared/lib/drag";
 import { beginLayoutTransition } from "../../../shared/lib/layoutTransition";
-import { ActivePaneRing } from "../../../shared/ui/ActivePaneRing";
+import { paneStatus } from "../../sessions/model/paneStatus";
+import {
+  PaneFocusRing,
+  PaneStatusEdge,
+  paneDimAttribute,
+  useActivePaneStyle,
+  useInactivePaneDim,
+} from "./PaneRing";
 import {
   paneDropFromPoint,
   setExternalTitleTabDrop,
@@ -408,6 +415,16 @@ function PaneTreeComponent({
   }
   // A closing pane still counts until it has slid out.
   const inSplit = rendered.length > 1;
+  const paneStyle = useActivePaneStyle();
+  const paneDim = useInactivePaneDim();
+  // Fork (L-184): one ring over the focused pane that glides between panes,
+  // like Focus mode (L-151), instead of a ring fading in on each pane.
+  const focusedLeaf = inSplit
+    ? rendered.find((entry) => !entry.leaving && entry.leaf.id === focusedId)
+        ?.leaf
+    : undefined;
+  const statusOf = (id: string) =>
+    paneStatus(sessions.find((entry) => entry.id === id));
 
   useLayoutEffect(() => {
     const from = slideFrom.current;
@@ -735,7 +752,12 @@ function PaneTreeComponent({
             data-pane-leaving={leaving ? "" : undefined}
             aria-hidden={leaving ? true : undefined}
             inert={leaving ? true : undefined}
-            className={`absolute flex min-h-0 min-w-0 flex-col overflow-hidden ${dragging ? "opacity-40" : ""}${leaving ? " pointer-events-none" : ""}`}
+            data-pane-dim={
+              leaving
+                ? undefined
+                : paneDimAttribute(paneDim, focusedId === leaf.id, inSplit)
+            }
+            className={`pane-dimmable absolute flex min-h-0 min-w-0 flex-col overflow-hidden ${dragging ? "opacity-40" : ""}${leaving ? " pointer-events-none" : ""}`}
             // The new pane focuses its composer or editor while it is still
             // offscreen, and focus scrolls this clip box to reveal it, which
             // fights the slide. Scroll events land before paint, so undoing
@@ -750,9 +772,13 @@ function PaneTreeComponent({
             {drop && drop.overId === leaf.id && drop.fromId !== leaf.id ? (
               <PaneDropHint edge={drop.edge} />
             ) : null}
-            <ActivePaneRing
-              shown={inSplit && !leaving && focusedId === leaf.id}
-            />
+            {paneStyle === "status" && inSplit && !leaving ? (
+              <PaneStatusEdge
+                paneId={leaf.id}
+                status={statusOf(leaf.id)}
+                hidden={focusedId === leaf.id}
+              />
+            ) : null}
             <div
               data-pane-content=""
               data-pane-enter={
@@ -874,19 +900,38 @@ function PaneTreeComponent({
           </div>
         );
       })}
+      {focusedLeaf ? (
+        <PaneFocusRing
+          ringAttribute="data-pane-ring"
+          paneId={focusedLeaf.id}
+          paneStyle={paneStyle}
+          status={statusOf(focusedLeaf.id)}
+          variant="inset"
+          className="pane-ring-glide absolute z-20"
+          style={ringRectStyle(focusedLeaf.rect)}
+        />
+      ) : null}
       {sashes.map((sash) => (
         <Sash
           key={`${sash.splitId}:${sash.index}`}
           sash={sash}
           containerRef={treeRef}
-          onPreview={(ratio) =>
+          onPreview={(ratio) => {
+            // The ring follows the drag without gliding behind it.
+            if (treeRef.current) treeRef.current.dataset.paneResizing = "";
             previewLayout(
               treeRef.current,
               setSplitRatio(layoutRef.current, sash.splitId, sash.index, ratio),
-            )
-          }
-          onCommit={(ratio) => onRatio(sash.splitId, sash.index, ratio)}
-          onCancel={() => previewLayout(treeRef.current, layoutRef.current)}
+            );
+          }}
+          onCommit={(ratio) => {
+            onRatio(sash.splitId, sash.index, ratio);
+            endResize(treeRef.current);
+          }}
+          onCancel={() => {
+            previewLayout(treeRef.current, layoutRef.current);
+            endResize(treeRef.current);
+          }}
         />
       ))}
     </div>
@@ -905,6 +950,23 @@ function paneRectStyle(rect: LayoutRect): Record<string, string> {
     "--chat-background-width": `${100 / rect.w}%`,
     "--chat-background-height": `${100 / rect.h}%`,
   };
+}
+
+/** The focused-pane ring's box: the pane's rect, nothing else. */
+function ringRectStyle(rect: LayoutRect): Record<string, string> {
+  return {
+    left: `${rect.x * 100}%`,
+    top: `${rect.y * 100}%`,
+    width: `${rect.w * 100}%`,
+    height: `${rect.h * 100}%`,
+  };
+}
+
+/** Turns the ring glide back on after the committed layout has painted. */
+function endResize(tree: HTMLElement | null): void {
+  requestAnimationFrame(() => {
+    if (tree) delete tree.dataset.paneResizing;
+  });
 }
 
 function sashBoundary(sash: LayoutSash): number {
@@ -944,14 +1006,19 @@ function previewLayout(tree: HTMLElement | null, layout: LayoutNode): void {
   for (const child of tree.children) {
     if (!(child instanceof HTMLElement)) continue;
     const pane = child.dataset.paneId ? panes.get(child.dataset.paneId) : null;
+    const ring = child.dataset.paneRing
+      ? panes.get(child.dataset.paneRing)
+      : null;
     const sash = child.dataset.paneSash
       ? sashes.get(child.dataset.paneSash)
       : null;
     const style = pane
       ? paneRectStyle(pane.rect)
-      : sash
-        ? sashStyle(sash)
-        : null;
+      : ring
+        ? ringRectStyle(ring.rect)
+        : sash
+          ? sashStyle(sash)
+          : null;
     if (!style) continue;
     for (const [name, value] of Object.entries(style)) {
       child.style.setProperty(name, value);
