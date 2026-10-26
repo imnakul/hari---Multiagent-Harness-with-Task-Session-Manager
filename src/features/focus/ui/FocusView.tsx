@@ -86,7 +86,6 @@ import { FocusSash } from "./FocusSash";
 import { paneStatus } from "../../sessions/model/paneStatus";
 import {
   PaneFocusRing,
-  PaneStatusEdge,
   paneDimAttribute,
   useActivePaneStyle,
   useInactivePaneDim,
@@ -712,13 +711,6 @@ export function FocusView({
           }${drag?.fromId === id ? " opacity-40" : ""}`}
           style={boxes.pane(columnIndex, rowIndex)}
         >
-          {paneStyle === "status" && outlined ? (
-            <PaneStatusEdge
-              paneId={id}
-              status={paneStatus(session)}
-              hidden={focused}
-            />
-          ) : null}
           <header
             data-focus-pane-header
             title="Drag to move"

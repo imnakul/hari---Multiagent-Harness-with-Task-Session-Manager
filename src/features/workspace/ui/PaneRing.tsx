@@ -64,10 +64,11 @@ function useFinishFlash(paneId: string, status: PaneStatus): boolean {
  * The one ring over the focused pane (L-137/L-144, gliding per L-151, and in
  * workspace splits too since L-184). The caller positions it (`className`,
  * `style`) over the pane's rounded card and moves it; this draws the style:
- * - `static`: the accent border and glow the app always had;
+ * - `static`: the accent border, glowing inward;
  * - `status`: the chat's state — accent while working (a light travels the
  *   border), amber when it waits on you, red after a failed or stopped turn,
  *   green when done, plain accent before anything ran.
+ * Panes that are not focused draw no ring or edge in either style.
  */
 export function PaneFocusRing({
   paneId,
@@ -99,37 +100,6 @@ export function PaneFocusRing({
     >
       {statusStyle ? <span className="pane-ring-edge" /> : null}
     </div>
-  );
-}
-
-/**
- * A thin status edge on a pane that is not focused, for the `status` style:
- * working, waiting on you, failed or done shows without focusing the pane.
- * Panes where nothing ran draw nothing. Keep it mounted (with `hidden` while
- * the pane is focused) so it notices a turn finishing.
- */
-export function PaneStatusEdge({
-  paneId,
-  status,
-  hidden,
-  className = "",
-}: {
-  paneId: string;
-  status: PaneStatus;
-  hidden: boolean;
-  className?: string;
-}): ReactElement | null {
-  const flashing = useFinishFlash(paneId, status);
-  if (hidden || status === "idle") return null;
-  return (
-    <span
-      aria-hidden
-      data-pane-status={status}
-      data-pane-flash={flashing ? "" : undefined}
-      className={`pane-status-edge pointer-events-none absolute inset-0 z-20 ${className}`}
-    >
-      <span className="pane-ring-edge" />
-    </span>
   );
 }
 

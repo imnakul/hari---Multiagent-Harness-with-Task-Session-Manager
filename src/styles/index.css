@@ -1905,10 +1905,10 @@ html.theme-light .orchestrator-constellation {
 }
 
 /* Focus pane cards (L-144): rounded, with the inset card's soft lift. The
-   focused one takes the accent edge and an outer glow, the turn-mode halo's
-   recipe at a calmer strength, held while it stays focused. Fork (L-151): the
-   edge and glow live on one ring over the focused pane (.focus-ring), which
-   glides between panes. */
+   focused one takes the accent edge and a glow, held while it stays focused.
+   Fork (L-151): the edge and glow live on one ring over the focused pane
+   (.focus-ring), which glides between panes. Fork (L-184): the glow falls
+   inward, so it never spills onto the neighbouring panes. */
 .focus-pane {
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
   transition:
@@ -1920,16 +1920,16 @@ html.theme-light .orchestrator-constellation {
   border: 1px solid
     color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 60%, transparent);
   box-shadow:
-    0 0 0 1px
+    inset 0 0 0 1px
       color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 28%, transparent),
-    0 0 18px 2px
+    inset 0 0 18px 2px
       color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 22%, transparent);
 }
 
 /* Glides on a focus change or a pane move; off while an edge is dragged. */
 .focus-ring-glide {
-  transition-property: left, top, width, height;
-  transition-duration: 260ms;
+  transition-property: left, top, width, height, box-shadow;
+  transition-duration: 260ms, 260ms, 260ms, 260ms, 200ms;
   transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -1953,8 +1953,8 @@ html.theme-light .orchestrator-constellation {
    the Session Manager tags: accent working, amber asks, red failed, emerald
    done. */
 .pane-ring-glide {
-  transition-property: left, top, width, height;
-  transition-duration: 260ms;
+  transition-property: left, top, width, height, box-shadow;
+  transition-duration: 260ms, 260ms, 260ms, 260ms, 200ms;
   transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -1993,7 +1993,6 @@ html.theme-light .orchestrator-constellation {
 
 .pane-ring[data-ring-kind="status"] {
   box-shadow: 0 0 18px 2px color-mix(in srgb, var(--pane-ring-color) 22%, transparent);
-  transition: box-shadow 200ms var(--motion-ease-out);
 }
 
 @property --pane-ring-angle {
@@ -2021,8 +2020,7 @@ html.theme-light .orchestrator-constellation {
 }
 
 /* Waiting on you: two soft pulses, then a steady amber edge. */
-.pane-ring[data-pane-status="attention"],
-.pane-status-edge[data-pane-status="attention"] {
+.pane-ring[data-pane-status="attention"] {
   animation: pane-ring-pulse 900ms ease-in-out 2;
 }
 
@@ -2034,26 +2032,6 @@ html.theme-light .orchestrator-constellation {
 @keyframes pane-ring-pulse {
   50% {
     opacity: 0.35;
-  }
-}
-
-/* Panes that are not focused, in the status style: a thinner, quieter edge. */
-.pane-status-edge {
-  border-radius: inherit;
-  opacity: 0.6;
-}
-
-.pane-status-edge .pane-ring-edge {
-  padding: 1px;
-}
-
-.pane-status-edge[data-pane-status="working"] {
-  animation: pane-status-breathe 2.4s ease-in-out infinite;
-}
-
-@keyframes pane-status-breathe {
-  50% {
-    opacity: 0.25;
   }
 }
 
@@ -2083,7 +2061,6 @@ html.theme-light .orchestrator-constellation {
   }
 
   .pane-ring,
-  .pane-status-edge,
   .pane-ring-edge,
   [data-pane-flash] {
     animation: none !important;

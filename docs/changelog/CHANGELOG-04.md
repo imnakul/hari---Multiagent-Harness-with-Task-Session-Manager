@@ -1,4 +1,25 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-26 11:19 IST — Only the focused pane is ringed in Status style; static glow inward (L-184)
+- Type: style
+- What: In the Status ring style, panes that are not focused no longer show a coloured edge; only the focused pane has a ring, as with the static border. The static border's glow now falls inside the focused pane instead of spilling outside it.
+- Why: User asked for the status style to match the static one (no borders around other session cards) and for an inner glow.
+- Files: [PaneRing.tsx](src/features/workspace/ui/PaneRing.tsx:63) (`PaneStatusEdge` removed), [FocusView.tsx](src/features/focus/ui/FocusView.tsx:87), [PaneTree.tsx](src/features/workspace/ui/PaneTree.tsx:15), [index.css](src/styles/index.css:1907) (`.focus-ring` inset shadows, `.pane-status-edge` rules removed), [PaneRing.test.ts](src/features/workspace/ui/PaneRing.test.ts:131) (edge tests replaced by inset-glow and no-edge CSS checks)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (workspace + focus, 25 files) lint — (no eslint config) build — ; desktop check manual
+## 2026-10-26 10:51 IST — Fix: focused-pane ring stopped gliding in the Status style (L-184)
+- Type: fix
+- What: With Focused pane style set to Status ring, the ring jumped to the new pane instead of gliding, in workspace splits and Focus mode. The status ring's glow-fade rule reset the whole `transition`, overriding the glide. The glide rules now include the glow fade, and no other ring rule sets a transition.
+- Why: User reported the glide on changing the focused pane was broken after the latest L-184 push (14923273).
+- Files: `src/styles/index.css` (lines 1930-1934, 1955-1959, 1994-1996) glide transitions include box-shadow, status rule's `transition` removed; `src/features/workspace/ui/PaneRing.test.ts` (end) regression test reading the stylesheet; `docs/LOCAL-FEATURES.md` L-184 technical row.
+- Verified: tsc ✅ vitest ✅ (7,746 passed, 2 skipped; new test fails on the old CSS) | manual: ring glides in both styles, splits and Focus mode
+- Commit: uncommitted
+## 2026-10-26 09:42 IST — 0.16.0-local12 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local12: 0.16.0-local11 plus L-182 (double-click Preview to edit at that line, Ctrl+E toggles views), L-183 (Markdown Live mode everywhere Markdown is edited) and L-184 (focused pane styles, gliding ring, status colours, rounded workspace cards), plus the Status-ring glide fix.
+- Why: User asked to pull the latest branch and build an installable version.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local12-markdown-live-pane-styles_x64.exe` (15,144,656 bytes, SHA-256 02D4AF7F5E597C67C1BEF2E3541431740E69B69E7D416AB2CD679F3AB30D7785, unsigned; rebuilt 11:03 IST with the glide fix, replacing the first 09:42 build); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 38c85e5f + uncommitted glide fix and version bump
+- Verified: build ✅ (npm run build:windows); tsc/vitest not re-run for this build (same code as the L-182–L-184 entries); desktop check manual
 ## 2026-10-26 09:22 IST — Focused pane follow-up: rounded workspace cards, status colours, edge fix (L-184)
 - Type: feature + fix
 - What: Workspace split panes are now rounded cards with gaps like Focus mode, with the gliding ring matching. Fixed the right and bottom ring edges looking doubled (the focused card's grey border showed beside the ring; it is transparent now). Removed the Gradient border option. Status ring colours: accent while working, green when done, red when failed or stopped, amber when it needs you (incl. paused/held queue).

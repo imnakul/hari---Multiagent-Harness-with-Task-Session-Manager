@@ -14,7 +14,6 @@ import { beginLayoutTransition } from "../../../shared/lib/layoutTransition";
 import { paneStatus } from "../../sessions/model/paneStatus";
 import {
   PaneFocusRing,
-  PaneStatusEdge,
   paneDimAttribute,
   useActivePaneStyle,
   useInactivePaneDim,
@@ -793,13 +792,6 @@ function PaneTreeComponent({
                   : ""
               }`}
             >
-              {paneStyle === "status" && inSplit && !leaving ? (
-                <PaneStatusEdge
-                  paneId={leaf.id}
-                  status={statusOf(leaf.id)}
-                  hidden={focusedId === leaf.id}
-                />
-              ) : null}
               {editorPane ? (
                 <FilePane
                   pane={editorPane}
