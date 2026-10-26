@@ -1,5 +1,5 @@
 # Changelog 04 — MonoCode Windows fork
-## 2026-10-26 09:30 IST — Focused pane follow-up: rounded workspace cards, status colours, edge fix (L-184)
+## 2026-10-26 09:22 IST — Focused pane follow-up: rounded workspace cards, status colours, edge fix (L-184)
 - Type: feature + fix
 - What: Workspace split panes are now rounded cards with gaps like Focus mode, with the gliding ring matching. Fixed the right and bottom ring edges looking doubled (the focused card's grey border showed beside the ring; it is transparent now). Removed the Gradient border option. Status ring colours: accent while working, green when done, red when failed or stopped, amber when it needs you (incl. paused/held queue).
 - Why: User feedback after the first desktop look (screenshot): status ring and dimming kept; gradient dropped.
