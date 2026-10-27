@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-27 23:06 IST — 0.16.0-local14 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local14: 0.16.0-local13 plus the idle cover and Focus up to 6 columns (L-185), interactive Claude Steer and resend fixes (L-186, L-187), sidechat context once and quote actions (L-188), and experimental Continue mode (L-189).
+- Why: User asked to commit and build the new version.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local14-continue-mode-idle-cover_x64.exe` (15,180,276 bytes, SHA-256 28BE45B277EE5EC7146F2D1AB26847C3B73EECEB77F4DD30F07B779377A5B610, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 7bd825ac + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest 7,799/7,799 ✅ before 7bd825ac; desktop check manual
 ## 2026-10-27 23:05 IST — Continue mode: new chat beside with a context card (L-189)
 - Type: feature (experimental, off by default)
 - What: Settings → Chat → Continue button adds Continue next to Handoff on replies. Its panel picks the agent and model and a card preset (Quick, Balanced, Thorough; Advanced: helper, model, passes, context size) with token estimates. The new chat opens beside with a chip, "Preparing context…" (with Use quick card) then "Context ready"; the card goes with the first message only, and a message sent early waits for it. Same provider opens a full-history branch instead. Any AI helper can write the card, Antigravity included (no-tools prompt plus the stop-on-tool guard, then the next helper). The last choice is remembered per project.
