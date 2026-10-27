@@ -43,6 +43,7 @@ import {
   useShowSessionLabels,
 } from "../../sessions/ui/useSessionMetadata";
 import {
+  FOCUS_GRID_AUTO_COLUMNS,
   focusColumnCap,
   focusGridHas,
   moveInFocusGrid,
@@ -222,7 +223,8 @@ function paneTitle(
 
 /**
  * Focus mode (fork, L-123): every running chat from any project side by
- * side, in up to 4 columns of 1–2 chats, with the app's chrome hidden.
+ * side, in columns of 1–2 chats (4 on their own, up to 6 by dragging),
+ * with the app's chrome hidden.
  * Panes keep their place; dragging a header moves one. Grouped by project
  * (L-128), tab rows pick a project and a chat, and the grid shows only that
  * project's chats; dragging then only swaps, so hidden projects keep their
@@ -254,7 +256,9 @@ export function FocusView({
 }: Props): ReactNode {
   const marks = useProjectMarks();
   const trafficLightsVisible = useTrafficLightsVisible();
-  const [cap, setCap] = useState(4);
+  const [cap, setCap] = useState(FOCUS_GRID_AUTO_COLUMNS);
+  const capRef = useRef(cap);
+  capRef.current = cap;
   const main = useRef<HTMLElement>(null);
   const [drag, setDrag] = useState<PaneDrag | null>(null);
   const gridRef = useRef(grid);
@@ -512,7 +516,8 @@ export function FocusView({
     ];
     const [side, distance] = sides.reduce((a, b) => (b[1] < a[1] ? b : a));
     const edge = distance > EDGE_ZONE ? "center" : side;
-    // A drop that would make a 5th column or a 3rd row shows no target.
+    // A drop that would make more columns than fit, or a 3rd row, shows no
+    // target.
     return planDrop(fromId, overId, edge) ? { overId, edge } : null;
   };
 
@@ -523,11 +528,18 @@ export function FocusView({
   ): FocusGrid | null => {
     const current = gridRef.current;
     if (!groupedRef.current)
-      return moveInFocusGrid(current, fromId, overId, edge);
+      return moveInFocusGrid(current, fromId, overId, edge, capRef.current);
     // Grouped (L-177): the move is made on this project's grid only.
     const group = activeGroupRef.current;
     return group
-      ? moveInProjectFocusGrid(current, group, fromId, overId, edge)
+      ? moveInProjectFocusGrid(
+          current,
+          group,
+          fromId,
+          overId,
+          edge,
+          capRef.current,
+        )
       : null;
   };
 

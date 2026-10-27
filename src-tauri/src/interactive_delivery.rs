@@ -9,6 +9,23 @@ fn frame(text: &str) -> String {
 /// Claude manual mode needs literal request text outside a folded context paste.
 /// Keep every original character and never type a control or mode shortcut.
 pub(crate) fn paste_payload(text: &str) -> String {
+    payload(text, true)
+}
+
+/// The second try after Claude redrew an empty prompt: only the pasted parts.
+/// The typed letter often survives a dropped paste, and typing it again sent
+/// "CC…" (fork, L-187). If the letter was lost too, the GUI accepts the prompt
+/// without it. A text that is only the letter is sent as before.
+pub(crate) fn repaste_payload(text: &str) -> String {
+    let pasted = payload(text, false);
+    if pasted.is_empty() {
+        paste_payload(text)
+    } else {
+        pasted
+    }
+}
+
+fn payload(text: &str, typed: bool) -> String {
     if text != "/compact" {
         if let Some((offset, letter)) = text.char_indices().find(|(_, c)| c.is_alphanumeric()) {
             let end = offset + letter.len_utf8();
@@ -19,7 +36,7 @@ pub(crate) fn paste_payload(text: &str) -> String {
                 } else {
                     frame(&text[..offset])
                 },
-                letter,
+                if typed { letter.to_string() } else { String::new() },
                 if end == text.len() {
                     String::new()
                 } else {
@@ -115,6 +132,19 @@ mod tests {
                 expected.replace("\x1b[200~", "").replace("\x1b[201~", ""),
                 text
             );
+        }
+    }
+
+    #[test]
+    fn repaste_never_types_the_letter_again() {
+        for (text, expected) in [
+            ("Context here", "\x1b[200~ontext here\x1b[201~"),
+            ("\n\t!हैलो", "\x1b[200~\n\t!\x1b[201~\x1b[200~ैलो\x1b[201~"),
+            ("C", "C"),
+            ("/compact", "\x1b[200~/compact\x1b[201~"),
+            ("?!", "\x1b[200~?!\x1b[201~"),
+        ] {
+            assert_eq!(repaste_payload(text), expected);
         }
     }
 

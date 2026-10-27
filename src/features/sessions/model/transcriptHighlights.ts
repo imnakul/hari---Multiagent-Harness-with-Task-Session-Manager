@@ -177,3 +177,67 @@ function toRange(
   range.setEnd(end.node, to - end.from);
   return range;
 }
+
+const PULSE_MS = 1900;
+
+/**
+ * Rings the current match a few times so the eye can find it (fork, L-188).
+ * Text highlights cannot animate, so this draws short-lived boxes over the
+ * match's line boxes, clipped to the scroller and kept in place while it
+ * scrolls. Returns a cleanup that removes them early.
+ */
+export function pulseTranscriptMatch(
+  range: Range,
+  scroller: HTMLElement,
+): () => void {
+  const document = scroller.ownerDocument;
+  const layer = document.createElement("div");
+  layer.className = "transcript-find-pulse-layer";
+  layer.setAttribute("aria-hidden", "true");
+  const place = () => {
+    const bounds = scroller.getBoundingClientRect();
+    Object.assign(layer.style, {
+      left: `${bounds.left}px`,
+      top: `${bounds.top}px`,
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`,
+    });
+    const rects = [...range.getClientRects()].filter(
+      (rect) => rect.width > 0 && rect.height > 0,
+    );
+    while (layer.childElementCount > rects.length) layer.lastElementChild?.remove();
+    rects.forEach((rect, index) => {
+      let ring = layer.children[index] as HTMLElement | undefined;
+      if (!ring) {
+        ring = document.createElement("div");
+        ring.className = "transcript-find-pulse";
+        layer.append(ring);
+      }
+      Object.assign(ring.style, {
+        left: `${rect.left - bounds.left - 2}px`,
+        top: `${rect.top - bounds.top - 1}px`,
+        width: `${rect.width + 4}px`,
+        height: `${rect.height + 2}px`,
+      });
+    });
+  };
+  let frame = 0;
+  const onScroll = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      place();
+    });
+  };
+  place();
+  document.body.append(layer);
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+  const timer = setTimeout(() => cleanup(), PULSE_MS);
+  function cleanup() {
+    clearTimeout(timer);
+    if (frame) cancelAnimationFrame(frame);
+    scroller.removeEventListener("scroll", onScroll);
+    layer.remove();
+  }
+  return cleanup;
+}

@@ -11,6 +11,7 @@ export {
 export {
   applyHarnessEvent,
   applyHarnessEvents,
+  finishExternalTurn,
   appendUser,
   appendSteerUser,
   promoteLastAssistantToPlan,

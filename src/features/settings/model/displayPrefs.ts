@@ -82,6 +82,16 @@ export const loadPacedReveal = pacedReveal.load;
 export const savePacedReveal = pacedReveal.save;
 export const usePacedReveal = pacedReveal.useFlag;
 
+/** Experimental Continue button on replies (L-189). */
+const continueMode = flagStore(
+  "monocode.continueMode",
+  false,
+  "monocode:continuemodechange",
+);
+export const loadContinueMode = continueMode.load;
+export const saveContinueMode = continueMode.save;
+export const useContinueMode = continueMode.useFlag;
+
 const newLayoutPromptDismissed = flagStore(
   "monocode.newLayoutPromptDismissed",
   false,

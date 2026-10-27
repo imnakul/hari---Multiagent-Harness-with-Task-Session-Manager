@@ -64,6 +64,9 @@ import { PlanPreview } from "./PlanPreview";
 import { OrchestrationPreview } from "../../orchestration/ui/OrchestrationPreview";
 import { TaskListPreview } from "./TaskListPreview";
 import { HandoffButton, SecondOpinionButton } from "./SecondOpinionButton";
+import { ContinueButton } from "./ContinueButton";
+import type { ContinueChoice, ContinueEstimate } from "../model/continueCard";
+import { useContinueMode } from "../../settings/model/displayPrefs";
 import { SecondOpinionCard } from "./SecondOpinionCard";
 import { NoteMiniCard } from "../../notes/ui/NoteMiniCard";
 import { ArtifactCard } from "../../artifacts/ui/ArtifactCard";
@@ -188,6 +191,7 @@ import {
 import {
   clearTranscriptHighlights,
   paintTranscriptHighlights,
+  pulseTranscriptMatch,
   transcriptMutationNeedsRepaint,
   transcriptWordRanges,
 } from "../model/transcriptHighlights";
@@ -292,6 +296,10 @@ type Props = {
   planBuildTargets?: boolean;
   onSecondOpinion?: (target: ModelTarget, turn: Block[]) => void;
   onHandoff?: (target: ModelTarget, turn: Block[]) => void;
+  /** Continue mode (L-189), shown when the Settings toggle is on. */
+  onContinue?: (choice: ContinueChoice, turn: Block[]) => void;
+  continueProjectCwd?: string;
+  continueEstimate?: (choice: ContinueChoice) => ContinueEstimate;
   onReviewFix?: (issue: ReviewIssue) => void;
   onSidechat?: (turn: Block[]) => void;
   onBranch?: (turn: Block[]) => void;
@@ -367,6 +375,9 @@ function AgentTranscriptComponent({
   planBuildTargets = true,
   onSecondOpinion,
   onHandoff,
+  onContinue,
+  continueProjectCwd,
+  continueEstimate,
   onReviewFix,
   onSidechat,
   onBranch,
@@ -1158,6 +1169,22 @@ function AgentTranscriptComponent({
     };
   }, [visible, searchQuery, searchCurrent, visibleTurnCount, openWork]);
 
+  // Pulse the current match each time find moves to it, once typing settles,
+  // so it is easy to spot (fork, L-188).
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !visible || !searchQuery || !searchCurrent) return;
+    let stop: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      const { current } = transcriptWordRanges(el, searchQuery);
+      if (current) stop = pulseTranscriptMatch(current, el);
+    }, 140);
+    return () => {
+      clearTimeout(timer);
+      stop?.();
+    };
+  }, [visible, searchQuery, searchCurrent]);
+
   refreshChatMotion.current = useBottomChatMotion(
     scrollerEl,
     visible,
@@ -1172,7 +1199,10 @@ function AgentTranscriptComponent({
     rememberScroll,
   );
 
-  const tableActions = useMemo(() => ({ onSaveNote }), [onSaveNote]);
+  const tableActions = useMemo(
+    () => ({ onSaveNote, onAddToTask: onSaveSelectionTask }),
+    [onSaveNote, onSaveSelectionTask],
+  );
   return (
     <SessionManagerCaptureContext.Provider value={onAddToSessionManager}>
       <MarkdownTableContext.Provider value={tableActions}>
@@ -1829,6 +1859,11 @@ function AgentTranscriptComponent({
                   onHandoff={
                     onHandoff ? (target) => onHandoff(target, turn) : undefined
                   }
+                  onContinue={
+                    onContinue ? (choice) => onContinue(choice, turn) : undefined
+                  }
+                  continueProjectCwd={continueProjectCwd}
+                  continueEstimate={continueEstimate}
                   onSidechat={
                     onSidechat ? () => onSidechat(turn) : undefined
                   }
@@ -2039,6 +2074,9 @@ function TurnDuration({
   fromModel,
   onSecondOpinion,
   onHandoff,
+  onContinue,
+  continueProjectCwd,
+  continueEstimate,
   onSidechat,
   onBranch,
   revealOnHover = false,
@@ -2062,14 +2100,20 @@ function TurnDuration({
   fromModel?: string;
   onSecondOpinion?: (target: ModelTarget) => void;
   onHandoff?: (target: ModelTarget) => void;
+  onContinue?: (choice: ContinueChoice) => void;
+  continueProjectCwd?: string;
+  continueEstimate?: (choice: ContinueChoice) => ContinueEstimate;
   onSidechat?: () => void;
   onBranch?: () => void;
   /** Sit in the gap under the turn and show on hover, as a sent message's do. */
   revealOnHover?: boolean;
 }) {
+  const continueMode = useContinueMode();
   const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : "";
   const ranFor = elapsed ? `Ran for ${elapsed}` : null;
-  const finished = completedAt != null ? formatClockTime(completedAt) : null;
+  // "Today, 3:10 PM", "Yesterday, …" or the date, as day separators read.
+  const finished =
+    completedAt != null ? dayStamp(completedAt).join(", ") : null;
   const label =
     completionLabel ??
     ([modelName?.trim(), ranFor, finished ? `finished ${finished}` : null]
@@ -2092,6 +2136,19 @@ function TurnDuration({
       <span className="flex shrink-0 items-center gap-1">
         {fromHarness && onHandoff ? (
           <HandoffButton from={fromHarness} onPick={onHandoff} />
+        ) : null}
+        {continueMode &&
+        fromHarness &&
+        onContinue &&
+        continueEstimate &&
+        continueProjectCwd ? (
+          <ContinueButton
+            from={fromHarness}
+            fromModel={fromModel}
+            projectCwd={continueProjectCwd}
+            estimate={continueEstimate}
+            onContinue={onContinue}
+          />
         ) : null}
         {fromHarness && onSecondOpinion ? (
           <SecondOpinionButton
@@ -2160,9 +2217,13 @@ function TurnDuration({
       {finished ? (
         <span className="flex shrink-0 items-center gap-2.5">
           {ranFor && !labelHidden ? dot : null}
-          <span className="shrink-0 tabular-nums text-content/35">
+          <time
+            dateTime={new Date(completedAt!).toISOString()}
+            title={new Date(completedAt!).toLocaleString()}
+            className="shrink-0 tabular-nums text-content/35"
+          >
             {finished}
-          </span>
+          </time>
         </span>
       ) : null}
       <span className="ml-auto flex shrink-0 items-center gap-1">

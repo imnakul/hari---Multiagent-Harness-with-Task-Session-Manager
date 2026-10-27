@@ -1171,8 +1171,44 @@ html.has-chat-background.chat-background-effect-ready.chat-background-gradient-b
   background-color: color-mix(in srgb, #e2c08d 46%, transparent);
 }
 
+/* The current match is solid orange with dark text, like browser find, so it
+   stands out from the other matches and from selected text (fork, L-188). */
 ::highlight(monocode-transcript-search-current) {
-  background-color: color-mix(in srgb, var(--color-accent) 62%, transparent);
+  background-color: #ff9632;
+  color: #1a1206;
+}
+
+.transcript-find-pulse-layer {
+  position: fixed;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.transcript-find-pulse {
+  position: absolute;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgb(255 150 50 / 0.95);
+  animation: transcript-find-pulse 600ms cubic-bezier(0.23, 1, 0.32, 1) 3;
+}
+
+@keyframes transcript-find-pulse {
+  0% {
+    box-shadow:
+      0 0 0 2px rgb(255 150 50 / 0.95),
+      0 0 0 2px rgb(255 150 50 / 0.55);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px rgb(255 150 50 / 0),
+      0 0 0 12px rgb(255 150 50 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transcript-find-pulse {
+    animation: none;
+  }
 }
 
 /* Match the Mono transcript's soft edge fade on overflowing tab text. */
@@ -2082,6 +2118,44 @@ html.theme-light .orchestrator-constellation {
 }
 
 /* Fork (L-181): a chat's saved label, in the accent chosen in Appearance. */
+/* Idle cover (fork, L-185): an idle open chat blurs behind its metadata card.
+   Covering eases in slowly (ambient); a peek fades out fast, and while
+   peeking the pointer passes through to the chat. */
+.session-idle-cover {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.session-idle-cover[data-session-idle-cover="on"],
+.session-idle-cover[data-session-idle-cover="peek"] {
+  background: color-mix(in srgb, var(--color-background-base) 45%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.session-idle-cover[data-session-idle-cover="on"] {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  transition-duration: 400ms;
+}
+
+.session-idle-cover-card {
+  transform: scale(0.96);
+  transition: transform 400ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.session-idle-cover[data-session-idle-cover="on"] .session-idle-cover-card {
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-idle-cover,
+  .session-idle-cover-card {
+    transition: none;
+  }
+}
+
 .session-label-text {
   color: var(--user-accent-color, var(--color-accent));
 }
@@ -2291,6 +2365,29 @@ input,
 .inbox-comment-md.agent-markdown li:last-child,
 .inbox-comment-md.agent-markdown blockquote:last-child {
   margin-bottom: 0;
+}
+
+/* Quote actions show on hover or keyboard focus, like code block buttons
+   (fork, L-188). Touch screens without hover always show them. */
+.agent-markdown .markdown-quote-actions {
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.agent-markdown [data-quote-actions]:hover > .markdown-quote-actions,
+.agent-markdown .markdown-quote-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .agent-markdown .markdown-quote-actions {
+    opacity: 1;
+  }
+}
+
+/* A quote inside a quote shares the outer one's actions. */
+.agent-markdown [data-quote-actions] [data-quote-actions] > .markdown-quote-actions {
+  display: none;
 }
 
 .agent-markdown [data-streamdown="blockquote"] {
@@ -2882,6 +2979,27 @@ header[data-tauri-drag-region] button {
   [data-streamdown="code-block-header"]
   + [data-streamdown="code-block-body"] {
   border-top: 0;
+}
+
+/* With no header row, the Copy/Wrap/Add Draft buttons sit over line 1:
+   keep that line's text out from under them. Long unwrapped lines still
+   scroll to reveal their end. */
+.agent-markdown
+  .markdown-code-shell:has(.markdown-code-fallback-label:empty)
+  [data-streamdown="code-block-body"]
+  code
+  > span:first-child {
+  padding-right: 72px;
+}
+
+.agent-markdown
+  .markdown-code-shell:has(.markdown-code-fallback-label:empty):has(
+    [aria-label="Add Draft to Sessions"]
+  )
+  [data-streamdown="code-block-body"]
+  code
+  > span:first-child {
+  padding-right: 104px;
 }
 
 .agent-markdown [data-streamdown="heading-1"] {

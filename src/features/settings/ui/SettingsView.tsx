@@ -7,6 +7,7 @@ import {
   useActivePaneStyle,
   useInactivePaneDim,
 } from "../../workspace/ui/PaneRing";
+import { useSessionIdleCover } from "../../sessions/ui/useSessionMetadata";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   ArrowDownCircle,
@@ -358,6 +359,7 @@ import {
 } from "../model/linkPreviewSettings";
 import {
   saveComposerAutocorrect,
+  saveContinueMode,
   savePacedReveal,
   usePacedReveal,
   saveMaskEmails,
@@ -365,6 +367,7 @@ import {
   saveRailMonosPinned,
   saveShowRemainingUsage,
   useComposerAutocorrect,
+  useContinueMode,
   useMaskEmails,
   useRailMonosPinned,
   useShowRemainingUsage,
@@ -469,6 +472,8 @@ import {
   loadSessionMetadataHover,
   saveSessionLabels,
   saveSessionMetadataHover,
+  saveSessionIdleCover,
+  SESSION_IDLE_COVER_CHOICES,
   ACTIVE_PANE_STYLES,
   INACTIVE_PANE_DIMS,
   saveActivePaneStyle,
@@ -1201,6 +1206,7 @@ function GeneralPage({
     useState<NotificationPermission>(cachedNotificationPermission);
   const [notesEnabled, setNotesEnabled] = useState(loadNotesEnabled);
   const [sessionLabels, setSessionLabels] = useState(loadSessionLabels);
+  const sessionIdleCover = useSessionIdleCover();
   const [sessionMetadataHover, setSessionMetadataHover] = useState(
     loadSessionMetadataHover,
   );
@@ -1436,6 +1442,21 @@ function GeneralPage({
             onChange={onSessionMetadataHover}
           />
         </Row>
+        <Row
+          id="session-idle-cover"
+          label="Cover idle sessions"
+          description="When an open chat with a label or notes has had no activity for this long, blur it behind a card with its metadata. Hover to peek; click to show it again. Chats that are working or waiting on you are never covered."
+        >
+          <Segmented
+            label="Cover idle sessions"
+            value={sessionIdleCover}
+            options={SESSION_IDLE_COVER_CHOICES.map((value) => ({
+              value,
+              label: value === "off" ? "Off" : `${value} min`,
+            }))}
+            onChange={saveSessionIdleCover}
+          />
+        </Row>
         {(IS_MAC || IS_WIN) && (
           <Row
             id="quick-composer"
@@ -1514,6 +1535,7 @@ function ChatPage() {
   const [formatOnSave, setFormatOnSave] = useState(loadFormatOnSave);
   const [composerRunner, setComposerRunner] = useState(loadComposerRunner);
   const composerAutocorrect = useComposerAutocorrect();
+  const continueMode = useContinueMode();
   const [gridArcadeEnabled, setGridArcadeEnabled] = useState(
     loadGridArcadeEnabled,
   );
@@ -1733,6 +1755,17 @@ function ChatPage() {
             label="Autocorrect"
             on={composerAutocorrect}
             onChange={saveComposerAutocorrect}
+          />
+        </Row>
+        <Row
+          id="continue-mode"
+          label="Continue button (experimental)"
+          description="Adds Continue next to Handoff on replies. It opens a new chat beside this one with a context card that goes with your first message."
+        >
+          <Toggle
+            label="Continue button"
+            on={continueMode}
+            onChange={saveContinueMode}
           />
         </Row>
       </Group>

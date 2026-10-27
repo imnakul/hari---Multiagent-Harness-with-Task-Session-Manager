@@ -120,7 +120,7 @@ describe("moveInProjectFocusGrid (L-177)", () => {
 
   it("stacks into the project's own grid and every other project's grid is unchanged", () => {
     const alpha = groupOf(FULL, "C:/work/alpha");
-    const next = moveInProjectFocusGrid(FULL, alpha, "a2", "a1", "bottom");
+    const next = moveInProjectFocusGrid(FULL, alpha, "a2", "a1", "bottom", 4);
     if (!next) throw new Error("drop rejected");
     expect(projectFocusGrid(next, groupOf(next, "C:/work/alpha"))).toEqual({
       columns: [["a1", "a2"], ["a3"]],

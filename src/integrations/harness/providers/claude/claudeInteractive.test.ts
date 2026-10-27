@@ -86,6 +86,7 @@ const {
   replyInteractiveClaude,
   hasInteractiveClaude,
   interactiveClaudeDiagnostics,
+  interactiveClaudeExternalTurn,
   returnInteractiveClaudeToChat,
   parkInteractiveClaude,
 } = await import("./claudeInteractive");
@@ -692,6 +693,33 @@ describe("interactive turn delivery", () => {
     expect(onAccepted).not.toHaveBeenCalled();
     expect(mocks.sends).toEqual([text]);
   });
+  it("counts a doubled first letter from a repaste as delivered, not different input (L-187)", async () => {
+    await running();
+    const text = "create a branch\nDiscuss first";
+    const original = mocks.invoke.getMockImplementation()!;
+    mocks.invoke.mockImplementation(
+      async (command: string, args: Record<string, unknown>) => {
+        if (command === "claude_interactive_send") {
+          mocks.sends.push(String(args.text));
+          hook("UserPromptSubmit", {
+            prompt:
+              'cc\n\n<pasted_content id="faa9">\nreate a branch\nDiscuss first\n</pasted_content>',
+          });
+          return;
+        }
+        return original(command, args);
+      },
+    );
+    const turn = sendInteractiveClaude(input({ text })).catch(
+      (error: unknown) => error,
+    );
+    await waitFor(() => mocks.sends.length === 1);
+    await settle();
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    expect(String(await Promise.race([turn, Promise.resolve("pending")]))).not.toContain(
+      "different input",
+    );
+  });
   it("does not submit into a menu or terminal draft", async () => {
     await running();
     mocks.ready.mockReturnValue(false);
@@ -1082,6 +1110,19 @@ describe("interactive observation and parking", () => {
     const turnId = await externalTurn();
     await stopInteractiveClaude("interactive-test");
     expect(events).toContainEqual({ type: "externalTurn.finished", turnId });
+  });
+  it("ends an open external turn when a new prompt is typed in Claude (L-186)", async () => {
+    const turnId = await externalTurn();
+    hook("UserPromptSubmit", { prompt: "Typed in the terminal" });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(events).toContainEqual({ type: "externalTurn.finished", turnId });
+    expect(interactiveClaudeExternalTurn("interactive-test")).not.toBe(turnId);
+  });
+  it("reports the external turn Claude is on (L-186)", async () => {
+    const turnId = await externalTurn();
+    expect(interactiveClaudeExternalTurn("interactive-test")).toBe(turnId);
+    await stopInteractiveClaude("interactive-test");
+    expect(interactiveClaudeExternalTurn("interactive-test")).toBeUndefined();
   });
   it("ends an open external turn when Claude's terminal exits (L-124)", async () => {
     const turnId = await externalTurn();

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  pulseTranscriptMatch,
   transcriptMutationNeedsRepaint,
   transcriptWordRanges,
 } from "./transcriptHighlights";
@@ -123,5 +124,47 @@ describe("transcriptWordRanges", () => {
         range.toString(),
       ),
     ).toEqual(["foo.bar"]);
+  });
+});
+
+describe("pulseTranscriptMatch (L-188)", () => {
+  function rect(left: number, top: number, width: number, height: number) {
+    return { left, top, width, height, right: left + width, bottom: top + height } as DOMRect;
+  }
+
+  it("rings each line of the match inside the scroller, then removes itself", () => {
+    vi.useFakeTimers();
+    try {
+      const scroller = document.createElement("div");
+      document.body.append(scroller);
+      scroller.getBoundingClientRect = () => rect(100, 50, 400, 300);
+      const range = {
+        getClientRects: () => [rect(120, 80, 60, 16), rect(0, 0, 0, 0), rect(104, 96, 30, 16)],
+      } as unknown as Range;
+
+      pulseTranscriptMatch(range, scroller);
+      const layer = document.querySelector<HTMLElement>(".transcript-find-pulse-layer");
+      expect(layer?.style.left).toBe("100px");
+      const rings = [...(layer?.children ?? [])] as HTMLElement[];
+      expect(rings).toHaveLength(2);
+      expect(rings[0].style.left).toBe("18px");
+      expect(rings[0].style.top).toBe("29px");
+      expect(rings[0].style.width).toBe("64px");
+
+      vi.advanceTimersByTime(2000);
+      expect(document.querySelector(".transcript-find-pulse-layer")).toBeNull();
+      scroller.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops early when cleaned up", () => {
+    const scroller = document.createElement("div");
+    const range = { getClientRects: () => [] } as unknown as Range;
+    const stop = pulseTranscriptMatch(range, scroller);
+    expect(document.querySelector(".transcript-find-pulse-layer")).not.toBeNull();
+    stop();
+    expect(document.querySelector(".transcript-find-pulse-layer")).toBeNull();
   });
 });

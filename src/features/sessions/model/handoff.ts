@@ -22,6 +22,14 @@ export type HandoffComposerCard = {
   brief: string;
   request?: string;
   files?: number;
+  /** Continue mode (L-189): the card is prepared beside, then sent with the first message. */
+  kind?: "continue";
+  status?: "preparing" | "ready";
+  /** Who wrote the card, or why the Quick card was used. */
+  note?: string;
+  /** Matches the preparing job, so a stale result cannot overwrite a newer card. */
+  jobId?: string;
+  tokens?: number;
 };
 
 export function buildHandoffComposerCard(input: {
@@ -46,6 +54,7 @@ export function handoffTurnCard(card: HandoffComposerCard): SecondOpinionMeta {
     from: card.from,
     to: card.to,
     kind: "handoff",
+    ...(card.kind === "continue" ? { continued: true as const } : {}),
     ...(card.request ? { request: card.request } : {}),
     ...(card.files != null && card.files > 0 ? { files: card.files } : {}),
   };

@@ -1,4 +1,4 @@
-import { ChevronRight, Replace, X } from "../../../shared/ui/icons";
+import { ChevronRight, CornerDownRight, LoaderCircle, Replace, X } from "../../../shared/ui/icons";
 import { HARNESS_TITLE, type HarnessId } from "../model/session";
 import { HarnessIcon } from "./HarnessIcon";
 
@@ -7,14 +7,31 @@ type Card = {
   to: HarnessId;
   request?: string;
   files?: number;
+  kind?: "continue";
+  status?: "preparing" | "ready";
+  note?: string;
+  tokens?: number;
 };
 
 type Props = {
   card: Card;
   onDismiss?: () => void;
+  /** Continue mode: stop waiting for the helper and use the Quick card. */
+  onUseQuick?: () => void;
 };
 
-export function HandoffMiniCard({ card, onDismiss }: Props) {
+function continueStatus(card: Card): string {
+  if (card.status === "preparing") return "Preparing context…";
+  const parts = ["Context ready"];
+  if (card.tokens != null && card.tokens > 0) parts.push(`~${card.tokens.toLocaleString()} tokens`);
+  if (card.note) parts.push(card.note);
+  return parts.join(" · ");
+}
+
+export function HandoffMiniCard({ card, onDismiss, onUseQuick }: Props) {
+  const continued = card.kind === "continue";
+  const preparing = continued && card.status === "preparing";
+  const Icon = continued ? CornerDownRight : Replace;
   const files =
     card.files != null && card.files > 0
       ? `${card.files} ${card.files === 1 ? "file" : "files"}`
@@ -29,12 +46,12 @@ export function HandoffMiniCard({ card, onDismiss }: Props) {
       >
         <div className="flex w-full flex-col text-left">
           <span className="flex min-w-0 items-center gap-1.5">
-            <Replace
+            <Icon
               className="size-3.5 shrink-0 text-content/45"
               strokeWidth={1.75}
             />
             <span className="min-w-0 truncate text-[11px] text-content/50">
-              Handoff
+              {continued ? "Continue" : "Handoff"}
             </span>
           </span>
           <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] font-semibold leading-snug text-content">
@@ -57,12 +74,36 @@ export function HandoffMiniCard({ card, onDismiss }: Props) {
               {files}
             </span>
           ) : null}
+          {continued ? (
+            <span
+              role="status"
+              className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-content/45"
+            >
+              {preparing ? (
+                <LoaderCircle
+                  aria-hidden
+                  className="size-3 shrink-0 motion-safe:animate-spin"
+                  strokeWidth={2}
+                />
+              ) : null}
+              <span className="min-w-0 truncate">{continueStatus(card)}</span>
+              {preparing && onUseQuick ? (
+                <button
+                  type="button"
+                  onClick={onUseQuick}
+                  className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-content/60 hover:bg-content/10 hover:text-content"
+                >
+                  Use quick card
+                </button>
+              ) : null}
+            </span>
+          ) : null}
         </div>
         {onDismiss ? (
           <button
             type="button"
             title="Remove"
-            aria-label="Remove handoff"
+            aria-label={continued ? "Remove context card" : "Remove handoff"}
             onClick={onDismiss}
             className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded text-content/40 hover:bg-content/10 hover:text-content"
           >

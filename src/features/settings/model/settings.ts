@@ -288,6 +288,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     label: "Show metadata on hover",
     keywords: "session metadata label notes hover tooltip preview cards tabs",
   },
+  {
+    id: "session-idle-cover",
+    section: "general",
+    label: "Cover idle sessions",
+    keywords: "session metadata label notes idle inactive blur cover privacy away",
+  },
   ...(IS_MAC || IS_WIN
     ? [
         {
@@ -547,6 +553,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     section: "chat",
     label: "Autocorrect",
     keywords: "spelling spell check autocorrect typo macos composer",
+  },
+  {
+    id: "continue-mode",
+    section: "chat",
+    label: "Continue button (experimental)",
+    keywords: "continue handoff new chat context card summary carry experimental",
   },
   {
     id: "composer-mascot",
@@ -1858,6 +1870,29 @@ const sessionMetadataHoverSetting = storedToggle(
 export const loadSessionMetadataHover = sessionMetadataHoverSetting.load;
 export const saveSessionMetadataHover = sessionMetadataHoverSetting.save;
 export const subscribeSessionMetadataHover = sessionMetadataHoverSetting.subscribe;
+
+/**
+ * Idle cover (fork, L-185): an open chat with a label or notes, left alone for
+ * this many minutes, is blurred behind a card with its metadata. Off by
+ * default.
+ */
+export const SESSION_IDLE_COVER_CHOICES = ["off", "2", "5", "10", "15", "30"] as const;
+export type SessionIdleCoverChoice = (typeof SESSION_IDLE_COVER_CHOICES)[number];
+
+const sessionIdleCoverSetting = storedChoice<SessionIdleCoverChoice>(
+  "monocode.sessionIdleCover",
+  SESSION_IDLE_COVER_CHOICES,
+  "off",
+  "monocode:session-idle-cover-change",
+);
+export const loadSessionIdleCover = sessionIdleCoverSetting.load;
+export const saveSessionIdleCover = sessionIdleCoverSetting.save;
+export const subscribeSessionIdleCover = sessionIdleCoverSetting.subscribe;
+
+/** The idle wait in ms for a choice, or null when off. */
+export function sessionIdleCoverMs(choice: SessionIdleCoverChoice): number | null {
+  return choice === "off" ? null : Number(choice) * 60_000;
+}
 
 const GPU_TERMINAL_RENDERING_KEY = "monocode.gpuTerminalRendering";
 const GPU_TERMINAL_RENDERING_EVENT = "monocode:gpu-terminal-rendering-change";

@@ -321,6 +321,16 @@ export function applyHarnessEvent(
   }
 }
 
+/** Ends the turn the app did not send, as the harness's finished event does (L-186). */
+export function finishExternalTurn(session: Session): Session {
+  return session.externalTurnId
+    ? applyExternalTurnEvent(session, {
+        type: "externalTurn.finished",
+        turnId: session.externalTurnId,
+      })
+    : session;
+}
+
 /** Phone blocks have their own boundary even if a local prompt is already queued. */
 function applyExternalTurnEvent(
   session: Session,

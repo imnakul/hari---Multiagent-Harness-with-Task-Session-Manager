@@ -21,6 +21,22 @@ export function isInteractiveClaudeWorkingElsewhere(
 }
 
 /**
+ * True when the chat still waits on a turn Claude did not get from MonoCode,
+ * but Claude itself (`liveExternalTurn`, from the harness) is no longer on
+ * it: the terminal closed or the turn ended without telling the chat. Steer
+ * and Resume clear it instead of waiting forever (fork, L-186).
+ */
+export function hasStaleExternalTurn(
+  session: SteerTarget & Pick<Session, "externalTurnId">,
+  liveExternalTurn: string | undefined,
+): boolean {
+  return (
+    isInteractiveClaudeWorkingElsewhere(session) &&
+    liveExternalTurn !== session.externalTurnId
+  );
+}
+
+/**
  * True when this session's running turn accepts a follow-up mid-turn.
  *
  * Steer support is a harness capability, but Interactive Claude rejects

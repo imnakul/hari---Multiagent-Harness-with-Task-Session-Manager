@@ -45,6 +45,7 @@ import {
 import {
   INTERACTIVE_ATTACHMENTS_HEADER,
   interactivePromptMatches,
+  interactivePromptNearlyMatches,
 } from "./claudeInteractivePrompt";
 
 type Binding = { nativeId: string; cwd: string; accountId?: string };
@@ -206,6 +207,10 @@ export function interactiveClaudeBinding(id: string): Binding | undefined {
 export function hasInteractiveClaude(id: string): boolean {
   return lives.has(id);
 }
+/** The turn Claude is working on that MonoCode did not send, if any (L-186). */
+export function interactiveClaudeExternalTurn(id: string): string | undefined {
+  return lives.get(id)?.external;
+}
 
 function readinessSnapshot(live: Live): ReadinessSnapshot {
   return {
@@ -352,6 +357,10 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
       live.continuation = taskId;
       return;
     }
+    // A new prompt means Claude finished whatever it was doing. End a turn
+    // MonoCode did not send before starting the next one, or the chat would
+    // keep waiting on it and never send its queue (L-186).
+    finishExternal(live);
     // Native acceptance, rather than process creation, establishes resumable history.
     if (!bindings.has(live.id)) {
       bindings.set(live.id, live.binding);
@@ -364,7 +373,13 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     live.transcript = newTranscriptState();
     live.stopText = undefined;
     live.lastReply = undefined;
-    if (live.pending && interactivePromptMatches(live.pending.text, row.prompt)) {
+    // A doubled or missing first letter is our own repaste, not other input:
+    // count it as delivered instead of locking the chat (L-187).
+    if (
+      live.pending &&
+      (interactivePromptMatches(live.pending.text, row.prompt) ||
+        interactivePromptNearlyMatches(live.pending.text, row.prompt))
+    ) {
       if (!live.pending.accepted) {
         live.pending.accepted = true;
         clearTimeout(live.pending.timer);

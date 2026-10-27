@@ -48,7 +48,8 @@ struct LiveState {
 /// confirms on screen that Claude shows it before `claude_interactive_submit`.
 struct PendingPaste {
     submission_id: String,
-    payload: String,
+    /// The second try: pasted parts only, never the typed letter (L-187).
+    repaste: String,
     repasted: bool,
     enters: u8,
 }
@@ -1038,7 +1039,7 @@ pub fn claude_interactive_send(
     } else if result.is_ok() {
         state.paste = Some(PendingPaste {
             submission_id,
-            payload,
+            repaste: crate::interactive_delivery::repaste_payload(&text),
             repasted: false,
             enters: 0,
         });
@@ -1101,7 +1102,7 @@ fn submit_step(
         }
         "repaste" if paste.enters == 0 && !paste.repasted => {
             paste.repasted = true;
-            Ok(SubmitStep::Write(paste.payload.clone()))
+            Ok(SubmitStep::Write(paste.repaste.clone()))
         }
         "abort" if paste.enters == 0 => {
             state.paste = None;
@@ -1370,7 +1371,7 @@ mod tests {
     fn submit_steps_follow_the_screen_but_never_repaste_after_enter() {
         let paste = || PendingPaste {
             submission_id: "a".into(),
-            payload: "R\x1b[200~eply\x1b[201~".into(),
+            repaste: "\x1b[200~eply\x1b[201~".into(),
             repasted: false,
             enters: 0,
         };
@@ -1385,7 +1386,7 @@ mod tests {
         );
         assert_eq!(
             submit_step(&mut state, "a", "repaste"),
-            Ok(SubmitStep::Write("R\x1b[200~eply\x1b[201~".into()))
+            Ok(SubmitStep::Write("\x1b[200~eply\x1b[201~".into()))
         );
         assert!(
             submit_step(&mut state, "a", "repaste").is_err(),

@@ -1,4 +1,5 @@
 import { WorkInPicker } from "../../provider-sessions/ui/WorkInPicker";
+import { continueEstimate, type ContinueChoice } from "../model/continueCard";
 import {
   selectedProviderAccountId,
   supportsProviderAccounts,
@@ -158,6 +159,11 @@ import { type ReviewIssue } from "../../inbox/model/githubTasks";
 import { RemoteSession } from "../../connections/ui/RemoteSession";
 import { isRemoteProjectPath } from "../../projects/model/recents";
 import type { HostSession } from "../../connections/model/protocol";
+import { sessionNeedsInput } from "../model/session";
+import { sessionIdleCoverMs } from "../../settings/model/settings";
+import { hasSessionMetadata } from "../model/sessionMetadata";
+import { SessionIdleCover, useIdleCover } from "./SessionIdleCover";
+import { useSessionIdleCover, useSessionMetadata } from "./useSessionMetadata";
 
 function ignoreCloudOutcome(): void {}
 
@@ -254,6 +260,8 @@ export type SessionPaneProps = {
   onNoteCardDismiss?: (sessionId: string) => void;
   onOpenArtifact?: (sessionId: string, id: string) => void;
   onHandoffCardDismiss?: (sessionId: string) => void;
+  /** Continue mode (L-189): stop waiting for the helper and use the Quick card. */
+  onUseQuickCard?: (sessionId: string) => void;
   onOpenLinkedWorkItem?: (item: LinkedWorkItem, sessionId: string) => void;
   onArchiveSession?: (sessionId: string, archived: boolean) => Promise<boolean>;
   onDeleteSession?: (sessionId: string) => Promise<boolean>;
@@ -297,6 +305,7 @@ export type SessionPaneProps = {
   onSidechat?: (sessionId: string, turn: Block[]) => void;
 
   onHandoff?: (sessionId: string, target: ModelTarget, turn: Block[]) => void;
+  onContinue?: (sessionId: string, choice: ContinueChoice, turn: Block[]) => void;
   onBtwSubmit?: (
     sessionId: string,
     turn: Block[],
@@ -410,6 +419,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
   onNoteCardDismiss,
   onOpenArtifact,
   onHandoffCardDismiss,
+  onUseQuickCard,
   onOpenLinkedWorkItem,
   onArchiveSession,
   onDeleteSession,
@@ -433,6 +443,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
   onBuildPlan,
   onSecondOpinion,
   onHandoff,
+  onContinue,
   onBranch,
   onSidechat,
   onBtwSubmit,
@@ -564,6 +575,23 @@ const LocalSessionPane = memo(function LocalSessionPane({
   useSyncExternalStore(subscribeMonos, monosSnapshot);
   const mono = monoForSession(session.id);
   const agent = mono ? monoLook(mono) : undefined;
+  // Idle cover (L-185): never over a working chat or one waiting on the user.
+  const idleCoverMetadata = useSessionMetadata(session.id);
+  const idleCoverChoice = useSessionIdleCover();
+  const idleCoverRoot = useRef<HTMLDivElement>(null);
+  const idleCoverEligible =
+    visible &&
+    !agent &&
+    hasSessionMetadata(idleCoverMetadata) &&
+    !session.busy &&
+    !session.externalTurnId &&
+    !session.pendingForm &&
+    !sessionNeedsInput(session);
+  const idleCover = useIdleCover(
+    idleCoverRoot,
+    sessionIdleCoverMs(idleCoverChoice),
+    idleCoverEligible,
+  );
   // A Mono shows only its own background, never the project's or the app's.
   const projectBackground = mono
     ? monoChatBackground(mono.id)
@@ -586,6 +614,11 @@ const LocalSessionPane = memo(function LocalSessionPane({
         ),
       } as CSSProperties)
     : undefined;
+  const estimateContinue = useCallback(
+    (choice: ContinueChoice) =>
+      continueEstimate(session.blocks, session.worktreeCwd || session.cwd, choice),
+    [session.blocks, session.worktreeCwd, session.cwd],
+  );
   const approve = useCallback(
     (requestId: number, decision: ApprovalDecision, scope?: ApprovalScope) =>
       onApproval(session.id, requestId, decision, scope),
@@ -889,6 +922,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
       onInboxCardDismiss={() => onInboxCardDismiss?.(session.id)}
       onNoteCardDismiss={() => onNoteCardDismiss?.(session.id)}
       onHandoffCardDismiss={() => onHandoffCardDismiss?.(session.id)}
+      onUseQuickCard={onUseQuickCard ? () => onUseQuickCard(session.id) : undefined}
       onQuestionReply={replyQuestion}
       onFormReply={replyForm}
       onQuestionInteraction={(id) => onQuestionInteraction?.(session.id, id)}
@@ -1105,7 +1139,18 @@ const LocalSessionPane = memo(function LocalSessionPane({
           </button>
         </div>
       ) : null}
-      <div className="flex min-h-0 min-w-0 flex-1">
+      <div
+        ref={idleCoverRoot}
+        data-idle-covered={idleCover.covered && !idleCover.peeking ? "" : undefined}
+        className="relative flex min-h-0 min-w-0 flex-1"
+      >
+        {idleCoverEligible && hasSessionMetadata(idleCoverMetadata) ? (
+          <SessionIdleCover
+            state={idleCover}
+            metadata={idleCoverMetadata}
+            title={title}
+          />
+        ) : null}
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {visible && historyNotice ? (
             <SessionProviderStrip
@@ -1372,6 +1417,19 @@ const LocalSessionPane = memo(function LocalSessionPane({
                           }
                         : undefined
                     }
+                    onContinue={
+                      !agent &&
+                      !session.inboxAsk &&
+                      !session.worktreeRemoved &&
+                      onContinue
+                        ? (choice, turn) => {
+                            if (!turn.some(isHistoryBlock))
+                              onContinue(session.id, choice, turn);
+                          }
+                        : undefined
+                    }
+                    continueProjectCwd={session.cwd}
+                    continueEstimate={estimateContinue}
                     onJumpToBottomChange={jumpVisibility.setVisible}
                     onJumpToBottomReady={onJumpToBottomReady}
                     onRevealReady={onRevealReady}

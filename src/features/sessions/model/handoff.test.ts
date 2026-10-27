@@ -327,6 +327,12 @@ describe("handoff composer card", () => {
       ),
     ).toEqual({ from: "cursor", to: "pi", kind: "handoff" });
   });
+
+  it("marks a Continue card so the sent message reads Continue (L-189)", () => {
+    expect(
+      handoffTurnCard({ from: "claude", to: "codex", brief: "card", kind: "continue" }),
+    ).toEqual({ from: "claude", to: "codex", kind: "handoff", continued: true });
+  });
 });
 
 describe("wrapHandoffPrompt", () => {

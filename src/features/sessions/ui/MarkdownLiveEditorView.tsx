@@ -54,6 +54,14 @@ const surfaceTheme = EditorView.theme({
   ".cm-placeholder": {
     color: "color-mix(in srgb, var(--color-content) 40%, transparent)",
   },
+  // drawSelection() hides the native caret and draws its own, black unless
+  // the theme is dark; match the file editor (editorChrome.ts).
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-content)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection":
+    {
+      backgroundColor:
+        "color-mix(in srgb, var(--color-accent) 35%, transparent) !important",
+    },
 });
 
 /** Props of the Live editor (see `MarkdownLiveEditor`). */

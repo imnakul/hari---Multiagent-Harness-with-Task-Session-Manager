@@ -66,6 +66,7 @@ import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
 import { TextWrap } from "../../../shared/ui/icons";
 import { loadProjectImagePreviewUrl } from "../model/attachments";
 import { MarkdownTable, MarkdownTableContext } from "./MarkdownTable";
+import { MarkdownQuote } from "./MarkdownQuote";
 import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
@@ -795,6 +796,7 @@ const MARKDOWN_COMPONENTS = {
   code: MarkdownCode,
   img: MarkdownImage,
   table: MarkdownTable,
+  blockquote: MarkdownQuote,
   source: MarkdownPictureSource,
 } satisfies Components;
 
@@ -957,12 +959,14 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   const tableActions = useMemo(
     () => ({
       onSaveNote: onSaveNote ?? inheritedTableActions.onSaveNote,
+      onAddToTask: inheritedTableActions.onAddToTask,
       streaming:
         !!streaming || !!inheritedTableActions.streaming || paced.revealing,
     }),
     [
       onSaveNote,
       inheritedTableActions.onSaveNote,
+      inheritedTableActions.onAddToTask,
       inheritedTableActions.streaming,
       streaming,
       paced.revealing,

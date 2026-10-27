@@ -64,6 +64,18 @@ function partEnds(actual: string, from: number, part: InputPart): number[] {
   return ends;
 }
 
+function matchesParts(actual: string, parts: InputPart[]): boolean {
+  let positions = new Set([0]);
+  for (const part of parts) {
+    const next = new Set<number>();
+    for (const from of positions)
+      for (const end of partEnds(actual, from, part)) next.add(end);
+    if (!next.size) return false;
+    positions = next;
+  }
+  return positions.has(actual.length);
+}
+
 /** Confirm only the exact prompt or Claude's equivalent of our known paste parts. */
 export function interactivePromptMatches(
   expected: string,
@@ -72,13 +84,37 @@ export function interactivePromptMatches(
   if (typeof actual !== "string") return false;
   if (actual === expected) return true;
   if (!expected || expected === "/compact") return false;
-  let positions = new Set([0]);
-  for (const part of inputParts(expected)) {
-    const next = new Set<number>();
-    for (const from of positions)
-      for (const end of partEnds(actual, from, part)) next.add(end);
-    if (!next.size) return false;
-    positions = next;
-  }
-  return positions.has(actual.length);
+  return matchesParts(actual, inputParts(expected));
+}
+
+/**
+ * The prompt as sent except for its one typed letter: doubled (the letter
+ * landed, then a repaste after a dropped paste typed it again) or missing (a
+ * repaste sends only the pasted parts). Only our own delivery explains either,
+ * so this counts as delivered instead of "different input" (fork, L-187).
+ * Every pasted part must still match exactly.
+ */
+export function interactivePromptNearlyMatches(
+  expected: string,
+  actual: unknown,
+): boolean {
+  if (typeof actual !== "string" || !expected || expected === "/compact")
+    return false;
+  const parts = inputParts(expected);
+  const typed = parts.findIndex((part) => !part.pasted);
+  if (typed < 0) return false;
+  const letter = parts[typed].text;
+  const before = parts.slice(0, typed);
+  const after = parts.slice(typed + 1);
+  const pasted = [...before, ...after];
+  const variants: InputPart[][] = [
+    [...before, { text: letter + letter, pasted: false }, ...after],
+    pasted,
+  ];
+  // Two adjacent pastes may reach Claude as one.
+  if (pasted.length === 2)
+    variants.push([{ text: pasted[0].text + pasted[1].text, pasted: true }]);
+  return variants.some(
+    (variant) => variant.length > 0 && matchesParts(actual, variant),
+  );
 }

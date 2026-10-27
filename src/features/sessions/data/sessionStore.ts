@@ -1926,6 +1926,7 @@ function sanitizeSecondOpinion(
     ...(request ? { request } : {}),
     ...(files > 0 ? { files } : {}),
     ...(value.kind === "handoff" ? { kind: "handoff" as const } : {}),
+    ...(value.continued === true ? { continued: true as const } : {}),
   };
 }
 
@@ -2167,6 +2168,12 @@ function restoreQueueHandoff(value: unknown): QueuedMessage["handoffCard"] {
     Number.isFinite(value.files) &&
     value.files >= 0
       ? { files: value.files }
+      : {}),
+    // Continue mode (L-189): keep the card kind; a preparing job does not survive a restart.
+    ...("kind" in value && value.kind === "continue" ? { kind: "continue" as const } : {}),
+    ...("note" in value && typeof value.note === "string" ? { note: value.note } : {}),
+    ...("tokens" in value && typeof value.tokens === "number" && Number.isFinite(value.tokens)
+      ? { tokens: value.tokens }
       : {}),
   };
 }

@@ -26,6 +26,24 @@ type SidechatSubmitInput = {
   timeoutMs?: number;
 };
 
+/**
+ * The source context to put before this send, if any. It goes with the first
+ * message only: every harness keeps the sidechat's messages in its own native
+ * history, so once a message was sent and the harness bound a native
+ * conversation (`providerSessionId`), the agent already has the context.
+ * Sending it again piled up on every turn, wasted tokens and forced frequent
+ * compactions (fork, L-187 for Interactive Claude, L-188 for all harnesses).
+ * Without a native conversation yet, the context goes again.
+ */
+export function sidechatContextForSend(
+  session: Pick<Session, "blocks" | "providerSessionId">,
+  prepared: SidechatContextPrepared | undefined,
+): string | undefined {
+  const sentBefore = session.blocks.some((block) => block.role === "user");
+  if (sentBefore && session.providerSessionId) return undefined;
+  return prepared?.sourceContext;
+}
+
 /** Coalesces the saved-parent lookup needed before a closed-parent sidechat send. */
 export class SidechatSubmitPreflight {
   private pending = new Map<string, object>();

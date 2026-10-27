@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   canSteerSession,
+  hasStaleExternalTurn,
   isInteractiveClaudeSession,
   isInteractiveClaudeWorkingElsewhere,
 } from "./steerSupport";
@@ -26,6 +27,23 @@ describe("canSteerSession", () => {
     ).toBe(true);
     expect(
       isInteractiveClaudeWorkingElsewhere({ harness: "claude", externalTurnId: "phone:1" }),
+    ).toBe(false);
+  });
+
+  it("finds a turn the chat waits on that Claude has left (L-186)", () => {
+    const session = {
+      harness: "claude" as const,
+      modelSettings: interactive,
+      externalTurnId: "interactive:1",
+    };
+    expect(hasStaleExternalTurn(session, "interactive:1")).toBe(false);
+    expect(hasStaleExternalTurn(session, undefined)).toBe(true);
+    expect(hasStaleExternalTurn(session, "interactive:2")).toBe(true);
+    expect(
+      hasStaleExternalTurn({ ...session, externalTurnId: undefined }, undefined),
+    ).toBe(false);
+    expect(
+      hasStaleExternalTurn({ harness: "claude", externalTurnId: "phone:1" }, undefined),
     ).toBe(false);
   });
 

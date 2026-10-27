@@ -359,6 +359,7 @@ import {
 import {
   applyHarnessEvent,
   applyHarnessEvents,
+  finishExternalTurn,
   appendUser,
   appendSteerUser,
   bindHarnessSession,
@@ -421,6 +422,14 @@ import {
   wrapHandoffPrompt,
 } from "../features/sessions/model/handoff";
 import { requestOutgoingHandoff } from "../features/sessions/model/handoffTurn";
+import {
+  buildQuickCard,
+  continueFacts,
+  estimateTokens,
+  wrapContinuePrompt,
+  type ContinueChoice,
+} from "../features/sessions/model/continueCard";
+import { prepareContinueCard } from "../integrations/harness/core/continueHelper";
 import {
   applyBtwHarnessEvent,
   btwTurnHarness,
@@ -555,7 +564,10 @@ import {
   continueCostNote,
   continueClaudeSession,
 } from "../features/providers/model/continueOnAccount";
-import { hasInteractiveClaude } from "../integrations/harness/providers/claude/claudeInteractive";
+import {
+  hasInteractiveClaude,
+  interactiveClaudeExternalTurn,
+} from "../integrations/harness/providers/claude/claudeInteractive";
 import { emptyProviderListState } from "../features/provider-sessions/model/conversationStore";
 import { CloudSessionDialog } from "../features/provider-sessions/ui/CloudSessionDialog";
 import { useCloudRecords } from "../features/provider-sessions/ui/useCloudRecords";
@@ -825,7 +837,7 @@ import {
   recordBoardOutcome,
 } from "../features/session-board/sessionBoard";
 import {
-  FOCUS_GRID_MAX_COLUMNS,
+  FOCUS_GRID_AUTO_COLUMNS,
   addToFocusGrid,
   focusGridHas,
   focusGridIds,
@@ -990,7 +1002,11 @@ import {
 import { type ReviewIssue } from "../features/inbox/model/githubTasks";
 import { type RecentProject } from "../features/projects/model/recents";
 import { queuePersistFingerprint } from "../features/sessions/data/sessionStore";
-import { SidechatSubmitPreflight, createSidechatSession } from "../features/sessions/model/sidechatSubmit";
+import {
+  SidechatSubmitPreflight,
+  createSidechatSession,
+  sidechatContextForSend,
+} from "../features/sessions/model/sidechatSubmit";
 import { planBranch } from "../features/sessions/model/branchPlan";
 import { saveSessionLink } from "../features/sessions/model/sessionLinks";
 import { sendBranchTurn } from "../features/sessions/model/branchFlow";
@@ -1002,6 +1018,7 @@ import {
 import { settleQueuedSteerCancellations } from "../features/sessions/model/messageQueue";
 import {
   canSteerSession,
+  hasStaleExternalTurn,
   isInteractiveClaudeSession,
   isInteractiveClaudeWorkingElsewhere,
 } from "../features/sessions/model/steerSupport";
@@ -1511,7 +1528,7 @@ function Workspace({
     [focusGrid, focusMode],
   );
   /** Columns the Focus view has room for, as it last measured. */
-  const focusColumnCapRef = useRef(FOCUS_GRID_MAX_COLUMNS);
+  const focusColumnCapRef = useRef(FOCUS_GRID_AUTO_COLUMNS);
   /** Tab id -> project name, kept in sync with the rendered title tabs. */
   const tabProjectsRef = useRef(new Map<string, string>());
   const displayedTabNavigation = useRef<{
@@ -3674,7 +3691,15 @@ function Workspace({
     );
   }, []);
 
+  /** Continue mode (L-189): context cards still being written, settled by the helper or "Use quick card". */
+  const continueJobs = useRef(
+    new Map<string, { promise: Promise<string>; settle: (card: string) => void }>(),
+  );
+
   const onHandoffCardDismiss = useCallback((sessionId: string) => {
+    const jobId = sessionsRef.current.find((session) => session.id === sessionId)
+      ?.handoffCard?.jobId;
+    if (jobId) continueJobs.current.delete(jobId);
     setSessions((prev) =>
       prev.map((session) =>
         session.id === sessionId && session.handoffCard
@@ -8779,10 +8804,14 @@ function Workspace({
           return false;
         }
       }
-      // Attach the source thread's latest state to every send. Saved sidechats
+      // Attach the source thread's state to the first send only; the native
+      // conversation keeps it after that (fork, L-187, L-188). Saved sidechats
       // also keep a bounded source snapshot for recovery after the parent
       // closes; visible turns remain independent in the sidechat.
-      const sidechatContext = options?.sidechatContextPrepared?.sourceContext;
+      const sidechatContext = sidechatContextForSend(
+        current,
+        options?.sidechatContextPrepared,
+      );
       const sendText = sidechatContext
         ? `${sidechatContext}\n\n---\n\n${text}`
         : text;
@@ -9029,6 +9058,15 @@ function Workspace({
                   : "queue"
                 : (options?.followUpBehavior ?? loadFollowUpBehavior());
         if (followUpBehavior === "queue") {
+          // Steer or Resume on a queued message that still has to wait leaves
+          // it where it is instead of queueing a copy (L-186).
+          if (
+            options?.queuedMessageId &&
+            current.queuedMessages?.some(
+              (entry) => entry.id === options.queuedMessageId,
+            )
+          )
+            return true;
           // An app request's ID, so a retried request finds it queued.
           const queuedSubmissionId =
             options?.appRequestId ?? crypto.randomUUID();
@@ -9591,11 +9629,25 @@ function Workspace({
             ),
           );
         }
-        let wrap = handoffCard
+        // Continue mode: a message sent before the card is ready waits for it here.
+        const continueJob =
+          handoffCard?.kind === "continue" && handoffCard.jobId
+            ? continueJobs.current.get(handoffCard.jobId)
+            : undefined;
+        const continueBrief = continueJob ? await continueJob.promise : undefined;
+        if (handoffCard?.jobId) continueJobs.current.delete(handoffCard.jobId);
+        if (turnGen.current.get(sessionId) !== gen) return;
+        let wrap: {
+          from: HarnessId;
+          to: HarnessId;
+          text: string;
+          continued?: boolean;
+        } | null = handoffCard
           ? {
               from: handoffCard.from,
               to: current.harness,
-              text: handoffCard.brief,
+              text: continueBrief ?? handoffCard.brief,
+              ...(handoffCard.kind === "continue" ? { continued: true } : {}),
             }
           : queuedHandoff;
         if (pendingSwitch) {
@@ -9921,7 +9973,7 @@ function Workspace({
             inboxAskPrompt(
               rawCommand ? undefined : current.inboxAsk,
               wrap && !rawCommand
-                ? wrapHandoffPrompt(
+                ? (wrap.continued ? wrapContinuePrompt : wrapHandoffPrompt)(
                     wrap.text,
                     wrap.from,
                     turnPrompt.trim() || CONTINUE_PROMPT,
@@ -11360,11 +11412,46 @@ function Workspace({
     [],
   );
 
-  const onSteerQueuedMessage = useCallback(
-    (sessionId: string, messageId: string) => {
+  // Interactive Claude: the chat can wait on a turn Claude did not get from
+  // the app after Claude has left it (terminal closed, turn ended unseen).
+  // Steer and Resume end that turn here, as its finished event would (L-186).
+  const clearStaleExternalTurn = useCallback(
+    (sessionId: string): Session | undefined => {
       const session = sessionsRef.current.find(
         (entry) => entry.id === sessionId,
       );
+      if (
+        !session ||
+        !hasStaleExternalTurn(session, interactiveClaudeExternalTurn(sessionId))
+      )
+        return session;
+      const nextSessions = sessionsRef.current.map((entry) =>
+        entry.id === sessionId ? finishExternalTurn(entry) : entry,
+      );
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
+      return nextSessions.find((entry) => entry.id === sessionId);
+    },
+    [],
+  );
+
+  // Resume while Claude is really still on its own turn: say why nothing
+  // sends yet (L-186).
+  const noteQueueWaitsOnClaude = useCallback(
+    (session: Session) => {
+      if (!isInteractiveClaudeWorkingElsewhere(session)) return;
+      enqueueHarnessEvent(session.id, {
+        type: "status",
+        text: "Claude is still working on a turn it started itself. The queue sends when it finishes, or use Steer to stop it and send now.",
+      });
+      flushHarnessEvents();
+    },
+    [enqueueHarnessEvent, flushHarnessEvents],
+  );
+
+  const onSteerQueuedMessage = useCallback(
+    (sessionId: string, messageId: string) => {
+      const session = clearStaleExternalTurn(sessionId);
       const message = session
         ? queuedMessageForSubmit(session, messageId, "steer")
         : undefined;
@@ -11373,8 +11460,10 @@ function Workspace({
       // Providers without native steer (Antigravity, Grok, Cline, Pi, omp,
       // fx) cannot take a whisper mid-turn. Plan mode also needs a distinct
       // next turn. In both cases, cancellation must settle before auto-flush.
+      // Interactive Claude working on a turn the app did not send counts as
+      // busy here: Steer stops that turn too, then sends (L-186).
       if (
-        session.busy &&
+        (session.busy || isInteractiveClaudeWorkingElsewhere(session)) &&
         (!canSteerSession(session) || message.intent === "plan")
       ) {
         const gen = (turnGen.current.get(sessionId) ?? 0) + 1;
@@ -11399,9 +11488,14 @@ function Workspace({
             ),
           );
           if (turnGen.current.get(sessionId) !== gen) return;
+          // Stop ends Claude's own turn too; clear it here in case its
+          // finished event never reaches the chat (L-186).
           const finished = sessionsRef.current.map((entry) =>
             entry.id === sessionId
-              ? finishQueuedSteerCancellation(entry, succeeded)
+              ? finishQueuedSteerCancellation(
+                  succeeded ? finishExternalTurn(entry) : entry,
+                  succeeded,
+                )
               : entry,
           );
           sessionsRef.current = finished;
@@ -11431,14 +11525,12 @@ function Workspace({
         intent: message.intent,
       });
     },
-    [onSubmit, enqueueHarnessEvent, flushHarnessEvents],
+    [onSubmit, enqueueHarnessEvent, flushHarnessEvents, clearStaleExternalTurn],
   );
 
   const onResumeQueue = useCallback(
     (sessionId: string) => {
-      const session = sessionsRef.current.find(
-        (entry) => entry.id === sessionId,
-      );
+      const session = clearStaleExternalTurn(sessionId);
       if (
         !session ||
         (session.busy &&
@@ -11457,6 +11549,24 @@ function Workspace({
         );
         sessionsRef.current = nextSessions;
         setSessions(nextSessions);
+        noteQueueWaitsOnClaude(session);
+        return;
+      }
+      // Claude is really still on its own turn: a Continue now would only
+      // queue behind it, so the queue just waits for that turn (L-186).
+      if (isInteractiveClaudeWorkingElsewhere(session)) {
+        const nextSessions = sessionsRef.current.map((entry) =>
+          entry.id === sessionId
+            ? {
+                ...entry,
+                queueStatus: "active" as const,
+                queueHoldReason: undefined,
+              }
+            : entry,
+        );
+        sessionsRef.current = nextSessions;
+        setSessions(nextSessions);
+        noteQueueWaitsOnClaude(session);
         return;
       }
       if (monoForSession(sessionId)) {
@@ -11493,7 +11603,7 @@ function Workspace({
         followUpBehavior: "steer",
       });
     },
-    [onSubmit],
+    [onSubmit, clearStaleExternalTurn, noteQueueWaitsOnClaude],
   );
 
   const onUsageLimitDismiss = useCallback((sessionId: string) => {
@@ -11522,9 +11632,7 @@ function Workspace({
 
   const onUsageLimitResume = useCallback(
     (sessionId: string) => {
-      const session = sessionsRef.current.find(
-        (entry) => entry.id === sessionId,
-      );
+      const session = clearStaleExternalTurn(sessionId);
       if (!session?.usageLimit || session.busy) return;
       if (isMonoSession(sessionId)) {
         setSessions((prev) =>
@@ -11545,7 +11653,7 @@ function Workspace({
       }
       onSubmit(sessionId, CONTINUE_PROMPT);
     },
-    [onSubmit, onUsageLimitDismiss],
+    [onSubmit, onUsageLimitDismiss, clearStaleExternalTurn],
   );
 
   const usageLimitSwitching = useRef(new Set<string>());
@@ -12712,6 +12820,120 @@ function Workspace({
       openSessionBeside(sourceId, session, cwd, true);
     },
     [openSessionBeside],
+  );
+
+  /** Updates a Continue card only while it is still the one this job prepares. */
+  const settleContinueCard = useCallback(
+    (sessionId: string, jobId: string, card: string, note: string) => {
+      continueJobs.current.get(jobId)?.settle(card);
+      setSessions((prev) =>
+        prev.map((session) => {
+          const current = session.handoffCard;
+          if (session.id !== sessionId || current?.jobId !== jobId) return session;
+          return {
+            ...session,
+            handoffCard: {
+              ...current,
+              brief: card,
+              status: "ready" as const,
+              note,
+              tokens: estimateTokens(card),
+              jobId: undefined,
+            },
+          };
+        }),
+      );
+    },
+    [],
+  );
+
+  /** Continue mode (L-189): a new chat beside, with a context card sent with the first message. */
+  const onContinue = useCallback(
+    (sourceId: string, choice: ContinueChoice, turn: Block[]) => {
+      const source = sessionsRef.current.find((session) => session.id === sourceId);
+      if (!source || source.worktreeRemoved) return;
+      const { harness, model, modelSettings } = choice.target;
+      const settings = mergeModelSettings(resolveModel(harness, model), modelSettings);
+      const display = sessionDisplayTitle(source.title, source.harness);
+      const title = display === "New session" ? HANDOFF_TITLE : display;
+
+      // Same provider: a native fork keeps the full history, so no card is needed.
+      if (harness === source.harness) {
+        const newSessionId = crypto.randomUUID();
+        const plan = planBranch({ source, turn, newSessionId });
+        if (plan?.kind === "native") {
+          const forked = {
+            ...newSession(harness, source.cwd, model, source.runtimeMode, settings),
+            id: newSessionId,
+            title: formatSessionTitle(harness, title),
+            blocks: plan.blocks,
+            providerAccountId: source.providerAccountId,
+            worktreeCwd: source.worktreeCwd,
+            branch: source.branch,
+          };
+          saveSessionLink(forked.id, { parentId: source.id, relation: "fork" });
+          openSessionBeside(sourceId, forked, source.cwd, true);
+          return;
+        }
+      }
+
+      const cwd = sessionWorkCwd(source);
+      const from = harnessForTurn(source.blocks, turn, source.harness);
+      const sliced = sessionThroughTurn(source, turn);
+      const quick = buildQuickCard(continueFacts(sliced.blocks, cwd));
+      const preparing = choice.preset !== "quick";
+      const jobId = crypto.randomUUID();
+      const session = {
+        ...newSession(harness, source.cwd, model, source.runtimeMode),
+        worktreeCwd: source.worktreeCwd,
+        branch: source.branch,
+        modelSettings: settings,
+        title: formatSessionTitle(harness, title),
+        handoffCard: {
+          ...buildHandoffComposerCard({
+            from,
+            to: harness,
+            brief: quick,
+            userRequest: turnUserRequest(turn),
+            files: turnEditedFiles(sliced.blocks, cwd),
+          }),
+          brief: quick,
+          kind: "continue" as const,
+          ...(preparing
+            ? { status: "preparing" as const, jobId }
+            : { status: "ready" as const, note: "Quick card", tokens: estimateTokens(quick) }),
+        },
+      };
+      if (preparing) {
+        let settle: (card: string) => void = () => undefined;
+        const promise = new Promise<string>((resolve) => {
+          let done = false;
+          settle = (card) => {
+            if (done) return;
+            done = true;
+            resolve(card);
+          };
+        });
+        continueJobs.current.set(jobId, { promise, settle });
+        void prepareContinueCard({
+          blocks: sliced.blocks,
+          cwd,
+          choice,
+          sourceHarness: from,
+        }).then((result) => settleContinueCard(session.id, jobId, result.card, result.note));
+      }
+      openSessionBeside(sourceId, session, source.cwd, true);
+    },
+    [openSessionBeside, settleContinueCard],
+  );
+
+  const onUseQuickCard = useCallback(
+    (sessionId: string) => {
+      const card = sessionsRef.current.find((session) => session.id === sessionId)?.handoffCard;
+      if (card?.kind !== "continue" || card.status !== "preparing" || !card.jobId) return;
+      settleContinueCard(sessionId, card.jobId, card.brief, "Quick card");
+    },
+    [settleContinueCard],
   );
 
   useEffect(() => {
@@ -15751,6 +15973,7 @@ function Workspace({
     onLinkedWorkItemUpdateCardDismiss,
     onNoteCardDismiss,
     onHandoffCardDismiss,
+    onUseQuickCard,
     onOpenLinkedWorkItem,
     onArchiveSession: onArchiveHistorySession,
     onDeleteSession: onDeleteHistorySession,
@@ -15764,6 +15987,7 @@ function Workspace({
     onBuildPlan,
     onSecondOpinion,
     onHandoff,
+    onContinue,
     onBtwSubmit,
     onBtwRetry,
     onBtwDelete,
@@ -15921,6 +16145,7 @@ function Workspace({
             // second opinion belongs in its own tab.
             onSecondOpinion={undefined}
             onHandoff={undefined}
+            onContinue={undefined}
             visible={monoCovers && !focusMode}
             focused={monoShownSessionActive && !projectTerminalFocused}
             inSplit={false}

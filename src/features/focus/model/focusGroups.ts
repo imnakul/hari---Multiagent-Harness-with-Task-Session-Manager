@@ -61,7 +61,8 @@ export function projectFocusGrid(
  * order and their own grid. When the run leaves no room, other projects'
  * last columns wait in overflow and the full grid refills free places from
  * it, which no project's own grid can see. A center drop swaps in place.
- * Returns null when the move does not fit the project's grid.
+ * Returns null when the move does not fit the project's grid. `maxColumns`
+ * is the window's room (L-185).
  */
 export function moveInProjectFocusGrid(
   grid: FocusGrid,
@@ -69,11 +70,12 @@ export function moveInProjectFocusGrid(
   id: string,
   targetId: string,
   edge: FocusDropEdge,
+  maxColumns: number = FOCUS_GRID_MAX_COLUMNS,
 ): FocusGrid | null {
   const members = new Set(group.ids);
   if (!members.has(id) || !members.has(targetId)) return null;
   const view = projectFocusGrid(grid, group);
-  const moved = moveInFocusGrid(view, id, targetId, edge);
+  const moved = moveInFocusGrid(view, id, targetId, edge, maxColumns);
   if (!moved) return null;
   if (edge === "center") return swapInFocusGrid(grid, id, targetId);
   const others = grid.columns
@@ -90,11 +92,10 @@ export function moveInProjectFocusGrid(
           .filter((column) => column.some((entry) => !members.has(entry))).length;
   const before = others.slice(0, at);
   const after = others.slice(at);
+  // Spill past the columns the window shows, so none hide under "+N more".
+  const limit = Math.min(maxColumns, FOCUS_GRID_MAX_COLUMNS);
   const spilled: string[][] = [];
-  while (
-    before.length + moved.columns.length + after.length >
-    FOCUS_GRID_MAX_COLUMNS
-  ) {
+  while (before.length + moved.columns.length + after.length > limit) {
     const last = after.length > 0 ? after.pop() : before.pop();
     if (last) spilled.unshift(last);
   }

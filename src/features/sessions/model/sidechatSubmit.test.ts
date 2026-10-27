@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { newSession } from "./session";
-import { SidechatSubmitPreflight } from "./sidechatSubmit";
+import { SidechatSubmitPreflight, sidechatContextForSend } from "./sidechatSubmit";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -177,6 +177,39 @@ describe("SidechatSubmitPreflight", () => {
     await load.promise;
     await Promise.resolve();
     expect(submitted).toEqual([{ id: "timed-sidechat", prepared: fallback }]);
+  });
+});
+
+describe("sidechatContextForSend (L-187, L-188)", () => {
+  const prepared = { sourceTitle: "Parent chat", sourceContext: "Context block" };
+  const asked = [{ id: "u1", role: "user" as const, text: "First question" }];
+  const sessions = [
+    newSession("claude", "/repo", "claude:sonnet-5", "supervised", {
+      claudeExecution: "interactive",
+    }),
+    newSession("claude", "/repo", "claude:sonnet-5"),
+    newSession("codex", "/repo", "codex:gpt-6"),
+    newSession("opencode", "/repo", "opencode:default"),
+  ];
+
+  it.each(sessions)("sends the context with the first message only ($harness)", (session) => {
+    expect(sidechatContextForSend(session, prepared)).toBe("Context block");
+    expect(
+      sidechatContextForSend({ ...session, providerSessionId: "native" }, prepared),
+    ).toBe("Context block");
+    expect(
+      sidechatContextForSend(
+        { ...session, blocks: asked, providerSessionId: "native" },
+        prepared,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("sends it again while no native conversation holds it", () => {
+    expect(
+      sidechatContextForSend({ ...sessions[2], blocks: asked }, prepared),
+    ).toBe("Context block");
+    expect(sidechatContextForSend(sessions[0], undefined)).toBeUndefined();
   });
 });
 

@@ -54,7 +54,7 @@ export function promptLabel(block: Block): string {
   const text = textShown ? firstLine(block.text) : "";
   if (text) return text;
   if (card) {
-    if (card.kind === "handoff") return "Handoff";
+    if (card.kind === "handoff") return card.continued ? "Continue" : "Handoff";
     const request = firstLine(card.request ?? "");
     return request ? `Second opinion: ${request}` : "Second opinion";
   }

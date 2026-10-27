@@ -179,6 +179,8 @@ export type SecondOpinionMeta = {
   files?: number;
   /** Split-pane continue. Default is a second-opinion review. */
   kind?: "handoff";
+  /** A handoff made by Continue mode (L-189). */
+  continued?: true;
 };
 
 /** A mid-turn interjection the harness asked to surface, e.g. OMP advisor notes. */

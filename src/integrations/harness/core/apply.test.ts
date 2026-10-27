@@ -14,6 +14,7 @@ import {
   appendUser,
   applyHarnessEvent,
   appendSteerUser,
+  finishExternalTurn,
   promoteLastAssistantToPlan,
   stopStreaming,
 } from "./apply";
@@ -58,6 +59,25 @@ describe("follow-up readiness", () => {
     );
     session = appendUser(session, "Next");
     expect(session.turnReady).toBe(false);
+  });
+});
+
+describe("finishExternalTurn (L-186)", () => {
+  it("ends the turn the app did not send, as its finished event would", () => {
+    const started = applyHarnessEvent(newSession("claude", "/repo", "m"), {
+      type: "externalTurn.started",
+      turnId: "interactive:1",
+    });
+    expect(started.externalTurnId).toBe("interactive:1");
+    const finished = finishExternalTurn(started);
+    expect(finished).toEqual(
+      applyHarnessEvent(started, {
+        type: "externalTurn.finished",
+        turnId: "interactive:1",
+      }),
+    );
+    expect(finished.externalTurnId).toBeUndefined();
+    expect(finishExternalTurn(finished)).toBe(finished);
   });
 });
 

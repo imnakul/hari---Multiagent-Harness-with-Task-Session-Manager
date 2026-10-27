@@ -105,10 +105,35 @@ describe("moveInFocusGrid", () => {
     ]);
   });
 
-  it("refuses a 5th column, a 3rd row, and a drop on itself", () => {
-    expect(moveInFocusGrid(gridOf(5), "s5", "s3", "right")).toBeNull();
+  it("refuses more columns than fit, a 3rd row, and a drop on itself", () => {
+    expect(moveInFocusGrid(gridOf(5), "s5", "s3", "right", 4)).toBeNull();
     expect(moveInFocusGrid(gridOf(6), "s3", "s2", "bottom")).toBeNull();
     expect(moveInFocusGrid(gridOf(2), "s1", "s1", "left")).toBeNull();
+  });
+
+  it("drags a 5th and 6th column out when there is room, never a 7th (L-185)", () => {
+    const five = moveInFocusGrid(gridOf(5), "s5", "s4", "right");
+    expect(five?.columns).toEqual([["s1"], ["s2"], ["s3"], ["s4"], ["s5"]]);
+    const six = moveInFocusGrid(gridOf(6), "s6", "s4", "right");
+    expect(six?.columns).toEqual([["s1", "s5"], ["s2"], ["s3"], ["s4"], ["s6"]]);
+    const seven = moveInFocusGrid(
+      { columns: [["a", "g"], ["b"], ["c"], ["d"], ["e"], ["f"]], overflow: [] },
+      "g",
+      "f",
+      "right",
+    );
+    expect(seven).toBeNull();
+  });
+
+  it("keeps placing new chats in rows once 4 or more columns exist", () => {
+    const five = { columns: [["a"], ["b"], ["c"], ["d"], ["e"]], overflow: [] };
+    expect(addToFocusGrid(five, "f").columns).toEqual([
+      ["a", "f"],
+      ["b"],
+      ["c"],
+      ["d"],
+      ["e"],
+    ]);
   });
 
   it("allows a side drop when leaving a column frees one", () => {
@@ -135,6 +160,9 @@ describe("visibleFocusGrid", () => {
     expect(focusColumnCap(600)).toBe(1);
     expect(focusColumnCap(900)).toBe(2);
     expect(focusColumnCap(1400)).toBe(4);
+    expect(focusColumnCap(1500)).toBe(5);
+    expect(focusColumnCap(1800)).toBe(6);
+    expect(focusColumnCap(3000)).toBe(6);
     expect(visibleFocusGrid(grid, 2)).toEqual({
       columns: [
         ["s1", "s5"],
@@ -165,6 +193,15 @@ describe("parseFocusGrid", () => {
     const grid = parseFocusGrid({ columns: [["a", "b", "c"], ["a"]] });
     expect(focusGridIds(grid)).toEqual(["a", "b", "c"]);
     expect(grid.columns).toEqual([["a"], ["b"], ["c"]]);
+  });
+
+  it("keeps a dragged 5- or 6-column grid and re-places a 7th column", () => {
+    const six = { columns: [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]], overflow: [] };
+    expect(parseFocusGrid(six)).toEqual(six);
+    const seven = parseFocusGrid({
+      columns: [["a"], ["b"], ["c"], ["d"], ["e"], ["f"], ["g"]],
+    });
+    expect(seven.columns).toEqual([["a", "e"], ["b", "f"], ["c", "g"], ["d"]]);
   });
 
   it("round-trips through storage", () => {

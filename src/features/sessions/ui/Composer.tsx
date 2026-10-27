@@ -330,6 +330,7 @@ type Props = {
   onInboxCardDismiss?: () => void;
   onNoteCardDismiss?: () => void;
   onHandoffCardDismiss?: () => void;
+  onUseQuickCard?: () => void;
   onQuestionReply?: (requestId: number, reply: UserQuestionReply) => void;
   onFormReply?: (requestId: number, reply: McpFormReply) => void;
   onQuestionInteraction?: (requestId: number) => void;
@@ -474,6 +475,7 @@ export function Composer({
   onBtwCommand,
   onNoteCardDismiss,
   onHandoffCardDismiss,
+  onUseQuickCard,
   onQuestionReply,
   form,
   onFormReply,
@@ -2484,6 +2486,7 @@ export function Composer({
             <HandoffMiniCard
               card={handoffCard}
               onDismiss={onHandoffCardDismiss}
+              onUseQuick={onUseQuickCard}
             />
           ) : null}
 

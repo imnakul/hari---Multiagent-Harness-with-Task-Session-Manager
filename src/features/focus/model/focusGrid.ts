@@ -1,19 +1,26 @@
 /**
- * Focus mode's grid of chats (fork, L-123): up to 4 columns of 1–2 chats.
+ * Focus mode's grid of chats (fork, L-123): columns of 1–2 chats.
  * Chats never move on their own. A new chat takes the next free place
- * (a new column, then the bottom row of the first single-chat column), and
- * one that does not fit waits in `overflow` ("+N more").
+ * (a new column while there are fewer than 4, then the bottom row of the
+ * first single-chat column), and one that does not fit waits in `overflow`
+ * ("+N more"). Dragging can make up to 6 columns where the window has room
+ * (L-185).
  */
 export type FocusGrid = {
   /** Left to right; each column holds 1 or 2 session ids, top first. */
   columns: string[][];
-  /** Chats beyond the 8 places, oldest first. */
+  /** Chats beyond the free places, oldest first. */
   overflow: string[];
 };
 
 export type FocusDropEdge = "left" | "right" | "top" | "bottom" | "center";
 
-export const FOCUS_GRID_MAX_COLUMNS = 4;
+/** Columns new chats fill on their own. */
+export const FOCUS_GRID_AUTO_COLUMNS = 4;
+/** Columns a drag can make (L-185), where the window has room. */
+export const FOCUS_GRID_MAX_COLUMNS = 6;
+/** Narrowest column a drag may make room for beyond the first 4. */
+const FOCUS_GRID_MIN_COLUMN_WIDTH = 300;
 export const FOCUS_GRID_MAX_ROWS = 2;
 const STORAGE_KEY = "monocode.focusGrid.v1";
 
@@ -31,10 +38,10 @@ export function focusGridHas(grid: FocusGrid, id: string): boolean {
   );
 }
 
-/** Places a chat in the next free place, or in overflow when all 8 are taken. */
+/** Places a chat in the next free place, or in overflow when all are taken. */
 export function addToFocusGrid(grid: FocusGrid, id: string): FocusGrid {
   if (focusGridHas(grid, id)) return grid;
-  if (grid.columns.length < FOCUS_GRID_MAX_COLUMNS) {
+  if (grid.columns.length < FOCUS_GRID_AUTO_COLUMNS) {
     return { ...grid, columns: [...grid.columns, [id]] };
   }
   const index = grid.columns.findIndex(
@@ -130,13 +137,15 @@ export function moveListItem<T>(items: readonly T[], from: number, to: number): 
 /**
  * Drops `id` on `targetId`'s edge: left/right make a column beside the
  * target's, top/bottom share the target's column, and center swaps the two.
- * Returns null when the drop would make a 5th column or a 3rd row.
+ * Returns null when the drop would make more than `maxColumns` columns
+ * (the window's room, at most 6) or a 3rd row.
  */
 export function moveInFocusGrid(
   grid: FocusGrid,
   id: string,
   targetId: string,
   edge: FocusDropEdge,
+  maxColumns: number = FOCUS_GRID_MAX_COLUMNS,
 ): FocusGrid | null {
   if (id === targetId || !focusGridHas(grid, id)) return null;
   if (!grid.columns.some((column) => column.includes(targetId))) return null;
@@ -146,7 +155,8 @@ export function moveInFocusGrid(
     column.includes(targetId),
   );
   if (edge === "left" || edge === "right") {
-    if (rest.columns.length >= FOCUS_GRID_MAX_COLUMNS) return null;
+    if (rest.columns.length >= Math.min(maxColumns, FOCUS_GRID_MAX_COLUMNS))
+      return null;
     const at = edge === "left" ? targetColumn : targetColumn + 1;
     const columns = [...rest.columns];
     columns.splice(at, 0, [id]);
@@ -162,11 +172,20 @@ export function moveInFocusGrid(
   };
 }
 
-/** How many columns fit: 1 below 700 px, 2 below 1100 px, else 4. */
+/**
+ * How many columns fit: 1 below 700 px, 2 below 1100 px, else 4, or up to 6
+ * while each column keeps at least 300 px.
+ */
 export function focusColumnCap(width: number): number {
   if (width < 700) return 1;
   if (width < 1100) return 2;
-  return FOCUS_GRID_MAX_COLUMNS;
+  return Math.min(
+    FOCUS_GRID_MAX_COLUMNS,
+    Math.max(
+      FOCUS_GRID_AUTO_COLUMNS,
+      Math.floor(width / FOCUS_GRID_MIN_COLUMN_WIDTH),
+    ),
+  );
 }
 
 /**
