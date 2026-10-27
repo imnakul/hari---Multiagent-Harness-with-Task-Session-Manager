@@ -3,7 +3,7 @@
 - Type: chore
 - What: New Windows installer, version 0.16.0-local14: 0.16.0-local13 plus the idle cover and Focus up to 6 columns (L-185), interactive Claude Steer and resend fixes (L-186, L-187), sidechat context once and quote actions (L-188), and experimental Continue mode (L-189).
 - Why: User asked to commit and build the new version.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local14-continue-mode-idle-cover_x64.exe` (15,180,276 bytes, SHA-256 28BE45B277EE5EC7146F2D1AB26847C3B73EECEB77F4DD30F07B779377A5B610, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local14-continue-mode-idle-cover_x64.exe` (15,180,276 bytes, SHA-256 28BE45B277EE5EC7146F2D1AB26847C3B73EECEB77F4DD30F07B779377A5B610, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from 7bd825ac + version bump (committed as the release commit)
 - Verified: build ✅ (npm run build:windows); tsc and vitest 7,799/7,799 ✅ before 7bd825ac; desktop check manual
 ## 2026-10-27 23:05 IST — Continue mode: new chat beside with a context card (L-189)
@@ -45,7 +45,7 @@
 - Type: chore
 - What: New Windows installer, version 0.16.0-local13: 0.16.0-local12 plus the Status-ring glide fix, only the focused pane ringed in the Status style, and the static border's glow moved inward (L-184).
 - Why: User asked to commit, push and build with the ring changes.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local13-pane-ring-focused-only_x64.exe` (15,141,736 bytes, SHA-256 5C4DD994A760793FE81BB4D243206D0CAE1932312F24706B05E41666FF713720, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local13-pane-ring-focused-only_x64.exe` (15,141,736 bytes, SHA-256 5C4DD994A760793FE81BB4D243206D0CAE1932312F24706B05E41666FF713720, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from 90f4d66e + version bump (committed as the release commit)
 - Verified: build ✅ (npm run build:windows); tsc and vitest ✅ at 90f4d66e; desktop check manual
 ## 2026-10-26 11:19 IST — Only the focused pane is ringed in Status style; static glow inward (L-184)
