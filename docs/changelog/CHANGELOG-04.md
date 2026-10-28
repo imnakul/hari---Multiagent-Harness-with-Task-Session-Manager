@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-28 16:29 IST — 0.16.0-local16 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local16: 0.16.0-local15 plus AI session metadata, Auto notes and cover on open (L-190).
+- Why: User asked to commit, push and build the installer.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local16-ai-session-notes_x64.exe` (15,176,853 bytes, SHA-256 DAF8AB720C6A92A5B03AF31BC71D0D6BAC43A018B687C59F80FFD37878956833, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 5b8ef37c + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest 7,827/7,827 ✅ at 5b8ef37c; desktop check manual
 ## 2026-10-28 15:24 IST — AI session metadata, Auto notes, cover on open (L-190)
 - Type: feature
 - What: The Session metadata dialog has AI buttons beside Label and Notes. Notes only grow: the AI adds what is new, one point per outcome, under the last heading or a new "<Topic> (continued)" heading, and ends with one **Left off:** line that each run replaces. Auto notes (per chat; default in the new Settings → Session metadata block, off) updates notes a minute after each turn ends. The block also picks the model and edits the notes instructions (style A by default, Reset to default). A chat with metadata you were away from longer than the idle wait opens covered, also after being closed; the cover blur went from 14px to 6px.
