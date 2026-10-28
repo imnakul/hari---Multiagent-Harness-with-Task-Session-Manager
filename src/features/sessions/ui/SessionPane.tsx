@@ -591,6 +591,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
     idleCoverRoot,
     sessionIdleCoverMs(idleCoverChoice),
     idleCoverEligible,
+    visible ? session.id : null,
   );
   // A Mono shows only its own background, never the project's or the app's.
   const projectBackground = mono

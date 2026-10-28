@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  awayLongerThan,
+  recordSessionSeen,
+  sessionLastSeen,
+} from "../model/sessionLastSeen";
 import type { SessionMetadata } from "../model/sessionMetadata";
 import { SessionMetadataBody } from "./SessionMetadataHoverCard";
 
@@ -19,11 +24,16 @@ export type IdleCoverState = {
  * wait. Pointer movement on an uncovered pane counts as activity. `idleMs`
  * null, or `enabled` false, keeps the pane uncovered; each time the pane
  * becomes eligible again the wait starts over.
+ *
+ * `seenKey` (L-190) is the chat's id while it is on screen, else null. When a
+ * chat comes on screen after being away longer than `idleMs` (or never
+ * recorded), it starts covered; when it leaves, the time is recorded.
  */
 export function useIdleCover(
   root: RefObject<HTMLElement | null>,
   idleMs: number | null,
   enabled: boolean,
+  seenKey: string | null = null,
 ): IdleCoverState {
   const active = enabled && idleMs != null;
   const [covered, setCovered] = useState(false);
@@ -31,10 +41,31 @@ export function useIdleCover(
   const lastActivity = useRef(Date.now());
   const coveredRef = useRef(false);
   coveredRef.current = covered;
+  const idleMsRef = useRef(idleMs);
+  idleMsRef.current = idleMs;
+  // One-shot: decided when the chat comes on screen, used by the next start.
+  const coverOnArrival = useRef(false);
 
   useEffect(() => {
-    lastActivity.current = Date.now();
-    setCovered(false);
+    if (!seenKey) return;
+    const wait = idleMsRef.current;
+    coverOnArrival.current = wait != null && awayLongerThan(seenKey, wait);
+    return () => {
+      // Still covered: you have not looked since the last activity.
+      recordSessionSeen(
+        seenKey,
+        coveredRef.current ? lastActivity.current : Date.now(),
+      );
+    };
+  }, [seenKey]);
+
+  useEffect(() => {
+    const arriveCovered = active && coverOnArrival.current;
+    coverOnArrival.current = false;
+    lastActivity.current = arriveCovered && seenKey
+      ? (sessionLastSeen(seenKey) ?? 0)
+      : Date.now();
+    setCovered(arriveCovered);
     setPeeking(false);
     if (!active) return;
     const element = root.current;
@@ -68,7 +99,7 @@ export function useIdleCover(
       element.removeEventListener("pointermove", onMove);
       element.removeEventListener("pointerleave", onLeave);
     };
-  }, [active, idleMs, root]);
+  }, [active, idleMs, root, seenKey]);
 
   return active ? { covered, peeking: covered && peeking } : { covered: false, peeking: false };
 }

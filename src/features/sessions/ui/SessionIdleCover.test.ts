@@ -2,22 +2,35 @@
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { recordSessionSeen, sessionLastSeen } from "../model/sessionLastSeen";
 import { useIdleCover, type IdleCoverState } from "./SessionIdleCover";
 
 let root: Root | undefined;
 let container: HTMLDivElement;
 let state: IdleCoverState;
 
-function Probe({ idleMs, enabled }: { idleMs: number | null; enabled: boolean }) {
+function Probe({
+  idleMs,
+  enabled,
+  seenKey,
+}: {
+  idleMs: number | null;
+  enabled: boolean;
+  seenKey: string | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  state = useIdleCover(ref, idleMs, enabled);
+  state = useIdleCover(ref, idleMs, enabled, seenKey);
   return createElement("div", { ref, "data-testid": "pane" });
 }
 
-function render(idleMs: number | null, enabled = true): HTMLElement {
+function render(
+  idleMs: number | null,
+  enabled = true,
+  seenKey: string | null = null,
+): HTMLElement {
   act(() => {
     root ??= createRoot(container);
-    root.render(createElement(Probe, { idleMs, enabled }));
+    root.render(createElement(Probe, { idleMs, enabled, seenKey }));
   });
   return container.querySelector<HTMLElement>("[data-testid=pane]")!;
 }
@@ -37,6 +50,7 @@ function wait(ms: number): void {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers();
+  localStorage.clear();
   container = document.createElement("div");
   document.body.append(container);
 });
@@ -102,5 +116,41 @@ describe("useIdleCover (L-185)", () => {
     expect(state.covered).toBe(true);
     render(10_000, false);
     expect(state.covered).toBe(false);
+  });
+});
+
+describe("useIdleCover on arrival (L-190)", () => {
+  it("opens covered when the chat has never been seen on this device", () => {
+    render(10_000, true, "s1");
+    expect(state.covered).toBe(true);
+  });
+
+  it("opens as is after a short absence, covered after a long one", () => {
+    recordSessionSeen("s1", Date.now() - 3_000);
+    render(10_000, true, "s1");
+    expect(state.covered).toBe(false);
+
+    act(() => root?.unmount());
+    root = undefined;
+    expect(sessionLastSeen("s1")).toBe(Date.now());
+    wait(10_000);
+    render(10_000, true, "s1");
+    expect(state.covered).toBe(true);
+  });
+
+  it("covers on arrival only, not when a chat becomes eligible later", () => {
+    render(10_000, false, "s1");
+    render(10_000, true, "s1");
+    expect(state.covered).toBe(false);
+  });
+
+  it("records the last activity when it leaves covered", () => {
+    recordSessionSeen("s1", Date.now());
+    render(10_000, true, "s1");
+    wait(12_000);
+    expect(state.covered).toBe(true);
+    act(() => root?.unmount());
+    root = undefined;
+    expect(sessionLastSeen("s1")).toBe(Date.now() - 12_000);
   });
 });

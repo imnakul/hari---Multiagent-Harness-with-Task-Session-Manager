@@ -2130,7 +2130,7 @@ html.theme-light .orchestrator-constellation {
 .session-idle-cover[data-session-idle-cover="on"],
 .session-idle-cover[data-session-idle-cover="peek"] {
   background: color-mix(in srgb, var(--color-background-base) 45%, transparent);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(6px);
 }
 
 .session-idle-cover[data-session-idle-cover="on"] {

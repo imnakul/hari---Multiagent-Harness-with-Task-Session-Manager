@@ -1,6 +1,20 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import {
+  writeSessionLabel,
+  writeSessionNotes,
+} from "../../../integrations/harness/core/sessionMetadataHelper";
 import { IS_MAC } from "../../../platform/tauri/platform";
+import { Loader, Sparkles } from "../../../shared/ui/icons";
 import { Modal } from "../../../shared/ui/Modal";
+import { Toggle } from "../../../shared/ui/Toggle";
 import {
   hasSessionMetadata,
   loadSessionMetadataFor,
@@ -12,6 +26,14 @@ import {
   type SessionMetadata,
   type SessionMetadataEditRequest,
 } from "../model/sessionMetadata";
+import {
+  appendSessionNotes,
+  autoNotesOn,
+  markAutoNotesDone,
+  setAutoNotes,
+  subscribeAutoNotes,
+} from "../model/sessionMetadataAi";
+import { SessionStateContext } from "../model/sessionStateStore";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { MarkdownDetailTabs } from "./MarkdownDetailTabs";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
@@ -25,6 +47,15 @@ type SavedState =
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
+}
+
+type AiRun = { kind: "label" | "notes"; controller: AbortController };
+
+let editingSessionId: string | null = null;
+
+/** True while the editor is open for this chat; Auto notes waits so Save cannot drop its points (L-190). */
+export function sessionMetadataEditorOpen(sessionId: string): boolean {
+  return editingSessionId === sessionId;
 }
 
 /**
@@ -81,10 +112,96 @@ function SessionMetadataEditor({
   const [mode, setMode] = useState<MarkdownViewMode>("live");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiRun, setAiRun] = useState<AiRun | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const aiMarker = useRef<string | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
   const notesRef = useRef<MarkdownCaretTarget | null>(null);
   const labelId = useId();
   const counterId = useId();
+  const store = useContext(SessionStateContext);
+  const autoOn = useSyncExternalStore(subscribeAutoNotes, () =>
+    autoNotesOn(sessionId),
+  );
+
+  useEffect(() => {
+    editingSessionId = sessionId;
+    return () => {
+      if (editingSessionId === sessionId) editingSessionId = null;
+    };
+  }, [sessionId]);
+
+  const aiRunRef = useRef<AiRun | null>(null);
+  aiRunRef.current = aiRun;
+  useEffect(() => () => aiRunRef.current?.controller.abort(), []);
+
+  const chat = store?.session(sessionId);
+  const aiUnavailable = !chat
+    ? "Open this chat first, so the AI can read it"
+    : chat.blocks.length === 0
+      ? "This chat has nothing to read yet"
+      : null;
+
+  const runAi = async (kind: AiRun["kind"]): Promise<void> => {
+    const session = store?.session(sessionId);
+    if (!session || aiRun) return;
+    const controller = new AbortController();
+    setAiRun({ kind, controller });
+    setAiNotice(null);
+    setError(null);
+    const finished = session.blocks.filter((block) => !block.streaming);
+    const input = {
+      blocks: finished,
+      cwd: session.cwd,
+      harness: session.harness,
+      signal: controller.signal,
+    };
+    try {
+      if (kind === "label") {
+        const result = await writeSessionLabel(input);
+        if (controller.signal.aborted) return;
+        if (result.ok) setLabel(result.value);
+        else if (!result.cancelled) setError(result.message);
+        return;
+      }
+      const result = await writeSessionNotes({ ...input, notes, scope: "full" });
+      if (controller.signal.aborted) return;
+      if (!result.ok) {
+        if (!result.cancelled) setError(result.message);
+        return;
+      }
+      aiMarker.current = finished[finished.length - 1]?.id ?? null;
+      if (result.value.kind === "none") setAiNotice("Nothing new to add.");
+      else {
+        const addition = result.value.text;
+        setNotes((current) => appendSessionNotes(current, addition));
+        setAiNotice("New notes added at the end. Save to keep them.");
+      }
+    } finally {
+      setAiRun((current) => (current?.controller === controller ? null : current));
+    }
+  };
+
+  const aiButton = (kind: AiRun["kind"], text: string, title: string): ReactNode => {
+    const running = aiRun?.kind === kind;
+    return (
+      <button
+        type="button"
+        disabled={!running && (!!aiRun || !!aiUnavailable || saving)}
+        onClick={() => (running ? aiRun.controller.abort() : void runAi(kind))}
+        title={running ? "Stop" : (aiUnavailable ?? title)}
+        aria-label={running ? `Stop: ${title}` : title}
+        className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-content/60 transition-colors hover:bg-content/10 hover:text-content disabled:opacity-40 disabled:hover:bg-transparent"
+      >
+        {running ? (
+          <Loader aria-hidden className="size-3 motion-safe:animate-spin" />
+        ) : (
+          <Sparkles aria-hidden className="size-3" />
+        )}
+        {running ? "Stop" : text}
+      </button>
+    );
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +237,7 @@ function SessionMetadataEditor({
     setError(null);
     try {
       await saveSessionMetadata(sessionId, nextLabel, nextNotes);
+      if (aiMarker.current) markAutoNotesDone(sessionId, aiMarker.current);
       onDone();
     } catch (reason) {
       setError(`Could not save: ${errorMessage(reason)}`);
@@ -146,6 +264,7 @@ function SessionMetadataEditor({
     );
 
   const busy = saving || savedState.status === "loading";
+  const saveBlocked = busy || !!aiRun;
   const labelLength = [...label].length;
   const canClear =
     savedState.status === "ready" && hasSessionMetadata(savedState.saved);
@@ -156,23 +275,24 @@ function SessionMetadataEditor({
       className="flex min-h-0 flex-col gap-3 p-4"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!busy) void save(label, notes);
+        if (!saveBlocked) void save(label, notes);
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
-          if (!busy) void save(label, notes);
+          if (!saveBlocked) void save(label, notes);
         }
       }}
     >
       <div className="flex flex-col gap-1">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-center justify-between gap-2">
           <label htmlFor={labelId} className="text-[12px] text-content/60">
             Label
           </label>
+          {aiButton("label", "Write", "Write the label with AI")}
           <span
             id={counterId}
-            className={`text-[11px] tabular-nums ${
+            className={`ml-auto text-[11px] tabular-nums ${
               labelLength > SESSION_LABEL_MAX
                 ? "text-red-400"
                 : "text-content/40"
@@ -185,7 +305,7 @@ function SessionMetadataEditor({
           id={labelId}
           ref={labelRef}
           value={label}
-          disabled={busy}
+          disabled={busy || aiRun?.kind === "label"}
           aria-describedby={counterId}
           onChange={(event) => setLabel(event.target.value)}
           placeholder="Shown in place of the chat title, e.g. Auth spike"
@@ -194,7 +314,21 @@ function SessionMetadataEditor({
         />
       </div>
       <div className="flex min-h-0 flex-col gap-1">
-        <span className="text-[12px] text-content/60">Notes</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] text-content/60">Notes</span>
+          {aiButton("notes", "Add new", "Add what is new in this chat to the notes with AI")}
+          <label
+            className="ml-auto flex items-center gap-2 text-[11px] text-content/55"
+            title="A minute after each turn ends, the AI adds what is new to these notes"
+          >
+            Auto notes
+            <Toggle
+              label="Auto notes for this chat"
+              on={autoOn}
+              onChange={(on) => setAutoNotes(sessionId, on)}
+            />
+          </label>
+        </div>
         <MarkdownDetailTabs
           mode={mode}
           onChange={setMode}
@@ -222,6 +356,10 @@ function SessionMetadataEditor({
         <p role="alert" className="text-[12px] text-red-400">
           {error}
         </p>
+      ) : aiNotice ? (
+        <p role="status" className="text-[12px] text-content/55">
+          {aiNotice}
+        </p>
       ) : null}
       <div className="flex items-center gap-2">
         {canClear ? (
@@ -248,7 +386,7 @@ function SessionMetadataEditor({
         </button>
         <button
           type="submit"
-          disabled={busy}
+          disabled={saveBlocked}
           className="h-7 rounded-md bg-accent px-3 text-[12px] font-medium text-white disabled:opacity-40"
         >
           {saving ? "Saving…" : "Save"}

@@ -8,6 +8,13 @@ import {
   useInactivePaneDim,
 } from "../../workspace/ui/PaneRing";
 import { useSessionIdleCover } from "../../sessions/ui/useSessionMetadata";
+import {
+  DEFAULT_NOTES_INSTRUCTIONS,
+  loadSessionMetadataAi,
+  saveSessionMetadataAi,
+  subscribeSessionMetadataAi,
+  type SessionMetadataAiSettings,
+} from "../../sessions/model/sessionMetadataAi";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   ArrowDownCircle,
@@ -1834,6 +1841,8 @@ function ChatPage() {
         ) : null}
       </Group>
 
+      <SessionMetadataAiGroup />
+
       <Group
         title="Editor"
         description="What happens when you save a file in the workspace editor."
@@ -1900,6 +1909,107 @@ function ChatPage() {
         </Row>
       </Group>
     </>
+  );
+}
+
+/** Settings for the AI label and notes in Session metadata (fork, L-190). */
+function SessionMetadataAiGroup() {
+  const settings = useSyncExternalStore(
+    subscribeSessionMetadataAi,
+    loadSessionMetadataAi,
+  );
+  const update = (patch: Partial<SessionMetadataAiSettings>) =>
+    saveSessionMetadataAi({ ...settings, ...patch });
+  const instructions = settings.instructions || DEFAULT_NOTES_INSTRUCTIONS;
+  const isDefault = instructions.trim() === DEFAULT_NOTES_INSTRUCTIONS.trim();
+
+  return (
+    <Group
+      title="Session metadata"
+      description="The AI buttons in a chat's Session metadata, and Auto notes. Notes only grow: each run adds what is new and replaces the closing Left off line."
+    >
+      <Row
+        id="session-metadata-ai-model"
+        label="Model"
+        description="Same as AI helper follows the AI helper settings above."
+      >
+        <Segmented
+          label="Session metadata model"
+          value={settings.helper ? "custom" : "same"}
+          options={[
+            { value: "same", label: "Same as AI helper" },
+            { value: "custom", label: "Choose a model" },
+          ]}
+          onChange={(value) =>
+            update({
+              helper:
+                value === "custom"
+                  ? (settings.helper ?? { provider: AI_HELPER_PROVIDERS[0] })
+                  : null,
+            })
+          }
+        />
+      </Row>
+      {settings.helper ? (
+        <AiHelperTargetEditor
+          id="session-metadata-ai-target"
+          label="Notes model"
+          target={settings.helper}
+          onChange={(helper) => update({ helper })}
+        />
+      ) : null}
+      <Row
+        id="session-metadata-auto-notes"
+        label="Auto notes for new chats"
+        description="A minute after a turn ends, the AI adds what is new to the chat's notes. Each chat can turn it on or off in its Session metadata. Uses one AI helper call per quiet turn."
+      >
+        <Toggle
+          label="Auto notes for new chats"
+          on={settings.autoDefault}
+          onChange={(autoDefault) => update({ autoDefault })}
+        />
+      </Row>
+      <div
+        id={settingDomId("session-metadata-instructions")}
+        data-setting-id="session-metadata-instructions"
+        className="flex flex-col gap-2 px-4 py-3.5"
+      >
+        <div className="flex items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium text-content">
+              Notes instructions
+            </div>
+            <p className="mt-1 text-[12px] leading-relaxed text-content/45">
+              How the notes should look. The fixed rules (only new points, one
+              point per outcome, the Left off line) always apply.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={isDefault}
+            onClick={() => update({ instructions: "" })}
+            className="shrink-0 text-[12px] text-content/55 hover:text-content disabled:opacity-40 disabled:hover:text-content/55"
+          >
+            Reset to default
+          </button>
+        </div>
+        <textarea
+          aria-label="Notes instructions"
+          value={instructions}
+          onChange={(event) =>
+            update({
+              instructions:
+                event.target.value.trim() === DEFAULT_NOTES_INSTRUCTIONS.trim()
+                  ? ""
+                  : event.target.value,
+            })
+          }
+          rows={6}
+          spellCheck={false}
+          className="block w-full resize-y rounded-md border border-content/10 bg-content/4 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-content outline-none focus:border-content/25"
+        />
+      </div>
+    </Group>
   );
 }
 

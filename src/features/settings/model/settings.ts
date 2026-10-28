@@ -549,6 +549,24 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "title commit pull request pr description helper model fallback",
   },
   {
+    id: "session-metadata-ai-model",
+    section: "chat",
+    label: "Session metadata model",
+    keywords: "session metadata notes label ai helper model",
+  },
+  {
+    id: "session-metadata-auto-notes",
+    section: "chat",
+    label: "Auto notes",
+    keywords: "session metadata notes automatic auto ai left off",
+  },
+  {
+    id: "session-metadata-instructions",
+    section: "chat",
+    label: "Notes instructions",
+    keywords: "session metadata notes instructions prompt style ai reset default",
+  },
+  {
     id: "composer-autocorrect",
     section: "chat",
     label: "Autocorrect",
@@ -1055,7 +1073,7 @@ function isAiHelperProvider(value: unknown): value is AiHelperProvider {
   );
 }
 
-function parseAiHelperTarget(value: unknown): AiHelperTarget | null {
+export function parseAiHelperTarget(value: unknown): AiHelperTarget | null {
   if (!isAiHelperRecord(value)) return null;
   const provider = value.provider;
   if (!isAiHelperProvider(provider)) return null;
