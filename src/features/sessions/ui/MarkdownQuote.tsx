@@ -93,13 +93,13 @@ export function MarkdownQuote({
       ref={quote}
       data-streamdown="blockquote"
       data-quote-actions=""
-      className={`group/quote relative my-4 border-muted-foreground/30 border-l-4 pl-4 text-muted-foreground italic ${className ?? ""}`}
+      className={`group/quote relative flow-root my-4 border-muted-foreground/30 border-l-4 pl-4 text-muted-foreground italic ${className ?? ""}`}
     >
-      {children}
+      {/* Floated first so the first line wraps around it instead of under it. */}
       <div
         role="group"
         aria-label="Quote actions"
-        className="markdown-quote-actions absolute top-0 right-0 flex items-center gap-0.5 rounded-lg border border-content/10 bg-surface p-0.5 not-italic shadow-sm select-none"
+        className="markdown-quote-actions float-right -mt-1 -mb-1 ml-2 flex items-center gap-0.5 rounded-lg border border-content/10 bg-surface p-0.5 not-italic shadow-sm select-none"
       >
         {onAddToTask ? (
           <QuoteButton
@@ -137,6 +137,7 @@ export function MarkdownQuote({
           {complete ? DONE[complete] : ""}
         </span>
       </div>
+      {children}
       {error ? (
         <p role="alert" className="text-xs not-italic text-content/70">
           {error}

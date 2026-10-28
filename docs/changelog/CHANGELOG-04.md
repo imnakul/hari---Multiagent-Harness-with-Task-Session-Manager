@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-28 00:11 IST — Fix: Continue button never showed; quote buttons covered the first line (L-189, L-188)
+- Type: fix
+- What: The Continue button now shows on replies when Settings → Chat → Continue button is on. Quote buttons (Copy, Add to notes, Add Task) now sit at the right of the quote's first line, and the text wraps around them instead of running underneath.
+- Why: User found the Continue button missing in 0.16.0-local14 and the quote buttons hiding text. Root cause: `PaneTree` passes each action to the chat pane by name and did not pass `onContinue` / `onUseQuickCard`; the quote buttons were absolutely positioned over the text.
+- Files: [PaneTree.tsx](src/features/workspace/ui/PaneTree.tsx), [MarkdownQuote.tsx](src/features/sessions/ui/MarkdownQuote.tsx), [index.css](src/styles/index.css) (quote paragraph-gap rule skips the buttons); tests [PaneTreeEnter.test.ts](src/features/workspace/ui/PaneTreeEnter.test.ts), [MarkdownQuote.test.ts](src/features/sessions/ui/MarkdownQuote.test.ts)
+- Commit: see git log (fix: Continue button, quote buttons)
+- Verified: tsc ✅; targeted tests 15/15 ✅; full vitest 7,800/7,800 ✅ (2 skipped); desktop check manual
 ## 2026-10-27 23:06 IST — 0.16.0-local14 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local14: 0.16.0-local13 plus the idle cover and Focus up to 6 columns (L-185), interactive Claude Steer and resend fixes (L-186, L-187), sidechat context once and quote actions (L-188), and experimental Continue mode (L-189).

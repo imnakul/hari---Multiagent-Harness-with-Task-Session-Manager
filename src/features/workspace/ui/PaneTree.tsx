@@ -48,6 +48,7 @@ import {
   type RecentProject,
 } from "../../projects/model/recents";
 import type { TerminalMetaPatch } from "../../terminal/model/terminalTab";
+import type { ContinueChoice } from "../../sessions/model/continueCard";
 import {
   sessionWorkCwd,
   type Attachment,
@@ -144,6 +145,7 @@ type Shared = Pick<
   onLinkedWorkItemUpdateCardDismiss?: (sessionId: string) => void;
   onNoteCardDismiss?: (sessionId: string) => void;
   onHandoffCardDismiss?: (sessionId: string) => void;
+  onUseQuickCard?: (sessionId: string) => void;
   onOpenLinkedWorkItem?: (item: LinkedWorkItem, sessionId: string) => void;
   onArchiveSession?: (sessionId: string, archived: boolean) => Promise<boolean>;
   onDeleteSession?: (sessionId: string) => Promise<boolean>;
@@ -188,6 +190,7 @@ type Shared = Pick<
   onBranch?: (sessionId: string, turn: Block[]) => void;
   onSidechat?: (sessionId: string, turn: Block[]) => void;
   onHandoff?: (sessionId: string, target: ModelTarget, turn: Block[]) => void;
+  onContinue?: (sessionId: string, choice: ContinueChoice, turn: Block[]) => void;
   onBtwSubmit?: (
     sessionId: string,
     turn: Block[],
@@ -279,6 +282,7 @@ function PaneTreeComponent({
   onLinkedWorkItemUpdateCardDismiss,
   onNoteCardDismiss,
   onHandoffCardDismiss,
+  onUseQuickCard,
   onOpenLinkedWorkItem,
   onArchiveSession,
   onDeleteSession,
@@ -302,6 +306,7 @@ function PaneTreeComponent({
   onBtwStop,
   onBtwModelChange,
   onHandoff,
+  onContinue,
   onBranch,
   onSidechat,
   onMovePane,
@@ -869,6 +874,7 @@ function PaneTreeComponent({
                   }
                   onNoteCardDismiss={onNoteCardDismiss}
                   onHandoffCardDismiss={onHandoffCardDismiss}
+                  onUseQuickCard={onUseQuickCard}
                   onOpenLinkedWorkItem={onOpenLinkedWorkItem}
                   onArchiveSession={onArchiveSession}
                   onDeleteSession={onDeleteSession}
@@ -885,6 +891,7 @@ function PaneTreeComponent({
                   onBuildPlan={onBuildPlan}
                   onSecondOpinion={onSecondOpinion}
                   onHandoff={onHandoff}
+                  onContinue={onContinue}
                   onBranch={onBranch}
                   onSidechat={onSidechat}
                   onBtwSubmit={onBtwSubmit}

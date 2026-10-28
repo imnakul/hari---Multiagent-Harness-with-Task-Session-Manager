@@ -274,6 +274,15 @@ describe("pane enter animation", () => {
     expect(actions?.closest('[data-pane-enter="right"]')).not.toBeNull();
   });
 
+  it("forwards the Continue actions to the chat pane (L-189)", () => {
+    const session = { ...newSession("claude", "/tmp/project"), id: "chat" };
+    const onContinue = vi.fn();
+    const onUseQuickCard = vi.fn();
+    render(leaf(session.id), [], [session], { onContinue, onUseQuickCard });
+    expect(paneProps.mock.lastCall?.[0].onContinue).toBe(onContinue);
+    expect(paneProps.mock.lastCall?.[0].onUseQuickCard).toBe(onUseQuickCard);
+  });
+
   it("forwards Cloud and Claude RC controls to a normal empty chat and later split panes", () => {
     const session = { ...newSession("claude", "/tmp/project"), id: "claude-chat" };
     const onCloudLaunchOutcome = vi.fn();

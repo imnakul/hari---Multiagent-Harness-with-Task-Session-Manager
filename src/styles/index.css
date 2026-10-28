@@ -3174,8 +3174,9 @@ html:not(.theme-light) .markdown-code-token {
 }
 
 /* Nested blocks do not get Streamdown's root spacing. Keep blank-line
-   paragraphs inside a quote distinct without adding space above the first. */
-.agent-markdown [data-streamdown="blockquote"] > p:not(:first-child) {
+   paragraphs inside a quote distinct without adding space above the first
+   (the floated quote actions come first and do not count). */
+.agent-markdown [data-streamdown="blockquote"] > :not(.markdown-quote-actions) ~ p {
   margin-top: 1rem;
 }
 

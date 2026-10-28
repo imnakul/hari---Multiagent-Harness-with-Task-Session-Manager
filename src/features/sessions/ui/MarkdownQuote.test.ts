@@ -85,6 +85,10 @@ describe("quote actions (L-188)", () => {
     render();
     const quote = container.querySelector('[data-streamdown="blockquote"]');
     expect(quote?.querySelector('[aria-label="Quote actions"]')).not.toBeNull();
+    // Floated ahead of the text so the first line leaves room for it.
+    const bar = quote?.firstElementChild;
+    expect(bar?.getAttribute("aria-label")).toBe("Quote actions");
+    expect(bar?.className).toContain("float-right");
     await act(async () => action("Copy quote")!.click());
     expect(copy).toHaveBeenCalledWith(quoted);
     expect(action("Quote copied")).not.toBeNull();
