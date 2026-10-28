@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-29 00:09 IST — 0.16.0-local18 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local18: 0.16.0-local17 plus the Session overview (L-192).
+- Why: User asked to commit and build the installer.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local18-session-overview_x64.exe` (15,201,387 bytes, SHA-256 56B7E4D1215E82B24AA7C67227A091579F9E212170884C14ED7AE35D559096FA, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 8c602a24 + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest 7831 passed, 2 skipped ✅ at 8c602a24; desktop check manual
 ## 2026-10-29 00:01 IST — Session overview: Summary, Bookmarks, Files changed (L-192)
 - Type: feature
 - What: The Session panel becomes the Session overview with three tabs: Summary (the notes grouped by heading, collapsed, newest first, Left off on top, edited in Live Markdown), Bookmarks (reply button plus a new Bookmark item in the selected-text menu, with the quote) and Files changed. The header has the chat label as an input with its own AI sparkle, a per-chat Auto switch, a sparkle that adds to the Summary (and writes the label only when empty) and ✕. Timeline, Decisions, AI points, the Session metadata dialog and the idle cover are removed; menus say Open Session overview; the hover card shows label, Left off and headings. Coming back to a chat with a Summary after the set wait opens the overview. Settings group renamed Session overview, with a new Effort picker and Antigravity allowed as the Notes model (with a warning). The resize edge is a line that appears on hover. Both tables and saved data stay.
