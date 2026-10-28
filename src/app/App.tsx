@@ -246,6 +246,7 @@ import {
 } from "../features/settings/model/uiScale";
 import { resolveZoomKeybinding } from "../features/settings/model/zoomKeybinding";
 import { resolveAppShortcut } from "../features/settings/model/appShortcuts";
+import { toggleSessionPanel } from "../features/sessions/model/sessionPanel";
 import { runUpdateFlow } from "./model/updater";
 import {
   displayAttachments,
@@ -15573,6 +15574,8 @@ function Workspace({
           run("toggle_mono", a.onToggleMono);
         else if (shortcut === "App: Toggle Focus")
           run("toggle_focus", a.onToggleFocusMode);
+        else if (shortcut === "App: Toggle Session Panel")
+          run("toggle_session_panel", toggleSessionPanel);
         else if (shortcut === "App: Go to File")
           run("go_to_file", a.onGoToFile);
         else if (shortcut === "App: Command Palette")

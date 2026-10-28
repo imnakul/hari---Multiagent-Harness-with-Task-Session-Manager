@@ -91,7 +91,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
-| 2026-10-28 15:12 | [Progress — AI session metadata and cover on open (L-190)](session-metadata-ai-plan.md) | AI buttons for label and notes, append-only grouped notes with a Left off line, Auto notes, Settings → Session metadata, cover on open, lighter blur; built 2026-10-28, desktop check manual. |
+| 2026-10-28 15:12 | [Progress — AI session metadata and cover on open (L-190)](session-metadata-ai-plan.md) | AI buttons for label and notes, append-only grouped notes with a Left off line, Auto notes, Settings → Session metadata, cover on open, lighter blur; Session panel (L-191) section added 2026-10-28 21:03; built 2026-10-28, desktop check manual. |
 | 2026-10-27 22:39 | [Progress — Continue mode (L-189)](continue-mode-plan.md) | Experimental Continue button: new chat beside with a context card (Quick/Balanced/Thorough, any helper incl. Antigravity); built 2026-10-27, desktop check manual. |
 | 2026-10-19 01:59 | [Progress — Quick Composer matches the chat composer (L-110)](quick-composer-consistency.md) | Floating window applies UI font/size/workspace theme; footer reuses the chat composer pill and scrolling toolbar; Add Draft dialog uses the lg modal with one close button. Desktop check manual. |
 

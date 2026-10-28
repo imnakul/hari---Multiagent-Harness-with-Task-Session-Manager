@@ -12,6 +12,7 @@ export function MarkdownSourceEditor({
   onBlur,
   lineNumbers = true,
   className = "min-h-[448px]",
+  endPadClass = "pr-3",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -22,6 +23,8 @@ export function MarkdownSourceEditor({
   onBlur?: () => void;
   lineNumbers?: boolean;
   className?: string;
+  /** Right inset of the text, e.g. room for a button over the corner. */
+  endPadClass?: string;
 }) {
   const lines = value.split("\n");
   const gutterWidth = `calc(${Math.max(String(lines.length).length, 2)}ch + 0.75rem)`;
@@ -47,7 +50,7 @@ export function MarkdownSourceEditor({
             ) : null}
             <div
               data-source-line={index}
-              className={`min-h-5 min-w-0 whitespace-pre-wrap wrap-break-word ${lineNumbers ? "pl-3" : "px-3"}`}
+              className={`min-h-5 min-w-0 whitespace-pre-wrap wrap-break-word ${lineNumbers ? "pl-3" : `pl-3 ${endPadClass}`}`}
             >
               {line ? <MarkdownSourceHighlight text={line} /> : "\u00a0"}
             </div>
@@ -70,7 +73,7 @@ export function MarkdownSourceEditor({
         onBlur={onBlur}
         spellCheck={false}
         placeholder={placeholder}
-        className={`markdown-source-field absolute inset-0 h-full w-full resize-none overflow-hidden border-0 bg-transparent font-mono text-[13px] leading-5 whitespace-pre-wrap wrap-break-word outline-none ${lineNumbers ? "py-0 pr-0" : "py-3 pr-3"}`}
+        className={`markdown-source-field absolute inset-0 h-full w-full resize-none overflow-hidden border-0 bg-transparent font-mono text-[13px] leading-5 whitespace-pre-wrap wrap-break-word outline-none ${lineNumbers ? "py-0 pr-0" : `py-3 ${endPadClass}`}`}
         style={{ paddingLeft: textOffset }}
       />
     </div>

@@ -34,6 +34,7 @@ export function MarkdownEditorPanel({
   lineNumbers = true,
   minHeightClass = "",
   paddingClass = "",
+  sourceEndPadClass,
 }: {
   mode: MarkdownViewMode;
   onModeChange: (mode: MarkdownViewMode) => void;
@@ -54,6 +55,8 @@ export function MarkdownEditorPanel({
   minHeightClass?: string;
   /** Inset for Live and Preview (Source pads itself). */
   paddingClass?: string;
+  /** Right inset of Source text without line numbers. */
+  sourceEndPadClass?: string;
 }): ReactElement {
   const gestures = useMarkdownEditGestures({
     mode,
@@ -93,6 +96,7 @@ export function MarkdownEditorPanel({
           placeholder={placeholder}
           lineNumbers={lineNumbers}
           className={minHeightClass}
+          endPadClass={sourceEndPadClass}
         />
       ) : (
         <div

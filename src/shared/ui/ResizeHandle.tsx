@@ -21,6 +21,7 @@ export function ResizeHandle({
   placement = "inset-y-0 -right-1",
   getStartValue,
   onReset,
+  reverse = false,
 }: {
   label: string;
   value: number;
@@ -35,6 +36,8 @@ export function ResizeHandle({
   getStartValue?: () => number;
   /** Double-click action instead of committing `defaultValue`. */
   onReset?: () => void;
+  /** The column grows leftward (a handle on its left edge). */
+  reverse?: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   const liveRef = useRef<number | null>(null);
@@ -77,7 +80,7 @@ export function ResizeHandle({
     };
     const onMove = (move: globalThis.PointerEvent) => {
       if (move.pointerId !== pointerId) return;
-      pending = clamp(startValue + move.clientX - startX);
+      pending = clamp(startValue + (move.clientX - startX) * (reverse ? -1 : 1));
       if (!frame) frame = requestAnimationFrame(paint);
     };
     const onUp = (up: globalThis.PointerEvent) => {
@@ -114,7 +117,12 @@ export function ResizeHandle({
     if (!delta) return;
     event.preventDefault();
     event.stopPropagation();
-    setLive(clamp((liveRef.current ?? getStartValue?.() ?? value) + delta));
+    setLive(
+      clamp(
+        (liveRef.current ?? getStartValue?.() ?? value) +
+          (reverse ? -delta : delta),
+      ),
+    );
   };
 
   return (

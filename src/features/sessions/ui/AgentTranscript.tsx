@@ -9,6 +9,7 @@ import {
   CircleDashed,
   Copy,
   FilePlusCorner,
+  Bookmark,
   GitBranch,
   MessageSquarePlus,
   ListBullet,
@@ -303,6 +304,10 @@ type Props = {
   onReviewFix?: (issue: ReviewIssue) => void;
   onSidechat?: (turn: Block[]) => void;
   onBranch?: (turn: Block[]) => void;
+  /** Bookmarks the turn in the Session panel (fork, L-191). */
+  onBookmarkTurn?: (turn: Block[]) => void;
+  /** Block ids that carry a bookmark, so the turn's button shows as set. */
+  bookmarkedBlockIds?: ReadonlySet<string>;
   onEditLastTurn?: () => void;
   editingLastTurn?: boolean;
   onJumpToBottomChange?: (show: boolean) => void;
@@ -381,6 +386,8 @@ function AgentTranscriptComponent({
   onReviewFix,
   onSidechat,
   onBranch,
+  onBookmarkTurn,
+  bookmarkedBlockIds,
   onEditLastTurn,
   editingLastTurn = false,
   onJumpToBottomChange,
@@ -1868,6 +1875,13 @@ function AgentTranscriptComponent({
                     onSidechat ? () => onSidechat(turn) : undefined
                   }
                   onBranch={onBranch ? () => onBranch(turn) : undefined}
+                  onBookmark={
+                    onBookmarkTurn ? () => onBookmarkTurn(turn) : undefined
+                  }
+                  bookmarked={
+                    !!bookmarkedBlockIds &&
+                    turn.some((block) => bookmarkedBlockIds.has(block.id))
+                  }
                 />
               ) : null}
             </HistoryTurn>
@@ -2079,6 +2093,8 @@ function TurnDuration({
   continueEstimate,
   onSidechat,
   onBranch,
+  onBookmark,
+  bookmarked = false,
   revealOnHover = false,
 }: {
   elapsedMs: number | null;
@@ -2105,6 +2121,8 @@ function TurnDuration({
   continueEstimate?: (choice: ContinueChoice) => ContinueEstimate;
   onSidechat?: () => void;
   onBranch?: () => void;
+  onBookmark?: () => void;
+  bookmarked?: boolean;
   /** Sit in the gap under the turn and show on hover, as a sent message's do. */
   revealOnHover?: boolean;
 }) {
@@ -2179,6 +2197,22 @@ function TurnDuration({
             className="rounded-md p-1 text-content/40 transition-colors duration-100 hover:bg-content/8 hover:text-content/70"
           >
             <MessageSquarePlus className="size-3.5" strokeWidth={1.75} />
+          </button>
+        ) : null}
+        {onBookmark ? (
+          <button
+            type="button"
+            title={
+              bookmarked
+                ? "Bookmarked — edit it in the Session panel"
+                : "Bookmark this turn in the Session panel"
+            }
+            aria-label={bookmarked ? "Bookmarked" : "Bookmark this turn"}
+            aria-pressed={bookmarked}
+            onClick={onBookmark}
+            className={`rounded-md p-1 transition-colors duration-100 hover:bg-content/8 hover:text-content/70 ${bookmarked ? "text-accent" : "text-content/40"}`}
+          >
+            <Bookmark className="size-3.5" strokeWidth={1.75} />
           </button>
         ) : null}
         {onShowWork ? (

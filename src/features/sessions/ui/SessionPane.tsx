@@ -11,7 +11,7 @@ import {
 import type { RemoteControlControls } from "../../provider-sessions/ui/RemoteControlButton";
 import { editableSessionTodo } from "../../session-board/sessionTodos";
 import { composeSessionTodo } from "../../session-board/ui/SessionManagerCapture";
-import { GripVertical, X } from "../../../shared/ui/icons";
+import { GripVertical, PanelRight, X } from "../../../shared/ui/icons";
 import { useSessionSnapshot } from "../model/sessionStateStore";
 import {
   memo,
@@ -114,7 +114,7 @@ import { MessageQueue } from "./MessageQueue";
 import { useMonoTranscript } from "../../monos/hooks/useMonoTranscript";
 import { MONO_PAGE_TURNS } from "../data/sessionStore";
 import { useComposerDockMotion } from "./useComposerDockMotion";
-import { MOD } from "../../../platform/tauri/platform";
+import { MOD, SHIFT } from "../../../platform/tauri/platform";
 import {
   acknowledgeQuoteRequest,
   ADD_TO_CHAT_EVENT,
@@ -164,6 +164,16 @@ import { sessionIdleCoverMs } from "../../settings/model/settings";
 import { hasSessionMetadata } from "../model/sessionMetadata";
 import { SessionIdleCover, useIdleCover } from "./SessionIdleCover";
 import { useSessionIdleCover, useSessionMetadata } from "./useSessionMetadata";
+import { messageLine, SessionPanelDock, useSessionPanelView } from "./SessionPanel";
+import {
+  addBookmark,
+  removeBookmark,
+  saveSessionPanelView,
+  sessionPanelSnapshot,
+  subscribeSessionPanel,
+  toggleSessionPanel,
+  updateSessionPanel,
+} from "../model/sessionPanel";
 
 function ignoreCloudOutcome(): void {}
 
@@ -592,6 +602,39 @@ const LocalSessionPane = memo(function LocalSessionPane({
     sessionIdleCoverMs(idleCoverChoice),
     idleCoverEligible,
     visible ? session.id : null,
+  );
+  // Session panel (L-191): docked right; not for Monos, inbox asks or remote chats.
+  const panelEnabled = !agent && !session.inboxAsk && !remote;
+  const panelView = useSessionPanelView();
+  const subscribePanel = useCallback(
+    (listener: () => void) =>
+      panelEnabled ? subscribeSessionPanel(session.id, listener) : () => {},
+    [panelEnabled, session.id],
+  );
+  const panelData = useSyncExternalStore(
+    subscribePanel,
+    () => sessionPanelSnapshot(session.id),
+    () => sessionPanelSnapshot(session.id),
+  ).data;
+  const bookmarkedBlockIds = useMemo(
+    () => new Set(panelData.bookmarks.map((bookmark) => bookmark.blockId)),
+    [panelData.bookmarks],
+  );
+  const bookmarkTurn = useCallback(
+    (turn: Block[]) => {
+      const first = turn[0];
+      if (!first) return;
+      const ids = new Set(turn.map((block) => block.id));
+      const marked = panelData.bookmarks.filter((bookmark) => ids.has(bookmark.blockId));
+      const saved = updateSessionPanel(session.id, (current) =>
+        marked.length > 0
+          ? marked.reduce((next, bookmark) => removeBookmark(next, bookmark.id), current)
+          : addBookmark(current, first.id, messageLine(first), Date.now()),
+      );
+      saved.catch((error: unknown) => console.warn("Couldn't save the bookmark", error));
+      if (marked.length === 0) saveSessionPanelView({ open: true, tab: "bookmarks" });
+    },
+    [panelData.bookmarks, session.id],
   );
   // A Mono shows only its own background, never the project's or the app's.
   const projectBackground = mono
@@ -1062,6 +1105,22 @@ const LocalSessionPane = memo(function LocalSessionPane({
           remote={remoteControlControls}
         />
       }
+      trailing={
+        panelEnabled ? (
+          <button
+            type="button"
+            onClick={toggleSessionPanel}
+            aria-pressed={panelView.open}
+            aria-label="Session panel"
+            title={`${panelView.open ? "Hide" : "Show"} Session panel (${MOD}${SHIFT}O)`}
+            className={`flex size-6 items-center justify-center rounded-md transition-colors duration-100 hover:bg-content/5 hover:text-content ${
+              panelView.open ? "text-accent" : "text-content/50"
+            }`}
+          >
+            <PanelRight aria-hidden className="size-3.5" strokeWidth={1.75} />
+          </button>
+        ) : undefined
+      }
     />
   );
 
@@ -1350,6 +1409,8 @@ const LocalSessionPane = memo(function LocalSessionPane({
                             })
                     }
                     onSidechat={onSidechat ? askSidechat : undefined}
+                    onBookmarkTurn={panelEnabled ? bookmarkTurn : undefined}
+                    bookmarkedBlockIds={panelEnabled ? bookmarkedBlockIds : undefined}
                     onBranch={onBranch ? branchTurn : undefined}
                     onSaveSelectionTask={saveSelectionTask}
                     onAddToChat={addSelectionToChat}
@@ -1657,6 +1718,16 @@ const LocalSessionPane = memo(function LocalSessionPane({
             onOpenDiff={onOpenDiff}
           />
         </div>
+        {panelEnabled && visible ? (
+          <SessionPanelDock
+            session={session}
+            blocks={history.transcriptBlocks}
+            title={title}
+            row={idleCoverRoot}
+            onNavigate={navigateBlock}
+            onOpenFile={onOpenFile}
+          />
+        ) : null}
       </div>
     </div>
   );

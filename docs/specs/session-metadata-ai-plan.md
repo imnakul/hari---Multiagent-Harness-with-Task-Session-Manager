@@ -78,9 +78,34 @@ switched): the last activity if it was covered, else now.
 
 - [ ] Close a chat with notes, wait past the idle time, reopen it: it opens covered.
 - [ ] Switch away and back quickly: no cover. Cover blur is lighter.
+- [ ] The sparkle icons sit inside the Label and Notes boxes, top-right; notes text (Live, Preview, Source) never runs under the icon.
 - [ ] Label button writes a short label; Notes button appends grouped points and one Left off line.
 - [ ] Notes button twice in a row: the second adds nothing or only a new Left off line.
 - [ ] Auto notes on: a minute after a turn ends, new points appear; tiny tweaks fold into one.
 - [ ] Settings: change the model and instructions, Reset restores the default.
 - [ ] Dialog opened from a chat that is not open: AI buttons are disabled with "Open this chat first".
 - [ ] Stop during a run keeps the form as it was; Save is blocked while a run is going.
+
+## Session panel (L-191)
+
+Built directly (Do mode), no separate spec. Decisions locked in Discuss on 2026-10-28:
+
+- **Layout 1A:** docked glass panel on the right of each chat pane; composer button and Ctrl+Shift+O; width dragged and remembered; folds into a button (opens as an overlay) when the chat would get narrower than 440 px.
+- **Content 2A:** one AI run writes tagged points (event, decision, found) linked to their message, plus one Left off line. Tabs: Timeline, Decisions, Files (from edit tool calls, no AI), Notes (the existing notes), Bookmarks.
+- **Key terms 3A:** later.
+- **Bookmarks 4A:** pin a message with a short line; click jumps there; no file restore.
+- Auto notes now updates the panel; notes stay the user's. AI runs read only blocks after `after`; user edits and deletes persist. Monos, inbox asks and remote chats get no panel. Compacted messages show "Earlier in this chat".
+
+### Checklist (manual desktop)
+
+- [ ] Composer button and Ctrl+Shift+O open and close the panel; the button shows accent while open.
+- [ ] Glass looks like the other popovers in light and dark; drag the left edge to resize; width survives a restart.
+- [ ] Split the workspace until a pane is narrow: the panel folds into a top-right button that opens it over the chat; X closes the overlay.
+- [ ] Update with AI: a spinner, then points with icons (flag decision, bulb found, dot event) and a Left off card; a second run adds nothing or a new Left off.
+- [ ] Click a point, a Left off card, a file row and a bookmark: the chat scrolls to that message, also for an old turn not yet loaded.
+- [ ] Edit and delete a point and a bookmark; they stay after reload.
+- [ ] Bookmark button under a reply: turns accent, panel opens on Bookmarks; clicking it again removes the bookmark.
+- [ ] Files tab lists edited files newest first; the open button opens the file.
+- [ ] Notes tab shows the notes; Edit notes opens the Session metadata dialog.
+- [ ] Auto notes on: a minute after a turn, new points appear in the Timeline; notes unchanged.
+- [ ] No panel or button in a Mono chat or an inbox ask.

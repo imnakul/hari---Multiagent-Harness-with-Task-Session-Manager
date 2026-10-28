@@ -1336,6 +1336,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     crate::automations::ensure_tables(conn)?;
     crate::prompts::ensure_table(conn)?;
     crate::session_metadata::ensure_table(conn)?;
+    crate::session_panel::ensure_table(conn)?;
     crate::provider_sessions::ensure_table(conn)?;
     ensure_orchestration_history(conn)?;
     crate::mono_transcript::ensure_tables(conn)?;
@@ -2543,6 +2544,8 @@ fn delete_session(conn: &Connection, session_id: &str) -> rusqlite::Result<()> {
     )?;
     // Fork (L-181): the chat's label and notes go with it.
     crate::session_metadata::delete(&tx, session_id)?;
+    // Fork (L-191): its side-panel points and bookmarks too.
+    crate::session_panel::delete(&tx, session_id)?;
     tx.execute("DELETE FROM sessions WHERE id = ?1", [session_id])?;
     tx.commit()
 }
@@ -3563,7 +3566,21 @@ mod tests {
             [],
         )
         .unwrap();
+        conn.execute(
+            "INSERT INTO session_panel (session_id, data, updated_at)
+             VALUES ('s1', '{}', 1), ('s2', '{}', 1)",
+            [],
+        )
+        .unwrap();
         delete_session(&conn, "s1").unwrap();
+        let panels: Vec<String> = conn
+            .prepare("SELECT session_id FROM session_panel")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(panels, ["s2"]);
         let left: Vec<String> = conn
             .prepare("SELECT session_id FROM session_metadata")
             .unwrap()

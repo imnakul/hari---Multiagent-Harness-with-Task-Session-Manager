@@ -1,4 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-28 21:03 IST — Session panel: timeline, decisions, files, notes, bookmarks (L-191)
+- Type: feature
+- What: A glass panel docked on the right of each chat (composer button or Ctrl+Shift+O; resizable, folds into a button in narrow panes) with Timeline (Left off pinned on top), Decisions, Files, Notes and Bookmarks tabs; every row jumps to its message. Update with AI adds tagged points from the messages since its last run; the Auto notes switch now feeds the panel instead of the notes. Replies get a bookmark button. Points and bookmarks are stored per chat in a new `session_panel` table, deleted with the chat.
+- Why: User asked for a toggleable side panel to see what happened in a chat and jump back to it, built with the existing glass components; decisions locked in Discuss (docked panel, tagged points, bookmarks without file restore, key terms later).
+- Files: `src-tauri/src/session_panel.rs`, `session_store.rs`, `lib.rs`; [sessionPanel.ts](src/features/sessions/model/sessionPanel.ts) (+test), [SessionPanel.tsx](src/features/sessions/ui/SessionPanel.tsx), [SessionPanelItems.tsx](src/features/sessions/ui/SessionPanelItems.tsx), `SessionPane.tsx`, `AgentTranscript.tsx`, `Composer.tsx` (`trailing`), `SessionMetadataAutoWriter.tsx`, `sessionMetadataHelper.ts`, `SessionMetadataDialog.tsx` and `SettingsView.tsx` (Auto notes text), `ResizeHandle.tsx` (`reverse`), `icons.tsx`, `appShortcuts.ts`, `settings.ts`, `App.tsx`
+- Commit: see git log (feat: Session panel, L-191)
+- Verified: cargo test session_panel ✅; sessionPanel.test.ts 13/13 ✅; tsc ✅; full vitest 7840 passed, 2 skipped ✅; desktop check manual
+## 2026-10-28 17:47 IST — Session metadata AI buttons sit inside the fields (L-190)
+- Type: change
+- What: The Label and Notes AI buttons are now sparkle icons inside the top-right corner of the label box and the notes box, in place of the "Write" and "Add new" text buttons beside the headings. A spinner shows while a run is going, and clicking it stops the run. Text keeps clear of the icon in Live, Preview and Source.
+- Why: User asked for the buttons inside the fields.
+- Files: `src/features/sessions/ui/SessionMetadataDialog.tsx`, `MarkdownEditorPanel.tsx` (`sourceEndPadClass`), `MarkdownSourceEditor.tsx` (`endPadClass`, default unchanged)
+- Commit: see git log (feat: Session panel, L-191)
+- Verified: tsc ✅; vitest src/features/sessions 192 files ✅ (one test that did not repeat failed under load on the first run); desktop check manual
 ## 2026-10-28 16:29 IST — 0.16.0-local16 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local16: 0.16.0-local15 plus AI session metadata, Auto notes and cover on open (L-190).

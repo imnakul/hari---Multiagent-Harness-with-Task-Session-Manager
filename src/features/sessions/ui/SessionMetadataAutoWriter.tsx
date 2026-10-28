@@ -1,5 +1,8 @@
 import { useContext, useEffect } from "react";
-import { writeSessionNotes } from "../../../integrations/harness/core/sessionMetadataHelper";
+import {
+  writeSessionNotes,
+  writeSessionPoints,
+} from "../../../integrations/harness/core/sessionMetadataHelper";
 import { isMonoSession } from "../../monos/model/mono";
 import type { Session } from "../model/session";
 import {
@@ -15,6 +18,12 @@ import {
   blocksAfter,
   markAutoNotesDone,
 } from "../model/sessionMetadataAi";
+import {
+  applyPointsReply,
+  loadSessionPanel,
+  panelBlocksAfter,
+  updateSessionPanel,
+} from "../model/sessionPanel";
 import { SessionStateContext, type SessionStateStore } from "../model/sessionStateStore";
 import { sessionMetadataEditorOpen } from "./SessionMetadataDialog";
 
@@ -121,6 +130,54 @@ export async function autoUpdateNotes(session: Session): Promise<void> {
   markAutoNotesDone(session.id, last.id);
 }
 
+export type PanelUpdateResult = { ok: true; added: number } | { ok: false; message: string };
+
+const panelRuns = new Map<string, Promise<PanelUpdateResult>>();
+
+/**
+ * Adds the session panel's points for what is new since its last run (L-191).
+ * One run per chat at a time: a second call joins the running one.
+ */
+export function updateSessionPanelWithAi(
+  session: Session,
+  signal?: AbortSignal,
+): Promise<PanelUpdateResult> {
+  const running = panelRuns.get(session.id);
+  if (running) return running;
+  const run = (async (): Promise<PanelUpdateResult> => {
+    const data = await loadSessionPanel(session.id);
+    const finished = session.blocks.filter((block) => !block.streaming);
+    const fresh = panelBlocksAfter(session.blocks, data.after);
+    const last = fresh[fresh.length - 1];
+    if (!last) return { ok: true, added: 0 };
+    const result = await writeSessionPoints({
+      blocks: fresh,
+      cwd: session.cwd,
+      harness: session.harness,
+      data,
+      scope: fresh.length < finished.length ? "update" : "full",
+      signal,
+    });
+    if (!result.ok) return { ok: false, message: result.cancelled ? "" : result.message };
+    await updateSessionPanel(session.id, (current) =>
+      applyPointsReply(current, result.value, last.id),
+    );
+    return { ok: true, added: result.value.kind === "add" ? result.value.points.length : 0 };
+  })().finally(() => panelRuns.delete(session.id));
+  panelRuns.set(session.id, run);
+  return run;
+}
+
+/** True while an AI run is filling this chat's panel. */
+export function sessionPanelUpdating(sessionId: string): boolean {
+  return panelRuns.has(sessionId);
+}
+
+/** The Auto switch now fills the side panel's points; notes stay the user's (L-191). */
+async function autoUpdatePanel(session: Session): Promise<void> {
+  await updateSessionPanelWithAi(session);
+}
+
 /** Mounted once per window, beside the Session metadata dialog host. */
 export function SessionMetadataAutoWriter(): null {
   const store = useContext(SessionStateContext);
@@ -129,7 +186,7 @@ export function SessionMetadataAutoWriter(): null {
     return watchAutoNotes(store, {
       isOn: (id) => autoNotesOn(id) && !isMonoSession(id),
       waitFor: sessionMetadataEditorOpen,
-      update: autoUpdateNotes,
+      update: autoUpdatePanel,
     });
   }, [store]);
   return null;

@@ -373,6 +373,8 @@ type Props = {
   cloudLaunch?: ComposerCloudLaunch;
   /** "Work in" (This computer / Cloud / Remote) shown after the branch. */
   workIn?: ReactNode;
+  /** Fork (L-191): controls at the end of the bottom row, before the context meter. */
+  trailing?: ReactNode;
   children?: ReactNode;
 };
 
@@ -504,6 +506,7 @@ export function Composer({
   onEditingLastTurnChange,
   cloudLaunch,
   workIn,
+  trailing,
   onOperatorDisable,
   externalTurnActive = false,
   children,
@@ -2195,6 +2198,7 @@ export function Composer({
       )}
       {workIn}
       <div className="ml-auto flex shrink-0 items-center">
+        {trailing}
         <ContextMeter
           sessionId={sessionId}
           usage={context}

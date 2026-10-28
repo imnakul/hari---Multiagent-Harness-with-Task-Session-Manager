@@ -1926,7 +1926,7 @@ function SessionMetadataAiGroup() {
   return (
     <Group
       title="Session metadata"
-      description="The AI buttons in a chat's Session metadata, and Auto notes. Notes only grow: each run adds what is new and replaces the closing Left off line."
+      description="The AI buttons in a chat's Session metadata, and Auto notes for the Session panel. Notes only grow: each run adds what is new and replaces the closing Left off line."
     >
       <Row
         id="session-metadata-ai-model"
@@ -1961,7 +1961,7 @@ function SessionMetadataAiGroup() {
       <Row
         id="session-metadata-auto-notes"
         label="Auto notes for new chats"
-        description="A minute after a turn ends, the AI adds what is new to the chat's notes. Each chat can turn it on or off in its Session metadata. Uses one AI helper call per quiet turn."
+        description="A minute after a turn ends, the AI logs what is new in the chat's Session panel (timeline, decisions, Left off); notes are left as you wrote them. Each chat can turn it on or off in its Session metadata. Uses one AI helper call per quiet turn."
       >
         <Toggle
           label="Auto notes for new chats"

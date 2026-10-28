@@ -182,7 +182,12 @@ function SessionMetadataEditor({
     }
   };
 
-  const aiButton = (kind: AiRun["kind"], text: string, title: string): ReactNode => {
+  /** Icon-only AI button that sits inside its field's top-right corner. */
+  const aiButton = (
+    kind: AiRun["kind"],
+    title: string,
+    place: string,
+  ): ReactNode => {
     const running = aiRun?.kind === kind;
     return (
       <button
@@ -191,14 +196,13 @@ function SessionMetadataEditor({
         onClick={() => (running ? aiRun.controller.abort() : void runAi(kind))}
         title={running ? "Stop" : (aiUnavailable ?? title)}
         aria-label={running ? `Stop: ${title}` : title}
-        className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-content/60 transition-colors hover:bg-content/10 hover:text-content disabled:opacity-40 disabled:hover:bg-transparent"
+        className={`absolute z-10 grid size-6 place-items-center rounded-md text-content/50 transition-colors hover:bg-content/10 hover:text-content disabled:opacity-40 disabled:hover:bg-transparent ${place}`}
       >
         {running ? (
-          <Loader aria-hidden className="size-3 motion-safe:animate-spin" />
+          <Loader aria-hidden className="size-3.5 motion-safe:animate-spin" />
         ) : (
-          <Sparkles aria-hidden className="size-3" />
+          <Sparkles aria-hidden className="size-3.5" />
         )}
-        {running ? "Stop" : text}
       </button>
     );
   };
@@ -289,7 +293,6 @@ function SessionMetadataEditor({
           <label htmlFor={labelId} className="text-[12px] text-content/60">
             Label
           </label>
-          {aiButton("label", "Write", "Write the label with AI")}
           <span
             id={counterId}
             className={`ml-auto text-[11px] tabular-nums ${
@@ -301,25 +304,27 @@ function SessionMetadataEditor({
             {labelLength}/{SESSION_LABEL_MAX}
           </span>
         </div>
-        <input
-          id={labelId}
-          ref={labelRef}
-          value={label}
-          disabled={busy || aiRun?.kind === "label"}
-          aria-describedby={counterId}
-          onChange={(event) => setLabel(event.target.value)}
-          placeholder="Shown in place of the chat title, e.g. Auth spike"
-          autoComplete="off"
-          className="h-8 rounded-md border border-content/10 bg-transparent px-2.5 text-[13px] text-content outline-none placeholder:text-content/35 focus:border-content/25 disabled:opacity-60"
-        />
+        <div className="relative">
+          <input
+            id={labelId}
+            ref={labelRef}
+            value={label}
+            disabled={busy || aiRun?.kind === "label"}
+            aria-describedby={counterId}
+            onChange={(event) => setLabel(event.target.value)}
+            placeholder="Shown in place of the chat title, e.g. Auth spike"
+            autoComplete="off"
+            className="h-8 w-full rounded-md border border-content/10 bg-transparent pl-2.5 pr-9 text-[13px] text-content outline-none placeholder:text-content/35 focus:border-content/25 disabled:opacity-60"
+          />
+          {aiButton("label", "Write the label with AI", "right-1 top-1")}
+        </div>
       </div>
       <div className="flex min-h-0 flex-col gap-1">
         <div className="flex items-center gap-2">
           <span className="text-[12px] text-content/60">Notes</span>
-          {aiButton("notes", "Add new", "Add what is new in this chat to the notes with AI")}
           <label
             className="ml-auto flex items-center gap-2 text-[11px] text-content/55"
-            title="A minute after each turn ends, the AI adds what is new to these notes"
+            title="A minute after each turn ends, the AI logs what is new in the Session panel's timeline. These notes stay as you wrote them"
           >
             Auto notes
             <Toggle
@@ -335,21 +340,31 @@ function SessionMetadataEditor({
           markdown={notes}
           label="Notes view"
         />
-        <div className="max-h-[45vh] min-h-40 overflow-y-auto rounded-md border border-content/10">
-          <MarkdownEditorPanel
-            mode={mode}
-            onModeChange={setMode}
-            value={notes}
-            onChange={setNotes}
-            caretRef={notesRef}
-            label="Notes Markdown"
-            placeholder="Plans, links, what is left…"
-            lineNumbers={false}
-            minHeightClass="min-h-40"
-            paddingClass="px-3 py-2"
-            preview={<AgentMarkdown text={notes} hardBreaks />}
-            emptyPreview={<p className="text-[13px] text-content/45">No notes</p>}
-          />
+        <div className="relative">
+          {aiButton(
+            "notes",
+            "Add what is new in this chat to the notes with AI",
+            "right-2 top-1.5",
+          )}
+          <div className="max-h-[45vh] min-h-40 overflow-y-auto rounded-md border border-content/10">
+            <MarkdownEditorPanel
+              mode={mode}
+              onModeChange={setMode}
+              value={notes}
+              onChange={setNotes}
+              caretRef={notesRef}
+              label="Notes Markdown"
+              placeholder="Plans, links, what is left…"
+              lineNumbers={false}
+              minHeightClass="min-h-40"
+              paddingClass="py-2 pl-3 pr-10"
+              sourceEndPadClass="pr-10"
+              preview={<AgentMarkdown text={notes} hardBreaks />}
+              emptyPreview={
+                <p className="text-[13px] text-content/45">No notes</p>
+              }
+            />
+          </div>
         </div>
       </div>
       {error ? (
