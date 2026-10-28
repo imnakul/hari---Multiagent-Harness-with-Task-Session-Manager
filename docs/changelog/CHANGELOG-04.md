@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-28 11:17 IST — 0.16.0-local15 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local15: 0.16.0-local14 plus the fix that makes the Continue button show (L-189) and quote buttons that sit at the right of the first line instead of covering text (L-188).
+- Why: User asked to commit, push and build the fix.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local15-continue-button-quote-space_x64.exe` (15,176,810 bytes, SHA-256 887CA68AF542B448D1B31D2FBA7ACEC5284B391AF1622023067F1E4833207C23, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 1ae792b2 + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest 7,800/7,800 ✅ at 1ae792b2; desktop check manual
 ## 2026-10-28 00:11 IST — Fix: Continue button never showed; quote buttons covered the first line (L-189, L-188)
 - Type: fix
 - What: The Continue button now shows on replies when Settings → Chat → Continue button is on. Quote buttons (Copy, Add to notes, Add Task) now sit at the right of the quote's first line, and the text wraps around them instead of running underneath.
