@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-28 22:23 IST — 0.16.0-local17 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local17: 0.16.0-local16 plus the Session panel (L-191) and the in-field sparkle AI buttons in Session metadata (L-190).
+- Why: User asked to commit, push and build the installer.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local17-session-panel_x64.exe` (15,195,585 bytes, SHA-256 536801D485F499D453E71920E77D61B401C605C1AA9844A6993486DE398C8574, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from a3297fa1 + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest 7840 passed, 2 skipped ✅ at a3297fa1; desktop check manual
 ## 2026-10-28 21:03 IST — Session panel: timeline, decisions, files, notes, bookmarks (L-191)
 - Type: feature
 - What: A glass panel docked on the right of each chat (composer button or Ctrl+Shift+O; resizable, folds into a button in narrow panes) with Timeline (Left off pinned on top), Decisions, Files, Notes and Bookmarks tabs; every row jumps to its message. Update with AI adds tagged points from the messages since its last run; the Auto notes switch now feeds the panel instead of the notes. Replies get a bookmark button. Points and bookmarks are stored per chat in a new `session_panel` table, deleted with the chat.
