@@ -11,6 +11,7 @@ import {
   loadSessionMetadataAi,
   markAutoNotesDone,
   NOTHING_NEW,
+  notesSummary,
   parseLabelReply,
   parseNotesReply,
   parseSessionMetadataAi,
@@ -104,5 +105,35 @@ describe("appendSessionNotes", () => {
     );
     expect(appendSessionNotes("", "- a")).toBe("- a");
     expect(appendSessionNotes(notes, "  ")).toBe(notes);
+  });
+});
+
+describe("notesSummary (L-192)", () => {
+  it("lifts Left off out and groups the rest by heading, newest first", () => {
+    const notes = [
+      "Started on the panel.",
+      "",
+      "## Day 1",
+      "- Picked SQLite",
+      "**Day 2**",
+      "- Wired the UI",
+      "- **Left off:** styling the tabs",
+    ].join("\n");
+    expect(notesSummary(notes)).toEqual({
+      leftOff: "styling the tabs",
+      groups: [
+        { heading: "Day 2", body: "- Wired the UI" },
+        { heading: "Day 1", body: "- Picked SQLite" },
+        { heading: "", body: "Started on the panel." },
+      ],
+    });
+  });
+
+  it("returns nothing for empty notes and keeps headings without points", () => {
+    expect(notesSummary("")).toEqual({ leftOff: null, groups: [] });
+    expect(notesSummary("# Plan\r\n**Left off:**")).toEqual({
+      leftOff: null,
+      groups: [{ heading: "Plan", body: "" }],
+    });
   });
 });

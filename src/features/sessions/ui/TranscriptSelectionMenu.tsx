@@ -1,4 +1,5 @@
 import {
+  Bookmark,
   CheckCircle,
   FilePlusCorner,
   MessageSquarePlus,
@@ -14,6 +15,8 @@ type Props = {
   onAddToChat?: (text: string) => void;
   onAddToNotes?: (text: string) => void | Promise<void>;
   onAddToTask?: (text: string, blockId?: string) => void | Promise<void>;
+  /** Saves the selected text as a bookmark in the Session overview (L-192). */
+  onBookmark?: (text: string, blockId?: string) => void | Promise<void>;
   onDismiss: () => void;
 };
 
@@ -22,6 +25,7 @@ export function TranscriptSelectionMenu({
   onAddToChat,
   onAddToNotes,
   onAddToTask,
+  onBookmark,
   onDismiss,
 }: Props) {
   const onDismissRef = useRef(onDismiss);
@@ -74,6 +78,15 @@ export function TranscriptSelectionMenu({
             onSelect={() => onAddToTask(selection.text, selection.responseId)}
             onDismiss={onDismiss}>
             <CheckCircle aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+          </SelectionAction>
+        ) : null}
+        {onBookmark ? (
+          <SelectionAction
+            label="Bookmark"
+            onSelect={() => onBookmark(selection.text, selection.responseId)}
+            onDismiss={onDismiss}
+          >
+            <Bookmark aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
           </SelectionAction>
         ) : null}
         {onAddToNotes ? (

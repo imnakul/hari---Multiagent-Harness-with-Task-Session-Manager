@@ -157,13 +157,14 @@ export const claudeAdapter: HarnessAdapter = {
   generatePrContent: generateClaudePrContent,
   generateBranchName: generateClaudeBranchName,
   warmupText: warmupClaudeText,
-  runHelperPrompt: ({ cwd, prompt, timeoutMs, providerAccountId, model }) =>
+  runHelperPrompt: ({ cwd, prompt, timeoutMs, providerAccountId, model, modelSettings }) =>
     runClaudeTextPrompt({
       cwd,
       prompt,
       timeoutMs,
       providerAccountId,
       model,
+      modelSettings,
       helperOnly: true,
     }),
   runTextPrompt: (input) => {

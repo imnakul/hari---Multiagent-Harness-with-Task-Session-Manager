@@ -22,6 +22,7 @@ export function ResizeHandle({
   getStartValue,
   onReset,
   reverse = false,
+  look = "band",
 }: {
   label: string;
   value: number;
@@ -38,6 +39,11 @@ export function ResizeHandle({
   onReset?: () => void;
   /** The column grows leftward (a handle on its left edge). */
   reverse?: boolean;
+  /**
+   * "band" tints the whole grab area; "line" stays invisible until hover,
+   * then shows a thin line that turns accent while dragging (L-192).
+   */
+  look?: "band" | "line";
 }) {
   const [dragging, setDragging] = useState(false);
   const liveRef = useRef<number | null>(null);
@@ -134,9 +140,13 @@ export function ResizeHandle({
       aria-valuemin={min}
       aria-valuemax={max}
       tabIndex={0}
-      className={`absolute ${placement} z-10 w-2 cursor-col-resize touch-none outline-none focus-visible:bg-accent/40 ${
-        dragging ? "bg-content/15" : "hover:bg-content/10"
-      }`}
+      className={
+        look === "line"
+          ? `group absolute ${placement} z-10 flex w-2 cursor-col-resize touch-none justify-center outline-none`
+          : `absolute ${placement} z-10 w-2 cursor-col-resize touch-none outline-none focus-visible:bg-accent/40 ${
+              dragging ? "bg-content/15" : "hover:bg-content/10"
+            }`
+      }
       onClick={(event) => event.stopPropagation()}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
@@ -149,6 +159,17 @@ export function ResizeHandle({
         if (onReset) onReset();
         else onCommit(clamp(defaultValue));
       }}
-    />
+    >
+      {look === "line" ? (
+        <span
+          aria-hidden
+          className={`h-full w-px transition-colors duration-150 ${
+            dragging
+              ? "bg-accent"
+              : "bg-transparent group-hover:bg-content/25 group-focus-visible:bg-accent/60"
+          }`}
+        />
+      ) : null}
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useContext, useEffect } from "react";
 import {
+  writeSessionLabel,
   writeSessionNotes,
-  writeSessionPoints,
 } from "../../../integrations/harness/core/sessionMetadataHelper";
 import { isMonoSession } from "../../monos/model/mono";
 import type { Session } from "../model/session";
@@ -18,14 +18,7 @@ import {
   blocksAfter,
   markAutoNotesDone,
 } from "../model/sessionMetadataAi";
-import {
-  applyPointsReply,
-  loadSessionPanel,
-  panelBlocksAfter,
-  updateSessionPanel,
-} from "../model/sessionPanel";
 import { SessionStateContext, type SessionStateStore } from "../model/sessionStateStore";
-import { sessionMetadataEditorOpen } from "./SessionMetadataDialog";
 
 /** How long a chat stays quiet after a turn before Auto notes runs (L-190). */
 export const AUTO_NOTES_QUIET_MS = 60_000;
@@ -34,7 +27,7 @@ type WatchDeps = {
   quietMs?: number;
   /** Auto notes applies to this chat (its switch is on and it is not a Mono). */
   isOn: (sessionId: string) => boolean;
-  /** Try again later, e.g. while the chat's Session metadata editor is open. */
+  /** Try again later, e.g. while the chat's Summary is being edited. */
   waitFor: (sessionId: string) => boolean;
   update: (session: Session) => Promise<void>;
 };
@@ -103,90 +96,158 @@ export function watchAutoNotes(
   };
 }
 
-/** Adds what is new since the last update to the chat's notes; quiet on failure. */
-export async function autoUpdateNotes(session: Session): Promise<void> {
-  const finished = session.blocks.filter((block) => !block.streaming);
-  const fresh = blocksAfter(session.blocks, autoNotesAfter(session.id));
-  const last = fresh[fresh.length - 1];
-  if (!last) return;
-  const saved = await loadSessionMetadataFor(session.id);
-  const result = await writeSessionNotes({
-    blocks: fresh,
-    cwd: session.cwd,
-    harness: session.harness,
-    notes: saved?.notes ?? "",
-    scope: fresh.length < finished.length ? "update" : "full",
-  });
-  if (!result.ok) return;
-  if (result.value.kind === "add") {
-    // The editor opened meanwhile: leave the points for the next run.
-    if (sessionMetadataEditorOpen(session.id)) return;
-    const current = getSessionMetadata(session.id);
-    const label = current?.label ?? "";
-    const notes = appendSessionNotes(current?.notes ?? "", result.value.text);
-    if (sessionMetadataError(label, notes)) return;
-    await saveSessionMetadata(session.id, label, notes);
-  }
-  markAutoNotesDone(session.id, last.id);
+// ---------------------------------------------------------------------------
+// Summary editing: Auto waits while the user edits a chat's Summary (L-192).
+
+let editingSummaryId: string | null = null;
+
+export function setSummaryEditing(sessionId: string | null): void {
+  editingSummaryId = sessionId;
 }
 
-export type PanelUpdateResult = { ok: true; added: number } | { ok: false; message: string };
+/** True while the Session overview's Summary editor is open for this chat. */
+export function summaryEditorOpen(sessionId: string): boolean {
+  return editingSummaryId === sessionId;
+}
 
-const panelRuns = new Map<string, Promise<PanelUpdateResult>>();
+// ---------------------------------------------------------------------------
+// AI runs, one per chat at a time; the panel shows a spinner while one runs.
 
-/**
- * Adds the session panel's points for what is new since its last run (L-191).
- * One run per chat at a time: a second call joins the running one.
- */
-export function updateSessionPanelWithAi(
-  session: Session,
-  signal?: AbortSignal,
-): Promise<PanelUpdateResult> {
-  const running = panelRuns.get(session.id);
+export type SummaryUpdateResult =
+  | { ok: true; added: boolean }
+  | { ok: false; message: string };
+
+const summaryRuns = new Map<string, Promise<SummaryUpdateResult>>();
+const labelRuns = new Map<string, Promise<SummaryUpdateResult>>();
+const runListeners = new Set<() => void>();
+
+function emitRuns(): void {
+  for (const listener of runListeners) listener();
+}
+
+export function subscribeSummaryRuns(listener: () => void): () => void {
+  runListeners.add(listener);
+  return () => runListeners.delete(listener);
+}
+
+/** True while an AI run is adding to this chat's Summary. */
+export function sessionSummaryUpdating(sessionId: string): boolean {
+  return summaryRuns.has(sessionId);
+}
+
+/** True while an AI run is writing this chat's label. */
+export function sessionLabelUpdating(sessionId: string): boolean {
+  return labelRuns.has(sessionId);
+}
+
+function track(
+  runs: Map<string, Promise<SummaryUpdateResult>>,
+  sessionId: string,
+  start: () => Promise<SummaryUpdateResult>,
+): Promise<SummaryUpdateResult> {
+  const running = runs.get(sessionId);
   if (running) return running;
-  const run = (async (): Promise<PanelUpdateResult> => {
-    const data = await loadSessionPanel(session.id);
-    const finished = session.blocks.filter((block) => !block.streaming);
-    const fresh = panelBlocksAfter(session.blocks, data.after);
-    const last = fresh[fresh.length - 1];
-    if (!last) return { ok: true, added: 0 };
-    const result = await writeSessionPoints({
-      blocks: fresh,
-      cwd: session.cwd,
-      harness: session.harness,
-      data,
-      scope: fresh.length < finished.length ? "update" : "full",
-      signal,
-    });
-    if (!result.ok) return { ok: false, message: result.cancelled ? "" : result.message };
-    await updateSessionPanel(session.id, (current) =>
-      applyPointsReply(current, result.value, last.id),
-    );
-    return { ok: true, added: result.value.kind === "add" ? result.value.points.length : 0 };
-  })().finally(() => panelRuns.delete(session.id));
-  panelRuns.set(session.id, run);
+  const run = start().finally(() => {
+    runs.delete(sessionId);
+    emitRuns();
+  });
+  runs.set(sessionId, run);
+  emitRuns();
   return run;
 }
 
-/** True while an AI run is filling this chat's panel. */
-export function sessionPanelUpdating(sessionId: string): boolean {
-  return panelRuns.has(sessionId);
+/** Saves a new label, keeping the chat's latest notes. */
+async function saveLabel(sessionId: string, label: string): Promise<void> {
+  const notes = getSessionMetadata(sessionId)?.notes ?? "";
+  if (sessionMetadataError(label, notes)) return;
+  await saveSessionMetadata(sessionId, label, notes);
 }
 
-/** The Auto switch now fills the side panel's points; notes stay the user's (L-191). */
-async function autoUpdatePanel(session: Session): Promise<void> {
-  await updateSessionPanelWithAi(session);
+/**
+ * Adds what is new since the last update to the chat's Summary notes, and
+ * writes a label when the chat has none (L-192). Reads the whole chat when
+ * the notes are empty. A second call joins the running one.
+ */
+export function updateSessionSummary(
+  session: Session,
+  signal?: AbortSignal,
+): Promise<SummaryUpdateResult> {
+  return track(summaryRuns, session.id, async () => {
+    const saved = await loadSessionMetadataFor(session.id);
+    const notes = saved?.notes ?? "";
+    const finished = session.blocks.filter((block) => !block.streaming);
+    const fresh = notes.trim()
+      ? blocksAfter(session.blocks, autoNotesAfter(session.id))
+      : finished;
+    const last = fresh[fresh.length - 1];
+    let added = false;
+    if (last) {
+      const result = await writeSessionNotes({
+        blocks: fresh,
+        cwd: session.cwd,
+        harness: session.harness,
+        notes,
+        scope: fresh.length < finished.length ? "update" : "full",
+        signal,
+      });
+      if (!result.ok) return { ok: false, message: result.cancelled ? "" : result.message };
+      if (result.value.kind === "add") {
+        // The editor opened meanwhile: leave the points for the next run.
+        if (summaryEditorOpen(session.id))
+          return { ok: false, message: "Close the editor first, then try again." };
+        const current = getSessionMetadata(session.id);
+        const label = current?.label ?? "";
+        const next = appendSessionNotes(current?.notes ?? "", result.value.text);
+        const invalid = sessionMetadataError(label, next);
+        if (invalid) return { ok: false, message: invalid };
+        await saveSessionMetadata(session.id, label, next);
+        added = true;
+      }
+      markAutoNotesDone(session.id, last.id);
+    }
+    if (!getSessionMetadata(session.id)?.label.trim() && !signal?.aborted) {
+      const label = await writeSessionLabel({
+        blocks: finished,
+        cwd: session.cwd,
+        harness: session.harness,
+        signal,
+      });
+      if (label.ok && !getSessionMetadata(session.id)?.label.trim())
+        await saveLabel(session.id, label.value);
+    }
+    return { ok: true, added };
+  });
 }
 
-/** Mounted once per window, beside the Session metadata dialog host. */
+/** Writes the chat's label with AI, replacing the current one. */
+export function rewriteSessionLabel(
+  session: Session,
+  signal?: AbortSignal,
+): Promise<SummaryUpdateResult> {
+  return track(labelRuns, session.id, async () => {
+    const result = await writeSessionLabel({
+      blocks: session.blocks.filter((block) => !block.streaming),
+      cwd: session.cwd,
+      harness: session.harness,
+      signal,
+    });
+    if (!result.ok) return { ok: false, message: result.cancelled ? "" : result.message };
+    await saveLabel(session.id, result.value);
+    return { ok: true, added: true };
+  });
+}
+
+/** Mounted once per window (L-190; Session overview since L-192). */
 export function SessionMetadataAutoWriter(): null {
   const store = useContext(SessionStateContext);
   useEffect(() => {
     if (!store) return;
     return watchAutoNotes(store, {
       isOn: (id) => autoNotesOn(id) && !isMonoSession(id),
-      waitFor: sessionMetadataEditorOpen,
-      update: autoUpdatePanel,
+      waitFor: summaryEditorOpen,
+      update: async (session) => {
+        await updateSessionSummary(session);
+      },
     });
   }, [store]);
   return null;

@@ -69,7 +69,6 @@ import {
   type SubmissionAcceptance,
 } from "./model/submissionAcceptance";
 import { SavePromptDialogHost } from "../features/prompts/ui/SavePromptDialog";
-import { SessionMetadataDialogHost } from "../features/sessions/ui/SessionMetadataDialog";
 import { SessionMetadataAutoWriter } from "../features/sessions/ui/SessionMetadataAutoWriter";
 import type { CiRepairRequest } from "../features/inbox/model/ciRepair";
 import { ciRepairSessions } from "../features/inbox/model/ciRepairSessions";
@@ -16792,7 +16791,6 @@ function Workspace({
         >
           {titleBarSpansWindow && !focusMode ? workspaceTitleBar : null}
           <SavePromptDialogHost />
-          <SessionMetadataDialogHost />
           <SessionMetadataAutoWriter />
           {continueOffer
             ? (() => {

@@ -1,4 +1,4 @@
-import { requestSessionMetadataEdit } from "../model/sessionMetadata";
+import { openSessionOverview } from "../model/sessionPanel";
 import {
   Fragment,
   useEffect,
@@ -168,9 +168,9 @@ export function ChatPanel({
       : []),
     {
       kind: "item" as const,
-      id: "session-metadata",
-      label: "Session metadata…",
-      description: "Label and notes",
+      id: "session-overview",
+      label: "Open Session overview",
+      description: "Label, summary, bookmarks and files",
     },
     { kind: "sep" as const },
     {
@@ -220,8 +220,9 @@ export function ChatPanel({
       setRenamingId(sessionId);
       return;
     }
-    if (id === "session-metadata") {
-      requestSessionMetadataEdit(sessionId, menuChat?.title ?? "");
+    if (id === "session-overview") {
+      onSelect(sessionId);
+      openSessionOverview();
       return;
     }
     if (id === "folder-new") {

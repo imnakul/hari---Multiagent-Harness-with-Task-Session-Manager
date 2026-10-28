@@ -1,4 +1,4 @@
-import { requestSessionMetadataEdit } from "../../features/sessions/model/sessionMetadata";
+import { openSessionOverview } from "../../features/sessions/model/sessionPanel";
 import { useSessionMetadataHoverCard } from "../../features/sessions/ui/SessionMetadataHoverCard";
 import { useSessionLabel } from "../../features/sessions/ui/useSessionMetadata";
 import {
@@ -1052,12 +1052,12 @@ function TitleBarComponent({
               { kind: "sep" as const },
               {
                 kind: "item" as const,
-                id: "session-metadata",
-                label: "Session metadata…",
+                id: "session-overview",
+                label: "Open Session overview",
                 description:
                   contextTab.sessionCount > 1
-                    ? "Label and notes of the focused conversation"
-                    : "Label and notes",
+                    ? "For the focused conversation"
+                    : "Label, summary, bookmarks and files",
               },
             ]
           : []),
@@ -1103,9 +1103,9 @@ function TitleBarComponent({
       onClose(contextTab.id);
       return;
     }
-    if (id === "session-metadata") {
-      if (contextTab.sessionId)
-        requestSessionMetadataEdit(contextTab.sessionId, contextTab.title);
+    if (id === "session-overview") {
+      onSelect(contextTab.id);
+      openSessionOverview();
       return;
     }
     if (id === "archive") {

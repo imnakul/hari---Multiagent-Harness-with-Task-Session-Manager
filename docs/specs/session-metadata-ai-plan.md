@@ -109,3 +109,32 @@ Built directly (Do mode), no separate spec. Decisions locked in Discuss on 2026-
 - [ ] Notes tab shows the notes; Edit notes opens the Session metadata dialog.
 - [ ] Auto notes on: a minute after a turn, new points appear in the Timeline; notes unchanged.
 - [ ] No panel or button in a Mono chat or an inbox ask.
+
+## Session overview (L-192)
+
+Built directly after Discuss, no separate spec. Decisions locked on 2026-10-28/29 (replace parts of L-190 and L-191):
+
+- **Name and tabs:** Session overview with Summary (default) | Bookmarks | Files changed. Timeline, Decisions and AI points are removed.
+- **Header:** label input (placeholder the chat title) with its own sparkle that always rewrites the label; Auto switch for this chat; main sparkle adds what is new to the Summary and writes the label only when it is empty; ✕.
+- **Summary:** the notes, grouped by heading, collapsed, newest first, Left off card on top; points plain text; Edit summary opens Live Markdown in the panel.
+- **Bookmarks:** reply button stays; Bookmark in the selected-text menu saves the quote, kept apart from the whole-reply bookmark.
+- **Removed UI:** Session metadata dialog and idle cover. Menus say Open Session overview; the hover card shows label, Left off and the Summary headings.
+- **Coming back:** after the wait in Settings → General (Off, 2–30 min, default 5), a chat with a Summary opens the overview on Summary.
+- **Settings:** group renamed Session overview; Effort picker (Automatic, Low, Medium, High; Claude and Codex); Antigravity allowed as the Notes model with a tools warning.
+- **Resize edge:** invisible until hover, then a thin line.
+- **Data:** keep both tables; delete nothing. Old AI points in saved panels are ignored and dropped on the next bookmark save.
+
+### Checklist (manual desktop)
+
+- [ ] Panel title reads Session overview; tabs Summary, Bookmarks, Files changed; opens on Summary.
+- [ ] Label input: type and blur saves; its sparkle replaces the label; empty label shows the chat title as placeholder.
+- [ ] Main sparkle: Summary gains a new group; label filled only when it was empty.
+- [ ] Auto switch per chat: on, a minute after a turn the Summary grows; off, nothing changes.
+- [ ] Summary groups start collapsed, newest first, open with a short slide; Left off card on top.
+- [ ] Edit summary: Live Markdown editor, Save, Cancel, Ctrl+Enter, Esc.
+- [ ] Select text in a reply → Bookmark: panel opens on Bookmarks with the quote; add a note; click jumps to the message.
+- [ ] Sidebar, tab and pane menus say Open Session overview; no Session metadata dialog anywhere; no blur cover on return.
+- [ ] Hover card on a chat shows label, Left off and the headings.
+- [ ] Leave a chat with a Summary for longer than the wait (set 2 min), come back: the overview opens on Summary.
+- [ ] Settings → Session overview: Effort picker saves; Antigravity selectable as Notes model with the warning.
+- [ ] Resize edge hidden until hover, a thin line on hover, accent while dragging.

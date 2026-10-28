@@ -1,7 +1,7 @@
 /**
- * When each chat was last on screen (fork, L-190), per device. The idle cover
- * uses it to open a chat already covered when you have been away from it
- * longer than the idle wait, including chats that were closed.
+ * When each chat was last on screen (fork, L-190, L-192), per device. Coming
+ * back to a chat after the "Open Session overview when you come back" wait
+ * opens its Session overview on Summary.
  */
 const KEY = "monocode.sessionLastSeen";
 const MAX_ENTRIES = 300;

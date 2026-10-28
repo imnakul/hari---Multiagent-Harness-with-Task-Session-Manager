@@ -7,9 +7,10 @@ import {
   useActivePaneStyle,
   useInactivePaneDim,
 } from "../../workspace/ui/PaneRing";
-import { useSessionIdleCover } from "../../sessions/ui/useSessionMetadata";
+import { useSessionOverviewReturn } from "../../sessions/ui/useSessionMetadata";
 import {
   DEFAULT_NOTES_INSTRUCTIONS,
+  SESSION_AI_EFFORTS,
   loadSessionMetadataAi,
   saveSessionMetadataAi,
   subscribeSessionMetadataAi,
@@ -479,8 +480,8 @@ import {
   loadSessionMetadataHover,
   saveSessionLabels,
   saveSessionMetadataHover,
-  saveSessionIdleCover,
-  SESSION_IDLE_COVER_CHOICES,
+  saveSessionOverviewReturn,
+  SESSION_OVERVIEW_RETURN_CHOICES,
   ACTIVE_PANE_STYLES,
   INACTIVE_PANE_DIMS,
   saveActivePaneStyle,
@@ -539,6 +540,7 @@ import {
   subscribeAiHelperSettings,
   type CollapsedProjectRailMode,
   type AiHelperSettings,
+  type AiHelperProvider,
   type AiHelperTarget,
   type DiffViewer,
   type FileTabMode,
@@ -1213,7 +1215,7 @@ function GeneralPage({
     useState<NotificationPermission>(cachedNotificationPermission);
   const [notesEnabled, setNotesEnabled] = useState(loadNotesEnabled);
   const [sessionLabels, setSessionLabels] = useState(loadSessionLabels);
-  const sessionIdleCover = useSessionIdleCover();
+  const sessionOverviewReturn = useSessionOverviewReturn();
   const [sessionMetadataHover, setSessionMetadataHover] = useState(
     loadSessionMetadataHover,
   );
@@ -1430,7 +1432,7 @@ function GeneralPage({
         <Row
           id="session-labels"
           label="Show label where available"
-          description="When a chat has a label (right-click a chat → Session metadata…), show it in accent colour in place of the chat title on session cards and tabs."
+          description="When a chat has a label (set it at the top of its Session overview), show it in accent colour in place of the chat title on session cards and tabs."
         >
           <Toggle
             label="Show label where available"
@@ -1441,7 +1443,7 @@ function GeneralPage({
         <Row
           id="session-metadata-hover"
           label="Show metadata on hover"
-          description="Hovering a chat card or tab shows its label and notes instead of the branch and folder details. Chats without metadata keep the usual hover."
+          description="Hovering a chat card or tab shows its label, where it left off and its Summary headings instead of the branch and folder details. Chats without a label or Summary keep the usual hover."
         >
           <Toggle
             label="Show metadata on hover"
@@ -1450,18 +1452,18 @@ function GeneralPage({
           />
         </Row>
         <Row
-          id="session-idle-cover"
-          label="Cover idle sessions"
-          description="When an open chat with a label or notes has had no activity for this long, blur it behind a card with its metadata. Hover to peek; click to show it again. Chats that are working or waiting on you are never covered."
+          id="session-overview-return"
+          label="Open Session overview when you come back"
+          description="When you come back to a chat you have been away from for this long, open its Session overview on the Summary. Only chats with a Summary open it."
         >
           <Segmented
-            label="Cover idle sessions"
-            value={sessionIdleCover}
-            options={SESSION_IDLE_COVER_CHOICES.map((value) => ({
+            label="Open Session overview when you come back"
+            value={sessionOverviewReturn}
+            options={SESSION_OVERVIEW_RETURN_CHOICES.map((value) => ({
               value,
               label: value === "off" ? "Off" : `${value} min`,
             }))}
-            onChange={saveSessionIdleCover}
+            onChange={saveSessionOverviewReturn}
           />
         </Row>
         {(IS_MAC || IS_WIN) && (
@@ -1912,7 +1914,7 @@ function ChatPage() {
   );
 }
 
-/** Settings for the AI label and notes in Session metadata (fork, L-190). */
+/** Settings for the AI label and Summary in the Session overview (fork, L-190, L-192). */
 function SessionMetadataAiGroup() {
   const settings = useSyncExternalStore(
     subscribeSessionMetadataAi,
@@ -1925,8 +1927,8 @@ function SessionMetadataAiGroup() {
 
   return (
     <Group
-      title="Session metadata"
-      description="The AI buttons in a chat's Session metadata, and Auto notes for the Session panel. Notes only grow: each run adds what is new and replaces the closing Left off line."
+      title="Session overview"
+      description="The AI buttons and Auto in a chat's Session overview. The Summary only grows: each run adds what is new and replaces the Left off line."
     >
       <Row
         id="session-metadata-ai-model"
@@ -1934,7 +1936,7 @@ function SessionMetadataAiGroup() {
         description="Same as AI helper follows the AI helper settings above."
       >
         <Segmented
-          label="Session metadata model"
+          label="Session overview model"
           value={settings.helper ? "custom" : "same"}
           options={[
             { value: "same", label: "Same as AI helper" },
@@ -1956,15 +1958,38 @@ function SessionMetadataAiGroup() {
           label="Notes model"
           target={settings.helper}
           onChange={(helper) => update({ helper })}
+          allowUnverified
         />
       ) : null}
       <Row
+        id="session-metadata-ai-effort"
+        label="Effort"
+        description="How hard the model thinks when it writes the label and Summary. Automatic lets the provider decide; providers without an effort setting ignore it."
+      >
+        <Segmented
+          label="Session overview effort"
+          value={settings.effort ?? "auto"}
+          options={[
+            { value: "auto", label: "Automatic" },
+            ...SESSION_AI_EFFORTS.map((effort) => ({
+              value: effort,
+              label: effort[0]!.toUpperCase() + effort.slice(1),
+            })),
+          ]}
+          onChange={(value) => {
+            const effort = SESSION_AI_EFFORTS.find((candidate) => candidate === value);
+            const { effort: _previous, ...rest } = settings;
+            saveSessionMetadataAi(effort ? { ...rest, effort } : rest);
+          }}
+        />
+      </Row>
+      <Row
         id="session-metadata-auto-notes"
-        label="Auto notes for new chats"
-        description="A minute after a turn ends, the AI logs what is new in the chat's Session panel (timeline, decisions, Left off); notes are left as you wrote them. Each chat can turn it on or off in its Session metadata. Uses one AI helper call per quiet turn."
+        label="Auto summary for new chats"
+        description="A minute after a turn ends, the AI adds what is new to the chat's Summary and writes a label if it has none. Each chat has its own Auto switch in its Session overview. Uses one AI helper call per quiet turn."
       >
         <Toggle
-          label="Auto notes for new chats"
+          label="Auto summary for new chats"
           on={settings.autoDefault}
           onChange={(autoDefault) => update({ autoDefault })}
         />
@@ -2019,14 +2044,22 @@ function AiHelperTargetEditor({
   target,
   onChange,
   action,
+  allowUnverified = false,
 }: {
   id: string;
   label: string;
   target: AiHelperTarget;
   onChange: (target: AiHelperTarget) => void;
   action?: ReactNode;
+  /**
+   * Lets providers whose built-in tools can't be switched off be picked, with
+   * a warning (L-192). Only the Session overview model uses it.
+   */
+  allowUnverified?: boolean;
 }) {
   const [providerSelectOpen, setProviderSelectOpen] = useState(false);
+  const usable = (provider: AiHelperProvider): boolean =>
+    allowUnverified || HELPER_ISOLATION[provider].verified;
   const providerOptions = AI_HELPER_PROVIDERS.map((provider) => {
     const isolation = HELPER_ISOLATION[provider];
     const notInstalled =
@@ -2034,10 +2067,10 @@ function AiHelperTargetEditor({
     return {
       value: provider,
       label:
-        provider === "antigravity" && !isolation.verified
+        provider === "antigravity" && !usable(provider)
           ? "Antigravity (not available yet)"
           : `${HARNESS_TITLE[provider]}${notInstalled ? " (not installed)" : ""}`,
-      disabled: !isolation.verified,
+      disabled: !usable(provider),
       title: isolation.reason,
       description: isolation.reason,
     };
@@ -2072,12 +2105,20 @@ function AiHelperTargetEditor({
       "Not in the current model list. The provider will decide if it works.",
     );
   }
-  if (
+  if (!HELPER_ISOLATION[target.provider].verified && allowUnverified) {
+    warnings.push(
+      `${HARNESS_TITLE[target.provider]}'s built-in tools can't be switched off, so it may look at files in the chat's folder while it writes.`,
+    );
+  } else if (
     target.provider === "antigravity" &&
     !HELPER_ISOLATION.antigravity.verified
   ) {
     warnings.push(HELPER_ISOLATION.antigravity.reason ?? "");
-  } else if (providerSelectOpen && HELPER_ISOLATION.antigravity.reason) {
+  } else if (
+    providerSelectOpen &&
+    !allowUnverified &&
+    HELPER_ISOLATION.antigravity.reason
+  ) {
     warnings.push(HELPER_ISOLATION.antigravity.reason);
   }
 
@@ -2085,7 +2126,7 @@ function AiHelperTargetEditor({
     const provider = AI_HELPER_PROVIDERS.find(
       (candidate) => candidate === value,
     );
-    if (!provider || !HELPER_ISOLATION[provider].verified) return;
+    if (!provider || !usable(provider)) return;
     onChange({ provider });
   };
 

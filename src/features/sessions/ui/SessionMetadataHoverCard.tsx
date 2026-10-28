@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useMemo,
   useState,
   type FocusEvent,
   type PointerEvent,
@@ -12,6 +13,7 @@ import {
 import type { PopoverSide } from "../../../shared/lib/popover";
 import { Popover } from "../../../shared/ui/Popover";
 import type { SessionMetadata } from "../model/sessionMetadata";
+import { notesSummary } from "../model/sessionMetadataAi";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { useSessionHoverMetadata } from "./useSessionMetadata";
 
@@ -25,8 +27,9 @@ function stopPropagation(event: SyntheticEvent): void {
 }
 
 /**
- * Label (accent) and rendered notes of one chat (L-181). `title` is the
- * chat's own title, shown under the label so the chat stays recognisable.
+ * Label (accent), Left off and Summary headings of one chat (L-181, L-192).
+ * `title` is the chat's own title, shown under the label so the chat stays
+ * recognisable. The full Summary lives in the Session overview.
  */
 export function SessionMetadataBody({
   metadata,
@@ -35,7 +38,8 @@ export function SessionMetadataBody({
   metadata: SessionMetadata;
   title: string;
 }): ReactNode {
-  const notes = metadata.notes.trim();
+  const summary = useMemo(() => notesSummary(metadata.notes), [metadata.notes]);
+  const hasSummary = summary.leftOff !== null || summary.groups.length > 0;
   return (
     <>
       {metadata.label ? (
@@ -54,9 +58,31 @@ export function SessionMetadataBody({
           {title}
         </p>
       ) : null}
-      {notes ? (
-        <div className="mt-2 border-t border-stroke pt-2 text-[12px]">
-          <AgentMarkdown text={notes} hardBreaks />
+      {hasSummary ? (
+        <div className="mt-2 space-y-1.5 border-t border-stroke pt-2 text-[12px] leading-[18px]">
+          {summary.leftOff ? (
+            <div className="text-content/85">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-content/45">
+                Left off
+              </p>
+              <AgentMarkdown text={summary.leftOff} hardBreaks />
+            </div>
+          ) : null}
+          {summary.groups.length > 0 ? (
+            <ul role="list" className="space-y-0.5 text-content/65">
+              {summary.groups.map((group, index) =>
+                group.heading ? (
+                  <li key={index} className="truncate">
+                    {group.heading}
+                  </li>
+                ) : (
+                  <li key={index} className="line-clamp-3">
+                    <AgentMarkdown text={group.body} hardBreaks />
+                  </li>
+                ),
+              )}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </>

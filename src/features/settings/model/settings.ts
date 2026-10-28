@@ -286,13 +286,13 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     id: "session-metadata-hover",
     section: "general",
     label: "Show metadata on hover",
-    keywords: "session metadata label notes hover tooltip preview cards tabs",
+    keywords: "session overview metadata label summary left off hover tooltip preview cards tabs",
   },
   {
-    id: "session-idle-cover",
+    id: "session-overview-return",
     section: "general",
-    label: "Cover idle sessions",
-    keywords: "session metadata label notes idle inactive blur cover privacy away",
+    label: "Open Session overview when you come back",
+    keywords: "session overview summary notes away return idle panel open",
   },
   ...(IS_MAC || IS_WIN
     ? [
@@ -551,20 +551,26 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
   {
     id: "session-metadata-ai-model",
     section: "chat",
-    label: "Session metadata model",
-    keywords: "session metadata notes label ai helper model",
+    label: "Session overview model",
+    keywords: "session overview summary metadata notes label ai helper model antigravity",
+  },
+  {
+    id: "session-metadata-ai-effort",
+    section: "chat",
+    label: "Session overview effort",
+    keywords: "session overview summary label ai helper effort reasoning thinking low medium high",
   },
   {
     id: "session-metadata-auto-notes",
     section: "chat",
-    label: "Auto notes",
-    keywords: "session metadata notes automatic auto ai left off",
+    label: "Auto summary for new chats",
+    keywords: "session overview summary metadata notes automatic auto ai left off label",
   },
   {
     id: "session-metadata-instructions",
     section: "chat",
     label: "Notes instructions",
-    keywords: "session metadata notes instructions prompt style ai reset default",
+    keywords: "session overview summary metadata notes instructions prompt style ai reset default",
   },
   {
     id: "composer-autocorrect",
@@ -1890,25 +1896,25 @@ export const saveSessionMetadataHover = sessionMetadataHoverSetting.save;
 export const subscribeSessionMetadataHover = sessionMetadataHoverSetting.subscribe;
 
 /**
- * Idle cover (fork, L-185): an open chat with a label or notes, left alone for
- * this many minutes, is blurred behind a card with its metadata. Off by
- * default.
+ * Coming back to a chat (fork, L-192; replaces the L-185 idle cover): a chat
+ * with a Summary that was off screen for this many minutes opens with the
+ * Session overview on Summary.
  */
-export const SESSION_IDLE_COVER_CHOICES = ["off", "2", "5", "10", "15", "30"] as const;
-export type SessionIdleCoverChoice = (typeof SESSION_IDLE_COVER_CHOICES)[number];
+export const SESSION_OVERVIEW_RETURN_CHOICES = ["off", "2", "5", "10", "15", "30"] as const;
+export type SessionOverviewReturnChoice = (typeof SESSION_OVERVIEW_RETURN_CHOICES)[number];
 
-const sessionIdleCoverSetting = storedChoice<SessionIdleCoverChoice>(
-  "monocode.sessionIdleCover",
-  SESSION_IDLE_COVER_CHOICES,
-  "off",
-  "monocode:session-idle-cover-change",
+const sessionOverviewReturnSetting = storedChoice<SessionOverviewReturnChoice>(
+  "monocode.sessionOverviewReturn",
+  SESSION_OVERVIEW_RETURN_CHOICES,
+  "5",
+  "monocode:session-overview-return-change",
 );
-export const loadSessionIdleCover = sessionIdleCoverSetting.load;
-export const saveSessionIdleCover = sessionIdleCoverSetting.save;
-export const subscribeSessionIdleCover = sessionIdleCoverSetting.subscribe;
+export const loadSessionOverviewReturn = sessionOverviewReturnSetting.load;
+export const saveSessionOverviewReturn = sessionOverviewReturnSetting.save;
+export const subscribeSessionOverviewReturn = sessionOverviewReturnSetting.subscribe;
 
-/** The idle wait in ms for a choice, or null when off. */
-export function sessionIdleCoverMs(choice: SessionIdleCoverChoice): number | null {
+/** The time away in ms for a choice, or null when off. */
+export function sessionOverviewReturnMs(choice: SessionOverviewReturnChoice): number | null {
   return choice === "off" ? null : Number(choice) * 60_000;
 }
 

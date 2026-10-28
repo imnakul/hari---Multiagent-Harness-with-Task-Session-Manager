@@ -18,7 +18,13 @@ export type SessionMetadataAiSettings = {
   instructions: string;
   /** Auto notes for chats that have no switch of their own. */
   autoDefault: boolean;
+  /** Reasoning effort for helper runs (L-192); missing lets the provider pick. */
+  effort?: SessionAiEffort;
 };
+
+/** Effort levels every helper provider with an effort setting understands. */
+export const SESSION_AI_EFFORTS = ["low", "medium", "high"] as const;
+export type SessionAiEffort = (typeof SESSION_AI_EFFORTS)[number];
 
 export const DEFAULT_NOTES_INSTRUCTIONS = `Group points by thread of work: one feature, bug, screen or task per bold heading, with its kind in brackets, e.g. **Rubrics (open-ended)** or **KaTeX in question bank (bug fix)**.
 - Under each heading, short bullets, keywords first, no full sentences. Name the feature, screen, file or endpoint.
@@ -78,6 +84,9 @@ export function parseSessionMetadataAi(raw: unknown): SessionMetadataAiSettings 
     helper: parseAiHelperTarget(raw.helper),
     instructions: typeof raw.instructions === "string" ? raw.instructions : "",
     autoDefault: raw.autoDefault === true,
+    ...(SESSION_AI_EFFORTS.includes(raw.effort as SessionAiEffort)
+      ? { effort: raw.effort as SessionAiEffort }
+      : {}),
   };
 }
 
@@ -302,4 +311,49 @@ export function appendSessionNotes(notes: string, addition: string): string {
   if (!added) return notes;
   if (!base) return added;
   return `${base}${LIST_ITEM.test(added) ? "\n" : "\n\n"}${added}`;
+}
+
+export type SummaryGroup = { heading: string; body: string };
+
+export type NotesSummary = {
+  /** The last Left off line's text, without the bold label. */
+  leftOff: string | null;
+  /** One group per heading, newest (last written) first. */
+  groups: SummaryGroup[];
+};
+
+const HEADING_LINE = /^[ \t]*(?:#{1,6}[ \t]+(.+?)[ \t#]*|\*\*([^*\n]+?)\*\*:?[ \t]*)$/;
+const LEFT_OFF_TEXT = /\*\*Left off:?\*\*:?[ \t]*(.*)$/i;
+const LEFT_OFF_ANY = new RegExp(LEFT_OFF_LINE.source, "i");
+
+/**
+ * The notes split for the Session overview (L-192): the Left off line on its
+ * own, and the rest grouped by heading (a Markdown heading or a line that is
+ * only bold text). Text before the first heading becomes a group with no
+ * heading. Empty groups are dropped.
+ */
+export function notesSummary(notes: string): NotesSummary {
+  const lines = notes.replace(/\r\n?/g, "\n").split("\n");
+  let leftOff: string | null = null;
+  const groups: SummaryGroup[] = [];
+  let current: { heading: string; lines: string[] } = { heading: "", lines: [] };
+  const flush = (): void => {
+    const body = current.lines.join("\n").replace(/^\n+|\s+$/g, "");
+    if (current.heading || body) groups.push({ heading: current.heading, body });
+  };
+  for (const line of lines) {
+    if (LEFT_OFF_ANY.test(line)) {
+      leftOff = LEFT_OFF_TEXT.exec(line)?.[1]?.trim() || null;
+      continue;
+    }
+    const heading = HEADING_LINE.exec(line);
+    if (heading) {
+      flush();
+      current = { heading: (heading[1] ?? heading[2] ?? "").trim(), lines: [] };
+      continue;
+    }
+    current.lines.push(line);
+  }
+  flush();
+  return { leftOff, groups: groups.reverse() };
 }

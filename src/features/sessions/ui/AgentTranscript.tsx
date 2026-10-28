@@ -304,8 +304,10 @@ type Props = {
   onReviewFix?: (issue: ReviewIssue) => void;
   onSidechat?: (turn: Block[]) => void;
   onBranch?: (turn: Block[]) => void;
-  /** Bookmarks the turn in the Session panel (fork, L-191). */
+  /** Bookmarks the turn in the Session overview (fork, L-191). */
   onBookmarkTurn?: (turn: Block[]) => void;
+  /** Bookmarks the selected text (L-192); `blockId` is the reply it came from. */
+  onBookmarkQuote?: (text: string, blockId?: string) => void | Promise<void>;
   /** Block ids that carry a bookmark, so the turn's button shows as set. */
   bookmarkedBlockIds?: ReadonlySet<string>;
   onEditLastTurn?: () => void;
@@ -387,6 +389,7 @@ function AgentTranscriptComponent({
   onSidechat,
   onBranch,
   onBookmarkTurn,
+  onBookmarkQuote,
   bookmarkedBlockIds,
   onEditLastTurn,
   editingLastTurn = false,
@@ -1888,12 +1891,13 @@ function AgentTranscriptComponent({
           );
         })}
       </TranscriptContent>
-      {onAddToChat || onSaveSelectionNote || onSaveSelectionTask ? (
+      {onAddToChat || onSaveSelectionNote || onSaveSelectionTask || onBookmarkQuote ? (
         <TranscriptSelectionMenu
           selection={selection}
           onAddToChat={onAddToChat}
           onAddToNotes={onSaveSelectionNote}
           onAddToTask={onSaveSelectionTask}
+          onBookmark={onBookmarkQuote}
           onDismiss={dismissSelection}
         />
       ) : null}
@@ -2204,8 +2208,8 @@ function TurnDuration({
             type="button"
             title={
               bookmarked
-                ? "Bookmarked — edit it in the Session panel"
-                : "Bookmark this turn in the Session panel"
+                ? "Bookmarked — edit it in the Session overview"
+                : "Bookmark this turn in the Session overview"
             }
             aria-label={bookmarked ? "Bookmarked" : "Bookmark this turn"}
             aria-pressed={bookmarked}

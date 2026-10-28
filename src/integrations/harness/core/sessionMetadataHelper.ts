@@ -11,13 +11,6 @@ import {
   type SessionMetadataAiSettings,
 } from "../../../features/sessions/model/sessionMetadataAi";
 import {
-  buildPointsPrompt,
-  parsePointsReply,
-  taggedTranscript,
-  type PointsReply,
-  type SessionPanelData,
-} from "../../../features/sessions/model/sessionPanel";
-import {
   AI_HELPER_PROVIDERS,
   loadAiHelperSettings,
   type AiHelperSettings,
@@ -110,6 +103,7 @@ async function runTargets<T>(
         timeoutMs,
         providerAccountId: target.accountId,
         model: target.model,
+        ...(settings.effort ? { modelSettings: { effort: settings.effort } } : {}),
       }));
   const failures: string[] = [];
   for (const target of targets) {
@@ -174,22 +168,4 @@ export async function writeSessionNotes(
       what: "notes",
     },
   );
-}
-
-/**
- * Session panel points (L-191): what to add from `blocks`; `scope` "update"
- * means `blocks` are only the messages since the last run.
- */
-export async function writeSessionPoints(
-  input: HelperInput & { data: SessionPanelData; scope: "full" | "update" },
-): Promise<MetadataHelperOutcome<PointsReply>> {
-  const transcript = taggedTranscript(input.blocks);
-  if (!transcript.text.trim()) return emptyChat("panel");
-  return runTargets(input, {
-    prompt: buildPointsPrompt({ transcript: transcript.text, data: input.data, scope: input.scope }),
-    timeoutMs: TIMEOUT_MS[input.scope],
-    parse: (raw) => parsePointsReply(raw, transcript.ids),
-    expected: "lines like `decision | m12 | text`, ending with one `leftoff | mN | text` line, or NOTHING_NEW",
-    what: "panel",
-  });
 }

@@ -159,14 +159,14 @@ import { type ReviewIssue } from "../../inbox/model/githubTasks";
 import { RemoteSession } from "../../connections/ui/RemoteSession";
 import { isRemoteProjectPath } from "../../projects/model/recents";
 import type { HostSession } from "../../connections/model/protocol";
-import { sessionNeedsInput } from "../model/session";
-import { sessionIdleCoverMs } from "../../settings/model/settings";
-import { hasSessionMetadata } from "../model/sessionMetadata";
-import { SessionIdleCover, useIdleCover } from "./SessionIdleCover";
-import { useSessionIdleCover, useSessionMetadata } from "./useSessionMetadata";
+import { sessionOverviewReturnMs } from "../../settings/model/settings";
+import { loadSessionMetadataFor } from "../model/sessionMetadata";
+import { recordSessionSeen, sessionLastSeen } from "../model/sessionLastSeen";
+import { useSessionOverviewReturn } from "./useSessionMetadata";
 import { messageLine, SessionPanelDock, useSessionPanelView } from "./SessionPanel";
 import {
   addBookmark,
+  openSessionOverview,
   removeBookmark,
   saveSessionPanelView,
   sessionPanelSnapshot,
@@ -585,27 +585,37 @@ const LocalSessionPane = memo(function LocalSessionPane({
   useSyncExternalStore(subscribeMonos, monosSnapshot);
   const mono = monoForSession(session.id);
   const agent = mono ? monoLook(mono) : undefined;
-  // Idle cover (L-185): never over a working chat or one waiting on the user.
-  const idleCoverMetadata = useSessionMetadata(session.id);
-  const idleCoverChoice = useSessionIdleCover();
-  const idleCoverRoot = useRef<HTMLDivElement>(null);
-  const idleCoverEligible =
-    visible &&
-    !agent &&
-    hasSessionMetadata(idleCoverMetadata) &&
-    !session.busy &&
-    !session.externalTurnId &&
-    !session.pendingForm &&
-    !sessionNeedsInput(session);
-  const idleCover = useIdleCover(
-    idleCoverRoot,
-    sessionIdleCoverMs(idleCoverChoice),
-    idleCoverEligible,
-    visible ? session.id : null,
-  );
-  // Session panel (L-191): docked right; not for Monos, inbox asks or remote chats.
+  const paneRow = useRef<HTMLDivElement>(null);
+  // Session overview (L-191, L-192): docked right; not for Monos, inbox asks or remote chats.
   const panelEnabled = !agent && !session.inboxAsk && !remote;
   const panelView = useSessionPanelView();
+  // Coming back to a chat after the chosen wait opens the overview on its
+  // Summary, once the chat has one (L-192; replaces the idle cover).
+  const overviewReturnChoice = useSessionOverviewReturn();
+  useEffect(() => {
+    if (!visible) return;
+    let left = false;
+    const wait = sessionOverviewReturnMs(overviewReturnChoice);
+    const seen = sessionLastSeen(session.id);
+    if (panelEnabled && wait !== null && seen !== null && Date.now() - seen >= wait)
+      // Loads the map first when the app has just started.
+      void loadSessionMetadataFor(session.id)
+        .then((metadata) => {
+          if (!left && metadata?.notes.trim()) openSessionOverview();
+        })
+        .catch(() => undefined);
+    const recordSeen = (): void => recordSessionSeen(session.id, Date.now());
+    recordSeen();
+    // Quitting the app with this chat open counts as leaving it.
+    window.addEventListener("pagehide", recordSeen);
+    return () => {
+      left = true;
+      window.removeEventListener("pagehide", recordSeen);
+      recordSeen();
+    };
+    // Only arriving at the chat counts; a settings change mid-visit does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, session.id]);
   const subscribePanel = useCallback(
     (listener: () => void) =>
       panelEnabled ? subscribeSessionPanel(session.id, listener) : () => {},
@@ -616,8 +626,14 @@ const LocalSessionPane = memo(function LocalSessionPane({
     () => sessionPanelSnapshot(session.id),
     () => sessionPanelSnapshot(session.id),
   ).data;
+  // Whole-reply bookmarks only: a saved quote doesn't mark its reply as set.
   const bookmarkedBlockIds = useMemo(
-    () => new Set(panelData.bookmarks.map((bookmark) => bookmark.blockId)),
+    () =>
+      new Set(
+        panelData.bookmarks
+          .filter((bookmark) => !bookmark.quote)
+          .map((bookmark) => bookmark.blockId),
+      ),
     [panelData.bookmarks],
   );
   const bookmarkTurn = useCallback(
@@ -625,7 +641,9 @@ const LocalSessionPane = memo(function LocalSessionPane({
       const first = turn[0];
       if (!first) return;
       const ids = new Set(turn.map((block) => block.id));
-      const marked = panelData.bookmarks.filter((bookmark) => ids.has(bookmark.blockId));
+      const marked = panelData.bookmarks.filter(
+        (bookmark) => !bookmark.quote && ids.has(bookmark.blockId),
+      );
       const saved = updateSessionPanel(session.id, (current) =>
         marked.length > 0
           ? marked.reduce((next, bookmark) => removeBookmark(next, bookmark.id), current)
@@ -635,6 +653,15 @@ const LocalSessionPane = memo(function LocalSessionPane({
       if (marked.length === 0) saveSessionPanelView({ open: true, tab: "bookmarks" });
     },
     [panelData.bookmarks, session.id],
+  );
+  const bookmarkQuote = useCallback(
+    async (quote: string, blockId?: string) => {
+      await updateSessionPanel(session.id, (current) =>
+        addBookmark(current, blockId ?? "", "", Date.now(), quote),
+      );
+      saveSessionPanelView({ open: true, tab: "bookmarks" });
+    },
+    [session.id],
   );
   // A Mono shows only its own background, never the project's or the app's.
   const projectBackground = mono
@@ -1111,8 +1138,8 @@ const LocalSessionPane = memo(function LocalSessionPane({
             type="button"
             onClick={toggleSessionPanel}
             aria-pressed={panelView.open}
-            aria-label="Session panel"
-            title={`${panelView.open ? "Hide" : "Show"} Session panel (${MOD}${SHIFT}O)`}
+            aria-label="Session overview"
+            title={`${panelView.open ? "Hide" : "Show"} Session overview (${MOD}${SHIFT}O)`}
             className={`flex size-6 items-center justify-center rounded-md transition-colors duration-100 hover:bg-content/5 hover:text-content ${
               panelView.open ? "text-accent" : "text-content/50"
             }`}
@@ -1200,17 +1227,9 @@ const LocalSessionPane = memo(function LocalSessionPane({
         </div>
       ) : null}
       <div
-        ref={idleCoverRoot}
-        data-idle-covered={idleCover.covered && !idleCover.peeking ? "" : undefined}
+        ref={paneRow}
         className="relative flex min-h-0 min-w-0 flex-1"
       >
-        {idleCoverEligible && hasSessionMetadata(idleCoverMetadata) ? (
-          <SessionIdleCover
-            state={idleCover}
-            metadata={idleCoverMetadata}
-            title={title}
-          />
-        ) : null}
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {visible && historyNotice ? (
             <SessionProviderStrip
@@ -1410,6 +1429,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
                     }
                     onSidechat={onSidechat ? askSidechat : undefined}
                     onBookmarkTurn={panelEnabled ? bookmarkTurn : undefined}
+                    onBookmarkQuote={panelEnabled ? bookmarkQuote : undefined}
                     bookmarkedBlockIds={panelEnabled ? bookmarkedBlockIds : undefined}
                     onBranch={onBranch ? branchTurn : undefined}
                     onSaveSelectionTask={saveSelectionTask}
@@ -1723,7 +1743,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
             session={session}
             blocks={history.transcriptBlocks}
             title={title}
-            row={idleCoverRoot}
+            row={paneRow}
             onNavigate={navigateBlock}
             onOpenFile={onOpenFile}
           />

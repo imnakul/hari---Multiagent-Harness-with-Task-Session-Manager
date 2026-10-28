@@ -1,4 +1,4 @@
-import { requestSessionMetadataEdit } from "../../features/sessions/model/sessionMetadata";
+import { openSessionOverview } from "../../features/sessions/model/sessionPanel";
 import {
   loadSessionOpeningBehavior,
   newTabClick,
@@ -1690,9 +1690,9 @@ function SidebarComponent({
       ? [
           {
             kind: "item" as const,
-            id: "session-metadata",
-            label: "Session metadata…",
-            description: "Label and notes",
+            id: "session-overview",
+            label: "Open Session overview",
+            description: "Label, summary, bookmarks and files",
           },
         ]
       : []),
@@ -1857,8 +1857,9 @@ function SidebarComponent({
       setRenamingSessionId(sessionId);
       return;
     }
-    if (id === "session-metadata") {
-      requestSessionMetadataEdit(sessionId, menuSessions[0]?.title ?? "");
+    if (id === "session-overview") {
+      onSelectSession(sessionId);
+      openSessionOverview();
       return;
     }
     if (id === "copy-harness-session-id" || id === "copy-monocode-session-id") {

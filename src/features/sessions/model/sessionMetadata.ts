@@ -16,8 +16,6 @@ export type SessionMetadata = {
 /** Emitted by the backend to every window after a save. */
 export const SESSION_METADATA_CHANGED_EVENT =
   "monocode:session-metadata-changed";
-/** Asks this window's dialog host to open the editor (`SessionMetadataEditRequest`). */
-export const SESSION_METADATA_EDIT_EVENT = "monocode:session-metadata-edit";
 
 export const SESSION_LABEL_MAX = 120;
 export const SESSION_NOTES_MAX = 100_000;
@@ -101,31 +99,6 @@ export async function saveSessionMetadata(
   else next.delete(sessionId);
   publish(next);
   return saved;
-}
-
-/** `title` is the chat's own title, shown in the dialog so it is clear which chat. */
-export type SessionMetadataEditRequest = { sessionId: string; title: string };
-
-/** Opens the Session metadata dialog (mounted once per window) for one chat. */
-export function requestSessionMetadataEdit(
-  sessionId: string,
-  title: string,
-): void {
-  window.dispatchEvent(
-    new CustomEvent<SessionMetadataEditRequest>(SESSION_METADATA_EDIT_EVENT, {
-      detail: { sessionId, title },
-    }),
-  );
-}
-
-/** Reads the event detail sent by `requestSessionMetadataEdit`. */
-export function parseSessionMetadataEditRequest(
-  detail: unknown,
-): SessionMetadataEditRequest | null {
-  if (!isRecord(detail)) return null;
-  const { sessionId, title } = detail;
-  if (typeof sessionId !== "string" || !sessionId) return null;
-  return { sessionId, title: typeof title === "string" ? title : "" };
 }
 
 // One map per window, loaded on the first subscriber and refreshed whenever

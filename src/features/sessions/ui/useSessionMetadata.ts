@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from "react";
 import {
-  loadSessionIdleCover,
+  loadSessionOverviewReturn,
   loadSessionLabels,
   loadSessionMetadataHover,
-  subscribeSessionIdleCover,
+  subscribeSessionOverviewReturn,
   subscribeSessionLabels,
   subscribeSessionMetadataHover,
-  type SessionIdleCoverChoice,
+  type SessionOverviewReturnChoice,
 } from "../../settings/model/settings";
 import {
   hasSessionMetadata,
@@ -42,11 +42,11 @@ export function useShowSessionLabels(): boolean {
   );
 }
 
-/** Settings → General → Cover idle sessions (L-185), live. */
-export function useSessionIdleCover(): SessionIdleCoverChoice {
+/** Settings → General → Open Session overview when you come back (L-192), live. */
+export function useSessionOverviewReturn(): SessionOverviewReturnChoice {
   return useSyncExternalStore(
-    subscribeSessionIdleCover,
-    loadSessionIdleCover,
+    subscribeSessionOverviewReturn,
+    loadSessionOverviewReturn,
     () => "off",
   );
 }

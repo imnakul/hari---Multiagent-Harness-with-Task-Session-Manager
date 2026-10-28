@@ -57,6 +57,7 @@ export const codexAdapter: HarnessAdapter = {
     timeoutMs,
     providerAccountId,
     model,
+    modelSettings,
     outputSchema,
   }) =>
     runCodexTextPrompt({
@@ -65,6 +66,7 @@ export const codexAdapter: HarnessAdapter = {
       timeoutMs,
       providerAccountId,
       model,
+      modelSettings,
       outputSchema,
       helperOnly: true,
     }),

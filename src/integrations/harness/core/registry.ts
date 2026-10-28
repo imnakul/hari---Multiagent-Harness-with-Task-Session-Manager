@@ -45,6 +45,8 @@ export type HelperPromptInput = {
   timeoutMs: number;
   providerAccountId?: string;
   model?: string;
+  /** e.g. `{ effort }` (L-192); providers ignore keys they do not use. */
+  modelSettings?: Record<string, string>;
   outputSchema?: Record<string, unknown>;
 };
 

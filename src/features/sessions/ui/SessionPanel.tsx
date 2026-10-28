@@ -12,16 +12,26 @@ import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { MOD, SHIFT } from "../../../platform/tauri/platform";
 import { Loader, PanelRight, Pencil, Sparkles, X } from "../../../shared/ui/icons";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
+import { Toggle } from "../../../shared/ui/Toggle";
 import type { Block, Session } from "../model/session";
-import { requestSessionMetadataEdit } from "../model/sessionMetadata";
+import {
+  saveSessionMetadata,
+  SESSION_LABEL_MAX,
+  sessionMetadataError,
+} from "../model/sessionMetadata";
+import {
+  autoNotesOn,
+  notesSummary,
+  setAutoNotes,
+  subscribeAutoNotes,
+  subscribeSessionMetadataAi,
+} from "../model/sessionMetadataAi";
 import {
   clampPanelWidth,
   editBookmark,
-  editPoint,
   EMPTY_SESSION_PANEL,
   loadSessionPanelView,
   removeBookmark,
-  removePoint,
   saveSessionPanelView,
   SESSION_PANEL_MAX_WIDTH,
   SESSION_PANEL_MIN_WIDTH,
@@ -36,37 +46,44 @@ import {
   type SessionPanelView,
 } from "../model/sessionPanel";
 import { AgentMarkdown } from "./AgentMarkdown";
+import type { MarkdownViewMode } from "./MarkdownModeToggle";
+import type { MarkdownCaretTarget } from "./markdownCaret";
+import { MarkdownEditorPanel } from "./MarkdownEditorPanel";
 import {
-  sessionPanelUpdating,
-  updateSessionPanelWithAi,
+  rewriteSessionLabel,
+  sessionLabelUpdating,
+  sessionSummaryUpdating,
+  setSummaryEditing,
+  subscribeSummaryRuns,
+  updateSessionSummary,
+  type SummaryUpdateResult,
 } from "./SessionMetadataAutoWriter";
 import {
   BookmarkRow,
   FileRow,
   LeftOffCard,
-  PanelRow,
-  PointIcon,
-  POINT_LOOK,
+  SummaryGroupRow,
   type RowLink,
 } from "./SessionPanelItems";
 import { useSessionMetadata } from "./useSessionMetadata";
 
 /**
- * Session panel (fork, L-191): a glass panel docked on the right of a chat
- * pane. Timeline, Decisions, Files, Notes and Bookmarks; rows jump to their
- * message. Below `DOCK_MIN_CHAT` of room for the chat it folds into a button
- * that opens it over the chat instead.
+ * Session overview (fork, L-191; reworked in L-192): a glass panel docked on
+ * the right of a chat pane. Header: the chat's label and Auto; tabs Summary
+ * (the chat's AI notes, grouped by heading), Bookmarks and Files changed.
+ * Below `DOCK_MIN_CHAT` of room for the chat it folds into a button that
+ * opens it over the chat instead.
  */
 const TAB_LABEL: Record<SessionPanelTab, string> = {
-  timeline: "Timeline",
-  decisions: "Decisions",
-  files: "Files",
-  notes: "Notes",
+  summary: "Summary",
   bookmarks: "Bookmarks",
+  files: "Files changed",
 };
 const DOCK_MIN_CHAT = 440;
 const DEFAULT_WIDTH = 320;
 const NOT_LOADED = { data: EMPTY_SESSION_PANEL, loaded: false };
+const ICON_BUTTON =
+  "grid size-7 shrink-0 place-items-center rounded-md text-content/55 transition-colors duration-100 hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:opacity-50 disabled:hover:bg-transparent";
 
 export function useSessionPanelView(): SessionPanelView {
   return useSyncExternalStore(subscribeSessionPanelView, loadSessionPanelView, loadSessionPanelView);
@@ -78,6 +95,36 @@ function useSessionPanelData(sessionId: string): { data: SessionPanelData; loade
     [sessionId],
   );
   return useSyncExternalStore(subscribe, () => sessionPanelSnapshot(sessionId), () => NOT_LOADED);
+}
+
+function useAutoNotes(sessionId: string): boolean {
+  const subscribe = useCallback((listener: () => void) => {
+    const stopAuto = subscribeAutoNotes(listener);
+    const stopSettings = subscribeSessionMetadataAi(listener);
+    return () => {
+      stopAuto();
+      stopSettings();
+    };
+  }, []);
+  return useSyncExternalStore(subscribe, () => autoNotesOn(sessionId), () => false);
+}
+
+function useRunning(sessionId: string): { summary: boolean; label: boolean } {
+  const summary = useSyncExternalStore(
+    subscribeSummaryRuns,
+    () => sessionSummaryUpdating(sessionId),
+    () => false,
+  );
+  const label = useSyncExternalStore(
+    subscribeSummaryRuns,
+    () => sessionLabelUpdating(sessionId),
+    () => false,
+  );
+  return { summary, label };
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** The first line of a message, for bookmarks saved without text. */
@@ -120,8 +167,8 @@ export function SessionPanelDock(props: DockProps): ReactNode {
       <button
         type="button"
         onClick={() => setOverlay(true)}
-        title="Show the Session panel"
-        aria-label="Show the Session panel"
+        title="Show the Session overview"
+        aria-label="Show the Session overview"
         className="absolute right-2 top-2 z-20 isolate grid size-8 place-items-center overflow-hidden rounded-lg border border-content/10 text-content/60 shadow-xl transition-colors duration-100 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
       >
         <GlassBackdrop />
@@ -139,6 +186,273 @@ export function SessionPanelDock(props: DockProps): ReactNode {
   );
 }
 
+/** The chat's label, saved on Enter or blur; its sparkle always rewrites it with AI. */
+function LabelField({
+  session,
+  title,
+  label,
+  notes,
+  running,
+  onResult,
+}: {
+  session: Session;
+  title: string;
+  label: string;
+  notes: string;
+  running: boolean;
+  onResult: (message: string | null) => void;
+}): ReactNode {
+  const [draft, setDraft] = useState(label);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setDraft(label);
+  }, [label]);
+
+  const commit = (): void => {
+    const next = draft.trim();
+    if (next === label.trim()) return;
+    const invalid = sessionMetadataError(next, notes);
+    if (invalid) {
+      onResult(invalid);
+      return;
+    }
+    void saveSessionMetadata(session.id, next, notes).catch((error: unknown) =>
+      onResult(`Couldn't save the label: ${errorText(error)}`),
+    );
+  };
+  const rewrite = (): void => {
+    onResult(null);
+    void rewriteSessionLabel(session)
+      .then((result) => {
+        if (!result.ok) onResult(result.message || null);
+      })
+      .catch((error: unknown) => onResult(`Couldn't write the label: ${errorText(error)}`));
+  };
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <input
+        value={draft}
+        maxLength={SESSION_LABEL_MAX}
+        disabled={running}
+        aria-label="Chat label"
+        title="Shown in place of the chat title"
+        placeholder={title || "Label"}
+        autoComplete="off"
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          focused.current = false;
+          commit();
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Enter") event.currentTarget.blur();
+          else if (event.key === "Escape") {
+            setDraft(label);
+            focused.current = false;
+            requestAnimationFrame(() => event.currentTarget?.blur());
+          }
+        }}
+        className="h-7 w-full rounded-md border border-transparent bg-transparent pl-2 pr-8 text-[13px] font-semibold text-content outline-none transition-colors duration-100 placeholder:font-normal placeholder:text-content/40 hover:border-content/10 focus:border-content/25 focus:bg-content/5 disabled:opacity-60"
+      />
+      <button
+        type="button"
+        onClick={rewrite}
+        disabled={running || !!session.busy}
+        title={running ? "Writing the label…" : "Write the label with AI"}
+        aria-label="Write the label with AI"
+        className={`absolute right-0.5 top-0.5 ${ICON_BUTTON} size-6`}
+      >
+        {running ? (
+          <Loader aria-hidden className="size-3 motion-safe:animate-spin" />
+        ) : (
+          <Sparkles aria-hidden className="size-3" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+/** The chat's notes as grouped Summary, or the in-panel editor. */
+function SummaryTab({
+  sessionId,
+  label,
+  notes,
+  editing,
+  onEdit,
+  onDone,
+  generate,
+  generating,
+  busy,
+  onStatus,
+}: {
+  sessionId: string;
+  label: string;
+  notes: string;
+  editing: boolean;
+  onEdit: () => void;
+  onDone: () => void;
+  generate: () => void;
+  generating: boolean;
+  busy: boolean;
+  onStatus: (message: string | null) => void;
+}): ReactNode {
+  const summary = useMemo(() => notesSummary(notes), [notes]);
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const [draft, setDraft] = useState(notes);
+  const [mode, setMode] = useState<MarkdownViewMode>("live");
+  const [saving, setSaving] = useState(false);
+  const caret = useRef<MarkdownCaretTarget | null>(null);
+
+  useEffect(() => setOpen(new Set()), [sessionId]);
+  useEffect(() => {
+    if (editing) setDraft(notes);
+    // Only when the editor opens; later saves must not reset the draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+  const toggle = (key: string): void =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  if (editing) {
+    const save = (): void => {
+      const invalid = sessionMetadataError(label, draft);
+      if (invalid) {
+        onStatus(invalid);
+        return;
+      }
+      setSaving(true);
+      void saveSessionMetadata(sessionId, label, draft)
+        .then(onDone)
+        .catch((error: unknown) => onStatus(`Couldn't save: ${errorText(error)}`))
+        .finally(() => setSaving(false));
+    };
+    return (
+      <div
+        className="flex min-h-0 flex-col gap-2 px-1.5"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            save();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            onDone();
+          }
+        }}
+      >
+        <div className="rounded-md border border-content/10">
+          <MarkdownEditorPanel
+            mode={mode}
+            onModeChange={setMode}
+            value={draft}
+            onChange={setDraft}
+            caretRef={caret}
+            label="Summary Markdown"
+            placeholder="**Heading (kind)**, then a point per line…"
+            autoFocus
+            lineNumbers={false}
+            minHeightClass="min-h-48"
+            paddingClass="py-2 pl-2.5 pr-2.5"
+            sourceEndPadClass="pr-2.5"
+            preview={<AgentMarkdown text={draft} hardBreaks />}
+            emptyPreview={<p className="text-[12px] text-content/45">No summary</p>}
+          />
+        </div>
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={onDone}
+            className="h-7 rounded-md px-2.5 text-xs text-content/60 transition-colors duration-100 hover:bg-content/10 hover:text-content"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="h-7 rounded-md bg-accent px-2.5 text-xs text-white transition-[opacity,transform] duration-100 hover:opacity-90 active:scale-96 disabled:opacity-50"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const editButton = (
+    <button
+      type="button"
+      onClick={onEdit}
+      disabled={generating}
+      className="inline-flex h-7 items-center gap-1.5 self-start rounded-md px-2 text-xs text-content/60 transition-colors duration-100 hover:bg-content/10 hover:text-content disabled:opacity-50"
+    >
+      <Pencil aria-hidden className="size-3.5" strokeWidth={1.75} />
+      {notes.trim() ? "Edit summary" : "Write my own"}
+    </button>
+  );
+
+  if (!summary.leftOff && summary.groups.length === 0)
+    return (
+      <div className="flex flex-col items-start gap-2.5 px-2 py-3">
+        <p className="text-[12px] leading-[18px] text-content/50">
+          No summary yet. AI reads this chat and writes what was worked on, grouped by topic, plus
+          where you left off.
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={generate}
+            disabled={generating || busy}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-content/10 px-2.5 text-xs text-content transition-colors duration-100 hover:bg-content/15 disabled:opacity-50"
+          >
+            {generating ? (
+              <Loader aria-hidden className="size-3.5 motion-safe:animate-spin" />
+            ) : (
+              <Sparkles aria-hidden className="size-3.5" />
+            )}
+            Write summary
+          </button>
+          {editButton}
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="flex flex-col gap-2">
+      {summary.leftOff ? (
+        <div className="px-1.5">
+          <LeftOffCard text={summary.leftOff} />
+        </div>
+      ) : null}
+      {summary.groups.length > 0 ? (
+        <ul role="list" className="flex flex-col gap-0.5">
+          {summary.groups.map((group, index) => {
+            const key = `${group.heading}\u0000${summary.groups.length - index}`;
+            return (
+              <SummaryGroupRow
+                key={key}
+                heading={group.heading}
+                body={group.body}
+                open={open.has(key)}
+                onToggle={() => toggle(key)}
+              />
+            );
+          })}
+        </ul>
+      ) : null}
+      <div className="px-0.5">{editButton}</div>
+    </div>
+  );
+}
+
 function SessionPanel({
   session,
   blocks,
@@ -150,10 +464,14 @@ function SessionPanel({
 }: DockProps & { view: SessionPanelView; onClose: () => void }): ReactNode {
   const { data, loaded } = useSessionPanelData(session.id);
   const metadata = useSessionMetadata(session.id);
+  const autoOn = useAutoNotes(session.id);
+  const running = useRunning(session.id);
   const frame = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [running, setRunning] = useState(() => sessionPanelUpdating(session.id));
+  const [editing, setEditing] = useState(false);
   const tab = view.tab;
+  const label = metadata?.label ?? "";
+  const notes = metadata?.notes ?? "";
 
   const blocksById = useMemo(
     () => new Map(blocks.map((block) => [block.id, block])),
@@ -167,9 +485,15 @@ function SessionPanel({
     !blockId ? "none" : blocksById.has(blockId) ? "jump" : "earlier";
 
   useEffect(() => {
-    setRunning(sessionPanelUpdating(session.id));
     setStatus(null);
+    setEditing(false);
   }, [session.id]);
+  // Auto waits while the Summary editor is open, so a save cannot drop its points.
+  useEffect(() => {
+    if (!editing) return;
+    setSummaryEditing(session.id);
+    return () => setSummaryEditing(null);
+  }, [editing, session.id]);
 
   const jump = (blockId: string | undefined): void => {
     if (!blockId) return;
@@ -180,20 +504,19 @@ function SessionPanel({
   };
   const change = (update: (current: SessionPanelData) => SessionPanelData): void => {
     void updateSessionPanel(session.id, update).catch((error: unknown) =>
-      setStatus(`Couldn't save: ${String(error)}`),
+      setStatus(`Couldn't save: ${errorText(error)}`),
     );
   };
-  const runAi = (): void => {
-    if (running) return;
-    setRunning(true);
+  const generate = (): void => {
+    if (running.summary || editing) return;
     setStatus(null);
-    void updateSessionPanelWithAi(session)
-      .then((result) => {
+    if (tab !== "summary") saveSessionPanelView({ tab: "summary" });
+    void updateSessionSummary(session)
+      .then((result: SummaryUpdateResult) => {
         if (!result.ok) setStatus(result.message || null);
-        else if (result.added === 0) setStatus("Nothing new since the last update.");
+        else if (!result.added) setStatus("Nothing new since the last update.");
       })
-      .catch((error: unknown) => setStatus(`Couldn't update: ${String(error)}`))
-      .finally(() => setRunning(false));
+      .catch((error: unknown) => setStatus(`Couldn't update: ${errorText(error)}`));
   };
   const selectTab = (next: SessionPanelTab): void => saveSessionPanelView({ tab: next });
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -206,73 +529,28 @@ function SessionPanel({
     event.currentTarget.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
   };
 
-  const points = [...data.points].reverse();
-  const decisions = points.filter((point) => point.kind === "decision");
   const bookmarks = [...data.bookmarks].reverse();
   const busy = !!session.busy;
 
-  const pointList = (list: typeof points, empty: ReactNode): ReactNode =>
-    list.length === 0 ? (
-      empty
-    ) : (
-      <ul role="list" className="flex flex-col gap-0.5">
-        {list.map((point) => (
-          <PanelRow
-            key={point.id}
-            icon={<PointIcon kind={point.kind} />}
-            text={point.text}
-            meta={`${POINT_LOOK[point.kind].label}${point.edited ? " · edited" : ""}`}
-            link={linkOf(point.blockId)}
-            editLabel="Edit point"
-            onJump={() => jump(point.blockId)}
-            onEdit={(text) => change((current) => editPoint(current, point.id, text))}
-            onDelete={() => change((current) => removePoint(current, point.id))}
-          />
-        ))}
-      </ul>
-    );
-
-  const aiEmpty = (what: string): ReactNode => (
-    <EmptyState
-      text={`No ${what} yet. Update with AI reads this chat and logs what happened, what was decided and what came up.`}
-      action={
-        <button
-          type="button"
-          onClick={runAi}
-          disabled={running || busy}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-content/10 px-2.5 text-xs text-content transition-colors duration-100 hover:bg-content/15 disabled:opacity-50"
-        >
-          <Sparkles aria-hidden className="size-3.5" />
-          Update with AI
-        </button>
-      }
-    />
-  );
-
   let body: ReactNode;
-  if (!loaded && (tab === "timeline" || tab === "decisions" || tab === "bookmarks"))
+  if (tab === "summary")
     body = (
-      <ul aria-busy="true" aria-label="Loading" className="flex flex-col gap-2 px-2">
-        {[0, 1, 2].map((key) => (
-          <li key={key} className="h-9 rounded-lg bg-content/5 motion-safe:animate-pulse" />
-        ))}
-      </ul>
+      <SummaryTab
+        sessionId={session.id}
+        label={label}
+        notes={notes}
+        editing={editing}
+        onEdit={() => {
+          setStatus(null);
+          setEditing(true);
+        }}
+        onDone={() => setEditing(false)}
+        generate={generate}
+        generating={running.summary}
+        busy={busy}
+        onStatus={setStatus}
+      />
     );
-  else if (tab === "timeline")
-    body = (
-      <div className="flex flex-col gap-2">
-        {data.leftOff ? (
-          <LeftOffCard
-            text={data.leftOff.text}
-            link={linkOf(data.leftOff.blockId)}
-            onJump={() => jump(data.leftOff?.blockId)}
-          />
-        ) : null}
-        {pointList(points, data.leftOff ? null : aiEmpty("timeline"))}
-      </div>
-    );
-  else if (tab === "decisions")
-    body = pointList(decisions, aiEmpty("decisions"));
   else if (tab === "files")
     body =
       files.length === 0 ? (
@@ -291,30 +569,18 @@ function SessionPanel({
           ))}
         </ul>
       );
-  else if (tab === "notes")
+  else if (!loaded)
     body = (
-      <div className="flex flex-col gap-2">
-        {metadata?.notes.trim() ? (
-          <div className="px-1 text-[12px]">
-            <AgentMarkdown text={metadata.notes} hardBreaks />
-          </div>
-        ) : (
-          <EmptyState text="No notes yet. Notes are yours: write anything you want to keep for this chat." />
-        )}
-        <button
-          type="button"
-          onClick={() => requestSessionMetadataEdit(session.id, title)}
-          className="inline-flex h-7 items-center gap-1.5 self-start rounded-md px-2 text-xs text-content/60 transition-colors duration-100 hover:bg-content/10 hover:text-content"
-        >
-          <Pencil aria-hidden className="size-3.5" strokeWidth={1.75} />
-          Edit notes
-        </button>
-      </div>
+      <ul aria-busy="true" aria-label="Loading" className="flex flex-col gap-2 px-2">
+        {[0, 1, 2].map((key) => (
+          <li key={key} className="h-9 rounded-lg bg-content/5 motion-safe:animate-pulse" />
+        ))}
+      </ul>
     );
   else
     body =
       bookmarks.length === 0 ? (
-        <EmptyState text="No bookmarks yet. Use the bookmark button under a reply to keep it here." />
+        <EmptyState text="No bookmarks yet. Use the bookmark button under a reply, or select text in a reply and choose Bookmark." />
       ) : (
         <ul role="list" className="flex flex-col gap-0.5">
           {bookmarks.map((bookmark) => (
@@ -334,44 +600,63 @@ function SessionPanel({
   return (
     <aside
       ref={frame}
-      aria-label="Session panel"
+      aria-label="Session overview"
       style={{ width: view.width }}
       className="relative isolate my-2 mr-2 flex shrink-0 flex-col overflow-hidden rounded-xl border border-content/10 shadow-xl"
     >
       <GlassBackdrop />
       <ResizeHandle
-        label="Resize Session panel"
+        label="Resize Session overview"
         value={view.width}
         min={SESSION_PANEL_MIN_WIDTH}
         max={SESSION_PANEL_MAX_WIDTH}
         defaultValue={DEFAULT_WIDTH}
         placement="inset-y-0 left-0"
         reverse
+        look="line"
         onLive={(width) => {
           if (frame.current) frame.current.style.width = `${width ?? view.width}px`;
         }}
         onCommit={(width) => saveSessionPanelView({ width: clampPanelWidth(width) })}
       />
       <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center gap-1 px-3 pt-2.5 pb-1.5">
-          <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-content">
-            Session
-          </h2>
+        <header className="flex shrink-0 items-center gap-1 px-2 pt-2 pb-1.5">
+          <LabelField
+            session={session}
+            title={title}
+            label={label}
+            notes={notes}
+            running={running.label}
+            onResult={setStatus}
+          />
+          <label
+            className="ml-1 flex shrink-0 items-center gap-1.5 text-[11px] text-content/55"
+            title="A minute after each turn ends, AI adds what is new to the Summary. It writes the label only while the chat has none"
+          >
+            Auto
+            <Toggle
+              label="Auto summary for this chat"
+              on={autoOn}
+              onChange={(on) => setAutoNotes(session.id, on)}
+            />
+          </label>
           <button
             type="button"
-            onClick={runAi}
-            disabled={running || busy}
+            onClick={generate}
+            disabled={running.summary || busy || editing}
             title={
-              running
-                ? "Updating…"
+              running.summary
+                ? "Updating the summary…"
                 : busy
                   ? "Wait for the turn to finish"
-                  : "Update with AI: log what is new in this chat"
+                  : editing
+                    ? "Close the editor first"
+                    : "Update the summary with AI"
             }
-            aria-label="Update with AI"
-            className="grid size-7 place-items-center rounded-md text-content/55 transition-colors duration-100 hover:bg-content/10 hover:text-content disabled:opacity-50 disabled:hover:bg-transparent"
+            aria-label="Update the summary with AI"
+            className={ICON_BUTTON}
           >
-            {running ? (
+            {running.summary ? (
               <Loader aria-hidden className="size-3.5 motion-safe:animate-spin" />
             ) : (
               <Sparkles aria-hidden className="size-3.5" />
@@ -381,15 +666,15 @@ function SessionPanel({
             type="button"
             onClick={onClose}
             title={`Close (${MOD}${SHIFT}O)`}
-            aria-label="Close Session panel"
-            className="grid size-7 place-items-center rounded-md text-content/55 transition-colors duration-100 hover:bg-content/10 hover:text-content"
+            aria-label="Close Session overview"
+            className={ICON_BUTTON}
           >
             <X aria-hidden className="size-3.5" />
           </button>
         </header>
         <div
           role="tablist"
-          aria-label="Session panel views"
+          aria-label="Session overview views"
           onKeyDown={onTabKey}
           className="flex shrink-0 gap-0.5 overflow-x-auto px-2 pb-2 [scrollbar-width:none]"
         >
@@ -432,11 +717,10 @@ function SessionPanel({
   );
 }
 
-function EmptyState({ text, action }: { text: string; action?: ReactNode }): ReactNode {
+function EmptyState({ text }: { text: string }): ReactNode {
   return (
     <div className="flex flex-col items-start gap-2.5 px-2 py-3">
       <p className="text-[12px] leading-[18px] text-content/50">{text}</p>
-      {action}
     </div>
   );
 }
