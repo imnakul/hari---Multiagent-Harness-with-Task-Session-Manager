@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-29 09:12 IST — 0.16.0-local19 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local19: 0.16.0-local18 plus the Session overview Timeline tab, hover card Topics, overview search, Expand all, smooth jumps and bookmark tint (L-192).
+- Why: User asked to commit and build the installer.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local19-overview-search_x64.exe` (15,200,136 bytes, SHA-256 181584F0EABA6F7B7CB453BE8098A7E091AD6DED21C16CE457A220011447BAA4, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from bd29fb18 + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tsc and vitest 7848 passed, 2 skipped ✅ at bd29fb18; desktop check manual
 ## 2026-10-29 08:07 IST — Session overview search, Expand all, smooth jumps, bookmark tint (L-192)
 - Type: feature
 - What: Search button in the Session overview tab row: a search box filters every tab, shows a match count on each tab label, highlights the words, opens matching Summary headings and moves to the first tab with matches. Expand all / Collapse all button on Summary. The label sparkle shows only while the label box is focused. Bookmark, Timeline and file clicks scroll the chat smoothly and pulse the target once the scroll stops (a selection bookmark pulses its quote); chat find scrolls smoothly; reduced motion jumps. Text bookmarked from a selection stays tinted with the accent colour in the chat.
