@@ -9,6 +9,7 @@ import {
   sessionMetadataHelperTargets,
   writeSessionLabel,
   writeSessionNotes,
+  writeSessionPoints,
 } from "./sessionMetadataHelper";
 
 const blocks: Block[] = [
@@ -73,5 +74,27 @@ describe("writeSessionLabel / writeSessionNotes", () => {
     expect(
       await writeSessionNotes({ ...base, notes: "", scope: "full", targets: [{ provider: "claude" }], run: failing, signal: controller.signal }),
     ).toEqual({ ok: false, cancelled: true, message: "" });
+  });
+});
+
+describe("writeSessionPoints (L-192)", () => {
+  it("maps the reply's message ids back to the chat's messages", async () => {
+    const run = vi.fn(async () => "decision | m1 | Polish spacing and dividers\nevent | m2 | Updated TestPage.tsx");
+    const result = await writeSessionPoints({
+      ...base,
+      data: { version: 1, points: [], bookmarks: [] },
+      scope: "full",
+      targets: [{ provider: "claude" }],
+      run,
+    });
+    expect(result.ok && result.value).toEqual({
+      kind: "add",
+      points: [
+        { kind: "decision", text: "Polish spacing and dividers", blockId: "u1" },
+        { kind: "event", text: "Updated TestPage.tsx", blockId: "a1" },
+      ],
+    });
+    expect(await writeSessionPoints({ ...base, blocks: [], data: { version: 1, points: [], bookmarks: [] }, scope: "full" }))
+      .toEqual({ ok: false, cancelled: false, message: "Couldn't write the timeline: this chat has nothing to read yet." });
   });
 });

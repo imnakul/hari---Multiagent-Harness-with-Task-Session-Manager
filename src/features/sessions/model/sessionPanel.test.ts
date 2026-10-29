@@ -1,21 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addBookmark,
+  applyPointsReply,
+  blockTimes,
+  buildPointsPrompt,
   clampPanelWidth,
   editBookmark,
+  editPoint,
   EMPTY_SESSION_PANEL,
   loadSessionPanel,
   loadSessionPanelView,
   openSessionOverview,
   parseSessionPanelData,
   parseSessionPanelView,
+  panelBlocksAfter,
+  panelTextMatches,
+  parsePointsReply,
   removeBookmark,
+  removePoint,
   resetSessionPanelStoreForTests,
   saveSessionPanelView,
   serializeSessionPanelData,
   sessionFileTouches,
+  taggedTranscript,
+  timelineDayLabel,
+  timelineDays,
   updateSessionPanel,
   type SessionPanelData,
+  type SessionPoint,
 } from "./sessionPanel";
 import type { Block } from "./session";
 
@@ -33,6 +45,7 @@ function edit(id: string, path: string, status = "completed"): Block {
 
 const withQuote: SessionPanelData = {
   version: 1,
+  points: [{ id: "p1", kind: "found", text: "Race in save", blockId: "a1", at: 1, source: "ai" }],
   bookmarks: [{ id: "k1", blockId: "a1", text: "Why", at: 1, quote: "Use SQLite" }],
 };
 
@@ -53,9 +66,9 @@ describe("panel data", () => {
     ]);
   });
 
-  // Panels saved before L-192 also hold AI points and a Left off; they are
-  // ignored rather than failing the bookmarks.
-  it("keeps the bookmarks of a panel saved with the old timeline", () => {
+  // Panels saved by L-191 also hold a Left off; it now lives in the Summary
+  // and is ignored, while the points come back for the Timeline.
+  it("keeps the points and bookmarks of a panel saved with the old timeline", () => {
     const data = parseSessionPanelData(
       JSON.stringify({
         points: [{ id: "p1", kind: "decision", text: "Use SQLite", blockId: "u1", at: 1, source: "ai" }],
@@ -64,7 +77,12 @@ describe("panel data", () => {
         after: "b9",
       }),
     );
-    expect(data).toEqual({ version: 1, bookmarks: [{ id: "k1", blockId: "b2", text: "Here", at: 2 }] });
+    expect(data).toEqual({
+      version: 1,
+      points: [{ id: "p1", kind: "decision", text: "Use SQLite", blockId: "u1", at: 1, source: "ai" }],
+      bookmarks: [{ id: "k1", blockId: "b2", text: "Here", at: 2 }],
+      after: "b9",
+    });
   });
 
   it("treats unreadable data as empty", () => {
@@ -97,6 +115,97 @@ describe("edits", () => {
     const id = data.bookmarks[0]!.id;
     expect(editBookmark(data, id, "Renamed").bookmarks[0]!.text).toBe("Renamed");
     expect(removeBookmark(data, id).bookmarks).toEqual([]);
+  });
+});
+
+describe("timeline points (L-192)", () => {
+  const blocks = [
+    block("u1", "user", "Store it in SQLite?"),
+    block("a1", "assistant", "Yes, SQLite."),
+    block("t1", "tool", "", { tool: { kind: "edit", title: "Edit db.rs", status: "completed", paths: ["db.rs"] } }),
+    block("a2", "assistant", "Working", { streaming: true }),
+  ];
+
+  it("tags messages and builds a prompt without Left off", () => {
+    const transcript = taggedTranscript(blocks);
+    expect(transcript.text).toContain("[m1] User: Store it in SQLite?");
+    expect(transcript.text).toContain("[m3] Tool: Edit db.rs");
+    expect(transcript.ids.get("m2")).toBe("a1");
+    const prompt = buildPointsPrompt({ transcript: transcript.text, data: withQuote, scope: "update" });
+    expect(prompt).toContain("- found: Race in save");
+    expect(prompt).toContain("since the timeline was last updated");
+    expect(prompt.toLowerCase()).not.toContain("leftoff");
+  });
+
+  it("reads a points reply, skipping Left off lines", () => {
+    const ids = new Map([["m1", "u1"], ["m2", "a1"]]);
+    const reply = "decision | m1 | Use SQLite.\n- found | m9 | Lock order\nleftoff | m2 | x";
+    expect(parsePointsReply(reply, ids)).toEqual({
+      kind: "add",
+      points: [
+        { kind: "decision", text: "Use SQLite", blockId: "u1" },
+        { kind: "found", text: "Lock order" },
+      ],
+    });
+    expect(parsePointsReply("NOTHING_NEW", ids)).toEqual({ kind: "none" });
+    expect(parsePointsReply("leftoff | m2 | only this", ids)).toEqual({ kind: "none" });
+    expect(parsePointsReply("Sure, here you go", ids)).toBeNull();
+  });
+
+  it("adds points, records the marker, and edits or removes them", () => {
+    let data = applyPointsReply(
+      EMPTY_SESSION_PANEL,
+      { kind: "add", points: [{ kind: "event", text: "Built the store", blockId: "t1" }] },
+      "t1",
+      5,
+    );
+    expect(data.after).toBe("t1");
+    expect(data.points).toMatchObject([{ kind: "event", text: "Built the store", blockId: "t1", at: 5, source: "ai" }]);
+    const id = data.points[0]!.id;
+    data = editPoint(data, id, "Built the SQLite store");
+    expect(data.points[0]).toMatchObject({ text: "Built the SQLite store", edited: true });
+    expect(removePoint(data, id).points).toEqual([]);
+    expect(applyPointsReply(data, { kind: "none" }, "u9").after).toBe("u9");
+  });
+
+  it("reads only finished messages after the marker", () => {
+    expect(panelBlocksAfter(blocks, "a1").map((b) => b.id)).toEqual(["t1"]);
+    expect(panelBlocksAfter(blocks, "gone").map((b) => b.id)).toEqual(["u1", "a1", "t1"]);
+  });
+
+  it("times each message by its turn, and groups points by day, newest first", () => {
+    const day1 = new Date(2026, 9, 21, 11, 47).getTime();
+    const day2 = new Date(2026, 9, 22, 9, 5).getTime();
+    const times = blockTimes([
+      block("x0", "assistant", "before any turn"),
+      block("u1", "user", "a", { startedAt: day1 }),
+      block("a1", "assistant", "b"),
+      block("u2", "user", "c", { startedAt: day2 }),
+      block("u3", "user", "joined", { sentAt: day2 + 60_000 }),
+      block("a3", "assistant", "d"),
+    ]);
+    expect(times.has("x0")).toBe(false);
+    expect(times.get("a1")).toBe(day1);
+    expect(times.get("a3")).toBe(day2 + 60_000);
+    const point = (id: string, blockId: string | undefined, at: number): SessionPoint => ({
+      id, kind: "event", text: id, at, source: "ai", ...(blockId ? { blockId } : {}),
+    });
+    const days = timelineDays(
+      [point("p1", "a1", day2 + 999), point("p2", "a3", 1), point("p3", undefined, day1 - 60_000), point("p4", "u2", 1)],
+      times,
+    );
+    expect(days.map((day) => day.entries.map((entry) => entry.point.id))).toEqual([["p2", "p4"], ["p1", "p3"]]);
+    expect(days[1]!.entries[0]!.time).toBe(day1);
+  });
+
+  it("labels days as Today, Yesterday, or a date", () => {
+    const now = new Date(2026, 9, 29, 10).getTime();
+    expect(timelineDayLabel(new Date(2026, 9, 29, 1).getTime(), now)).toBe("Today");
+    expect(timelineDayLabel(new Date(2026, 9, 28, 23).getTime(), now)).toBe("Yesterday");
+    expect(timelineDayLabel(new Date(2026, 9, 21, 9).getTime(), now)).toBe(
+      new Date(2026, 9, 21).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+    );
+    expect(timelineDayLabel(new Date(2025, 0, 2).getTime(), now)).toContain("2025");
   });
 });
 
@@ -156,9 +265,9 @@ describe("view settings", () => {
     });
   });
 
-  it("opens on Summary when the saved tab was removed", () => {
-    expect(parseSessionPanelView({ open: true, width: 300, tab: "timeline" }).tab).toBe("summary");
+  it("opens on Summary when the saved tab was removed, and keeps Timeline", () => {
     expect(parseSessionPanelView({ open: true, width: 300, tab: "decisions" }).tab).toBe("summary");
+    expect(parseSessionPanelView({ open: true, width: 300, tab: "timeline" }).tab).toBe("timeline");
   });
 
   it("Open Session overview opens the panel on Summary and keeps the width", () => {
@@ -174,5 +283,16 @@ describe("view settings", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("panelTextMatches (L-192)", () => {
+  it("matches any text, ignoring case and outer spaces", () => {
+    expect(panelTextMatches(" Panel ", "other", "Fix the panel width")).toBe(true);
+    expect(panelTextMatches("panel", "other", undefined)).toBe(false);
+  });
+
+  it("matches everything when the query is blank", () => {
+    expect(panelTextMatches("  ", undefined)).toBe(true);
   });
 });

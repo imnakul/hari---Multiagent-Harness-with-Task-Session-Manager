@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import {
+  afterScrollSettles,
+  findTextRange,
   pulseTranscriptMatch,
+  scrollSmoothly,
+  textMatchRanges,
   transcriptMutationNeedsRepaint,
   transcriptWordRanges,
 } from "./transcriptHighlights";
@@ -166,5 +170,97 @@ describe("pulseTranscriptMatch (L-188)", () => {
     expect(document.querySelector(".transcript-find-pulse-layer")).not.toBeNull();
     stop();
     expect(document.querySelector(".transcript-find-pulse-layer")).toBeNull();
+  });
+});
+
+describe("findTextRange (L-192)", () => {
+  it("matches a quote across elements, ignoring whitespace", () => {
+    const root = document.createElement("div");
+    root.innerHTML = "<p>first line</p>\n<p>second <b>bold</b> line</p>";
+    const range = findTextRange(root, "line second  bold");
+    expect(range?.toString()).toBe("line\nsecond bold");
+  });
+
+  it("returns null when the quote is missing or blank", () => {
+    const root = document.createElement("div");
+    root.textContent = "some reply";
+    expect(findTextRange(root, "absent")).toBeNull();
+    expect(findTextRange(root, "   ")).toBeNull();
+  });
+});
+
+describe("textMatchRanges (L-192)", () => {
+  it("finds every case-insensitive match", () => {
+    const root = document.createElement("div");
+    root.innerHTML = "<span>Fix the Panel</span><span>panel width</span>";
+    const ranges = textMatchRanges(root, "panel");
+    expect(ranges.map((range) => range.toString())).toEqual(["Panel", "panel"]);
+    expect(textMatchRanges(root, "  ")).toEqual([]);
+  });
+});
+
+describe("scrollSmoothly (L-192)", () => {
+  it("jumps close to a far target, then glides", () => {
+    const scroller = document.createElement("div");
+    Object.defineProperty(scroller, "clientHeight", { value: 400 });
+    const scrollTo = vi.fn();
+    scroller.scrollTo = scrollTo as unknown as typeof scroller.scrollTo;
+    scrollSmoothly(scroller, 5000);
+    expect(scroller.scrollTop).toBe(4400);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 5000, behavior: "smooth" });
+  });
+
+  it("jumps straight there when reduced motion is on", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    try {
+      const scroller = document.createElement("div");
+      const scrollTo = vi.fn();
+      scroller.scrollTo = scrollTo as unknown as typeof scroller.scrollTo;
+      scrollSmoothly(scroller, 300);
+      expect(scroller.scrollTop).toBe(300);
+      expect(scrollTo).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("afterScrollSettles (L-192)", () => {
+  it("waits until scrolling stops, and can be cancelled", () => {
+    vi.useFakeTimers();
+    try {
+      const scroller = document.createElement("div");
+      const run = vi.fn();
+      afterScrollSettles(scroller, run, 100);
+      vi.advanceTimersByTime(80);
+      scroller.dispatchEvent(new Event("scroll"));
+      vi.advanceTimersByTime(80);
+      expect(run).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(30);
+      expect(run).toHaveBeenCalledTimes(1);
+
+      const other = vi.fn();
+      afterScrollSettles(scroller, other, 100)();
+      vi.advanceTimersByTime(200);
+      expect(other).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("pulseTranscriptMatch element target (L-192)", () => {
+  it("rings the element's box", () => {
+    const scroller = document.createElement("div");
+    scroller.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 }) as DOMRect;
+    const target = document.createElement("div");
+    target.getBoundingClientRect = () =>
+      ({ left: 10, top: 20, width: 100, height: 40, right: 110, bottom: 60 }) as DOMRect;
+    const stop = pulseTranscriptMatch(target, scroller);
+    const rings = document.querySelectorAll<HTMLElement>(".transcript-find-pulse");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]!.style.width).toBe("104px");
+    stop();
   });
 });

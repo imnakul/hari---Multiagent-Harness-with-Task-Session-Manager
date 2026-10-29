@@ -2,6 +2,7 @@ import { useContext, useEffect } from "react";
 import {
   writeSessionLabel,
   writeSessionNotes,
+  writeSessionPoints,
 } from "../../../integrations/harness/core/sessionMetadataHelper";
 import { isMonoSession } from "../../monos/model/mono";
 import type { Session } from "../model/session";
@@ -18,6 +19,12 @@ import {
   blocksAfter,
   markAutoNotesDone,
 } from "../model/sessionMetadataAi";
+import {
+  applyPointsReply,
+  loadSessionPanel,
+  panelBlocksAfter,
+  updateSessionPanel,
+} from "../model/sessionPanel";
 import { SessionStateContext, type SessionStateStore } from "../model/sessionStateStore";
 
 /** How long a chat stays quiet after a turn before Auto notes runs (L-190). */
@@ -164,9 +171,37 @@ async function saveLabel(sessionId: string, label: string): Promise<void> {
 }
 
 /**
- * Adds what is new since the last update to the chat's Summary notes, and
- * writes a label when the chat has none (L-192). Reads the whole chat when
- * the notes are empty. A second call joins the running one.
+ * Adds the Timeline's points for the messages since its last run (L-192).
+ * Resolves to whether points were added, or to the failure message.
+ */
+async function updateSessionTimeline(
+  session: Session,
+  signal?: AbortSignal,
+): Promise<{ ok: true; added: boolean } | { ok: false; message: string }> {
+  const data = await loadSessionPanel(session.id);
+  const finished = session.blocks.filter((block) => !block.streaming);
+  const fresh = panelBlocksAfter(session.blocks, data.after);
+  const last = fresh[fresh.length - 1];
+  if (!last) return { ok: true, added: false };
+  const result = await writeSessionPoints({
+    blocks: fresh,
+    cwd: session.cwd,
+    harness: session.harness,
+    data,
+    scope: fresh.length < finished.length ? "update" : "full",
+    signal,
+  });
+  if (!result.ok) return { ok: false, message: result.cancelled ? "" : result.message };
+  const reply = result.value;
+  await updateSessionPanel(session.id, (current) => applyPointsReply(current, reply, last.id));
+  return { ok: true, added: reply.kind === "add" };
+}
+
+/**
+ * Adds what is new since the last update to the chat's Summary notes, then
+ * the Timeline's points, and writes a label when the chat has none (L-192).
+ * Reads the whole chat when the notes are empty. A second call joins the
+ * running one.
  */
 export function updateSessionSummary(
   session: Session,
@@ -205,6 +240,19 @@ export function updateSessionSummary(
       }
       markAutoNotesDone(session.id, last.id);
     }
+    // The label still gets written when the Timeline run fails.
+    let timelineFailure: string | null = null;
+    if (!signal?.aborted) {
+      const timeline = await updateSessionTimeline(session, signal).catch(
+        (error: unknown): { ok: false; message: string } => ({
+          ok: false,
+          message: `Couldn't save the timeline: ${error instanceof Error ? error.message : String(error)}`,
+        }),
+      );
+      if (timeline.ok) added ||= timeline.added;
+      else timelineFailure = timeline.message;
+    }
+    if (timelineFailure === "") return { ok: false, message: "" };
     if (!getSessionMetadata(session.id)?.label.trim() && !signal?.aborted) {
       const label = await writeSessionLabel({
         blocks: finished,
@@ -215,6 +263,8 @@ export function updateSessionSummary(
       if (label.ok && !getSessionMetadata(session.id)?.label.trim())
         await saveLabel(session.id, label.value);
     }
+    if (timelineFailure)
+      return { ok: false, message: added ? `Summary updated. ${timelineFailure}` : timelineFailure };
     return { ok: true, added };
   });
 }

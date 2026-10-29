@@ -1,17 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bookmark,
+  Bulb,
   ChevronRight,
+  CircleDot,
   ExternalLink,
   File,
+  Flag,
   Pencil,
   Pin,
   Trash2,
 } from "../../../shared/ui/icons";
-import type { SessionBookmark, SessionFileTouch } from "../model/sessionPanel";
+import type {
+  SessionBookmark,
+  SessionFileTouch,
+  SessionPoint,
+  SessionPointKind,
+} from "../model/sessionPanel";
 import { AgentMarkdown } from "./AgentMarkdown";
 
 /** Session overview rows (fork, L-191; reworked in L-192). */
+
+/** Timeline point kinds: icon, colour and name (L-192). */
+export const POINT_LOOK: Record<
+  SessionPointKind,
+  { label: string; Icon: typeof Flag; tone: string }
+> = {
+  event: { label: "Event", Icon: CircleDot, tone: "text-content/45" },
+  decision: { label: "Decision", Icon: Flag, tone: "text-accent" },
+  found: { label: "Found", Icon: Bulb, tone: "text-amber-400" },
+};
 
 /** Where a row's message is: jump to it, gone (compacted), or none named. */
 export type RowLink = "jump" | "earlier" | "none";
@@ -75,6 +93,7 @@ export function PanelRow({
   text,
   quote,
   meta,
+  metaTitle,
   link,
   editLabel,
   editPlaceholder,
@@ -87,6 +106,8 @@ export function PanelRow({
   text: string;
   quote?: string;
   meta?: string;
+  /** Hover text for the meta line, e.g. the full date and time. */
+  metaTitle?: string;
   link: RowLink;
   editLabel: string;
   editPlaceholder?: string;
@@ -96,7 +117,8 @@ export function PanelRow({
   trailing?: ReactNode;
 }): ReactNode {
   const [editing, setEditing] = useState(false);
-  const metaText = link === "earlier" ? "Earlier in this chat" : meta;
+  const metaText =
+    link === "earlier" ? (meta ? `${meta} · Earlier in this chat` : "Earlier in this chat") : meta;
   const content = (
     <>
       {quote ? (
@@ -143,7 +165,7 @@ export function PanelRow({
           <p className="text-[12px] leading-[18px]">{content}</p>
         )}
         {metaText && !editing ? (
-          <p className="mt-0.5 truncate text-[11px] leading-4 text-content/40">
+          <p title={metaTitle} className="mt-0.5 truncate text-[11px] leading-4 text-content/40">
             {metaText}
           </p>
         ) : null}
@@ -326,6 +348,47 @@ export function BookmarkRow({
       link={link}
       editLabel={quoted ? "Edit note" : "Edit bookmark"}
       editPlaceholder={quoted ? "Add a note" : undefined}
+      onJump={onJump}
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
+  );
+}
+
+/** A Timeline point: kind icon, text, and "11:47 AM · Decision" (L-192). */
+export function PointRow({
+  point,
+  time,
+  link,
+  onJump,
+  onEdit,
+  onDelete,
+}: {
+  point: SessionPoint;
+  /** When its message was sent; the point's own time when unknown. */
+  time: number;
+  link: RowLink;
+  onJump: () => void;
+  onEdit: (text: string) => void;
+  onDelete: () => void;
+}): ReactNode {
+  const { label, Icon, tone } = POINT_LOOK[point.kind];
+  const date = new Date(time);
+  const meta = [
+    date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+    label,
+    point.edited ? "edited" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <PanelRow
+      icon={<Icon className={`size-3.5 ${tone}`} strokeWidth={1.75} />}
+      text={point.text}
+      meta={meta}
+      metaTitle={date.toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}
+      link={link}
+      editLabel="Edit point"
       onJump={onJump}
       onEdit={onEdit}
       onDelete={onDelete}

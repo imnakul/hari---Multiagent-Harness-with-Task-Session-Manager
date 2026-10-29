@@ -1178,6 +1178,16 @@ html.has-chat-background.chat-background-effect-ready.chat-background-gradient-b
   color: #1a1206;
 }
 
+/* Session overview search matches look like chat find matches (L-192). */
+::highlight(monocode-panel-search-match) {
+  background-color: color-mix(in srgb, #e2c08d 46%, transparent);
+}
+
+/* Text bookmarked from a selection keeps a soft accent tint in the chat (L-192). */
+::highlight(monocode-bookmark-quote) {
+  background-color: color-mix(in srgb, var(--color-accent) 24%, transparent);
+}
+
 .transcript-find-pulse-layer {
   position: fixed;
   z-index: 40;

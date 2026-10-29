@@ -1,4 +1,25 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-29 08:07 IST — Session overview search, Expand all, smooth jumps, bookmark tint (L-192)
+- Type: feature
+- What: Search button in the Session overview tab row: a search box filters every tab, shows a match count on each tab label, highlights the words, opens matching Summary headings and moves to the first tab with matches. Expand all / Collapse all button on Summary. The label sparkle shows only while the label box is focused. Bookmark, Timeline and file clicks scroll the chat smoothly and pulse the target once the scroll stops (a selection bookmark pulses its quote); chat find scrolls smoothly; reduced motion jumps. Text bookmarked from a selection stays tinted with the accent colour in the chat.
+- Why: User asked for these after using local18; locked: filter tabs + counts, tint always on.
+- Files: [transcriptHighlights.ts](src/features/sessions/model/transcriptHighlights.ts) (+test), [sessionPanel.ts](src/features/sessions/model/sessionPanel.ts) (+test), [SessionPanel.tsx](src/features/sessions/ui/SessionPanel.tsx), [AgentTranscript.tsx](src/features/sessions/ui/AgentTranscript.tsx), [SessionPane.tsx](src/features/sessions/ui/SessionPane.tsx), [useBookmarkHighlights.ts](src/features/sessions/ui/useBookmarkHighlights.ts), [index.css](src/styles/index.css)
+- Commit: not committed yet
+- Verified: tsc ✅; transcriptHighlights.test.ts + sessionPanel.test.ts 38/38 ✅; full vitest 7848 passed, 2 skipped ✅; desktop check manual
+## 2026-10-29 00:36 IST — Session overview Timeline tab (L-192)
+- Type: feature
+- What: A Timeline tab after Summary. The sparkle and Auto now update the Summary and then the Timeline (two runs, one after the other). AI logs points (decision, found, event, each with its icon), grouped by day (Today, Yesterday, then the date), newest first; each shows the time its message was sent, with the full date on hover. Click jumps to the message; points can be edited or deleted. Left off stays on Summary. Points saved by the L-191 Session panel come back.
+- Why: User asked for a timeline beside the Summary to see how the work went; locked in Discuss: AI points with date and time, a tab after Summary, newest first by day, written with the Summary.
+- Files: [sessionPanel.ts](src/features/sessions/model/sessionPanel.ts) (+test), [sessionMetadataHelper.ts](src/integrations/harness/core/sessionMetadataHelper.ts) (+test), [SessionMetadataAutoWriter.tsx](src/features/sessions/ui/SessionMetadataAutoWriter.tsx), [SessionPanel.tsx](src/features/sessions/ui/SessionPanel.tsx), [SessionPanelItems.tsx](src/features/sessions/ui/SessionPanelItems.tsx)
+- Commit: not committed yet
+- Verified: tsc ✅; sessionPanel.test.ts 17/17, sessionMetadataHelper.test.ts 5/5 ✅; full vitest 7839 passed, 2 skipped ✅; desktop check manual
+## 2026-10-29 00:17 IST — Hover card Topics list (L-192)
+- Type: feature
+- What: The chat hover card shows the Summary headings under a "Topics" caption (matching Left off), each with a bullet; a heading's bracketed kind ("feature", "bug fix") becomes a faint tag after the name. The newest 5 are shown, then "+N more".
+- Why: User found the plain heading list hard to read on hover; picked caption + bullets + tag in a Suggest round.
+- Files: [SessionMetadataHoverCard.tsx](src/features/sessions/ui/SessionMetadataHoverCard.tsx), [sessionMetadataAi.ts](src/features/sessions/model/sessionMetadataAi.ts) (`splitHeadingTag`, +test)
+- Commit: not committed yet
+- Verified: tsc ✅; src/features/sessions vitest 1989 passed ✅; desktop check manual
 ## 2026-10-29 00:09 IST — 0.16.0-local18 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local18: 0.16.0-local17 plus the Session overview (L-192).

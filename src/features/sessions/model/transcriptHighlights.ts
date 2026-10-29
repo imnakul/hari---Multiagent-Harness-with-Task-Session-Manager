@@ -184,10 +184,11 @@ const PULSE_MS = 1900;
  * Rings the current match a few times so the eye can find it (fork, L-188).
  * Text highlights cannot animate, so this draws short-lived boxes over the
  * match's line boxes, clipped to the scroller and kept in place while it
- * scrolls. Returns a cleanup that removes them early.
+ * scrolls. Returns a cleanup that removes them early. An element target
+ * (a jump from the Session overview, L-192) gets one ring around its box.
  */
 export function pulseTranscriptMatch(
-  range: Range,
+  target: Range | HTMLElement,
   scroller: HTMLElement,
 ): () => void {
   const document = scroller.ownerDocument;
@@ -202,7 +203,11 @@ export function pulseTranscriptMatch(
       width: `${bounds.width}px`,
       height: `${bounds.height}px`,
     });
-    const rects = [...range.getClientRects()].filter(
+    const rects = (
+      "nodeType" in target
+        ? [target.getBoundingClientRect()]
+        : [...target.getClientRects()]
+    ).filter(
       (rect) => rect.width > 0 && rect.height > 0,
     );
     while (layer.childElementCount > rects.length) layer.lastElementChild?.remove();
@@ -241,3 +246,113 @@ export function pulseTranscriptMatch(
   }
   return cleanup;
 }
+
+/**
+ * Runs `run` once `scroller` has stopped scrolling for `idleMs`, so a pulse
+ * starts after a smooth scroll lands (L-192). Returns a cancel.
+ */
+export function afterScrollSettles(
+  scroller: HTMLElement,
+  run: () => void,
+  idleMs = 120,
+): () => void {
+  let timer = setTimeout(done, idleMs);
+  const onScroll = () => {
+    clearTimeout(timer);
+    timer = setTimeout(done, idleMs);
+  };
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+  function done() {
+    scroller.removeEventListener("scroll", onScroll);
+    run();
+  }
+  return () => {
+    clearTimeout(timer);
+    scroller.removeEventListener("scroll", onScroll);
+  };
+}
+
+/**
+ * Smooth-scrolls to `top` (L-192). A far target first jumps to a screen and a
+ * half away, so the glide stays short; reduced motion jumps straight there.
+ */
+export function scrollSmoothly(scroller: HTMLElement, top: number): void {
+  const reduce =
+    typeof matchMedia === "function" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce || typeof scroller.scrollTo !== "function") {
+    scroller.scrollTop = top;
+    return;
+  }
+  const near = scroller.clientHeight * 1.5;
+  const distance = top - scroller.scrollTop;
+  if (Math.abs(distance) > near)
+    scroller.scrollTop = top - Math.sign(distance) * near;
+  scroller.scrollTo({ top, behavior: "smooth" });
+}
+
+/**
+ * Finds `text` inside `root`, ignoring whitespace, so a quote saved from a
+ * selection still matches across paragraphs and formatting (L-192).
+ */
+export function findTextRange(root: HTMLElement, text: string): Range | null {
+  const needle = text.replace(/\s+/g, "");
+  if (!needle) return null;
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let flat = "";
+  const at: { node: Text; offset: number }[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!(node instanceof Text)) continue;
+    if (node.parentElement?.closest("script, style, [hidden], [aria-hidden='true']"))
+      continue;
+    const data = node.data;
+    for (let offset = 0; offset < data.length; offset++) {
+      if (/\s/.test(data[offset]!)) continue;
+      flat += data[offset];
+      at.push({ node, offset });
+    }
+  }
+  const index = flat.indexOf(needle);
+  if (index < 0) return null;
+  const start = at[index]!;
+  const end = at[index + needle.length - 1]!;
+  const range = root.ownerDocument.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset + 1);
+  return range;
+}
+
+/** Ranges of `query` in any text under `root` (Session overview search, L-192). */
+export function textMatchRanges(root: HTMLElement, query: string): Range[] {
+  const pattern = transcriptSearchPattern(query, "giu");
+  if (!pattern) return [];
+  const ranges: Range[] = [];
+  for (const run of textRuns(root))
+    for (const hit of run.text.matchAll(pattern)) {
+      if (hit.index === undefined || !hit[0]) continue;
+      const range = toRange(run, hit.index, hit.index + hit[0].length, root.ownerDocument);
+      if (range) ranges.push(range);
+      if (ranges.length >= MATCH_CAP) return ranges;
+    }
+  return ranges;
+}
+
+// Highlights several views paint at once (one per pane): each owner's ranges
+// are kept apart and the named highlight shows them all.
+const shared = new Map<string, Map<symbol, Range[]>>();
+
+/** Sets `owner`'s ranges for highlight `name`; an empty list removes them. */
+export function paintSharedHighlight(name: string, owner: symbol, ranges: Range[]): void {
+  if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
+  const owners = shared.get(name) ?? new Map<symbol, Range[]>();
+  if (ranges.length) owners.set(owner, ranges);
+  else owners.delete(owner);
+  shared.set(name, owners);
+  const all = [...owners.values()].flat();
+  if (all.length) CSS.highlights.set(name, new Highlight(...all));
+  else CSS.highlights.delete(name);
+}
+
+/** Highlight names the stylesheet styles (L-192). */
+export const BOOKMARK_HIGHLIGHT = "monocode-bookmark-quote";
+export const PANEL_SEARCH_HIGHLIGHT = "monocode-panel-search-match";

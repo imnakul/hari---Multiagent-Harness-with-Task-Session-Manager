@@ -11,6 +11,13 @@ import {
   type SessionMetadataAiSettings,
 } from "../../../features/sessions/model/sessionMetadataAi";
 import {
+  buildPointsPrompt,
+  parsePointsReply,
+  taggedTranscript,
+  type PointsReply,
+  type SessionPanelData,
+} from "../../../features/sessions/model/sessionPanel";
+import {
   AI_HELPER_PROVIDERS,
   loadAiHelperSettings,
   type AiHelperSettings,
@@ -168,4 +175,22 @@ export async function writeSessionNotes(
       what: "notes",
     },
   );
+}
+
+/**
+ * Timeline points (L-192): what to add from `blocks`; `scope` "update" means
+ * `blocks` are only the messages since the last run.
+ */
+export async function writeSessionPoints(
+  input: HelperInput & { data: SessionPanelData; scope: "full" | "update" },
+): Promise<MetadataHelperOutcome<PointsReply>> {
+  const transcript = taggedTranscript(input.blocks);
+  if (!transcript.text.trim()) return emptyChat("timeline");
+  return runTargets(input, {
+    prompt: buildPointsPrompt({ transcript: transcript.text, data: input.data, scope: input.scope }),
+    timeoutMs: TIMEOUT_MS[input.scope],
+    parse: (raw) => parsePointsReply(raw, transcript.ids),
+    expected: "lines like `decision | m12 | text`, or NOTHING_NEW",
+    what: "timeline",
+  });
 }

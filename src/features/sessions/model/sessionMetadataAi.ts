@@ -357,3 +357,16 @@ export function notesSummary(notes: string): NotesSummary {
   flush();
   return { leftOff, groups: groups.reverse() };
 }
+
+const HEADING_TAG = /^(.*\S)\s*\(([^()]{1,24})\)$/;
+
+/**
+ * A heading's name and its trailing kind in brackets, as the Notes
+ * instructions write them ("Pagination overlap (bug fix)"), so the hover card
+ * can show the kind as a faint tag. No brackets → no tag.
+ */
+export function splitHeadingTag(heading: string): { name: string; tag: string | null } {
+  const match = HEADING_TAG.exec(heading.trim());
+  if (!match) return { name: heading.trim(), tag: null };
+  return { name: match[1]!, tag: match[2]!.trim() };
+}

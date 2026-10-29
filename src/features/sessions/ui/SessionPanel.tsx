@@ -10,7 +10,16 @@ import {
 } from "react";
 import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { MOD, SHIFT } from "../../../platform/tauri/platform";
-import { Loader, PanelRight, Pencil, Sparkles, X } from "../../../shared/ui/icons";
+import {
+  FoldVertical,
+  Loader,
+  PanelRight,
+  Pencil,
+  Search,
+  Sparkles,
+  UnfoldVertical,
+  X,
+} from "../../../shared/ui/icons";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { Toggle } from "../../../shared/ui/Toggle";
 import type { Block, Session } from "../model/session";
@@ -23,15 +32,20 @@ import {
   autoNotesOn,
   notesSummary,
   setAutoNotes,
+  type NotesSummary,
   subscribeAutoNotes,
   subscribeSessionMetadataAi,
 } from "../model/sessionMetadataAi";
 import {
+  blockTimes,
   clampPanelWidth,
   editBookmark,
+  editPoint,
   EMPTY_SESSION_PANEL,
   loadSessionPanelView,
+  panelTextMatches,
   removeBookmark,
+  removePoint,
   saveSessionPanelView,
   SESSION_PANEL_MAX_WIDTH,
   SESSION_PANEL_MIN_WIDTH,
@@ -40,11 +54,18 @@ import {
   sessionPanelSnapshot,
   subscribeSessionPanel,
   subscribeSessionPanelView,
+  timelineDayLabel,
+  timelineDays,
   updateSessionPanel,
   type SessionPanelData,
   type SessionPanelTab,
   type SessionPanelView,
 } from "../model/sessionPanel";
+import {
+  PANEL_SEARCH_HIGHLIGHT,
+  paintSharedHighlight,
+  textMatchRanges,
+} from "../model/transcriptHighlights";
 import { AgentMarkdown } from "./AgentMarkdown";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
 import type { MarkdownCaretTarget } from "./markdownCaret";
@@ -62,6 +83,7 @@ import {
   BookmarkRow,
   FileRow,
   LeftOffCard,
+  PointRow,
   SummaryGroupRow,
   type RowLink,
 } from "./SessionPanelItems";
@@ -70,20 +92,23 @@ import { useSessionMetadata } from "./useSessionMetadata";
 /**
  * Session overview (fork, L-191; reworked in L-192): a glass panel docked on
  * the right of a chat pane. Header: the chat's label and Auto; tabs Summary
- * (the chat's AI notes, grouped by heading), Bookmarks and Files changed.
+ * (the chat's AI notes, grouped by heading), Timeline (AI points by day,
+ * newest first), Bookmarks and Files changed.
  * Below `DOCK_MIN_CHAT` of room for the chat it folds into a button that
  * opens it over the chat instead.
  */
 const TAB_LABEL: Record<SessionPanelTab, string> = {
   summary: "Summary",
+  timeline: "Timeline",
   bookmarks: "Bookmarks",
   files: "Files changed",
 };
 const DOCK_MIN_CHAT = 440;
 const DEFAULT_WIDTH = 320;
 const NOT_LOADED = { data: EMPTY_SESSION_PANEL, loaded: false };
-const ICON_BUTTON =
-  "grid size-7 shrink-0 place-items-center rounded-md text-content/55 transition-colors duration-100 hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:opacity-50 disabled:hover:bg-transparent";
+const ICON_BUTTON_BASE =
+  "grid size-7 shrink-0 place-items-center rounded-md text-content/55 duration-100 hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:opacity-50 disabled:hover:bg-transparent";
+const ICON_BUTTON = `${ICON_BUTTON_BASE} transition-colors`;
 
 export function useSessionPanelView(): SessionPanelView {
   return useSyncExternalStore(subscribeSessionPanelView, loadSessionPanelView, loadSessionPanelView);
@@ -140,7 +165,8 @@ type DockProps = {
   title: string;
   /** The row the panel docks into; its width decides docked or folded. */
   row: React.RefObject<HTMLElement | null>;
-  onNavigate: (blockId: string) => Promise<boolean>;
+  /** `quote`: a bookmark's words, pulsed in the chat after the scroll (L-192). */
+  onNavigate: (blockId: string, quote?: string) => Promise<boolean>;
   onOpenFile: (path: string) => void;
 };
 
@@ -186,7 +212,10 @@ export function SessionPanelDock(props: DockProps): ReactNode {
   );
 }
 
-/** The chat's label, saved on Enter or blur; its sparkle always rewrites it with AI. */
+/**
+ * The chat's label, saved on Enter or blur. Its sparkle, which rewrites it
+ * with AI, shows only while the field is focused or a rewrite runs (L-192).
+ */
 function LabelField({
   session,
   title,
@@ -230,7 +259,7 @@ function LabelField({
   };
 
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="group relative min-w-0 flex-1">
       <input
         value={draft}
         maxLength={SESSION_LABEL_MAX}
@@ -256,7 +285,7 @@ function LabelField({
             requestAnimationFrame(() => event.currentTarget?.blur());
           }
         }}
-        className="h-7 w-full rounded-md border border-transparent bg-transparent pl-2 pr-8 text-[13px] font-semibold text-content outline-none transition-colors duration-100 placeholder:font-normal placeholder:text-content/40 hover:border-content/10 focus:border-content/25 focus:bg-content/5 disabled:opacity-60"
+        className="h-7 w-full rounded-md border border-transparent bg-transparent pl-2 pr-2 text-[13px] font-semibold text-content outline-none transition-colors duration-100 placeholder:font-normal placeholder:text-content/40 hover:border-content/10 focus:border-content/25 focus:bg-content/5 group-focus-within:pr-8 disabled:opacity-60"
       />
       <button
         type="button"
@@ -264,7 +293,11 @@ function LabelField({
         disabled={running || !!session.busy}
         title={running ? "Writing the label…" : "Write the label with AI"}
         aria-label="Write the label with AI"
-        className={`absolute right-0.5 top-0.5 ${ICON_BUTTON} size-6`}
+        className={`absolute right-0.5 top-0.5 ${ICON_BUTTON_BASE} size-6 transition-[color,background-color,opacity] ${
+          running
+            ? ""
+            : "pointer-events-none opacity-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+        }`}
       >
         {running ? (
           <Loader aria-hidden className="size-3 motion-safe:animate-spin" />
@@ -276,11 +309,23 @@ function LabelField({
   );
 }
 
-/** The chat's notes as grouped Summary, or the in-panel editor. */
+/** The key that keeps a Summary group open across updates. */
+function summaryGroupKey(summary: NotesSummary, index: number): string {
+  return `${summary.groups[index]!.heading}\u0000${summary.groups.length - index}`;
+}
+
+/**
+ * The chat's notes as grouped Summary, or the in-panel editor. While the
+ * overview is searched, only matching groups show, opened (L-192).
+ */
 function SummaryTab({
   sessionId,
   label,
   notes,
+  summary,
+  open,
+  onToggle,
+  query,
   editing,
   onEdit,
   onDone,
@@ -292,6 +337,10 @@ function SummaryTab({
   sessionId: string;
   label: string;
   notes: string;
+  summary: NotesSummary;
+  open: ReadonlySet<string>;
+  onToggle: (key: string) => void;
+  query: string;
   editing: boolean;
   onEdit: () => void;
   onDone: () => void;
@@ -300,27 +349,16 @@ function SummaryTab({
   busy: boolean;
   onStatus: (message: string | null) => void;
 }): ReactNode {
-  const summary = useMemo(() => notesSummary(notes), [notes]);
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [draft, setDraft] = useState(notes);
   const [mode, setMode] = useState<MarkdownViewMode>("live");
   const [saving, setSaving] = useState(false);
   const caret = useRef<MarkdownCaretTarget | null>(null);
 
-  useEffect(() => setOpen(new Set()), [sessionId]);
   useEffect(() => {
     if (editing) setDraft(notes);
     // Only when the editor opens; later saves must not reset the draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
-
-  const toggle = (key: string): void =>
-    setOpen((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
 
   if (editing) {
     const save = (): void => {
@@ -399,6 +437,40 @@ function SummaryTab({
     </button>
   );
 
+  const searching = !!query.trim();
+  if (searching) {
+    const leftOff =
+      summary.leftOff && panelTextMatches(query, summary.leftOff) ? summary.leftOff : null;
+    const groups = summary.groups.flatMap((group, index) =>
+      panelTextMatches(query, group.heading, group.body)
+        ? [{ group, key: summaryGroupKey(summary, index) }]
+        : [],
+    );
+    if (!leftOff && groups.length === 0) return <EmptyState text="No matches in the Summary." />;
+    return (
+      <div className="flex flex-col gap-2">
+        {leftOff ? (
+          <div className="px-1.5">
+            <LeftOffCard text={leftOff} />
+          </div>
+        ) : null}
+        {groups.length > 0 ? (
+          <ul role="list" className="flex flex-col gap-0.5">
+            {groups.map(({ group, key }) => (
+              <SummaryGroupRow
+                key={key}
+                heading={group.heading}
+                body={group.body}
+                open
+                onToggle={() => onToggle(key)}
+              />
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
+
   if (!summary.leftOff && summary.groups.length === 0)
     return (
       <div className="flex flex-col items-start gap-2.5 px-2 py-3">
@@ -435,14 +507,14 @@ function SummaryTab({
       {summary.groups.length > 0 ? (
         <ul role="list" className="flex flex-col gap-0.5">
           {summary.groups.map((group, index) => {
-            const key = `${group.heading}\u0000${summary.groups.length - index}`;
+            const key = summaryGroupKey(summary, index);
             return (
               <SummaryGroupRow
                 key={key}
                 heading={group.heading}
                 body={group.body}
                 open={open.has(key)}
-                onToggle={() => toggle(key)}
+                onToggle={() => onToggle(key)}
               />
             );
           })}
@@ -469,25 +541,96 @@ function SessionPanel({
   const frame = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+  // Search (L-192): null while closed; filters every tab and highlights its words.
+  const [query, setQuery] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const tab = view.tab;
   const label = metadata?.label ?? "";
   const notes = metadata?.notes ?? "";
+  const searchText = query?.trim() ?? "";
+  const searching = !!searchText;
+  const summary = useMemo(() => notesSummary(notes), [notes]);
 
   const blocksById = useMemo(
     () => new Map(blocks.map((block) => [block.id, block])),
     [blocks],
   );
-  const files = useMemo(
-    () => (tab === "files" ? sessionFileTouches(blocks) : []),
-    [tab, blocks],
+  const allFiles = useMemo(
+    () => (tab === "files" || searching ? sessionFileTouches(blocks) : []),
+    [tab, searching, blocks],
   );
+  const points = useMemo(
+    () => data.points.filter((point) => panelTextMatches(searchText, point.text, point.kind)),
+    [data.points, searchText],
+  );
+  const days = useMemo(
+    () => (tab === "timeline" ? timelineDays(points, blockTimes(blocks)) : []),
+    [tab, points, blocks],
+  );
+  const files = allFiles.filter((touch) => panelTextMatches(searchText, touch.path));
+  const bookmarks = [...data.bookmarks]
+    .reverse()
+    .map((bookmark) => ({
+      bookmark,
+      fallback: messageLine(blocksById.get(bookmark.blockId)) || "Bookmarked message",
+    }))
+    .filter(({ bookmark, fallback }) =>
+      panelTextMatches(searchText, bookmark.text, bookmark.quote, bookmark.text ? "" : fallback),
+    );
+  const counts: Record<SessionPanelTab, number> | null = searching
+    ? {
+        summary:
+          (summary.leftOff && panelTextMatches(searchText, summary.leftOff) ? 1 : 0) +
+          summary.groups.filter((group) => panelTextMatches(searchText, group.heading, group.body))
+            .length,
+        timeline: points.length,
+        bookmarks: bookmarks.length,
+        files: files.length,
+      }
+    : null;
+  const groupKeys = summary.groups.map((_, index) => summaryGroupKey(summary, index));
+  const allOpen = groupKeys.length > 0 && groupKeys.every((key) => openGroups.has(key));
   const linkOf = (blockId: string | undefined): RowLink =>
     !blockId ? "none" : blocksById.has(blockId) ? "jump" : "earlier";
 
   useEffect(() => {
     setStatus(null);
     setEditing(false);
+    setOpenGroups(new Set());
+    setQuery(null);
   }, [session.id]);
+  // A new search moves to the first tab with matches when the open one has none.
+  useEffect(() => {
+    if (!counts || counts[tab] > 0) return;
+    const first = SESSION_PANEL_TABS.find((id) => counts[id] > 0);
+    if (first) saveSessionPanelView({ tab: first });
+    // Only when the search text changes, so picking an empty tab sticks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText]);
+  // Highlights the matched words in the open tab, like chat find does.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || !searching) return;
+    const owner = Symbol("session-panel-search");
+    const paint = () =>
+      paintSharedHighlight(PANEL_SEARCH_HIGHLIGHT, owner, textMatchRanges(el, searchText));
+    let paintFrame = 0;
+    const observer = new MutationObserver(() => {
+      if (paintFrame) return;
+      paintFrame = requestAnimationFrame(() => {
+        paintFrame = 0;
+        paint();
+      });
+    });
+    observer.observe(el, { childList: true, characterData: true, subtree: true });
+    paint();
+    return () => {
+      observer.disconnect();
+      if (paintFrame) cancelAnimationFrame(paintFrame);
+      paintSharedHighlight(PANEL_SEARCH_HIGHLIGHT, owner, []);
+    };
+  }, [searching, searchText, tab]);
   // Auto waits while the Summary editor is open, so a save cannot drop its points.
   useEffect(() => {
     if (!editing) return;
@@ -495,10 +638,10 @@ function SessionPanel({
     return () => setSummaryEditing(null);
   }, [editing, session.id]);
 
-  const jump = (blockId: string | undefined): void => {
+  const jump = (blockId: string | undefined, quote?: string): void => {
     if (!blockId) return;
     setStatus(null);
-    void onNavigate(blockId).then((found) => {
+    void onNavigate(blockId, quote).then((found) => {
       if (!found) setStatus("That message isn't in the loaded chat.");
     });
   };
@@ -510,7 +653,7 @@ function SessionPanel({
   const generate = (): void => {
     if (running.summary || editing) return;
     setStatus(null);
-    if (tab !== "summary") saveSessionPanelView({ tab: "summary" });
+    if (tab !== "summary" && tab !== "timeline") saveSessionPanelView({ tab: "summary" });
     void updateSessionSummary(session)
       .then((result: SummaryUpdateResult) => {
         if (!result.ok) setStatus(result.message || null);
@@ -529,8 +672,15 @@ function SessionPanel({
     event.currentTarget.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
   };
 
-  const bookmarks = [...data.bookmarks].reverse();
   const busy = !!session.busy;
+  const toggleGroup = (key: string): void =>
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const closeSearch = (): void => setQuery(null);
 
   let body: ReactNode;
   if (tab === "summary")
@@ -539,6 +689,10 @@ function SessionPanel({
         sessionId={session.id}
         label={label}
         notes={notes}
+        summary={summary}
+        open={openGroups}
+        onToggle={toggleGroup}
+        query={searchText}
         editing={editing}
         onEdit={() => {
           setStatus(null);
@@ -554,7 +708,9 @@ function SessionPanel({
   else if (tab === "files")
     body =
       files.length === 0 ? (
-        <EmptyState text="No files edited in this chat yet." />
+        <EmptyState
+          text={searching ? "No matching files." : "No files edited in this chat yet."}
+        />
       ) : (
         <ul role="list" className="flex flex-col gap-0.5">
           {files.map((touch) => (
@@ -577,19 +733,58 @@ function SessionPanel({
         ))}
       </ul>
     );
+  else if (tab === "timeline")
+    body =
+      days.length === 0 ? (
+        searching ? (
+          <EmptyState text="No matches in the Timeline." />
+        ) : (
+          <EmptyState text="No timeline yet. Use the sparkle to write it: AI logs what happened, what was decided and what came up, each linked to its message." />
+        )
+      ) : (
+        <div className="flex flex-col gap-2">
+          {days.map((day) => {
+            const dayLabel = timelineDayLabel(day.time);
+            return (
+              <section key={day.key} aria-label={dayLabel}>
+                <h3 className="px-2 pb-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-content/45">
+                  {dayLabel}
+                </h3>
+                <ul role="list" className="flex flex-col gap-0.5">
+                  {day.entries.map(({ point, time }) => (
+                    <PointRow
+                      key={point.id}
+                      point={point}
+                      time={time}
+                      link={linkOf(point.blockId)}
+                      onJump={() => jump(point.blockId)}
+                      onEdit={(text) => change((current) => editPoint(current, point.id, text))}
+                      onDelete={() => change((current) => removePoint(current, point.id))}
+                    />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      );
   else
     body =
       bookmarks.length === 0 ? (
-        <EmptyState text="No bookmarks yet. Use the bookmark button under a reply, or select text in a reply and choose Bookmark." />
+        searching ? (
+          <EmptyState text="No matching bookmarks." />
+        ) : (
+          <EmptyState text="No bookmarks yet. Use the bookmark button under a reply, or select text in a reply and choose Bookmark." />
+        )
       ) : (
         <ul role="list" className="flex flex-col gap-0.5">
-          {bookmarks.map((bookmark) => (
+          {bookmarks.map(({ bookmark, fallback }) => (
             <BookmarkRow
               key={bookmark.id}
               bookmark={bookmark}
-              fallback={messageLine(blocksById.get(bookmark.blockId)) || "Bookmarked message"}
+              fallback={fallback}
               link={linkOf(bookmark.blockId)}
-              onJump={() => jump(bookmark.blockId)}
+              onJump={() => jump(bookmark.blockId, bookmark.quote)}
               onEdit={(text) => change((current) => editBookmark(current, bookmark.id, text))}
               onDelete={() => change((current) => removeBookmark(current, bookmark.id))}
             />
@@ -631,7 +826,7 @@ function SessionPanel({
           />
           <label
             className="ml-1 flex shrink-0 items-center gap-1.5 text-[11px] text-content/55"
-            title="A minute after each turn ends, AI adds what is new to the Summary. It writes the label only while the chat has none"
+            title="A minute after each turn ends, AI adds what is new to the Summary and Timeline. It writes the label only while the chat has none"
           >
             Auto
             <Toggle
@@ -646,14 +841,14 @@ function SessionPanel({
             disabled={running.summary || busy || editing}
             title={
               running.summary
-                ? "Updating the summary…"
+                ? "Updating the summary and timeline…"
                 : busy
                   ? "Wait for the turn to finish"
                   : editing
                     ? "Close the editor first"
-                    : "Update the summary with AI"
+                    : "Update the summary and timeline with AI"
             }
-            aria-label="Update the summary with AI"
+            aria-label="Update the summary and timeline with AI"
             className={ICON_BUTTON}
           >
             {running.summary ? (
@@ -672,33 +867,98 @@ function SessionPanel({
             <X aria-hidden className="size-3.5" />
           </button>
         </header>
-        <div
-          role="tablist"
-          aria-label="Session overview views"
-          onKeyDown={onTabKey}
-          className="flex shrink-0 gap-0.5 overflow-x-auto px-2 pb-2 [scrollbar-width:none]"
-        >
-          {SESSION_PANEL_TABS.map((id) => (
+        <div className="flex shrink-0 items-center gap-0.5 px-2 pb-2">
+          <div
+            role="tablist"
+            aria-label="Session overview views"
+            onKeyDown={onTabKey}
+            className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]"
+          >
+            {SESSION_PANEL_TABS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                data-tab={id}
+                id={`session-panel-tab-${session.id}-${id}`}
+                aria-selected={tab === id}
+                aria-controls={`session-panel-body-${session.id}`}
+                tabIndex={tab === id ? 0 : -1}
+                onClick={() => selectTab(id)}
+                className={`h-7 shrink-0 rounded-md px-2 text-xs transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                  tab === id
+                    ? "bg-content/10 text-content"
+                    : "text-content/50 hover:bg-content/5 hover:text-content/80"
+                }`}
+              >
+                {TAB_LABEL[id]}
+                {counts ? (
+                  <span
+                    className={`ml-1 tabular-nums ${counts[id] ? "text-content/60" : "text-content/30"}`}
+                  >
+                    {counts[id]}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+          {tab === "summary" && !editing && !searching && groupKeys.length > 0 ? (
             <button
-              key={id}
               type="button"
-              role="tab"
-              data-tab={id}
-              id={`session-panel-tab-${session.id}-${id}`}
-              aria-selected={tab === id}
-              aria-controls={`session-panel-body-${session.id}`}
-              tabIndex={tab === id ? 0 : -1}
-              onClick={() => selectTab(id)}
-              className={`h-7 shrink-0 rounded-md px-2 text-xs transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
-                tab === id
-                  ? "bg-content/10 text-content"
-                  : "text-content/50 hover:bg-content/5 hover:text-content/80"
-              }`}
+              onClick={() => setOpenGroups(allOpen ? new Set() : new Set(groupKeys))}
+              title={allOpen ? "Collapse all" : "Expand all"}
+              aria-label={allOpen ? "Collapse all headings" : "Expand all headings"}
+              className={ICON_BUTTON}
             >
-              {TAB_LABEL[id]}
+              {allOpen ? (
+                <FoldVertical aria-hidden className="size-3.5" strokeWidth={1.75} />
+              ) : (
+                <UnfoldVertical aria-hidden className="size-3.5" strokeWidth={1.75} />
+              )}
             </button>
-          ))}
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setQuery((current) => (current === null ? "" : null))}
+            aria-pressed={query !== null}
+            title={query !== null ? "Close search" : "Search the overview"}
+            aria-label="Search the overview"
+            className={`${ICON_BUTTON} ${query !== null ? "bg-content/10 text-content" : ""}`}
+          >
+            <Search aria-hidden className="size-3.5" strokeWidth={1.75} />
+          </button>
         </div>
+        {query !== null ? (
+          <div className="mx-2 mb-2 flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-content/15 bg-content/5 pl-2 pr-0.5 transition-colors duration-100 focus-within:border-content/30">
+            <Search aria-hidden className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeSearch();
+                }
+              }}
+              aria-label="Search Summary, Timeline, Bookmarks and Files changed"
+              placeholder="Search all tabs"
+              autoComplete="off"
+              spellCheck={false}
+              className="h-full min-w-0 flex-1 bg-transparent text-xs text-content outline-none placeholder:text-content/40"
+            />
+            <button
+              type="button"
+              onClick={closeSearch}
+              title="Close search (Esc)"
+              aria-label="Close search"
+              className={`${ICON_BUTTON} size-6`}
+            >
+              <X aria-hidden className="size-3" />
+            </button>
+          </div>
+        ) : null}
         {status ? (
           <p role="status" className="mx-3 mb-2 shrink-0 text-[11px] leading-4 text-content/55">
             {status}
@@ -708,6 +968,7 @@ function SessionPanel({
           role="tabpanel"
           id={`session-panel-body-${session.id}`}
           aria-labelledby={`session-panel-tab-${session.id}-${tab}`}
+          ref={bodyRef}
           className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3"
         >
           {body}

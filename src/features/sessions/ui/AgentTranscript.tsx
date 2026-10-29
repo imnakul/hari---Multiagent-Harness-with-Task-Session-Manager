@@ -46,6 +46,7 @@ import { OrchestratorConstellation } from "./OrchestratorConstellation";
 import { PlanStepsBurst } from "./PlanStepsBurst";
 import { settleCatchUpFades } from "./wordFade";
 import { revealMeasuredTurn, useMeasuredHistory } from "./useMeasuredHistory";
+import { useBookmarkHighlights } from "./useBookmarkHighlights";
 import {
   layoutTransitionActive,
   onLayoutTransitionEnd,
@@ -190,9 +191,12 @@ import {
   operatorUserPrompt,
 } from "../model/operatorCommand";
 import {
+  afterScrollSettles,
   clearTranscriptHighlights,
+  findTextRange,
   paintTranscriptHighlights,
   pulseTranscriptMatch,
+  scrollSmoothly,
   transcriptMutationNeedsRepaint,
   transcriptWordRanges,
 } from "../model/transcriptHighlights";
@@ -317,8 +321,9 @@ type Props = {
   onJumpToBottomReady?: (jump: () => void) => void;
   /** Passes a function that renders the turn that holds a block. The render completes before the function returns. */
   onRevealReady?: (reveal: (blockId: string) => boolean) => void;
+  /** `quote`: bookmarked text in the block to pulse after the scroll (L-192). */
   onNavigateReady?: (
-    navigate: (blockId: string | null, query?: string) => boolean,
+    navigate: (blockId: string | null, query?: string, quote?: string) => boolean,
   ) => void;
   /** Session-level output shown after the latest reply and before its action row. */
   latestTurnAccessory?: ReactNode;
@@ -403,6 +408,7 @@ function AgentTranscriptComponent({
   parked = false,
   onScrollerChange,
   managed = false,
+  sessionId,
 }: Props) {
   const isMonoChat = !!agentMascot;
   const blocks = useMemo(() => {
@@ -1060,6 +1066,7 @@ function AgentTranscriptComponent({
     };
   }, [loadEarlier, loadEarlierOnScroll, scrollerEl, visible]);
 
+  const jumpPulse = useRef<(() => void) | null>(null);
   const revealBlock = useCallback(
     (blockId: string): boolean => {
       const all = turnsRef.current;
@@ -1087,7 +1094,9 @@ function AgentTranscriptComponent({
   }, [revealBlock, onRevealReady]);
 
   const navigateToBlock = useCallback(
-    (blockId: string | null, query = ""): boolean => {
+    (blockId: string | null, query = "", quote?: string): boolean => {
+      jumpPulse.current?.();
+      jumpPulse.current = null;
       if (!blockId) {
         setSearchCurrent(null);
         setSearchQuery("");
@@ -1109,6 +1118,8 @@ function AgentTranscriptComponent({
       const el = scroller.current;
       if (!el) return false;
       el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }));
+      // The scroll target, kept so the second pass only corrects a real shift.
+      let goal: number | null = null;
       const align = () => {
         const target =
           el.querySelector<HTMLElement>(
@@ -1127,17 +1138,36 @@ function AgentTranscriptComponent({
             ? wordRect.top
             : target.getBoundingClientRect().top;
         const delta = targetTop - el.getBoundingClientRect().top - 42;
-        if (Math.abs(delta) > 2) {
-          el.scrollTop += delta;
-          rememberScroll(el);
-        }
+        const top = el.scrollTop + delta;
+        if (goal !== null && Math.abs(top - goal) <= 2) return;
+        goal = top;
+        // Glide there, then ring what was jumped to (L-192).
+        if (Math.abs(delta) > 2) scrollSmoothly(el, top);
       };
       align();
       requestAnimationFrame(align);
+      let stopPulse: (() => void) | undefined;
+      const stopWait = afterScrollSettles(el, () => {
+        rememberScroll(el);
+        // Find pulses its own match; a jump from the Session overview rings
+        // the bookmarked words or the whole message.
+        if (query) return;
+        const target = el.querySelector<HTMLElement>(
+          '[data-transcript-search-current="true"]',
+        );
+        if (!target) return;
+        const words = quote ? findTextRange(target, quote) : null;
+        stopPulse = pulseTranscriptMatch(words ?? target, el);
+      });
+      jumpPulse.current = () => {
+        stopWait();
+        stopPulse?.();
+      };
       return true;
     },
     [revealBlock, rememberScroll],
   );
+  useEffect(() => () => jumpPulse.current?.(), []);
 
   useEffect(() => {
     onNavigateReady?.(navigateToBlock);
@@ -1184,16 +1214,23 @@ function AgentTranscriptComponent({
   useEffect(() => {
     const el = scroller.current;
     if (!el || !visible || !searchQuery || !searchCurrent) return;
+    // Waits for the smooth scroll to land first (L-192).
     let stop: (() => void) | undefined;
-    const timer = setTimeout(() => {
-      const { current } = transcriptWordRanges(el, searchQuery);
-      if (current) stop = pulseTranscriptMatch(current, el);
-    }, 140);
+    const stopWait = afterScrollSettles(
+      el,
+      () => {
+        const { current } = transcriptWordRanges(el, searchQuery);
+        if (current) stop = pulseTranscriptMatch(current, el);
+      },
+      140,
+    );
     return () => {
-      clearTimeout(timer);
+      stopWait();
       stop?.();
     };
   }, [visible, searchQuery, searchCurrent]);
+
+  useBookmarkHighlights(scrollerEl, sessionId, visible);
 
   refreshChatMotion.current = useBottomChatMotion(
     scrollerEl,

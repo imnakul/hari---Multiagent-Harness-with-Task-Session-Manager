@@ -15,6 +15,7 @@ import {
   parseLabelReply,
   parseNotesReply,
   parseSessionMetadataAi,
+  splitHeadingTag,
   saveSessionMetadataAi,
   setAutoNotes,
   withoutLeftOff,
@@ -135,5 +136,17 @@ describe("notesSummary (L-192)", () => {
       leftOff: null,
       groups: [{ heading: "Plan", body: "" }],
     });
+  });
+
+  it("splits a heading's bracketed kind into a tag", () => {
+    expect(splitHeadingTag("Students pagination overlap (bug fix)")).toEqual({
+      name: "Students pagination overlap",
+      tag: "bug fix",
+    });
+    expect(splitHeadingTag("Plan")).toEqual({ name: "Plan", tag: null });
+    // Brackets in the middle, or a long aside, stay part of the name.
+    expect(splitHeadingTag("Fix (again) the build")).toEqual({ name: "Fix (again) the build", tag: null });
+    expect(splitHeadingTag("Move (a very long explanation in brackets)").tag).toBeNull();
+    expect(splitHeadingTag("(feature)")).toEqual({ name: "(feature)", tag: null });
   });
 });

@@ -807,25 +807,27 @@ const LocalSessionPane = memo(function LocalSessionPane({
     [],
   );
   const navigateBlockRef = useRef<
-    ((blockId: string | null, query?: string) => boolean) | null
+    ((blockId: string | null, query?: string, quote?: string) => boolean) | null
   >(null);
   const [navigatorReady, setNavigatorReady] = useState(false);
   const onNavigateReady = useCallback(
-    (navigate: (blockId: string | null, query?: string) => boolean) => {
+    (
+      navigate: (blockId: string | null, query?: string, quote?: string) => boolean,
+    ) => {
       navigateBlockRef.current = navigate;
       setNavigatorReady(true);
     },
     [],
   );
   const navigateBlock = useCallback(
-    async (blockId: string | null, query?: string) => {
-      if (navigateBlockRef.current?.(blockId, query)) return true;
+    async (blockId: string | null, query?: string, quote?: string) => {
+      if (navigateBlockRef.current?.(blockId, query, quote)) return true;
       if (!blockId) return false;
       if (!(await monoTranscript.reveal(blockId))) return false;
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => resolve()),
       );
-      return navigateBlockRef.current?.(blockId, query) ?? false;
+      return navigateBlockRef.current?.(blockId, query, quote) ?? false;
     },
     [monoTranscript.reveal],
   );
@@ -1744,7 +1746,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
             blocks={history.transcriptBlocks}
             title={title}
             row={paneRow}
-            onNavigate={navigateBlock}
+            onNavigate={(blockId, quote) => navigateBlock(blockId, undefined, quote)}
             onOpenFile={onOpenFile}
           />
         ) : null}

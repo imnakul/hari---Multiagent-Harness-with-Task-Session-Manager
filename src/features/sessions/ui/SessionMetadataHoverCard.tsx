@@ -13,7 +13,7 @@ import {
 import type { PopoverSide } from "../../../shared/lib/popover";
 import { Popover } from "../../../shared/ui/Popover";
 import type { SessionMetadata } from "../model/sessionMetadata";
-import { notesSummary } from "../model/sessionMetadataAi";
+import { notesSummary, splitHeadingTag } from "../model/sessionMetadataAi";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { useSessionHoverMetadata } from "./useSessionMetadata";
 
@@ -21,6 +21,20 @@ import { useSessionHoverMetadata } from "./useSessionMetadata";
 const OPEN_DELAY_MS = 400;
 /** Lets the pointer cross the gap into the card without closing it. */
 const CLOSE_DELAY_MS = 120;
+
+/** Newest Summary topics listed in the hover card; the rest are counted. */
+const HOVER_TOPICS = 5;
+
+/** A Summary heading with its bracketed kind as a faint tag (L-192). */
+function TopicHeading({ heading }: { heading: string }): ReactNode {
+  const { name, tag } = splitHeadingTag(heading);
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline gap-2">
+      <span className="truncate">{name}</span>
+      {tag ? <span className="shrink-0 text-[11px] text-content/40">{tag}</span> : null}
+    </span>
+  );
+}
 
 function stopPropagation(event: SyntheticEvent): void {
   event.stopPropagation();
@@ -69,19 +83,32 @@ export function SessionMetadataBody({
             </div>
           ) : null}
           {summary.groups.length > 0 ? (
-            <ul role="list" className="space-y-0.5 text-content/65">
-              {summary.groups.map((group, index) =>
-                group.heading ? (
-                  <li key={index} className="truncate">
-                    {group.heading}
+            <div className={summary.leftOff ? "pt-1" : undefined}>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-content/45">
+                Topics
+              </p>
+              <ul role="list" className="mt-0.5 space-y-0.5 text-content/75">
+                {summary.groups.slice(0, HOVER_TOPICS).map((group, index) => (
+                  <li key={index} className="flex min-w-0 items-baseline gap-2">
+                    <span aria-hidden="true" className="shrink-0 text-content/35">
+                      •
+                    </span>
+                    {group.heading ? (
+                      <TopicHeading heading={group.heading} />
+                    ) : (
+                      <div className="line-clamp-3 min-w-0">
+                        <AgentMarkdown text={group.body} hardBreaks />
+                      </div>
+                    )}
                   </li>
-                ) : (
-                  <li key={index} className="line-clamp-3">
-                    <AgentMarkdown text={group.body} hardBreaks />
-                  </li>
-                ),
-              )}
-            </ul>
+                ))}
+              </ul>
+              {summary.groups.length > HOVER_TOPICS ? (
+                <p className="mt-0.5 pl-4 text-[11px] text-content/45">
+                  +{summary.groups.length - HOVER_TOPICS} more
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

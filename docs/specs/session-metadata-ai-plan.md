@@ -114,7 +114,7 @@ Built directly (Do mode), no separate spec. Decisions locked in Discuss on 2026-
 
 Built directly after Discuss, no separate spec. Decisions locked on 2026-10-28/29 (replace parts of L-190 and L-191):
 
-- **Name and tabs:** Session overview with Summary (default) | Bookmarks | Files changed. Timeline, Decisions and AI points are removed.
+- **Name and tabs:** Session overview with Summary (default) | Bookmarks | Files changed. Timeline, Decisions and AI points are removed. (Timeline came back on 2026-10-29: see below.)
 - **Header:** label input (placeholder the chat title) with its own sparkle that always rewrites the label; Auto switch for this chat; main sparkle adds what is new to the Summary and writes the label only when it is empty; ✕.
 - **Summary:** the notes, grouped by heading, collapsed, newest first, Left off card on top; points plain text; Edit summary opens Live Markdown in the panel.
 - **Bookmarks:** reply button stays; Bookmark in the selected-text menu saves the quote, kept apart from the whole-reply bookmark.
@@ -123,6 +123,8 @@ Built directly after Discuss, no separate spec. Decisions locked on 2026-10-28/2
 - **Settings:** group renamed Session overview; Effort picker (Automatic, Low, Medium, High; Claude and Codex); Antigravity allowed as the Notes model with a tools warning.
 - **Resize edge:** invisible until hover, then a thin line.
 - **Data:** keep both tables; delete nothing. Old AI points in saved panels are ignored and dropped on the next bookmark save.
+- **Timeline (added 2026-10-29 00:36):** a tab after Summary (Summary | Timeline | Bookmarks | Files changed). AI points (decision, found, event) grouped by day, newest first; each shows the time its message was sent (the turn's user message), with the full date on hover; edit, delete, click to jump. The main sparkle and Auto run the Summary update, then the Timeline update. Left off stays on Summary only. Old saved points are read again.
+- **Search, Expand all, smooth jumps, tint (added 2026-10-29 08:07):** search button at the end of the tab row filters every tab with counts on the labels and the words highlighted, switching to the first tab with matches; Expand all / Collapse all icon button on Summary only (hidden while searching); label sparkle only while the label box is focused; jumps and chat find scroll smoothly, then pulse; selection bookmarks stay accent-tinted in the chat.
 
 ### Checklist (manual desktop)
 
@@ -138,3 +140,13 @@ Built directly after Discuss, no separate spec. Decisions locked on 2026-10-28/2
 - [ ] Leave a chat with a Summary for longer than the wait (set 2 min), come back: the overview opens on Summary.
 - [ ] Settings → Session overview: Effort picker saves; Antigravity selectable as Notes model with the warning.
 - [ ] Resize edge hidden until hover, a thin line on hover, accent while dragging.
+- [ ] Timeline tab after Summary; sparkle adds Summary groups and then Timeline points; spinner covers both runs.
+- [ ] Timeline days read Today / Yesterday / date, newest first; each point shows its message's time, hover shows the full date and time.
+- [ ] Timeline point: click jumps to its message; pencil edits (meta shows "edited"); bin deletes.
+- [ ] A chat with L-191 points (not re-saved under local18) shows them in the Timeline.
+- [ ] Label sparkle hidden until the label box is clicked; shows while focused, hides on blur (stays while running).
+- [ ] Summary: Expand all opens every heading and becomes Collapse all; hidden on other tabs and while searching.
+- [ ] Search button: box opens focused; typing shows counts on every tab, highlights words, Summary opens matching headings; an empty tab moves to the first tab with matches; Esc or ✕ closes and clears.
+- [ ] Click a bookmark, Timeline point and changed file far up the chat: smooth scroll, then a pulse where it lands (a selection bookmark pulses the quote).
+- [ ] Chat find (Ctrl+F) next/previous scroll smoothly; with Windows animations off, jumps are instant.
+- [ ] Select text → Bookmark: the text stays accent-tinted in the chat, also after scrolling away and back; a whole-reply bookmark adds no tint; deleting the bookmark removes the tint.
