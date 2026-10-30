@@ -6392,6 +6392,36 @@ pub async fn ensure_scratch_chat(name: String) -> Result<String, String> {
     Ok(dir.to_string_lossy().into_owned())
 }
 
+/// Whiteboard sheets (fork, L-194): `<home>/.monocode/whiteboards/` and its
+/// `.trash` folder, created on demand. Returns the absolute folder path.
+#[tauri::command]
+pub async fn ensure_whiteboard_dir() -> Result<String, String> {
+    let home = crate::dirs_home().ok_or("No home folder")?;
+    let dir = std::path::Path::new(&home)
+        .join(".monocode")
+        .join("whiteboards");
+    std::fs::create_dir_all(dir.join(".trash")).map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Write base64 bytes to a file the user picked in a save dialog (fork,
+/// L-194: whiteboard PNG export).
+#[tauri::command]
+pub async fn write_base64_file(path: String, data: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
+            .map_err(|e| e.to_string())?;
+        let destination = expand_home(&path);
+        if destination.is_dir() {
+            return Err("Cannot save to a directory.".into());
+        }
+        std::fs::write(&destination, bytes)
+            .map_err(|e| format!("{}: {e}", destination.display()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn scratch_chat_dir(name: &str) -> Option<std::path::PathBuf> {
     let home = crate::dirs_home()?;
     scratch_chat_dir_in(std::path::Path::new(&home), name)

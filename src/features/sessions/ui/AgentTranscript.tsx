@@ -188,6 +188,7 @@ import {
 } from "../model/monocodeToolCall";
 import {
   isOperatorUserTurn,
+  operatorEnabledInThread,
   operatorUserPrompt,
 } from "../model/operatorCommand";
 import {
@@ -429,6 +430,10 @@ function AgentTranscriptComponent({
       ? chatBlocks
       : visibleBlocks;
   }, [harness, isMonoChat, sourceBlocks]);
+  const continueOperatorOn = useMemo(
+    () => operatorEnabledInThread(sourceBlocks),
+    [sourceBlocks],
+  );
   const editableUserBlockId = useMemo(
     () => lastUserTurnBlock(blocks)?.id,
     [blocks],
@@ -1910,6 +1915,7 @@ function AgentTranscriptComponent({
                     onContinue ? (choice) => onContinue(choice, turn) : undefined
                   }
                   continueProjectCwd={continueProjectCwd}
+                  continueOperatorOn={continueOperatorOn}
                   continueEstimate={continueEstimate}
                   onSidechat={
                     onSidechat ? () => onSidechat(turn) : undefined
@@ -2131,6 +2137,7 @@ function TurnDuration({
   onHandoff,
   onContinue,
   continueProjectCwd,
+  continueOperatorOn = false,
   continueEstimate,
   onSidechat,
   onBranch,
@@ -2159,6 +2166,7 @@ function TurnDuration({
   onHandoff?: (target: ModelTarget) => void;
   onContinue?: (choice: ContinueChoice) => void;
   continueProjectCwd?: string;
+  continueOperatorOn?: boolean;
   continueEstimate?: (choice: ContinueChoice) => ContinueEstimate;
   onSidechat?: () => void;
   onBranch?: () => void;
@@ -2205,6 +2213,7 @@ function TurnDuration({
             from={fromHarness}
             fromModel={fromModel}
             projectCwd={continueProjectCwd}
+            operatorOn={continueOperatorOn}
             estimate={continueEstimate}
             onContinue={onContinue}
           />

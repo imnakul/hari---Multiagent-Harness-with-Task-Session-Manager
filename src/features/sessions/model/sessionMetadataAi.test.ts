@@ -7,6 +7,7 @@ import {
   autoNotesOn,
   blocksAfter,
   buildNotesPrompt,
+  buildTidyPrompt,
   DEFAULT_NOTES_INSTRUCTIONS,
   loadSessionMetadataAi,
   markAutoNotesDone,
@@ -15,6 +16,7 @@ import {
   parseLabelReply,
   parseNotesReply,
   parseSessionMetadataAi,
+  parseTidyReply,
   splitHeadingTag,
   saveSessionMetadataAi,
   setAutoNotes,
@@ -66,7 +68,10 @@ describe("prompts and replies", () => {
   it("builds the notes prompt with the rules, style, notes and transcript", () => {
     const prompt = buildNotesPrompt({ transcript: "T", notes: "", instructions: "", scope: "update" });
     expect(prompt).toContain(DEFAULT_NOTES_INSTRUCTIONS);
-    expect(prompt).toContain("(continued)");
+    // L-193: no "(continued)" headings; routine steps are skipped.
+    expect(prompt).toContain('Never write "(continued)"');
+    expect(prompt).toContain("Skip routine steps");
+    expect(prompt).toContain("At most 60 words");
     expect(prompt).toContain("**Left off:**");
     expect(prompt).toContain(NOTHING_NEW);
     expect(prompt).toContain("only the turns since");
@@ -106,6 +111,62 @@ describe("appendSessionNotes", () => {
     );
     expect(appendSessionNotes("", "- a")).toBe("- a");
     expect(appendSessionNotes(notes, "  ")).toBe(notes);
+  });
+});
+
+describe("tidy summary (L-193)", () => {
+  it("sizes the tidy prompt to the notes, within limits", () => {
+    const words = (count: number) => Array.from({ length: count }, () => "word").join(" ");
+    expect(buildTidyPrompt({ notes: words(10), instructions: "" })).toContain("At most 80 words.");
+    expect(buildTidyPrompt({ notes: words(200), instructions: "" })).toContain("At most 140 words.");
+    expect(buildTidyPrompt({ notes: words(5000), instructions: "" })).toContain("At most 400 words.");
+    const prompt = buildTidyPrompt({ notes: "## A\n- one", instructions: "Mine" });
+    expect(prompt).toContain("<style>\nMine\n</style>");
+    expect(prompt).toContain("<notes>\n## A\n- one\n</notes>");
+    expect(prompt).toContain("Skip routine steps");
+  });
+
+  it("accepts a tidied reply and rejects unusable ones", () => {
+    expect(parseTidyReply("```md\n## A\n- one\n```")).toBe("## A\n- one");
+    expect(parseTidyReply("   ")).toBeNull();
+    expect(parseTidyReply(`${NOTHING_NEW}.`)).toBeNull();
+    expect(parseTidyReply("x".repeat(12_001))).toBeNull();
+  });
+});
+
+describe("notesSummary topic merge (L-193)", () => {
+  it("shows a repeated heading as one topic, at its newest place", () => {
+    const notes = ["## Panel", "- a", "## Build", "- b", "## Panel", "- c"].join("\n");
+    expect(notesSummary(notes).groups).toEqual([
+      { heading: "Panel", body: "- a\n- c" },
+      { heading: "Build", body: "- b" },
+    ]);
+  });
+
+  it("folds (continued) headings into their topic", () => {
+    const notes = [
+      "## Panel tabs (feature)",
+      "- a",
+      "## Other",
+      "- b",
+      "## Panel tabs (continued)",
+      "- c",
+      "## Other - continued",
+      "- d",
+    ].join("\n");
+    expect(notesSummary(notes).groups).toEqual([
+      { heading: "Other", body: "- b\n- d" },
+      { heading: "Panel tabs (feature)", body: "- a\n- c" },
+    ]);
+  });
+
+  it("keeps different kinds of one name apart, and never merges headless text", () => {
+    const notes = ["Intro.", "## Tabs (bug fix)", "- a", "## Tabs (feature)", "- b"].join("\n");
+    expect(notesSummary(notes).groups).toEqual([
+      { heading: "Tabs (feature)", body: "- b" },
+      { heading: "Tabs (bug fix)", body: "- a" },
+      { heading: "", body: "Intro." },
+    ]);
   });
 });
 

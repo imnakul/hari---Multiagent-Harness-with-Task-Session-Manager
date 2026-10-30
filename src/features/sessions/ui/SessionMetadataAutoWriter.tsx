@@ -3,6 +3,7 @@ import {
   writeSessionLabel,
   writeSessionNotes,
   writeSessionPoints,
+  tidySessionNotes,
 } from "../../../integrations/harness/core/sessionMetadataHelper";
 import { isMonoSession } from "../../monos/model/mono";
 import type { Session } from "../model/session";
@@ -121,7 +122,13 @@ export function summaryEditorOpen(sessionId: string): boolean {
 // AI runs, one per chat at a time; the panel shows a spinner while one runs.
 
 export type SummaryUpdateResult =
-  | { ok: true; added: boolean }
+  | {
+      ok: true;
+      added: boolean;
+      /** Tidy summary only: the notes before and after, for Undo. */
+      previous?: string;
+      value?: string;
+    }
   | { ok: false; message: string };
 
 const summaryRuns = new Map<string, Promise<SummaryUpdateResult>>();
@@ -267,6 +274,56 @@ export function updateSessionSummary(
       return { ok: false, message: added ? `Summary updated. ${timelineFailure}` : timelineFailure };
     return { ok: true, added };
   });
+}
+
+/**
+ * Tidy summary (L-193): rewrites the chat's whole Summary once, one heading
+ * per topic. Waits for a running update first, and keeps the notes when they
+ * changed while the AI wrote. Resolves with the old notes for Undo.
+ */
+export async function tidySessionSummary(
+  session: Session,
+  signal?: AbortSignal,
+): Promise<SummaryUpdateResult> {
+  const running = summaryRuns.get(session.id);
+  if (running) await running.catch(() => undefined);
+  return track(summaryRuns, session.id, async () => {
+    const notes = (await loadSessionMetadataFor(session.id))?.notes ?? "";
+    const result = await tidySessionNotes({
+      blocks: [],
+      cwd: session.cwd,
+      harness: session.harness,
+      notes,
+      signal,
+    });
+    if (!result.ok) return { ok: false, message: result.cancelled ? "" : result.message };
+    if (summaryEditorOpen(session.id))
+      return { ok: false, message: "Close the editor first, then try again." };
+    const current = getSessionMetadata(session.id);
+    if ((current?.notes ?? "") !== notes)
+      return { ok: false, message: "The summary changed meanwhile. Try again." };
+    const label = current?.label ?? "";
+    const invalid = sessionMetadataError(label, result.value);
+    if (invalid) return { ok: false, message: invalid };
+    await saveSessionMetadata(session.id, label, result.value);
+    return { ok: true, added: true, previous: notes, value: result.value };
+  });
+}
+
+/**
+ * Puts back the notes a Tidy summary replaced, keeping the chat's label.
+ * Returns false when the summary changed since (an update or an edit), so
+ * Undo never drops newer notes.
+ */
+export async function undoTidySummary(
+  sessionId: string,
+  previous: string,
+  tidied: string,
+): Promise<boolean> {
+  const current = getSessionMetadata(sessionId);
+  if ((current?.notes ?? "") !== tidied) return false;
+  await saveSessionMetadata(sessionId, current?.label ?? "", previous);
+  return true;
 }
 
 /** Writes the chat's label with AI, replacing the current one. */

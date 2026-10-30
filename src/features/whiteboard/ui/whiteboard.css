@@ -1,0 +1,49 @@
+/* Whiteboard (fork, L-194): Excalidraw on the app's glass background. */
+[data-app-whiteboard] .excalidraw {
+  --island-bg-color: color-mix(in srgb, var(--color-background-base) 62%, transparent);
+  --default-bg-color: transparent;
+  --sidebar-bg-color: var(--island-bg-color);
+  background: transparent;
+}
+
+[data-app-whiteboard] .excalidraw .Island {
+  border: 1px solid color-mix(in srgb, var(--color-content) 10%, transparent);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+/* The top bar has the menu, zoom and help actions. */
+[data-app-whiteboard] .excalidraw .main-menu-trigger,
+[data-app-whiteboard] .excalidraw .zoom-actions,
+[data-app-whiteboard] .excalidraw .help-icon {
+  display: none;
+}
+
+.whiteboard-wheel {
+  animation: whiteboard-wheel-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes whiteboard-wheel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.whiteboard-thinking {
+  animation: whiteboard-thinking 1.6s ease-in-out infinite;
+}
+
+@keyframes whiteboard-thinking {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whiteboard-wheel,
+  .whiteboard-thinking {
+    animation: none;
+  }
+}

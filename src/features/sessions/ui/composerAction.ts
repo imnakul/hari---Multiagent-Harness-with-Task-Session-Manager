@@ -16,6 +16,11 @@ export type ActionResolutionContext = {
   canSteer: boolean;
   planMode?: boolean;
   isMac?: boolean;
+  /**
+   * Interactive Claude (fork, L-193): it can't take a steer, so the alternate
+   * key stops its turn and then sends ("Send now"); Enter and click queue.
+   */
+  sendNow?: boolean;
 };
 
 /**
@@ -59,7 +64,7 @@ export function resolveComposerKeyAction(
   const steeringSupported = context.canSteer && !context.planMode;
 
   if (!steeringSupported) {
-    return "queue";
+    return context.sendNow && !context.planMode && isAlternate ? "steer" : "queue";
   }
 
   if (context.followUpBehavior === "queue") {
@@ -98,12 +103,13 @@ export function resolveComposerActionTooltip(
   }
 
   const steeringSupported = context.canSteer && !context.planMode;
-  if (!steeringSupported) {
-    return "Click / Enter → Queue";
-  }
-
   const isMac = context.isMac ?? IS_MAC;
   const modEnter = isMac ? "Cmd+Enter" : "Ctrl+Enter";
+  if (!steeringSupported) {
+    return context.sendNow && !context.planMode
+      ? `Click / Enter → Queue\n${modEnter} → Send now (stops Claude's turn first)`
+      : "Click / Enter → Queue";
+  }
 
   if (context.followUpBehavior === "queue") {
     return `Click / Enter → Queue\n${modEnter} → Steer`;

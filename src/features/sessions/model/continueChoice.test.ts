@@ -49,6 +49,14 @@ describe("continue choice (L-189)", () => {
     expect(parseContinueChoice("bad")).toBeNull();
   });
 
+  it("keeps the new chat's account (L-193)", () => {
+    saveContinueChoice("/repo/a", { ...choice, accountId: "account-work" });
+    expect(loadContinueChoice("/repo/a")?.accountId).toBe("account-work");
+    expect(
+      parseContinueChoice({ target: { harness: "codex", model: "gpt" }, accountId: 3 }),
+    ).not.toHaveProperty("accountId");
+  });
+
   it("survives corrupt storage", () => {
     storage.set("monocode.continueChoice", "{not json");
     expect(loadContinueChoice("/repo/a")).toBeNull();

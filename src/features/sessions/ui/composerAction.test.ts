@@ -705,3 +705,31 @@ describe("composerAction resolution", () => {
     });
   });
 });
+
+describe("Interactive Claude Send now (L-193)", () => {
+  const context = {
+    busy: true,
+    followUpBehavior: "steer" as const,
+    canSteer: false,
+    planMode: false,
+    isMac: false,
+    sendNow: true,
+  };
+  const plain = { shiftKey: false, ctrlKey: false, metaKey: false };
+  const ctrl = { shiftKey: false, ctrlKey: true, metaKey: false };
+
+  it("queues on Enter and click, and sends now on Ctrl+Enter", () => {
+    expect(resolveComposerKeyAction("Enter", plain, context)).toBe("queue");
+    expect(resolveComposerKeyAction("Enter", ctrl, context)).toBe("steer");
+    expect(resolveComposerButtonAction(context)).toBe("queue");
+    expect(resolveComposerActionTooltip(context)).toBe(
+      "Click / Enter → Queue\nCtrl+Enter → Send now (stops Claude's turn first)",
+    );
+  });
+
+  it("only queues in plan mode or without Send now", () => {
+    expect(resolveComposerKeyAction("Enter", ctrl, { ...context, planMode: true })).toBe("queue");
+    expect(resolveComposerKeyAction("Enter", ctrl, { ...context, sendNow: false })).toBe("queue");
+    expect(resolveComposerActionTooltip({ ...context, sendNow: false })).toBe("Click / Enter → Queue");
+  });
+});

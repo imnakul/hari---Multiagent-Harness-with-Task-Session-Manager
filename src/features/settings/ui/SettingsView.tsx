@@ -475,6 +475,7 @@ import {
   loadGridArcadeEnabled,
   loadLiveAgentsEnabled,
   loadModelControls,
+  loadSessionManagerInSidebar,
   loadNotesEnabled,
   loadSessionLabels,
   loadSessionMetadataHover,
@@ -516,6 +517,7 @@ import {
   saveFormatOnSave,
   saveGridArcadeEnabled,
   saveLiveAgentsEnabled,
+  saveSessionManagerInSidebar,
   saveModelControls,
   saveNotesEnabled,
   saveAllAccountsUsage,
@@ -540,7 +542,6 @@ import {
   subscribeAiHelperSettings,
   type CollapsedProjectRailMode,
   type AiHelperSettings,
-  type AiHelperProvider,
   type AiHelperTarget,
   type DiffViewer,
   type FileTabMode,
@@ -1228,6 +1229,9 @@ function GeneralPage({
   const [liveAgentsEnabled, setLiveAgentsEnabled] = useState(
     loadLiveAgentsEnabled,
   );
+  const [sessionManagerInSidebar, setSessionManagerInSidebar] = useState(
+    loadSessionManagerInSidebar,
+  );
   const [fileTabMode, setFileTabMode] = useState<FileTabMode>(loadFileTabMode);
   const [tabAnimationsEnabled, setTabAnimationsEnabled] = useState(
     loadTabAnimationsEnabled,
@@ -1298,6 +1302,11 @@ function GeneralPage({
   const onLiveAgentsEnabled = (next: boolean) => {
     saveLiveAgentsEnabled(next);
     setLiveAgentsEnabled(next);
+  };
+
+  const onSessionManagerInSidebar = (next: boolean) => {
+    saveSessionManagerInSidebar(next);
+    setSessionManagerInSidebar(next);
   };
 
   const onFileTabMode = (next: FileTabMode) => {
@@ -1493,6 +1502,17 @@ function GeneralPage({
             label="Working agents"
             on={liveAgentsEnabled}
             onChange={onLiveAgentsEnabled}
+          />
+        </Row>
+        <Row
+          id="session-manager-sidebar"
+          label="Session Manager in sidebar"
+          description="Shows the Session Manager board in the sidebar. It is always in the View menu, and agents can still use it."
+        >
+          <Toggle
+            label="Session Manager in sidebar"
+            on={sessionManagerInSidebar}
+            onChange={onSessionManagerInSidebar}
           />
         </Row>
         <Row
@@ -1958,7 +1978,6 @@ function SessionMetadataAiGroup() {
           label="Notes model"
           target={settings.helper}
           onChange={(helper) => update({ helper })}
-          allowUnverified
         />
       ) : null}
       <Row
@@ -2044,33 +2063,22 @@ function AiHelperTargetEditor({
   target,
   onChange,
   action,
-  allowUnverified = false,
 }: {
   id: string;
   label: string;
   target: AiHelperTarget;
   onChange: (target: AiHelperTarget) => void;
   action?: ReactNode;
-  /**
-   * Lets providers whose built-in tools can't be switched off be picked, with
-   * a warning (L-192). Only the Session overview model uses it.
-   */
-  allowUnverified?: boolean;
 }) {
-  const [providerSelectOpen, setProviderSelectOpen] = useState(false);
-  const usable = (provider: AiHelperProvider): boolean =>
-    allowUnverified || HELPER_ISOLATION[provider].verified;
+  // Every provider can be picked; ones whose tools can't be switched off get
+  // a warning and are stopped if they try one (fork, L-193).
   const providerOptions = AI_HELPER_PROVIDERS.map((provider) => {
     const isolation = HELPER_ISOLATION[provider];
     const notInstalled =
       hasHarnessEvidence(provider) && !isHarnessAvailable(provider);
     return {
       value: provider,
-      label:
-        provider === "antigravity" && !usable(provider)
-          ? "Antigravity (not available yet)"
-          : `${HARNESS_TITLE[provider]}${notInstalled ? " (not installed)" : ""}`,
-      disabled: !usable(provider),
+      label: `${HARNESS_TITLE[provider]}${notInstalled ? " (not installed)" : ""}`,
       title: isolation.reason,
       description: isolation.reason,
     };
@@ -2105,28 +2113,16 @@ function AiHelperTargetEditor({
       "Not in the current model list. The provider will decide if it works.",
     );
   }
-  if (!HELPER_ISOLATION[target.provider].verified && allowUnverified) {
-    warnings.push(
-      `${HARNESS_TITLE[target.provider]}'s built-in tools can't be switched off, so it may look at files in the chat's folder while it writes.`,
-    );
-  } else if (
-    target.provider === "antigravity" &&
-    !HELPER_ISOLATION.antigravity.verified
-  ) {
-    warnings.push(HELPER_ISOLATION.antigravity.reason ?? "");
-  } else if (
-    providerSelectOpen &&
-    !allowUnverified &&
-    HELPER_ISOLATION.antigravity.reason
-  ) {
-    warnings.push(HELPER_ISOLATION.antigravity.reason);
+  const isolationReason = HELPER_ISOLATION[target.provider].reason;
+  if (!HELPER_ISOLATION[target.provider].verified && isolationReason) {
+    warnings.push(isolationReason);
   }
 
   const setProvider = (value: string) => {
     const provider = AI_HELPER_PROVIDERS.find(
       (candidate) => candidate === value,
     );
-    if (!provider || !usable(provider)) return;
+    if (!provider) return;
     onChange({ provider });
   };
 
@@ -2141,7 +2137,6 @@ function AiHelperTargetEditor({
         value={target.provider}
         options={providerOptions}
         onChange={setProvider}
-        onOpenChange={setProviderSelectOpen}
       />
       {supportsProviderAccounts(target.provider) ? (
         <Select

@@ -175,6 +175,7 @@ function turn(
     sessionId?: string;
     cwd?: string;
     providerAccountId?: string;
+    appAccess?: boolean;
   } = {},
 ) {
   return sendOpenCodeTurn({
@@ -182,6 +183,7 @@ function turn(
     fork: options.fork,
     cwd: options.cwd ?? "/repo",
     providerAccountId: options.providerAccountId,
+    appAccess: options.appAccess,
     intent: options.intent,
     model: "opencode:openrouter/anthropic/claude-sonnet-4.6",
     runtimeMode: options.runtimeMode ?? "supervised",
@@ -2418,4 +2420,95 @@ it("still kills the child when closing an ended stream fails", async () => {
   await expect(stopOpenCodeSession("opencode-live")).resolves.toBeUndefined();
   expect(closeHarnessSse).toHaveBeenCalledExactlyOnceWith("opencode-live");
   expect(killChild).toHaveBeenCalledExactlyOnceWith("opencode-live");
+});
+
+describe("OpenCode 2.x Operator server (L-193)", () => {
+  const v2Prompt = (events: HarnessEvent[], appAccess: boolean) => {
+    const before = harnessHttp.mock.calls.length;
+    const done = turn(events, { appAccess });
+    return {
+      done,
+      prompted: () =>
+        waitFor(
+          () =>
+            harnessHttp.mock.calls
+              .slice(before)
+              .some(([input]) => new URL(input.url).pathname === "/api/session/session_1/prompt"),
+          "v2 prompt",
+        ),
+    };
+  };
+  const finish = () =>
+    onSseEvent?.({
+      id: `evt_done_${Math.random()}`,
+      type: "session.execution.succeeded",
+      data: { sessionID: "session_1" },
+    });
+
+  beforeEach(() => {
+    openCodeVersion = "opencode v2.0.32";
+    spawnChild.mockImplementation(async () => {
+      onStdout?.("server listening on http://127.0.0.1:4100");
+      onStdout?.("server password private-pass");
+    });
+  });
+  afterEach(() => {
+    spawnChild.mockImplementation(async () => {
+      onStdout?.("opencode server listening on http://127.0.0.1:4096");
+    });
+  });
+
+  it("starts a private server for an Operator turn so the app connection reaches its shell", async () => {
+    const events: HarnessEvent[] = [];
+    const first = v2Prompt(events, true);
+    await first.prompted();
+    expect(spawnChild).toHaveBeenCalledWith(
+      "opencode-live",
+      "/fake/opencode",
+      ["serve", "--hostname=127.0.0.1", "--port=4096"],
+      "/repo",
+      undefined,
+      "opencode",
+    );
+    const prompt = harnessHttp.mock.calls.find(
+      ([input]) => new URL(input.url).pathname === "/api/session/session_1/prompt",
+    )?.[0] as { url: string; headers?: Record<string, string> };
+    expect(new URL(prompt.url).origin).toBe("http://127.0.0.1:4100");
+    expect(prompt.headers?.Authorization).toBe(
+      `Basic ${btoa("opencode:private-pass")}`,
+    );
+    finish();
+    await first.done;
+  });
+
+  it("moves a chat from the shared service to a private server when Operator turns on", async () => {
+    const events: HarnessEvent[] = [];
+    const plain = v2Prompt(events, false);
+    await plain.prompted();
+    expect(spawnChild).not.toHaveBeenCalled();
+    finish();
+    await plain.done;
+
+    const operator = v2Prompt(events, true);
+    await operator.prompted();
+    expect(spawnChild).toHaveBeenCalledTimes(1);
+    // The same OpenCode conversation continues on the new server.
+    expect(
+      harnessHttp.mock.calls.some(
+        ([input]) =>
+          input.url.startsWith("http://127.0.0.1:4100") &&
+          new URL(input.url).pathname === "/api/session/session_1" &&
+          input.method === "GET",
+      ),
+    ).toBe(true);
+    finish();
+    await operator.done;
+
+    // Later turns keep the private server, with or without Operator.
+    const after = v2Prompt(events, false);
+    await after.prompted();
+    expect(spawnChild).toHaveBeenCalledTimes(1);
+    finish();
+    await after.done;
+  });
 });

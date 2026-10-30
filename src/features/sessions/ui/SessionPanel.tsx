@@ -18,6 +18,7 @@ import {
   Search,
   Sparkles,
   UnfoldVertical,
+  WandSparkles,
   X,
 } from "../../../shared/ui/icons";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
@@ -76,6 +77,8 @@ import {
   sessionSummaryUpdating,
   setSummaryEditing,
   subscribeSummaryRuns,
+  tidySessionSummary,
+  undoTidySummary,
   updateSessionSummary,
   type SummaryUpdateResult,
 } from "./SessionMetadataAutoWriter";
@@ -541,6 +544,8 @@ function SessionPanel({
   const frame = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // The notes before the last Tidy, so Undo can put them back (L-193).
+  const [undo, setUndo] = useState<{ previous: string; tidied: string } | null>(null);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   // Search (L-192): null while closed; filters every tab and highlights its words.
   const [query, setQuery] = useState<string | null>(null);
@@ -599,6 +604,7 @@ function SessionPanel({
     setEditing(false);
     setOpenGroups(new Set());
     setQuery(null);
+    setUndo(null);
   }, [session.id]);
   // A new search moves to the first tab with matches when the open one has none.
   useEffect(() => {
@@ -660,6 +666,35 @@ function SessionPanel({
         else if (!result.added) setStatus("Nothing new since the last update.");
       })
       .catch((error: unknown) => setStatus(`Couldn't update: ${errorText(error)}`));
+  };
+  // Rewrites the whole summary once into one heading per topic (L-193).
+  const tidy = (): void => {
+    if (running.summary || editing) return;
+    setStatus(null);
+    setUndo(null);
+    void tidySessionSummary(session)
+      .then((result: SummaryUpdateResult) => {
+        if (!result.ok) setStatus(result.message || null);
+        else {
+          setOpenGroups(new Set());
+          setUndo(
+            result.previous !== undefined && result.value !== undefined
+              ? { previous: result.previous, tidied: result.value }
+              : null,
+          );
+          setStatus("Summary tidied.");
+        }
+      })
+      .catch((error: unknown) => setStatus(`Couldn't tidy: ${errorText(error)}`));
+  };
+  const undoTidy = (): void => {
+    if (!undo) return;
+    setUndo(null);
+    void undoTidySummary(session.id, undo.previous, undo.tidied)
+      .then((done) =>
+        setStatus(done ? "Summary restored." : "The summary changed since, so Undo is off."),
+      )
+      .catch((error: unknown) => setStatus(`Couldn't undo: ${errorText(error)}`));
   };
   const selectTab = (next: SessionPanelTab): void => saveSessionPanelView({ tab: next });
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -902,7 +937,23 @@ function SessionPanel({
               </button>
             ))}
           </div>
-          {tab === "summary" && !editing && !searching && groupKeys.length > 0 ? (
+          {tab === "summary" && !editing && !searching && groupKeys.length > 1 ? (
+          <button
+            type="button"
+            onClick={tidy}
+            disabled={running.summary || busy}
+            title={
+              busy
+                ? "Wait for the turn to finish"
+                : "Tidy summary: merge repeated headings and drop routine steps"
+            }
+            aria-label="Tidy summary"
+            className={ICON_BUTTON}
+          >
+            <WandSparkles aria-hidden className="size-3.5" strokeWidth={1.75} />
+          </button>
+        ) : null}
+        {tab === "summary" && !editing && !searching && groupKeys.length > 0 ? (
             <button
               type="button"
               onClick={() => setOpenGroups(allOpen ? new Set() : new Set(groupKeys))}
@@ -962,6 +1013,16 @@ function SessionPanel({
         {status ? (
           <p role="status" className="mx-3 mb-2 shrink-0 text-[11px] leading-4 text-content/55">
             {status}
+            {undo !== null && status === "Summary tidied." ? (
+              <button
+                type="button"
+                onClick={undoTidy}
+                disabled={running.summary || editing}
+                className="ml-1.5 rounded px-1 text-content/75 underline-offset-2 transition-colors duration-100 hover:text-content hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:opacity-40"
+              >
+                Undo
+              </button>
+            ) : null}
           </p>
         ) : null}
         <div

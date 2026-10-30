@@ -40,6 +40,9 @@ export function parseContinueChoice(value: unknown): ContinueChoice | null {
   const helper = parseHelper(value.helper);
   return {
     target: { harness, model, modelSettings },
+    ...(typeof value.accountId === "string" && value.accountId
+      ? { accountId: value.accountId }
+      : {}),
     preset,
     ...(helper ? { helper } : {}),
     ...(value.passes === 1 || value.passes === 2 ? { passes: value.passes } : {}),

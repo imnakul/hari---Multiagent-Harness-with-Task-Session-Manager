@@ -1,12 +1,20 @@
-import { useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from "react";
 import {
   getHarnessAvailabilitySnapshot,
   isHarnessAvailable,
   subscribeHarnessAvailability,
 } from "../../../integrations/harness/core/availability";
 import { continueHelperAvailable } from "../../../integrations/harness/core/continueHelper";
+import {
+  providerAccountExists,
+  providerAccounts,
+  selectedProviderAccountId,
+  subscribeProviderAccounts,
+  supportsProviderAccounts,
+} from "../../providers/model/providerAccounts";
 import { ChevronDown, CornerDownRight } from "../../../shared/ui/icons";
 import { Popover } from "../../../shared/ui/Popover";
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
 import { AI_HELPER_PROVIDERS, type AiHelperTarget } from "../../settings/model/settings";
 import {
@@ -27,17 +35,31 @@ type Props = {
   fromModel?: string;
   /** Project folder the last choice is remembered for. */
   projectCwd: string;
+  /** Operator is on in this chat, so a Claude chat must run Structured (L-193). */
+  operatorOn?: boolean;
   estimate: (choice: ContinueChoice) => ContinueEstimate;
   onContinue: (choice: ContinueChoice) => void;
 };
 
 const PANEL_WIDTH = 300;
-const SELF = "[data-provider-target],[data-continue-panel]";
+const SELF = "[data-provider-target],[data-continue-panel],[data-dialog-popover]";
 const AUTO = "auto";
+const SAME = "same";
+
+type ClaudeExecution = "structured" | "interactive";
 
 function initialChoice(from: HarnessId, fromModel: string | undefined, projectCwd: string): ContinueChoice {
   const saved = loadContinueChoice(projectCwd);
-  if (saved && isHarnessAvailable(saved.target.harness)) return saved;
+  if (saved && isHarnessAvailable(saved.target.harness)) {
+    const { accountId, ...rest } = saved;
+    const harness = saved.target.harness;
+    // A removed account falls back to the default choice (L-193).
+    const kept =
+      accountId !== undefined &&
+      supportsProviderAccounts(harness) &&
+      providerAccountExists(harness, accountId);
+    return kept ? saved : rest;
+  }
   return {
     target: { harness: from, model: fromModel ?? preferredModelId(from), modelSettings: {} },
     preset: saved?.preset ?? "balanced",
@@ -56,6 +78,7 @@ export function ContinueButton({
   from,
   fromModel,
   projectCwd,
+  operatorOn = false,
   estimate,
   onContinue,
 }: Props): ReactElement {
@@ -63,6 +86,11 @@ export function ContinueButton({
     subscribeHarnessAvailability,
     getHarnessAvailabilitySnapshot,
     getHarnessAvailabilitySnapshot,
+  );
+  const [accountsVersion, setAccountsVersion] = useState(0);
+  useEffect(
+    () => subscribeProviderAccounts(() => setAccountsVersion((value) => value + 1)),
+    [],
   );
   const button = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -77,6 +105,24 @@ export function ContinueButton({
   const numbers = useMemo(() => (open ? estimate(choice) : null), [open, estimate, choice]);
   const helper = choice.helper ?? null;
   const preset = CONTINUE_PRESETS.find((option) => option.id === choice.preset);
+  const harness = choice.target.harness;
+  const accounts = useMemo(() => {
+    void accountsVersion;
+    return supportsProviderAccounts(harness) ? providerAccounts(harness) : [];
+  }, [accountsVersion, harness]);
+  const sameProvider = harness === from;
+  const accountValue =
+    choice.accountId && accounts.some((account) => account.id === choice.accountId)
+      ? choice.accountId
+      : sameProvider
+        ? SAME
+        : supportsProviderAccounts(harness)
+          ? selectedProviderAccountId(harness, projectCwd)
+          : "";
+  const claudeExecution: ClaudeExecution =
+    operatorOn || choice.target.modelSettings.claudeExecution !== "interactive"
+      ? "structured"
+      : "interactive";
 
   const toggle = (): void => {
     if (!open) setChoice(initialChoice(from, fromModel, projectCwd));
@@ -85,10 +131,34 @@ export function ContinueButton({
   const update = (patch: Partial<ContinueChoice>): void =>
     setChoice((current) => ({ ...current, ...patch }));
   const setHelper = (next: AiHelperTarget | null): void => update({ helper: next });
+  const setAccount = (value: string): void =>
+    setChoice((current) => {
+      const { accountId: _old, ...rest } = current;
+      return value === SAME ? rest : { ...rest, accountId: value };
+    });
+  const setExecution = (mode: ClaudeExecution): void =>
+    setChoice((current) => ({
+      ...current,
+      target: {
+        ...current.target,
+        modelSettings: { ...current.target.modelSettings, claudeExecution: mode },
+      },
+    }));
   const submit = (): void => {
-    saveContinueChoice(projectCwd, choice);
+    // Operator can't run in Interactive Claude, so the new chat runs Structured.
+    const final: ContinueChoice =
+      operatorOn && harness === "claude"
+        ? {
+            ...choice,
+            target: {
+              ...choice.target,
+              modelSettings: { ...choice.target.modelSettings, claudeExecution: "structured" },
+            },
+          }
+        : choice;
+    saveContinueChoice(projectCwd, final);
     setOpen(false);
-    onContinue(choice);
+    onContinue(final);
   };
 
   return (
@@ -142,7 +212,13 @@ export function ContinueButton({
             <SecondOpinionButton
               from={from}
               fromModel={fromModel}
-              onPick={(target) => update({ target })}
+              onPick={(target) =>
+                setChoice((current) => {
+                  const { accountId: _old, ...rest } = current;
+                  const keep = target.harness === current.target.harness;
+                  return { ...(keep ? current : rest), target };
+                })
+              }
               icon={ChevronDown}
               title="Change model"
               disabledTitle="No other provider is available"
@@ -151,6 +227,50 @@ export function ContinueButton({
               includeCurrent
             />
           </div>
+
+          {accounts.length > 1 ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="shrink-0 text-content/50">Account</span>
+              <SearchableSelect
+                label="Account"
+                variant="row"
+                align="end"
+                searchable={false}
+                value={accountValue}
+                options={[
+                  ...(sameProvider ? [{ value: SAME, label: "Same as this chat" }] : []),
+                  ...accounts.map((account) => ({ value: account.id, label: account.label })),
+                ]}
+                onChange={setAccount}
+              />
+            </div>
+          ) : null}
+
+          {harness === "claude" ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="shrink-0 text-content/50">Claude runs</span>
+                {operatorOn ? (
+                  <span className="text-content/80">Structured</span>
+                ) : (
+                  <SegmentedSwitch<ClaudeExecution>
+                    ariaLabel="Claude Code execution"
+                    options={[
+                      { id: "structured", label: "Structured" },
+                      { id: "interactive", label: "Interactive" },
+                    ]}
+                    value={claudeExecution}
+                    onChange={setExecution}
+                  />
+                )}
+              </div>
+              {operatorOn ? (
+                <p className="text-[11px] leading-4 text-content/50 text-pretty">
+                  Operator is on in this chat, and Interactive can't use Operator.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-1">
             <SegmentedSwitch<ContinuePreset>
@@ -168,46 +288,52 @@ export function ContinueButton({
                 Advanced
               </summary>
               <div className="mt-2 flex flex-col gap-2">
-                <label className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-content/60">Helper</span>
-                  <select
-                    className="min-w-0 max-w-[170px] rounded border border-content/10 bg-background-base px-1.5 py-0.5 text-[12px]"
+                  <SearchableSelect
+                    label="Helper"
+                    variant="row"
+                    align="end"
+                    searchable={false}
                     value={helper?.provider ?? AUTO}
-                    onChange={(event) => {
-                      const provider = helpers.find((id) => id === event.target.value);
+                    options={[
+                      { value: AUTO, label: "Automatic" },
+                      ...helpers.map((provider) => ({
+                        value: provider,
+                        label: HARNESS_TITLE[provider],
+                      })),
+                    ]}
+                    onChange={(value) => {
+                      const provider = helpers.find((id) => id === value);
                       setHelper(provider ? { provider } : null);
                     }}
-                  >
-                    <option value={AUTO}>Automatic</option>
-                    {helpers.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {HARNESS_TITLE[provider]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </div>
                 {helper ? (
-                  <label className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-content/60">Model</span>
-                    <select
-                      className="min-w-0 max-w-[170px] rounded border border-content/10 bg-background-base px-1.5 py-0.5 text-[12px]"
+                    <SearchableSelect
+                      label="Helper model"
+                      variant="row"
+                      align="end"
+                      searchPlaceholder="Search models…"
                       value={helper.model ?? ""}
-                      onChange={(event) =>
+                      options={[
+                        { value: "", label: "Default" },
+                        ...modelsFor(helper.provider).map((model) => ({
+                          value: model.id,
+                          label: model.name,
+                        })),
+                      ]}
+                      onChange={(value) =>
                         setHelper({
                           provider: helper.provider,
                           ...(helper.accountId ? { accountId: helper.accountId } : {}),
-                          ...(event.target.value ? { model: event.target.value } : {}),
+                          ...(value ? { model: value } : {}),
                         })
                       }
-                    >
-                      <option value="">Default</option>
-                      {modelsFor(helper.provider).map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    />
+                  </div>
                 ) : null}
                 {helper?.provider === "antigravity" ? (
                   <p className="text-[11px] leading-4 text-content/50">

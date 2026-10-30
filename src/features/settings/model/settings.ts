@@ -311,6 +311,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "live running sessions rail card",
   },
   {
+    id: "session-manager-sidebar",
+    section: "general",
+    label: "Session Manager in sidebar",
+    keywords: "kanban board drafts sidebar rail show hide",
+  },
+  {
     id: "file-tabs",
     section: "general",
     label: "File tabs",
@@ -1326,6 +1332,32 @@ export function subscribeLiveAgentsEnabled(onStoreChange: () => void) {
   window.addEventListener(LIVE_AGENTS_ENABLED_CHANGE_EVENT, onStoreChange);
   return () =>
     window.removeEventListener(LIVE_AGENTS_ENABLED_CHANGE_EVENT, onStoreChange);
+}
+
+// Session Manager is off the sidebar by default; the View menu keeps it
+// (fork, L-193).
+const SESSION_MANAGER_SIDEBAR_KEY = "monocode.sessionManagerInSidebar";
+
+export const SESSION_MANAGER_SIDEBAR_DEFAULT = false;
+
+const SESSION_MANAGER_SIDEBAR_CHANGE_EVENT =
+  "monocode:session-manager-sidebar-change";
+
+export function loadSessionManagerInSidebar(): boolean {
+  return readFlag(SESSION_MANAGER_SIDEBAR_KEY) ?? SESSION_MANAGER_SIDEBAR_DEFAULT;
+}
+
+export function saveSessionManagerInSidebar(value: boolean) {
+  writeFlag(SESSION_MANAGER_SIDEBAR_KEY, value);
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(SESSION_MANAGER_SIDEBAR_CHANGE_EVENT));
+}
+
+export function subscribeSessionManagerInSidebar(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(SESSION_MANAGER_SIDEBAR_CHANGE_EVENT, onStoreChange);
+  return () =>
+    window.removeEventListener(SESSION_MANAGER_SIDEBAR_CHANGE_EVENT, onStoreChange);
 }
 
 const CLOSE_TO_TRAY_KEY = "monocode.closeToTray";

@@ -769,6 +769,16 @@ export function ensureScratchChat(name: string): Promise<string> {
   return invoke<string>("ensure_scratch_chat", { name });
 }
 
+/** Whiteboard sheets folder, created on demand (fork, L-194). */
+export function ensureWhiteboardDir(): Promise<string> {
+  return invoke<string>("ensure_whiteboard_dir").then(slash);
+}
+
+/** Write base64 bytes to `path` (fork, L-194: whiteboard PNG export). */
+export function writeBase64File(path: string, data: string): Promise<void> {
+  return invoke<void>("write_base64_file", { path, data });
+}
+
 export function writeTextFile(path: string, content: string): Promise<void> {
   return invoke<void>("write_text_file", { path, content });
 }

@@ -36,7 +36,11 @@ describe("hugeicons imports", () => {
         const allowedCatalog =
           rel === CATALOG &&
           (spec === "@hugeicons/react" || DEEP_ICON.test(spec));
-        if (allowedCatalog) continue;
+        // The whiteboard icon library lazy-loads the whole free set (fork, L-194).
+        const allowedFullCatalog =
+          rel === "features/whiteboard/ui/iconCatalog.ts" &&
+          spec === "@hugeicons/core-free-icons";
+        if (allowedCatalog || allowedFullCatalog) continue;
         violations.push(`${rel}: ${spec}`);
       }
     }

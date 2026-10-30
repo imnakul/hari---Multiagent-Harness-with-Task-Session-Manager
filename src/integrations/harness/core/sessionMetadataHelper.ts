@@ -3,10 +3,12 @@ import { HARNESS_TITLE, type Block, type HarnessId } from "../../../features/ses
 import {
   buildLabelPrompt,
   buildNotesPrompt,
+  buildTidyPrompt,
   loadSessionMetadataAi,
   notesInstructions,
   parseLabelReply,
   parseNotesReply,
+  parseTidyReply,
   type NotesReply,
   type SessionMetadataAiSettings,
 } from "../../../features/sessions/model/sessionMetadataAi";
@@ -45,7 +47,7 @@ type HelperInput = {
   run?: HelperRun;
 };
 
-const TIMEOUT_MS = { label: 120_000, update: 120_000, full: 240_000 } as const;
+const TIMEOUT_MS = { label: 120_000, update: 120_000, full: 240_000, tidy: 240_000 } as const;
 
 const FAILURE_TEXT: Record<HelperFailureKind, string> = {
   auth: "needs sign-in",
@@ -173,6 +175,25 @@ export async function writeSessionNotes(
       parse: parseNotesReply,
       expected: "Markdown points to add, ending with a **Left off:** line, or NOTHING_NEW",
       what: "notes",
+    },
+  );
+}
+
+/** The whole notes rewritten, one heading per topic (Tidy summary, L-193). */
+export async function tidySessionNotes(
+  input: HelperInput & { notes: string },
+): Promise<MetadataHelperOutcome<string>> {
+  if (!input.notes.trim())
+    return { ok: false, cancelled: false, message: "Couldn't tidy the summary: it is empty." };
+  const settings = input.settings ?? loadSessionMetadataAi();
+  return runTargets(
+    { ...input, settings },
+    {
+      prompt: buildTidyPrompt({ notes: input.notes, instructions: notesInstructions(settings) }),
+      timeoutMs: TIMEOUT_MS.tidy,
+      parse: parseTidyReply,
+      expected: "the rewritten Markdown notes, ending with a **Left off:** line",
+      what: "summary",
     },
   );
 }

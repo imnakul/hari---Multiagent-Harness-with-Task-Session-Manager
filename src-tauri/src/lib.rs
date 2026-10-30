@@ -579,6 +579,8 @@ pub fn run() {
             fs::allow_video_stream,
             fs::write_attachment,
             fs::ensure_scratch_chat,
+            fs::ensure_whiteboard_dir,
+            fs::write_base64_file,
             fs::save_generated_image,
             fs::delete_generated_images,
             fs::read_text_file,

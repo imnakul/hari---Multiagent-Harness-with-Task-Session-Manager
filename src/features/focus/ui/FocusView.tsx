@@ -22,6 +22,7 @@ import {
   GripVertical,
   Settings,
   X,
+  Whiteboard,
   Zap,
 } from "../../../shared/ui/icons";
 import type { RecentProject } from "../../projects/model/recents";
@@ -148,6 +149,7 @@ type Props = {
   /** Title-bar shortcuts; each leaves Focus (its grid is kept) for that view. */
   onOpenTasks?: () => void;
   onOpenAutomations?: () => void;
+  onOpenWhiteboard?: () => void;
   onOpenSettings?: () => void;
   footer?: ReactNode;
 };
@@ -251,6 +253,7 @@ export function FocusView({
   dockGridRef,
   onOpenTasks,
   onOpenAutomations,
+  onOpenWhiteboard,
   onOpenSettings,
   footer,
 }: Props): ReactNode {
@@ -837,6 +840,11 @@ export function FocusView({
           {onOpenAutomations ? (
             <IconButton label="Automations" onClick={onOpenAutomations}>
               <Zap className="size-3.5" strokeWidth={1.75} />
+            </IconButton>
+          ) : null}
+          {onOpenWhiteboard ? (
+            <IconButton label="Whiteboard" onClick={onOpenWhiteboard}>
+              <Whiteboard className="size-3.5" strokeWidth={1.75} />
             </IconButton>
           ) : null}
           {onOpenSettings ? (

@@ -82,6 +82,15 @@ export function parseOpenCodeModelSlug(
   };
 }
 
+/** The password a standalone `opencode serve` prints at startup (fork, L-193). */
+export function parseServerPasswordFromOutput(output: string): string | null {
+  for (const line of output.split("\n")) {
+    const match = line.trim().match(/^server password\s+(\S+)$/i);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
 export function parseServerUrlFromOutput(output: string): string | null {
   for (const line of output.split("\n")) {
     const trimmed = line.trim();

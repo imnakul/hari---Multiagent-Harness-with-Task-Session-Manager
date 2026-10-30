@@ -15,6 +15,7 @@ import {
   Search,
   Settings,
   Zap,
+  Whiteboard,
 } from "../../shared/ui/icons";
 import {
   useEffect,
@@ -143,7 +144,9 @@ type Props = {
   tasksActive?: boolean;
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
+  onOpenWhiteboard?: () => void;
   automationsActive?: boolean;
+  whiteboardActive?: boolean;
   onTogglePanel?: () => void;
   onSelectProject: (path: string) => void;
   onOpenProject: () => void;
@@ -198,7 +201,9 @@ export function ProjectRail({
   tasksActive = false,
   kanbanActive = false,
   onOpenAutomations,
+  onOpenWhiteboard,
   automationsActive = false,
+  whiteboardActive = false,
   onTogglePanel,
   onSelectProject,
   onOpenProject,
@@ -401,6 +406,7 @@ export function ProjectRail({
     inboxActive ||
     notesActive || tasksActive || kanbanActive || selectedProvider !== null ||
     automationsActive ||
+    whiteboardActive ||
     !!monos?.activeId;
   const pinnedIds = sections.pinned.map((item) => item.path);
   const projectIds = groupedProjectSections.ungrouped.map((item) => item.path);
@@ -491,6 +497,15 @@ export function ProjectRail({
               active={automationsActive}
               ariaLabel="Automations"
             />
+            {onOpenWhiteboard ? (
+              <RailAction
+                label="Whiteboard"
+                icon={Whiteboard}
+                onClick={onOpenWhiteboard}
+                active={whiteboardActive}
+                ariaLabel="Whiteboard"
+              />
+            ) : null}
             {onOpenKanban ? <SessionManagerRailAction onClick={onOpenKanban} active={kanbanActive} /> : null}
           </div>
 

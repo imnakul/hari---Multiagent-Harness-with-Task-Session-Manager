@@ -1,5 +1,9 @@
 import type { AiHelperProvider } from "../../../features/settings/model/settings";
 
+/**
+ * `verified: false` means the provider's tools can't be switched off. It can
+ * still be picked (fork, L-193): its runner stops the turn on any tool use.
+ */
 export const HELPER_ISOLATION: Record<
   AiHelperProvider,
   { verified: boolean; reason?: string }
@@ -10,7 +14,7 @@ export const HELPER_ISOLATION: Record<
   antigravity: {
     verified: false,
     reason:
-      "MonoCode can't switch off Antigravity's built-in tools yet, so it can't be used as an AI helper.",
+      "Antigravity's built-in tools can't be switched off. If it tries to use one, MonoCode stops it and the reply fails.",
   },
 };
 

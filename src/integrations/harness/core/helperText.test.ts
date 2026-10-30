@@ -87,6 +87,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("unverified helper providers (L-193)", () => {
+  it("runs an installed Antigravity helper; its runner stops tool use", async () => {
+    saveAiHelperSettings({
+      mode: "custom",
+      primary: { provider: "antigravity" },
+      fallback: null,
+    });
+    mocks.runHarnessHelperPrompt.mockResolvedValue(
+      '{"subject":"feat: antigravity helper","body":""}',
+    );
+    expect(await generateHelperCommitMessage("/repo")).toBe(
+      "feat: antigravity helper",
+    );
+    expect(mocks.runHarnessHelperPrompt).toHaveBeenCalledWith(
+      "antigravity",
+      expect.objectContaining({ cwd: "/repo" }),
+    );
+  });
+});
+
 describe("helper task wrappers", () => {
   it("keeps Automatic mode on the existing title, commit and PR functions", async () => {
     mocks.generateHarnessTitle.mockResolvedValue({
@@ -231,6 +251,9 @@ describe("helper task wrappers", () => {
   });
 
   it("does not call an unavailable primary or fall back after authentication errors", async () => {
+    mocks.isHarnessAvailable.mockImplementation(
+      (provider) => provider !== "antigravity",
+    );
     saveAiHelperSettings({
       mode: "custom",
       primary: { provider: "antigravity" },

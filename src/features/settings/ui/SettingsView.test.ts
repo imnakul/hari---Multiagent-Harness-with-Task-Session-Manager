@@ -964,14 +964,13 @@ describe("settings pages", () => {
       '[aria-label^="Main model provider:"]',
     )!;
     await act(async () => providerTrigger.click());
-    const antigravity = document.querySelector<HTMLButtonElement>(
-      '[role="option"][aria-disabled="true"]',
-    )!;
-    expect(antigravity.textContent).toContain(
-      "Antigravity (not available yet)",
-    );
-    expect(antigravity.title).toContain("can't switch off");
-    expect(antigravity.textContent).toContain("built-in tools");
+    // Antigravity can be picked, with a warning that it stops on tool use (L-193).
+    const antigravity = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+    ).find((option) => option.textContent?.includes("Antigravity"))!;
+    expect(antigravity.getAttribute("aria-disabled")).not.toBe("true");
+    expect(antigravity.title).toContain("can't be switched off");
+    expect(antigravity.textContent).toContain("MonoCode stops it");
 
     const openCode = Array.from(
       document.querySelectorAll<HTMLButtonElement>('[role="option"]'),

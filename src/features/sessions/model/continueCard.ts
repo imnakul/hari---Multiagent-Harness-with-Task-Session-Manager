@@ -9,6 +9,11 @@ export type ContinueContextSize = "short" | "long";
 
 export type ContinueChoice = {
   target: ModelTarget;
+  /**
+   * Account for the new chat (fork, L-193). Absent: the same account as this
+   * chat for the same provider, otherwise the project's chosen account.
+   */
+  accountId?: string;
   preset: ContinuePreset;
   /** Advanced: a fixed helper; absent or null picks one automatically. */
   helper?: AiHelperTarget | null;

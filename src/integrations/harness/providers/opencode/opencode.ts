@@ -39,6 +39,7 @@ import {
   KNOWN_HIDDEN_AGENTS,
   parseOpenCodeModelSlug,
   parseOpenCodeVersion,
+  parseServerPasswordFromOutput,
   parseServerUrlFromOutput,
   permissionTitle,
   previewFromToolPart,
@@ -101,6 +102,11 @@ type PendingQuestion = {
 type Live = {
   sessionId: string;
   providerAccountId?: string;
+  /**
+   * The server was started by MonoCode for an Operator turn, so its shell has
+   * the app connection (fork, L-193). The shared v2 service never has it.
+   */
+  appReady: boolean;
   turnUserMessageId?: string;
   client: OpenCodeClient;
   openCodeSessionId: string;
@@ -177,7 +183,7 @@ export function setOpenCodeBinaryResolver(
 export async function sendOpenCodeTurn(input: SendTurnInput): Promise<void> {
   let live: Live;
   try {
-    live = await ensureLive(input);
+    live = await ensureLive(input, input.appAccess === true);
   } catch (error) {
     cancelledThreads.delete(input.sessionId);
     throw error;
@@ -419,7 +425,10 @@ export function bindOpenCodeSession(
   resumeByThread.set(threadId, { sessionId, cwd });
 }
 
-async function ensureLive(input: HarnessSessionInput): Promise<Live> {
+async function ensureLive(
+  input: HarnessSessionInput,
+  appAccess = false,
+): Promise<Live> {
   const grants = mcpGrantsByThread.get(input.sessionId);
   if (
     grants &&
@@ -429,11 +438,10 @@ async function ensureLive(input: HarnessSessionInput): Promise<Live> {
     mcpGrantsByThread.delete(input.sessionId);
   }
   const existing = liveByThread.get(input.sessionId);
-  if (
-    existing &&
-    existing.cwd === input.cwd &&
-    existing.providerAccountId === input.providerAccountId
-  ) {
+  const sameChat =
+    existing?.cwd === input.cwd &&
+    existing.providerAccountId === input.providerAccountId;
+  if (existing && sameChat && (!appAccess || existing.appReady)) {
     existing.onEvent = input.onEvent;
     if (existing.runtimeMode !== input.runtimeMode) {
       await existing.client.updateSession(existing.openCodeSessionId, {
@@ -444,7 +452,8 @@ async function ensureLive(input: HarnessSessionInput): Promise<Live> {
     return existing;
   }
   if (existing) {
-    resumeByThread.delete(input.sessionId);
+    // Operator needs a server MonoCode started; the chat resumes on it.
+    if (!sameChat) resumeByThread.delete(input.sessionId);
     await stopOpenCodeSession(input.sessionId);
   }
 
@@ -458,20 +467,26 @@ async function ensureLive(input: HarnessSessionInput): Promise<Live> {
   const generation = await assertOpenCodeVersion(path, input.cwd);
 
   const liveRef: { current: Live | null } = { current: null };
-  const service =
-    generation === "v2"
-      ? await resolveOpenCodeV2Service(path, input.cwd)
-      : undefined;
+  // OpenCode 2.x normally shares one background service, which can't carry
+  // this chat's app connection. Operator turns get their own server (L-193).
+  const ownServer = generation === "v1" || appAccess;
+  const service = ownServer
+    ? undefined
+    : await resolveOpenCodeV2Service(path, input.cwd);
   let serverUrl = service?.url ?? "";
+  let serverPassword: string | undefined;
   let serverExited: number | null | undefined;
+  const readServerLine = (line: string) => {
+    const parsed = parseServerUrlFromOutput(line);
+    if (parsed) serverUrl = parsed;
+    const password = parseServerPasswordFromOutput(line);
+    if (password) serverPassword = password;
+  };
 
-  if (generation === "v1") {
+  if (ownServer) {
     watchChild(
       input.sessionId,
-      (line) => {
-        const parsed = parseServerUrlFromOutput(line);
-        if (parsed) serverUrl = parsed;
-      },
+      readServerLine,
       (code) => {
         serverExited = code;
         liveByThread.delete(input.sessionId);
@@ -486,10 +501,7 @@ async function ensureLive(input: HarnessSessionInput): Promise<Live> {
           live.turnFailed = null;
         }
       },
-      (line) => {
-        const parsed = parseServerUrlFromOutput(line);
-        if (parsed) serverUrl = parsed;
-      },
+      readServerLine,
     );
 
     const port = await freeHarnessPort();
@@ -504,19 +516,19 @@ async function ensureLive(input: HarnessSessionInput): Promise<Live> {
   }
 
   try {
-    const url =
-      generation === "v2"
-        ? serverUrl
-        : await waitForServerUrl(
-            () => serverUrl,
-            () => serverExited,
-            SERVER_TIMEOUT_MS,
-          );
+    // A 2.x server prints its password after the URL; wait for both.
+    const url = ownServer
+      ? await waitForServerUrl(
+          () => (generation === "v2" && !serverPassword ? "" : serverUrl),
+          () => serverExited,
+          SERVER_TIMEOUT_MS,
+        )
+      : serverUrl;
     const client = new OpenCodeClient(
       url,
       input.cwd,
       generation,
-      service?.password,
+      service?.password ?? serverPassword,
     );
     const openCodeSession = await resolveSession(client, {
       resume: canResume ? resume : undefined,
@@ -534,6 +546,7 @@ async function ensureLive(input: HarnessSessionInput): Promise<Live> {
     const live: Live = {
       sessionId: input.sessionId,
       providerAccountId: input.providerAccountId,
+      appReady: ownServer && appAccess,
       client,
       openCodeSessionId: openCodeSession.id,
       cwd: input.cwd,

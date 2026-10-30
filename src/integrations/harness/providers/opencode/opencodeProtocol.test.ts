@@ -27,6 +27,7 @@ import {
   openCodeVariantLabel,
   parseOpenCodeModelSlug,
   parseOpenCodeVersion,
+  parseServerPasswordFromOutput,
   parseServerUrlFromOutput,
   sortOpenCodeVariants,
   toOpenCodePermissionReply,
@@ -187,6 +188,15 @@ describe("parseServerUrlFromOutput", () => {
         "opencode server listening on http://127.0.0.1:4096",
       ),
     ).toBe("http://127.0.0.1:4096");
+  });
+
+  it("reads the password a standalone 2.x server prints (L-193)", () => {
+    expect(parseServerPasswordFromOutput("server password abc_123-XYZ")).toBe(
+      "abc_123-XYZ",
+    );
+    expect(
+      parseServerPasswordFromOutput("server listening on http://127.0.0.1:4096"),
+    ).toBeNull();
   });
 });
 

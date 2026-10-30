@@ -5,6 +5,7 @@ export const APP_VIEW_LABELS = {
   tasks: "Task Manager",
   kanban: "Session Manager",
   automations: "Automations",
+  whiteboard: "Whiteboard",
 } as const;
 
 export type AppView = keyof typeof APP_VIEW_LABELS;

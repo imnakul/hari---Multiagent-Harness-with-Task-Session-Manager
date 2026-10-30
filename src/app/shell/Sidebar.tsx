@@ -53,6 +53,7 @@ import {
   StickyNote,
   X,
   Zap,
+  Whiteboard,
   type IconComponent,
 } from "../../shared/ui/icons";
 import { createPortal } from "react-dom";
@@ -440,6 +441,7 @@ type Props = {
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
+  onOpenWhiteboard?: () => void;
   onGoToFile?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
@@ -447,6 +449,7 @@ type Props = {
   tasksActive?: boolean;
   kanbanActive?: boolean;
   automationsActive?: boolean;
+  whiteboardActive?: boolean;
   notesEnabled?: boolean;
   onToggleProjectRail?: () => void;
   projectRailOpen?: boolean;
@@ -573,6 +576,7 @@ function SidebarComponent({
   onOpenTasks,
   onOpenKanban,
   onOpenAutomations,
+  onOpenWhiteboard,
   onGoToFile,
   searchActive = false,
   inboxActive = false,
@@ -580,6 +584,7 @@ function SidebarComponent({
   tasksActive = false,
   kanbanActive = false,
   automationsActive = false,
+  whiteboardActive = false,
   notesEnabled = true,
   onToggleProjectRail,
   projectRailOpen = true,
@@ -1131,6 +1136,7 @@ function SidebarComponent({
     tasksActive ||
     kanbanActive ||
     automationsActive ||
+    whiteboardActive ||
     settingsOpen;
   // A remembered Mono sits underneath these views; select it only while visible.
   const railMonos = monos
@@ -1156,6 +1162,7 @@ function SidebarComponent({
     !kanbanActive &&
     !monoViewActive &&
     !automationsActive &&
+    !whiteboardActive &&
     !settingsOpen;
   const sidebarVisible = open && sidebarAvailable;
   // A selected provider folder replaces the workspace panel with its
@@ -1169,6 +1176,7 @@ function SidebarComponent({
     !tasksActive &&
     !kanbanActive &&
     !automationsActive &&
+    !whiteboardActive &&
     !settingsOpen;
   // With the sidebar collapsed beside the compact rail, its tab shortcuts
   // open the sidebar temporarily until the user clicks away.
@@ -2840,6 +2848,12 @@ function SidebarComponent({
           active: automationsActive,
           onClick: onOpenAutomations,
         },
+        onOpenWhiteboard && {
+          label: "Whiteboard",
+          icon: Whiteboard,
+          active: whiteboardActive,
+          onClick: onOpenWhiteboard,
+        },
         onOpenKanban && {
           label: "Session Manager",
           icon: MessageMultiple,
@@ -3031,10 +3045,12 @@ function SidebarComponent({
               tasksActive={tasksActive}
               kanbanActive={kanbanActive}
               onOpenAutomations={onOpenAutomations}
+              onOpenWhiteboard={onOpenWhiteboard}
               searchActive={searchActive}
               inboxActive={inboxActive}
               notesActive={notesActive}
               automationsActive={automationsActive}
+              whiteboardActive={whiteboardActive}
               inboxUnseen={inboxUnseen}
             />
           ) : null}
@@ -3652,7 +3668,9 @@ function SidebarComponent({
           tasksActive={tasksActive}
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
+          onOpenWhiteboard={onOpenWhiteboard}
           automationsActive={automationsActive}
+          whiteboardActive={whiteboardActive}
           onOpenSettings={onOpenSettings}
           onTogglePanel={onToggleProjectRail}
           onLeaveActive={onGoBack}
@@ -3691,7 +3709,9 @@ function SidebarComponent({
           tasksActive={tasksActive}
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
+          onOpenWhiteboard={onOpenWhiteboard}
           automationsActive={automationsActive}
+          whiteboardActive={whiteboardActive}
           onTogglePanel={onToggleProjectRail}
           onSelectProject={onSelectProject}
           onOpenProject={onOpenProject}
@@ -3842,12 +3862,14 @@ function SidebarProjectPicker({
   onOpenTasks,
   onOpenKanban,
   onOpenAutomations,
+  onOpenWhiteboard,
   searchActive = false,
   inboxActive = false,
   notesActive = false,
   tasksActive = false,
   kanbanActive = false,
   automationsActive = false,
+  whiteboardActive = false,
   inboxUnseen = false,
 }: {
   cwd: string;
@@ -3864,12 +3886,14 @@ function SidebarProjectPicker({
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
+  onOpenWhiteboard?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
   notesActive?: boolean;
   tasksActive?: boolean;
   kanbanActive?: boolean;
   automationsActive?: boolean;
+  whiteboardActive?: boolean;
   inboxUnseen?: boolean;
 }) {
   const [inboxMenu, setInboxMenu] = useState<{ x: number; y: number } | null>(
@@ -3953,6 +3977,15 @@ function SidebarProjectPicker({
             <Zap className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
+        {onOpenWhiteboard ? (
+          <IconButton
+            label="Whiteboard"
+            active={whiteboardActive}
+            onClick={onOpenWhiteboard}
+          >
+            <Whiteboard className="size-3.5" strokeWidth={1.75} />
+          </IconButton>
+        ) : null}
         {onOpenKanban ? (
           <IconButton
             label="Session Manager"
@@ -4007,7 +4040,9 @@ function CompactProjectRail({
   tasksActive = false,
   kanbanActive = false,
   onOpenAutomations,
+  onOpenWhiteboard,
   automationsActive,
+  whiteboardActive = false,
   onOpenSettings,
   onTogglePanel,
   onLeaveActive,
@@ -4044,7 +4079,9 @@ function CompactProjectRail({
   tasksActive?: boolean;
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
+  onOpenWhiteboard?: () => void;
   automationsActive: boolean;
+  whiteboardActive?: boolean;
   onOpenSettings?: () => void;
   onTogglePanel?: () => void;
   onLeaveActive?: () => void;
@@ -4092,6 +4129,7 @@ function CompactProjectRail({
     !tasksActive &&
     !kanbanActive &&
     !automationsActive &&
+    !whiteboardActive &&
     !monoViewActive;
   const openWorkspaceTab = (nextTab: SidebarTab) => {
     if (!workspaceActive) onLeaveActive?.();
@@ -4253,6 +4291,14 @@ function CompactProjectRail({
           active={automationsActive}
           onClick={action(automationsActive, onOpenAutomations)}
         />
+        {onOpenWhiteboard ? (
+          <CompactRailAction
+            label="Whiteboard"
+            icon={Whiteboard}
+            active={whiteboardActive}
+            onClick={action(whiteboardActive, onOpenWhiteboard)}
+          />
+        ) : null}
         {onOpenKanban ? (
           <CompactRailAction
             label="Session Manager"

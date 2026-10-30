@@ -20,6 +20,7 @@ export function MessageQueue({
   onEdit,
   onEditingChange,
   onSteer,
+  steerLabel = "steer",
   onResume,
   variant = "queue",
   sendingId,
@@ -31,6 +32,8 @@ export function MessageQueue({
   onEdit?: (messageId: string, text: string) => void;
   onEditingChange?: (messageId?: string) => void;
   onSteer?: (messageId: string) => void;
+  /** Interactive Claude can't steer: its button stops the turn, then sends (L-193). */
+  steerLabel?: "steer" | "send-now";
   onResume?: () => void;
   variant?: "queue" | "messages";
   sendingId?: string;
@@ -227,12 +230,21 @@ export function MessageQueue({
                     <button
                       type="button"
                       disabled={sending}
-                      aria-label={`Steer with queued message: ${label}`}
+                      aria-label={
+                        steerLabel === "send-now"
+                          ? `Send now, stopping the current turn: ${label}`
+                          : `Steer with queued message: ${label}`
+                      }
+                      title={
+                        steerLabel === "send-now"
+                          ? "Stops Claude's current turn, then sends this message"
+                          : undefined
+                      }
                       onClick={() => onSteer?.(message.id)}
                       className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-content/50 transition-colors hover:bg-content/8 hover:text-content/90 disabled:opacity-40"
                     >
                       <CornerDownRight className="size-3.5" />
-                      Steer
+                      {steerLabel === "send-now" ? "Send now" : "Steer"}
                     </button>
                   ) : null}
                   <button

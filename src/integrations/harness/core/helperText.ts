@@ -30,7 +30,6 @@ import {
   providerAccountExists,
   supportsProviderAccounts,
 } from "../../../features/providers/model/providerAccounts";
-import { HELPER_ISOLATION } from "./helperIsolation";
 import {
   runHelperPipeline,
   type HelperFailureKind,
@@ -75,12 +74,8 @@ function configuredTargets(
 }
 
 function isAvailable(target: AiHelperTarget): boolean {
-  if (
-    !HELPER_ISOLATION[target.provider].verified ||
-    !isHarnessAvailable(target.provider)
-  ) {
-    return false;
-  }
+  // Unverified providers are allowed; their runner stops on tool use (L-193).
+  if (!isHarnessAvailable(target.provider)) return false;
   if (target.accountId === undefined) return true;
   return (
     supportsProviderAccounts(target.provider) &&

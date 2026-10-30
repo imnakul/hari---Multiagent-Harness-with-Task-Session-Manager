@@ -934,6 +934,7 @@ import {
   loadFileTabMode,
   loadLiveAgentsEnabled,
   loadNotesEnabled,
+  loadSessionManagerInSidebar,
   loadMonosEnabled,
   subscribeMonosEnabled,
   loadDiffViewer,
@@ -947,6 +948,7 @@ import {
   saveAutosave,
   subscribeLiveAgentsEnabled,
   subscribeNotesEnabled,
+  subscribeSessionManagerInSidebar,
   type CollapsedProjectRailMode,
   type SettingsSectionId,
   type FollowUpBehavior,
@@ -1082,6 +1084,15 @@ const AutomationsView = lazySurface(
   async () => {
     const module = await import("../features/automations/ui/AutomationsView");
     return { default: module.AutomationsView };
+  },
+  { suspense: false },
+);
+// Fork (L-194): Excalidraw is heavy, so the Whiteboard loads on first open
+// only and stays out of the idle preload.
+const WhiteboardView = lazySurface(
+  async () => {
+    const module = await import("../features/whiteboard/ui/WhiteboardView");
+    return { default: module.WhiteboardView };
   },
   { suspense: false },
 );
@@ -1614,6 +1625,7 @@ function Workspace({
   const recordKindRef = useRef(recordKind);
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
+  const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
   const [openAppViews, setOpenAppViews] = useState<AppView[]>([]);
   // Monos open as title tabs in the inset layout, by Mono id.
   const [openMonoTabs, setOpenMonoTabs] = useState<string[]>([]);
@@ -1628,7 +1640,9 @@ function Workspace({
         ? recordKind
         : automationsViewOpen
           ? "automations"
-          : undefined;
+          : whiteboardViewOpen
+            ? "whiteboard"
+            : undefined;
   const rememberAppView = useCallback((view: AppView) => {
     setOpenAppViews((current) =>
       current.includes(view) ? current : [...current, view],
@@ -1657,6 +1671,12 @@ function Workspace({
     subscribeLiveAgentsEnabled,
     loadLiveAgentsEnabled,
     () => true,
+  );
+  // Session Manager leaves the sidebar unless turned on (L-193).
+  const sessionManagerInSidebar = useSyncExternalStore(
+    subscribeSessionManagerInSidebar,
+    loadSessionManagerInSidebar,
+    () => false,
   );
   const [collapsedProjectRailMode, setCollapsedProjectRailMode] =
     useState<CollapsedProjectRailMode>(loadCollapsedProjectRailMode);
@@ -1746,6 +1766,7 @@ function Workspace({
     notes: false,
     recordKind: "notes" as "notes" | "tasks" | "kanban",
     automations: false,
+    whiteboard: false,
   });
   const [updateNotice, setUpdateNotice] = useState(installedUpdate);
   const [whatsNewVersion, setWhatsNewVersion] = useState<string | null>(null);
@@ -1994,6 +2015,7 @@ function Workspace({
       !inboxViewOpen &&
       (!recordsViewOpen || (boardOpen && boardPaneVisible)) &&
       !automationsViewOpen &&
+      !whiteboardViewOpen &&
       !settingsOpen &&
       !monoViewId,
     standaloneSessionId: inboxViewOpen
@@ -2001,6 +2023,7 @@ function Workspace({
       : !searchViewOpen &&
           !recordsViewOpen &&
           !automationsViewOpen &&
+          !whiteboardViewOpen &&
           !settingsOpen
         ? (monoViewId ?? undefined)
         : undefined,
@@ -2009,6 +2032,7 @@ function Workspace({
       !searchViewOpen &&
       !notesViewOpen &&
       !automationsViewOpen &&
+      !whiteboardViewOpen &&
       !settingsOpen
         ? shownMonoSessionId
         : undefined,
@@ -2019,6 +2043,8 @@ function Workspace({
   recordsViewOpenRef.current = recordsViewOpen;
   const automationsViewOpenRef = useRef(automationsViewOpen);
   automationsViewOpenRef.current = automationsViewOpen;
+  const whiteboardViewOpenRef = useRef(whiteboardViewOpen);
+  whiteboardViewOpenRef.current = whiteboardViewOpen;
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
   const sessionNavigationIdsRef = useRef<readonly string[]>([]);
@@ -2784,6 +2810,7 @@ function Workspace({
             !inboxViewOpenRef.current &&
             (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
             !automationsViewOpenRef.current &&
+            !whiteboardViewOpenRef.current &&
             !settingsOpenRef.current
           ) {
             setComposerFocused(true);
@@ -2822,6 +2849,7 @@ function Workspace({
     searchViewOpen,
     recordsViewOpen,
     automationsViewOpen,
+    whiteboardViewOpen,
     settingsOpen,
     flushForegroundHarnessEvents,
   ]);
@@ -3454,6 +3482,7 @@ function Workspace({
     setInboxViewOpen(false);
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
+    setWhiteboardViewOpen(false);
     const cwd = sidebarCwd;
     const session = newWorkspaceSession(cwd, sessionDefaults?.runtimeMode);
     const tab = newTab(session.id);
@@ -3474,6 +3503,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       const existing = findRemoteSessionTab(
         tabsRef.current,
         sessionsRef.current,
@@ -3536,6 +3566,7 @@ function Workspace({
         setInboxViewOpen(false);
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
+        setWhiteboardViewOpen(false);
         const cwd =
           item.projectPath || active?.cwd || sessionDefaults?.cwd || projectCwd;
         setSidebarTab("sessions", cwd);
@@ -3604,6 +3635,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       const cwd =
         (card.sourceCwd && looksLikeProject(card.sourceCwd)
           ? card.sourceCwd
@@ -5901,6 +5933,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       lastMonoIdRef.current = monoId;
       const session = await ensureMonoSession(monoId, {
         home: homeDir,
@@ -5927,6 +5960,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setMonoViewId(session.id);
       if (insetLayoutRef.current) {
         setOpenMonoTabs((current) =>
@@ -6072,6 +6106,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       if (looksLikeProject(session.cwd))
         setProjectCwd(normalizeProjectPath(session.cwd));
       const linkedUpdate = linkedSessionUpdatesRef.current.get(session.id);
@@ -6189,6 +6224,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
       setSidebarTab("sessions", session.cwd);
@@ -6868,6 +6904,7 @@ function Workspace({
             inboxViewOpenRef.current ||
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
+            whiteboardViewOpenRef.current ||
             settingsOpenRef.current ||
             filePickerOpenRef.current ||
             whatsNewVersionRef.current,
@@ -7155,6 +7192,7 @@ function Workspace({
     setInboxViewOpen(false);
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
+    setWhiteboardViewOpen(false);
     setSelectedProvider((current) => (current === provider ? null : provider));
     setSessionSidebarOpen(true);
     saveSessionSidebarOpen(true);
@@ -7186,6 +7224,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
       setSelectedProvider(null);
@@ -7820,6 +7859,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
 
       // At most one folder can take the blank session, and it keeps the
       // retargeting rules `onCwdChange` already owns.
@@ -8598,6 +8638,12 @@ function Workspace({
     [invalidateLoadedSession],
   );
 
+  // Interactive Claude's Send now (Ctrl+Enter while busy) queues the message,
+  // then stops the turn and sends it as the queued Steer does (fork, L-193).
+  const sendQueuedNowRef = useRef<
+    ((sessionId: string, messageId: string) => void) | null
+  >(null);
+
   const submitSession = useCallback(
     (
       sessionId: string,
@@ -9071,7 +9117,16 @@ function Workspace({
           // An app request's ID, so a retried request finds it queued.
           const queuedSubmissionId =
             options?.appRequestId ?? crypto.randomUUID();
-          setSessions((prev) =>
+          const sendNow =
+            isInteractiveClaudeSession(current) &&
+            options?.followUpBehavior === "steer" &&
+            !options.queuedMessageId &&
+            !options.appRequestId &&
+            !current.worktreePreparing &&
+            intent !== "plan" &&
+            intent !== "orchestrate" &&
+            !operatorCommand.matched;
+          const queue = (prev: Session[]): Session[] =>
             prev.map((s) =>
               s.id === sessionId
                 ? appendQueuedMessage(
@@ -9094,10 +9149,25 @@ function Workspace({
                     },
                   )
                 : s,
-            ),
-          );
+            );
+          if (sendNow) {
+            const queued = queue(sessionsRef.current);
+            sessionsRef.current = queued;
+            setSessions(queued);
+          } else setSessions(queue);
           observeSubmission(queuedSubmissionId, "queued");
           dismissNoticesForContinuedSession(sessionId);
+          if (sendNow) {
+            // A permission or question dialog is open: stopping now would
+            // throw away the answer it waits for, so the message waits.
+            if (sessionNeedsInput(current)) {
+              enqueueHarnessEvent(sessionId, {
+                type: "status",
+                text: "Claude is waiting for your answer. Your message is queued and sends after this turn.",
+              });
+              flushHarnessEvents();
+            } else sendQueuedNowRef.current?.(sessionId, queuedSubmissionId);
+          }
           return true;
         }
         if (!steerable) {
@@ -10599,6 +10669,7 @@ function Workspace({
           setInboxViewOpen(false);
           setRecordsViewOpen(false);
           setAutomationsViewOpen(false);
+          setWhiteboardViewOpen(false);
           setSidebarTab("sessions", session.cwd);
         }
 
@@ -10760,6 +10831,7 @@ function Workspace({
             setInboxViewOpen(false);
             setRecordsViewOpen(false);
             setAutomationsViewOpen(false);
+            setWhiteboardViewOpen(false);
             setSidebarTab("sessions", cwd);
           },
           submit: (id, text, attachments, options) =>
@@ -11458,6 +11530,16 @@ function Workspace({
         : undefined;
       if (!session || !message) return;
       if (session.queueStatus === "steering") return;
+      // Interactive Claude showing a permission or question dialog: stopping
+      // would drop the answer it waits for, so the message keeps waiting (L-193).
+      if (isInteractiveClaudeSession(session) && session.busy && sessionNeedsInput(session)) {
+        enqueueHarnessEvent(sessionId, {
+          type: "status",
+          text: "Claude is waiting for your answer. Answer it first; the message stays queued.",
+        });
+        flushHarnessEvents();
+        return;
+      }
       // Providers without native steer (Antigravity, Grok, Cline, Pi, omp,
       // fx) cannot take a whisper mid-turn. Plan mode also needs a distinct
       // next turn. In both cases, cancellation must settle before auto-flush.
@@ -11528,6 +11610,10 @@ function Workspace({
     },
     [onSubmit, enqueueHarnessEvent, flushHarnessEvents, clearStaleExternalTurn],
   );
+
+  useEffect(() => {
+    sendQueuedNowRef.current = onSteerQueuedMessage;
+  }, [onSteerQueuedMessage]);
 
   const onResumeQueue = useCallback(
     (sessionId: string) => {
@@ -12853,13 +12939,30 @@ function Workspace({
     (sourceId: string, choice: ContinueChoice, turn: Block[]) => {
       const source = sessionsRef.current.find((session) => session.id === sourceId);
       if (!source || source.worktreeRemoved) return;
-      const { harness, model, modelSettings } = choice.target;
+      const { harness, model } = choice.target;
+      // Operator can't run in Interactive Claude (L-193).
+      const modelSettings =
+        harness === "claude" && operatorEnabledInThread(source.blocks)
+          ? { ...choice.target.modelSettings, claudeExecution: "structured" }
+          : choice.target.modelSettings;
       const settings = mergeModelSettings(resolveModel(harness, model), modelSettings);
+      // The chosen account, if it still exists (L-193); otherwise the default.
+      const accountId =
+        choice.accountId &&
+        supportsProviderAccounts(harness) &&
+        providerAccountExists(harness, choice.accountId)
+          ? choice.accountId
+          : undefined;
       const display = sessionDisplayTitle(source.title, source.harness);
       const title = display === "New session" ? HANDOFF_TITLE : display;
 
-      // Same provider: a native fork keeps the full history, so no card is needed.
-      if (harness === source.harness) {
+      // Same provider and account: a native fork keeps the full history, so no
+      // card is needed. Another account has its own history store.
+      if (
+        harness === source.harness &&
+        (accountId === undefined ||
+          sameProviderAccountId(accountId, source.providerAccountId))
+      ) {
         const newSessionId = crypto.randomUUID();
         const plan = planBranch({ source, turn, newSessionId });
         if (plan?.kind === "native") {
@@ -12886,6 +12989,7 @@ function Workspace({
       const jobId = crypto.randomUUID();
       const session = {
         ...newSession(harness, source.cwd, model, source.runtimeMode),
+        ...(accountId ? { providerAccountId: accountId } : {}),
         worktreeCwd: source.worktreeCwd,
         branch: source.branch,
         modelSettings: settings,
@@ -14185,6 +14289,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       onOpenApprovalSession(sessionId, intent);
     },
     [onOpenApprovalSession],
@@ -14473,6 +14578,7 @@ function Workspace({
     setInboxViewOpen(false);
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
+    setWhiteboardViewOpen(false);
     setFilePickerInitialQuery("");
     setFilePickerResetToken((token) => token + 1);
     setFilePickerOpen(true);
@@ -14482,6 +14588,7 @@ function Workspace({
     setInboxViewOpen(false);
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
+    setWhiteboardViewOpen(false);
     setFilePickerInitialQuery(">");
     setFilePickerResetToken((token) => token + 1);
     setFilePickerOpen(true);
@@ -14498,6 +14605,7 @@ function Workspace({
     setInboxViewOpen(false);
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
+    setWhiteboardViewOpen(false);
     setSidebarTab("files");
     setFilesSearchOpen(true);
     setSearchFocusToken((token) => token + 1);
@@ -14515,6 +14623,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setSearchViewOpen(true);
       setSearchViewFocusToken((token) => token + 1);
     });
@@ -14534,6 +14643,7 @@ function Workspace({
       setSearchViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setInboxViewOpen(true);
     });
   }, []);
@@ -14547,6 +14657,7 @@ function Workspace({
       setSearchViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setInboxViewOpen(false);
       const cwd =
         sessionsRef.current.find((session) => session.id === sessionId)?.cwd ??
@@ -14652,6 +14763,7 @@ function Workspace({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setRecordKind("notes");
       setRecordsViewOpen(true);
     });
@@ -14667,6 +14779,7 @@ function Workspace({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setRecordKind("tasks");
       setRecordsViewOpen(true);
     });
@@ -14682,6 +14795,7 @@ function Workspace({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setRecordKind("kanban");
       setRecordsViewOpen(true);
     });
@@ -14701,6 +14815,7 @@ function Workspace({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setAutomationsViewOpen(true);
     });
   }, []);
@@ -14709,12 +14824,32 @@ function Workspace({
     setAutomationsViewOpen(false);
   }, []);
 
+  const onOpenWhiteboard = useCallback(() => {
+    workspaceNavigation.cancel();
+    startTransition(() => {
+      closeMonoView();
+      rememberAppView("whiteboard");
+      setFilePickerOpen(false);
+      setSettingsOpen(false);
+      setSearchViewOpen(false);
+      setInboxViewOpen(false);
+      setRecordsViewOpen(false);
+      setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(true);
+    });
+  }, []);
+
+  const onLeaveWhiteboard = useCallback(() => {
+    setWhiteboardViewOpen(false);
+  }, []);
+
   const onOpenAutomationSession = useCallback(
     async (sessionId: string) => {
       const session = await ensureOpenSession(sessionId);
       if (!session)
         throw new Error("This conversation is no longer available.");
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
@@ -14738,6 +14873,7 @@ function Workspace({
           notes: recordsViewOpenRef.current,
           recordKind: recordKindRef.current,
           automations: automationsViewOpenRef.current,
+          whiteboard: whiteboardViewOpenRef.current,
         };
       }
       startTransition(() => {
@@ -14746,6 +14882,7 @@ function Workspace({
         setInboxViewOpen(false);
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
+        setWhiteboardViewOpen(false);
         if (section) {
           setSettingsSection(section);
           saveSettingsSection(section);
@@ -14811,6 +14948,7 @@ function Workspace({
       tasks: leavingFocus(onOpenTasks),
       kanban: leavingFocus(onOpenKanban),
       automations: leavingFocus(onOpenAutomations),
+      whiteboard: leavingFocus(onOpenWhiteboard),
       settings: leavingFocus(onOpenSettings),
       notificationSettings: leavingFocus(onOpenNotificationSettings),
     };
@@ -14822,6 +14960,7 @@ function Workspace({
     onOpenTasks,
     onOpenKanban,
     onOpenAutomations,
+    onOpenWhiteboard,
     onOpenSettings,
     onOpenNotificationSettings,
   ]);
@@ -14842,6 +14981,7 @@ function Workspace({
         (returnView.recordKind !== "notes" || loadNotesEnabled()),
     );
     setAutomationsViewOpen(returnView.automations);
+    setWhiteboardViewOpen(returnView.whiteboard);
     setSettingsOpen(false);
   }, []);
 
@@ -14884,6 +15024,11 @@ function Workspace({
     }
     if (automationsViewOpen) {
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
+      return;
+    }
+    if (whiteboardViewOpen) {
+      setWhiteboardViewOpen(false);
       return;
     }
     if (monoViewIdRef.current) {
@@ -14901,6 +15046,7 @@ function Workspace({
     inboxViewOpen,
     recordsViewOpen,
     automationsViewOpen,
+    whiteboardViewOpen,
   ]);
 
   const onRailForward = useCallback(() => {
@@ -14909,6 +15055,7 @@ function Workspace({
     setInboxViewOpen(false);
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
+    setWhiteboardViewOpen(false);
     onVisitForward();
   }, [onVisitForward]);
 
@@ -15048,6 +15195,7 @@ function Workspace({
           tasks: onOpenTasks,
           kanban: onOpenKanban,
           automations: onOpenAutomations,
+          whiteboard: onOpenWhiteboard,
         };
         open[view]();
         return;
@@ -15057,6 +15205,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
       activateTab(id);
     },
     [
@@ -15068,6 +15217,7 @@ function Workspace({
       onOpenTasks,
       onOpenKanban,
       onOpenAutomations,
+      onOpenWhiteboard,
     ],
   );
 
@@ -15103,6 +15253,7 @@ function Workspace({
         setRecordsViewOpen((open) => recordKindRef.current === view ? false : open);
       }
       if (view === "automations") setAutomationsViewOpen(false);
+      if (view === "whiteboard") setWhiteboardViewOpen(false);
       if (nextId) navigation.select?.(nextId);
     });
   }, []);
@@ -15440,6 +15591,7 @@ function Workspace({
             inboxViewOpenRef.current ||
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
+            whiteboardViewOpenRef.current ||
             settingsOpenRef.current ||
             filePickerOpenRef.current ||
             Boolean(whatsNewVersionRef.current);
@@ -15538,6 +15690,7 @@ function Workspace({
         !inboxViewOpenRef.current &&
         (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
         !automationsViewOpenRef.current &&
+        !whiteboardViewOpenRef.current &&
         !(
           e.target instanceof Element &&
           e.target.closest("[data-session-drop], [data-agent-tab]")
@@ -16296,7 +16449,8 @@ function Workspace({
     settingsOpen ||
     inboxViewOpen ||
     recordsViewOpen ||
-    automationsViewOpen;
+    automationsViewOpen ||
+    whiteboardViewOpen;
   const compactProjectRail = collapsedProjectRailMode === "compact";
   const compactRailActive = compactProjectRail && !projectRailOpen;
   const compactTitleNavigation =
@@ -16468,7 +16622,7 @@ function Workspace({
       onOpenInbox={onOpenInbox}
       onOpenNotes={notesEnabled ? onOpenNotes : undefined}
       onOpenTasks={onOpenTasks}
-      onOpenKanban={onOpenKanban}
+      onOpenKanban={sessionManagerInSidebar ? onOpenKanban : undefined}
       onClose={onCloseDisplayedTab}
       onCloseMany={onCloseDisplayedTabs}
       onCloseAll={onCloseAllDisplayedTabs}
@@ -16519,7 +16673,7 @@ function Workspace({
       onSelectProvider={onSelectProvider}
       providerPanel={providerPanel}
       onOpenTasks={sidebarPages.tasks}
-      onOpenKanban={sidebarPages.kanban}
+      onOpenKanban={sessionManagerInSidebar ? sidebarPages.kanban : undefined}
       tasksActive={recordsViewOpen && recordKind === "tasks"}
       kanbanActive={boardOpen}
       cwd={sidebarCwd}
@@ -16587,7 +16741,8 @@ function Workspace({
         settingsOpen ||
         inboxViewOpen ||
         recordsViewOpen ||
-        automationsViewOpen
+        automationsViewOpen ||
+        whiteboardViewOpen
       }
       canGoForward={tabVisitNav.canForward}
       onGoBack={onRailBack}
@@ -16619,11 +16774,13 @@ function Workspace({
       onOpenInboxItem={onOpenLinkedWorkItem}
       onOpenNotes={notesEnabled ? sidebarPages.notes : undefined}
       onOpenAutomations={sidebarPages.automations}
+      onOpenWhiteboard={sidebarPages.whiteboard}
       onGoToFile={onGoToFile}
       searchActive={searchViewOpen}
       inboxActive={inboxViewOpen}
       notesActive={recordsViewOpen && recordKind === "notes"}
       automationsActive={automationsViewOpen}
+      whiteboardActive={whiteboardViewOpen}
       notesEnabled={notesEnabled}
       // The inset layout has no project rail: the sidebar header's menu
       // switches projects.
@@ -16768,6 +16925,7 @@ function Workspace({
       // (L-148), so only the classic layout needs them in the header.
       onOpenTasks={insetLayout ? undefined : sidebarPages.tasks}
       onOpenAutomations={insetLayout ? undefined : sidebarPages.automations}
+      onOpenWhiteboard={insetLayout ? undefined : sidebarPages.whiteboard}
       onOpenSettings={insetLayout ? undefined : sidebarPages.settings}
       footer={usageFooter}
     />
@@ -16886,7 +17044,8 @@ function Workspace({
                       settingsOpen ||
                       inboxViewOpen ||
                       (recordsViewOpen && !boardOpen) ||
-                      automationsViewOpen
+                      automationsViewOpen ||
+                      whiteboardViewOpen
                         ? "hidden"
                         : "flex min-h-0 min-w-0 flex-1 flex-col"
                     }
@@ -16895,7 +17054,8 @@ function Workspace({
                       settingsOpen ||
                       inboxViewOpen ||
                       (recordsViewOpen && !boardOpen) ||
-                      automationsViewOpen
+                      automationsViewOpen ||
+                      whiteboardViewOpen
                     }
                     inert={
                       searchViewOpen ||
@@ -16903,6 +17063,7 @@ function Workspace({
                       inboxViewOpen ||
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
+                      whiteboardViewOpen ||
                       undefined
                     }
                   >
@@ -17140,6 +17301,7 @@ function Workspace({
                                 !inboxViewOpen &&
                                 !recordsViewOpen &&
                                 !automationsViewOpen &&
+                                !whiteboardViewOpen &&
                                 !monoViewId &&
                                 activeLinkedWorkItemPanel?.sessionId ===
                                   panel.sessionId
@@ -17365,6 +17527,21 @@ function Workspace({
                           launchAutomation(automation, run, true)
                         }
                         onOpenSession={onOpenAutomationSession}
+                      />
+                    </AppViewSurface>
+                  ) : null}
+                  {whiteboardViewOpen ||
+                  (insetLayout && openAppViews.includes("whiteboard")) ? (
+                    <AppViewSurface active={whiteboardViewOpen}>
+                      <WhiteboardView
+                        tabbed={insetLayout}
+                        besideRail={
+                          insetLayout || projectRailOpen || compactProjectRail
+                        }
+                        compactRail={!insetLayout && compactRailActive}
+                        cwd={projectCwd}
+                        onClose={onLeaveWhiteboard}
+                        onToggleSidebar={onToggleSidebar}
                       />
                     </AppViewSurface>
                   ) : null}

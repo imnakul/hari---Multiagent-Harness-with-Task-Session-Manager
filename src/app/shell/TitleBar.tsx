@@ -19,6 +19,7 @@ import {
   Terminal,
   X,
   Zap,
+  Whiteboard,
 } from "../../shared/ui/icons";
 import {
   memo,
@@ -83,6 +84,7 @@ const APP_VIEW_ICONS = {
   tasks: CheckCircle,
   kanban: MessageMultiple,
   automations: Zap,
+  whiteboard: Whiteboard,
 };
 
 export type Tab = {

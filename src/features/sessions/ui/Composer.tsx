@@ -1517,9 +1517,9 @@ export function Composer({
     loadFollowUpBehavior,
     () => FOLLOW_UP_BEHAVIOR_DEFAULT,
   );
-  const effectiveCanSteer =
-    !(harness === "claude" && modelSettings.claudeExecution === "interactive") &&
-    (canSteer ?? canSteerHarness(harness));
+  const interactiveClaude =
+    harness === "claude" && modelSettings.claudeExecution === "interactive";
+  const effectiveCanSteer = !interactiveClaude && (canSteer ?? canSteerHarness(harness));
 
   const actionContext: ActionResolutionContext = useMemo(
     () => ({
@@ -1528,8 +1528,9 @@ export function Composer({
       canSteer: effectiveCanSteer,
       planMode: planSelected,
       isMac: IS_MAC,
+      sendNow: interactiveClaude,
     }),
-    [busy, followUpBehavior, effectiveCanSteer, planSelected],
+    [busy, followUpBehavior, effectiveCanSteer, planSelected, interactiveClaude],
   );
 
   const actionTooltip = useMemo(
@@ -2263,6 +2264,7 @@ export function Composer({
         onEdit={onEditQueuedMessage}
         onEditingChange={onQueuedMessageEditingChange}
         onSteer={onSteerQueuedMessage}
+        steerLabel={interactiveClaude ? "send-now" : "steer"}
         onResume={onResumeQueue}
       />
       <div className="relative overflow-visible">
