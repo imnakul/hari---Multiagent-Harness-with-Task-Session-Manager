@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planBranch, pendingBranchOrigin, convertToPrefixSummary, markBranchUncertain, branchDividerText } from "./branchPlan";
+import { planBranch, pendingBranchOrigin, convertToPrefixSummary, markBranchUncertain, branchDividerText, pendingClaudeFork, moveBranchForkAccount } from "./branchPlan";
 import { buildForkBundle, forkThreadBlocks } from "./fork";
 import { newSession, HARNESSES, HARNESS_TITLE, type Session, type Block } from "./session";
 
@@ -96,5 +96,27 @@ describe("native branch planner", () => {
     if (!result || result.kind === "legacy") throw new Error("missing origin");
     expect(branchDividerText(result.origin, HARNESS_TITLE.claude)).toBe("Branched from “Original” · keeps Claude Code's full history");
     expect(branchDividerText({ ...result.origin, sourceTitle: "x".repeat(61) }, HARNESS_TITLE.claude)).toContain("x".repeat(60) + "…");
+  });
+});
+
+describe("moving a pending Claude fork to another account (L-200)", () => {
+  function fork(): Session {
+    const result = plan({ ...source(), providerAccountId: "old" });
+    if (result?.kind !== "native") throw new Error("expected a native fork");
+    return { ...newSession("claude", "/repo"), id: "branch", providerAccountId: "old", blocks: result.blocks };
+  }
+  it("finds the parent conversation of an unsent Claude fork", () => {
+    expect(pendingClaudeFork(fork())).toMatchObject({ sourceProviderSessionId: "provider-source", providerAccountId: "old" });
+  });
+  it("ignores sent, busy and non-Claude forks", () => {
+    expect(pendingClaudeFork({ ...fork(), providerSessionId: "child" })).toBeUndefined();
+    expect(pendingClaudeFork({ ...fork(), busy: true })).toBeUndefined();
+    expect(pendingClaudeFork({ ...fork(), harness: "codex" })).toBeUndefined();
+  });
+  it("moves the chat and its pending fork together", () => {
+    const moved = moveBranchForkAccount(fork(), "new");
+    expect(moved.providerAccountId).toBe("new");
+    expect(pendingBranchOrigin(moved)?.fork?.providerAccountId).toBe("new");
+    expect(pendingClaudeFork(moved)?.sourceProviderSessionId).toBe("provider-source");
   });
 });

@@ -153,6 +153,9 @@ export function summaryFromSession(
       ? { linkedWorkItem: session.linkedWorkItem }
       : {}),
     ...(session.automationId ? { automationId: session.automationId } : {}),
+    ...(session.providerAccountId
+      ? { providerAccountId: session.providerAccountId }
+      : {}),
     ...(session.sidechat
       ? {
           sidechat: {

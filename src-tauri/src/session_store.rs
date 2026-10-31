@@ -220,6 +220,9 @@ pub struct SessionSummary {
     pub automation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sidechat: Option<SidechatMeta>,
+    /// Fork (L-196): the provider account, so sidebar cards can name it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1703,6 +1706,7 @@ pub(crate) fn upsert_session_with_git(
             source_title: sidechat.source_title.clone(),
             source_context: None,
         }),
+        provider_account_id: provider_account_id.map(str::to_owned),
     })
 }
 
@@ -2187,6 +2191,7 @@ fn list_by_project_with_git(
             linked_work_item,
             automation_id: nonempty(row.get(17)?),
             sidechat: None,
+            provider_account_id: nonempty(row.get(19)?),
         })
     };
 
@@ -2196,7 +2201,7 @@ fn list_by_project_with_git(
                     created_at, updated_at, branch, archived, pinned,
                     linked_work_item_json,
                     (SELECT summary FROM orchestration_sidebar WHERE lead_id = sessions.id), worktree_cwd,
-                    worktree_removed, is_draft, automation_id, sidebar_hidden
+                    worktree_removed, is_draft, automation_id, sidebar_hidden, provider_account_id
              FROM sessions
              WHERE cwd = ?1
                AND has_user_message = 1
@@ -2217,7 +2222,7 @@ fn list_by_project_with_git(
                     created_at, updated_at, branch, archived, pinned,
                     linked_work_item_json,
                     (SELECT summary FROM orchestration_sidebar WHERE lead_id = sessions.id), worktree_cwd,
-                    worktree_removed, is_draft, automation_id, sidebar_hidden
+                    worktree_removed, is_draft, automation_id, sidebar_hidden, provider_account_id
              FROM sessions
              WHERE cwd IN ({placeholders})
                AND has_user_message = 1
@@ -2240,7 +2245,7 @@ fn list_by_project_with_git(
                     created_at, updated_at, branch, archived, pinned,
                     linked_work_item_json,
                     (SELECT summary FROM orchestration_sidebar WHERE lead_id = sessions.id), worktree_cwd,
-                    worktree_removed, is_draft, automation_id, sidebar_hidden
+                    worktree_removed, is_draft, automation_id, sidebar_hidden, provider_account_id
              FROM sessions
              WHERE has_user_message = 1
                AND is_sidechat = 0
@@ -2310,6 +2315,7 @@ fn list_sidechats(conn: &Connection) -> rusqlite::Result<Vec<SessionSummary>> {
                 source_title: source.source_title,
                 source_context: None,
             }),
+            provider_account_id: None,
         })
     })?;
     rows.collect()
@@ -2358,6 +2364,7 @@ fn list_linked(conn: &Connection) -> rusqlite::Result<Vec<SessionSummary>> {
             linked_work_item: optional_json(row.get(12)?),
             automation_id: nonempty(row.get(17)?),
             sidechat: None,
+            provider_account_id: None,
         })
     })?;
     rows.collect()
@@ -2403,6 +2410,7 @@ fn list_scratch(conn: &Connection) -> rusqlite::Result<Vec<SessionSummary>> {
             automation_id: nonempty(row.get(13)?),
             sidebar_hidden: row.get::<_, i64>(14)? != 0,
             sidechat: None,
+            provider_account_id: None,
         })
     })?;
     rows.collect()
@@ -5384,6 +5392,7 @@ mod tests {
                 draft: false,
                 automation_id: None,
                 sidechat: None,
+                provider_account_id: None,
             }))
             .unwrap()
             .collect::<Result<Vec<_>, _>>()

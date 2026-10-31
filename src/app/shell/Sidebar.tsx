@@ -22,6 +22,8 @@ import { OrchestrationSidebarAgents } from "../../features/orchestration/ui/Orch
 import {
   compactModelLabel,
   useCompactModelLabels,
+  useSessionAccountLabel,
+  withAccountLabel,
 } from "../../features/sessions/ui/useCompactModelLabels";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -54,6 +56,7 @@ import {
   X,
   Zap,
   Whiteboard,
+  Globe,
   type IconComponent,
 } from "../../shared/ui/icons";
 import { createPortal } from "react-dom";
@@ -442,6 +445,7 @@ type Props = {
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenBrowser?: () => void;
   onGoToFile?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
@@ -450,6 +454,7 @@ type Props = {
   kanbanActive?: boolean;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  browserActive?: boolean;
   notesEnabled?: boolean;
   onToggleProjectRail?: () => void;
   projectRailOpen?: boolean;
@@ -577,6 +582,7 @@ function SidebarComponent({
   onOpenKanban,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenBrowser,
   onGoToFile,
   searchActive = false,
   inboxActive = false,
@@ -585,6 +591,7 @@ function SidebarComponent({
   kanbanActive = false,
   automationsActive = false,
   whiteboardActive = false,
+  browserActive = false,
   notesEnabled = true,
   onToggleProjectRail,
   projectRailOpen = true,
@@ -1009,6 +1016,21 @@ function SidebarComponent({
   const viewGroupedIds = new Set(reminderIds);
   for (const session of visibleSessions)
     if (session.draft) viewGroupedIds.add(session.id);
+  // A draft added while the group is collapsed opens it for this view, so
+  // "Add Draft to Sessions" never lands out of sight (fork, L-198).
+  const draftKey = visibleSessions
+    .filter((session) => session.draft)
+    .map((session) => session.id)
+    .join(" ");
+  const knownDrafts = useRef<{ cwd: string; ids: Set<string> } | null>(null);
+  useEffect(() => {
+    const ids = new Set(draftKey ? draftKey.split(" ") : []);
+    const known = knownDrafts.current;
+    knownDrafts.current = { cwd, ids };
+    if (!known || known.cwd !== cwd) return;
+    if ([...ids].some((id) => !known.ids.has(id)))
+      setDraftSessionsCollapsed(false);
+  }, [cwd, draftKey]);
   const ungroupedVisible = ungroupedSessions(
     listedVisibleSessions,
     sessionFolders,
@@ -1137,6 +1159,7 @@ function SidebarComponent({
     kanbanActive ||
     automationsActive ||
     whiteboardActive ||
+    browserActive ||
     settingsOpen;
   // A remembered Mono sits underneath these views; select it only while visible.
   const railMonos = monos
@@ -1163,6 +1186,7 @@ function SidebarComponent({
     !monoViewActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !browserActive &&
     !settingsOpen;
   const sidebarVisible = open && sidebarAvailable;
   // A selected provider folder replaces the workspace panel with its
@@ -1177,6 +1201,7 @@ function SidebarComponent({
     !kanbanActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !browserActive &&
     !settingsOpen;
   // With the sidebar collapsed beside the compact rail, its tab shortcuts
   // open the sidebar temporarily until the user clicks away.
@@ -2854,6 +2879,12 @@ function SidebarComponent({
           active: whiteboardActive,
           onClick: onOpenWhiteboard,
         },
+        onOpenBrowser && {
+          label: "Browser",
+          icon: Globe,
+          active: browserActive,
+          onClick: onOpenBrowser,
+        },
         onOpenKanban && {
           label: "Session Manager",
           icon: MessageMultiple,
@@ -3046,11 +3077,13 @@ function SidebarComponent({
               kanbanActive={kanbanActive}
               onOpenAutomations={onOpenAutomations}
               onOpenWhiteboard={onOpenWhiteboard}
+              onOpenBrowser={onOpenBrowser}
               searchActive={searchActive}
               inboxActive={inboxActive}
               notesActive={notesActive}
               automationsActive={automationsActive}
               whiteboardActive={whiteboardActive}
+              browserActive={browserActive}
               inboxUnseen={inboxUnseen}
             />
           ) : null}
@@ -3669,8 +3702,10 @@ function SidebarComponent({
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
           onOpenWhiteboard={onOpenWhiteboard}
+          onOpenBrowser={onOpenBrowser}
           automationsActive={automationsActive}
           whiteboardActive={whiteboardActive}
+          browserActive={browserActive}
           onOpenSettings={onOpenSettings}
           onTogglePanel={onToggleProjectRail}
           onLeaveActive={onGoBack}
@@ -3710,8 +3745,10 @@ function SidebarComponent({
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
           onOpenWhiteboard={onOpenWhiteboard}
+          onOpenBrowser={onOpenBrowser}
           automationsActive={automationsActive}
           whiteboardActive={whiteboardActive}
+          browserActive={browserActive}
           onTogglePanel={onToggleProjectRail}
           onSelectProject={onSelectProject}
           onOpenProject={onOpenProject}
@@ -3863,6 +3900,7 @@ function SidebarProjectPicker({
   onOpenKanban,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenBrowser,
   searchActive = false,
   inboxActive = false,
   notesActive = false,
@@ -3870,6 +3908,7 @@ function SidebarProjectPicker({
   kanbanActive = false,
   automationsActive = false,
   whiteboardActive = false,
+  browserActive = false,
   inboxUnseen = false,
 }: {
   cwd: string;
@@ -3887,6 +3926,7 @@ function SidebarProjectPicker({
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenBrowser?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
   notesActive?: boolean;
@@ -3894,6 +3934,7 @@ function SidebarProjectPicker({
   kanbanActive?: boolean;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  browserActive?: boolean;
   inboxUnseen?: boolean;
 }) {
   const [inboxMenu, setInboxMenu] = useState<{ x: number; y: number } | null>(
@@ -3986,6 +4027,15 @@ function SidebarProjectPicker({
             <Whiteboard className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
+        {onOpenBrowser ? (
+          <IconButton
+            label="Browser"
+            active={browserActive}
+            onClick={onOpenBrowser}
+          >
+            <Globe className="size-3.5" strokeWidth={1.75} />
+          </IconButton>
+        ) : null}
         {onOpenKanban ? (
           <IconButton
             label="Session Manager"
@@ -4041,8 +4091,10 @@ function CompactProjectRail({
   kanbanActive = false,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenBrowser,
   automationsActive,
   whiteboardActive = false,
+  browserActive = false,
   onOpenSettings,
   onTogglePanel,
   onLeaveActive,
@@ -4080,8 +4132,10 @@ function CompactProjectRail({
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenBrowser?: () => void;
   automationsActive: boolean;
   whiteboardActive?: boolean;
+  browserActive?: boolean;
   onOpenSettings?: () => void;
   onTogglePanel?: () => void;
   onLeaveActive?: () => void;
@@ -4130,6 +4184,7 @@ function CompactProjectRail({
     !kanbanActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !browserActive &&
     !monoViewActive;
   const openWorkspaceTab = (nextTab: SidebarTab) => {
     if (!workspaceActive) onLeaveActive?.();
@@ -4297,6 +4352,14 @@ function CompactProjectRail({
             icon={Whiteboard}
             active={whiteboardActive}
             onClick={action(whiteboardActive, onOpenWhiteboard)}
+          />
+        ) : null}
+        {onOpenBrowser ? (
+          <CompactRailAction
+            label="Browser"
+            icon={Globe}
+            active={browserActive}
+            onClick={action(browserActive, onOpenBrowser)}
           />
         ) : null}
         {onOpenKanban ? (
@@ -5482,12 +5545,15 @@ export const SessionCard = memo(function SessionCard({
     : formatGitLabel(session.repo, session.branch);
   const time = formatRelative(session.updatedAt, now);
   const headerRow = !(compact && !orchestrationExpanded) && !modelInFooter;
-  const model =
+  const account = useSessionAccountLabel(session);
+  const model = withAccountLabel(
     compact && !orchestrationExpanded
       ? compactModelLabels
         ? compactModelLabel(session)
         : null
-      : compactModelLabel(session);
+      : compactModelLabel(session),
+    account,
+  );
   const statusClass = needsApproval
     ? "text-amber-400"
     : busy
@@ -5990,7 +6056,9 @@ export const SessionCard = memo(function SessionCard({
                   </span>
                 ) : null}
                 {model ? (
-                  <span className="min-w-0 truncate">{model}</span>
+                  <span className="min-w-0 truncate" title={model}>
+                    {model}
+                  </span>
                 ) : null}
               </span>
             ) : null}

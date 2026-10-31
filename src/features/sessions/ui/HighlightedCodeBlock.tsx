@@ -34,7 +34,7 @@ const HighlightedLine = memo(function HighlightedLine({
 }) {
   return (
     <span
-      className={`${wrap ? WRAP : ""} ${
+      className={`${wrap ? `${WRAP} markdown-code-wrapped` : ""} ${
         numbered ? "markdown-code-numbered-line" : ""
       }`}
     >
@@ -266,7 +266,7 @@ const CodePresentation = memo(function CodePresentation({
               {source.split("\n").map((line, index) => (
                 <span
                   key={index}
-                  className={`${wrap ? WRAP : ""} ${
+                  className={`${wrap ? `${WRAP} markdown-code-wrapped` : ""} ${
                     lineNumbers ? "markdown-code-numbered-line" : ""
                   }`}
                 >

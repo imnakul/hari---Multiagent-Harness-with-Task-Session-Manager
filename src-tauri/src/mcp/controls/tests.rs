@@ -457,3 +457,25 @@ fn antigravity_cli_rejects_invalid_flags_and_undiscovered_paths() {
         .toggle("antigravity-cli", "user", &unrelated, "docs", false)
         .is_err());
 }
+
+#[test]
+fn antigravity_acp_toggle_edits_only_its_private_profile_file() {
+    let f = Fixture::new();
+    let acp = crate::mcp::antigravity_acp_mcp_config(&f.home());
+    let cli = f.home().join(".gemini/config/mcp_config.json");
+    f.write(&acp, r#"{"mcpServers":{"notion":{"command":"npx"}}}"#);
+    f.write(&cli, r#"{"mcpServers":{"notion":{"command":"npx"}}}"#);
+    f.toggle("antigravity", "user", &acp, "notion", false).unwrap();
+    assert_eq!(
+        json_value(&std::fs::read_to_string(&acp).unwrap()).unwrap()["mcpServers"]["notion"]
+            ["disabled"],
+        true
+    );
+    assert!(f
+        .rows()
+        .iter()
+        .find(|row| row.provider == "antigravity-cli")
+        .unwrap()
+        .enabled);
+    assert!(f.toggle("antigravity", "user", &cli, "notion", false).is_err());
+}

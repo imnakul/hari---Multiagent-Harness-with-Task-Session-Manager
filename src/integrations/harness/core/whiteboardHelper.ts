@@ -11,6 +11,7 @@ import {
 } from "../../../features/whiteboard/model/whiteboardAgent";
 import { continueHelperAvailable } from "./continueHelper";
 import { runHelperPipeline, type HelperFailureKind } from "./helperPipeline";
+import { runInteractiveClaudeHelper } from "../providers/claude/claudeInteractiveHelper";
 import { runHarnessHelperPrompt } from "./registry";
 
 /** Whiteboard agent chat (fork, L-194): one reply from an AI helper. */
@@ -69,20 +70,38 @@ export async function askWhiteboardAgent(input: {
   target: AiHelperTarget;
   cwd: string;
   prompt: string;
+  /** e.g. `{ effort: "high" }` from the chat's effort picker (L-199). */
+  modelSettings?: Record<string, string>;
   signal?: AbortSignal;
+  /** Claude only: answer through the Claude CLI in a hidden terminal (L-204). */
+  interactive?: boolean;
   isAvailable?: (target: AiHelperTarget) => boolean;
   run?: HelperRun;
 }): Promise<WhiteboardAgentOutcome> {
   const isAvailable = input.isAvailable ?? continueHelperAvailable;
+  const settings = input.modelSettings && Object.keys(input.modelSettings).length ? input.modelSettings : undefined;
+  const interactive = input.interactive === true && input.target.provider === "claude";
   const run: HelperRun =
     input.run ??
     ((target, prompt, timeoutMs) =>
-      runHarnessHelperPrompt(target.provider, {
+      interactive
+        ? runInteractiveClaudeHelper({
+            cwd: input.cwd,
+            prompt,
+            timeoutMs,
+            providerAccountId: target.accountId,
+            model: target.model,
+            modelSettings: settings,
+            signal: input.signal,
+            purpose: "whiteboard",
+          })
+        : runHarnessHelperPrompt(target.provider, {
         cwd: input.cwd,
         prompt,
         timeoutMs,
         providerAccountId: target.accountId,
         model: target.model,
+        ...(settings ? { modelSettings: settings } : {}),
       }));
   const name = HARNESS_TITLE[input.target.provider];
   if (!isAvailable(input.target)) {
@@ -106,5 +125,7 @@ export async function askWhiteboardAgent(input: {
   if (input.signal?.aborted) return { ok: false, cancelled: true, message: "" };
   if (result.ok) return { ok: true, reply: result.value, helper: input.target };
   if (result.kind === "cancelled") return { ok: false, cancelled: true, message: "" };
-  return { ok: false, cancelled: false, message: `${name} ${FAILURE_TEXT[result.kind]}.` };
+  // The CLI's own reason (a folder-trust prompt, sign-in) is what the user needs.
+  const detail = interactive && result.kind === "failed" && result.message ? ` ${result.message}` : "";
+  return { ok: false, cancelled: false, message: `${name} ${FAILURE_TEXT[result.kind]}.${detail}` };
 }

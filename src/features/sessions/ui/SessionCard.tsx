@@ -16,6 +16,8 @@ import type { PaneEdge } from "../../workspace/model/layout";
 import {
   compactModelLabel,
   useCompactModelLabels,
+  useSessionAccountLabel,
+  withAccountLabel,
 } from "./useCompactModelLabels";
 import { paneDropFromPoint, setExternalPaneDrop } from "../../workspace/model/paneDrop";
 import { sessionDisplayTitle } from "../model/session";
@@ -104,11 +106,15 @@ export function SessionCard({
   const gitLabel = formatGitLabel(session.repo, session.branch);
   const time = formatRelative(session.updatedAt, now);
   const showCompactModel = useCompactModelLabels();
-  const model = compact
-    ? showCompactModel
-      ? compactModelLabel(session)
-      : null
-    : compactModelLabel(session);
+  const account = useSessionAccountLabel(session);
+  const model = withAccountLabel(
+    compact
+      ? showCompactModel
+        ? compactModelLabel(session)
+        : null
+      : compactModelLabel(session),
+    account,
+  );
   const statusClass = needsApproval
     ? "text-amber-400"
     : busy
@@ -309,7 +315,10 @@ export function SessionCard({
               harness={session.harness}
               className="size-3.5 shrink-0"
             />
-            <span className="min-w-0 truncate text-[11px] text-content/50">
+            <span
+              title={model ?? undefined}
+              className="min-w-0 truncate text-[11px] text-content/50"
+            >
               {model}
             </span>
             {badge}

@@ -89,6 +89,8 @@ export type SessionSummary = {
   linkedWorkItem?: LinkedWorkItem;
   automationId?: string;
   sidechat?: Pick<NonNullable<Session["sidechat"]>, "sourceSessionId" | "sourceTitle">;
+  /** Fork (L-196): named on the card when the provider has 2+ accounts. */
+  providerAccountId?: string;
 };
 
 type SessionRecord = {

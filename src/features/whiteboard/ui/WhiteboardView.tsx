@@ -71,10 +71,21 @@ import {
   extraFontLoadQueries,
   registerWhiteboardFonts,
 } from "../model/whiteboardFonts";
+import { clipboardJson, clipboardSelection } from "../model/whiteboardClipboard";
+import {
+  clampChatSize,
+  loadChatDock,
+  loadChatSize,
+  loadToolLock,
+  saveChatDock,
+  saveChatSize,
+  saveToolLock,
+  type ChatDock,
+} from "../model/whiteboardPrefs";
 import { applyWhiteboardOps, type WhiteboardSkeleton } from "../model/whiteboardScene";
 import { iconSvg, svgDataUrl, type CatalogIcon } from "./iconCatalog";
 import { IconLibraryPicker } from "./IconLibraryPicker";
-import { RadialToolMenu, type WheelTool } from "./RadialToolMenu";
+import { RadialToolMenu, type WheelAction } from "./RadialToolMenu";
 import { WhiteboardChat } from "./WhiteboardChat";
 import { WhiteboardTopBar, type ExportKind } from "./WhiteboardTopBar";
 
@@ -179,6 +190,11 @@ export function WhiteboardView({
   const [snap, setSnap] = useState(rememberedSnap);
   const [chatOpen, setChatOpen] = useState(rememberedChatOpen);
   const [iconsOpen, setIconsOpen] = useState(false);
+  const [dock, setDock] = useState<ChatDock>(loadChatDock);
+  const [chatSize, setChatSize] = useState(() => loadChatSize(loadChatDock()));
+  const [hasSelection, setHasSelection] = useState(false);
+  const [textColor, setTextColor] = useState("#1e1e1e");
+  const toolLock = useRef(loadToolLock());
   const [wheel, setWheel] = useState<{ x: number; y: number } | null>(null);
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const iconButton = useRef<HTMLButtonElement>(null);
@@ -287,13 +303,22 @@ export function WhiteboardView({
           const parsed = raw ? (JSON.parse(raw) as Parameters<typeof restore>[0]) : null;
           const data = restore(parsed, null, null);
           blockedSaves.current.delete(activeId);
-          setFontId(data.appState.currentItemFontFamily ?? DEFAULT_WHITEBOARD_FONT_ID);
+          // A new sheet starts in the default font; a saved one keeps its own.
+          const font = raw
+            ? (data.appState.currentItemFontFamily ?? DEFAULT_WHITEBOARD_FONT_ID)
+            : DEFAULT_WHITEBOARD_FONT_ID;
+          setFontId(font);
           setLoaded({
             id: activeId,
             status: "ready",
             data: {
               elements: data.elements,
-              appState: { ...data.appState, viewBackgroundColor: "transparent" },
+              appState: {
+                ...data.appState,
+                viewBackgroundColor: "transparent",
+                currentItemFontFamily: font,
+                activeTool: { ...data.appState.activeTool, locked: toolLock.current },
+              },
               files: data.files,
               scrollToContent: !raw,
             },
@@ -336,6 +361,12 @@ export function WhiteboardView({
       if (!activeId) return;
       setActiveTool(appState.activeTool.type);
       setFontId(appState.currentItemFontFamily);
+      setTextColor(appState.currentItemStrokeColor);
+      setHasSelection(Object.values(appState.selectedElementIds).some(Boolean));
+      if (appState.activeTool.locked !== toolLock.current) {
+        toolLock.current = appState.activeTool.locked;
+        saveToolLock(toolLock.current);
+      }
       latest.current = { id: activeId, scene: { elements, appState, files } };
       if (savedVersion.current.get(activeId) === sceneVersion({ elements, appState, files })) return;
       window.clearTimeout(saveTimer.current);
@@ -408,11 +439,72 @@ export function WhiteboardView({
     commitIndex(setSheetLocked(current, sheet.id, !sheet.locked));
   };
 
-  const pickTool = (tool: WheelTool) => {
+  const pickTool = (action: WheelAction) => {
     setWheel(null);
     if (!api) return;
-    if (tool === "image") api.setActiveTool({ type: "image", insertOnCanvasDirectly: true });
-    else api.setActiveTool({ type: tool });
+    if (action === "icons") setIconsOpen(true);
+    else if (action === "copy" || action === "cut") void copySelection(action === "cut");
+    else if (action === "image") api.setActiveTool({ type: "image", insertOnCanvasDirectly: true });
+    else api.setActiveTool({ type: action, locked: toolLock.current });
+  };
+
+  const copySelection = async (cut: boolean) => {
+    if (!api) return;
+    const elements = api.getSceneElementsIncludingDeleted();
+    const picked = clipboardSelection(elements, api.getAppState().selectedElementIds);
+    if (!picked.length) return flash("Select something first");
+    try {
+      await navigator.clipboard.writeText(clipboardJson(picked, api.getFiles()));
+    } catch (cause) {
+      return flash(`Couldn't copy: ${errorText(cause)}`, true);
+    }
+    if (!cut || locked) return flash(picked.length === 1 ? "Copied" : `Copied ${picked.length} items`);
+    const gone = new Set(picked.map((element) => element.id));
+    api.updateScene({
+      elements: elements.map((element) =>
+        gone.has(element.id) ? newElementWith(element, { isDeleted: true }) : element,
+      ),
+      appState: { selectedElementIds: {} },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    flash(picked.length === 1 ? "Cut" : `Cut ${picked.length} items`);
+  };
+
+  /** Text colour from any hex: the selection's text and new text (L-199). */
+  const changeTextColor = (color: string) => {
+    setTextColor(color);
+    if (!api || locked) return;
+    const state = api.getAppState();
+    const elements = api.getSceneElementsIncludingDeleted();
+    const targets = new Set<string>();
+    for (const element of elements) {
+      if (element.isDeleted || !state.selectedElementIds[element.id]) continue;
+      if (element.type === "text") targets.add(element.id);
+      for (const bound of element.boundElements ?? []) if (bound.type === "text") targets.add(bound.id);
+    }
+    api.updateScene({
+      ...(targets.size
+        ? {
+            elements: elements.map((element) =>
+              targets.has(element.id) ? newElementWith(element, { strokeColor: color }) : element,
+            ),
+          }
+        : {}),
+      appState: { currentItemStrokeColor: color },
+      captureUpdate: targets.size ? CaptureUpdateAction.IMMEDIATELY : CaptureUpdateAction.NEVER,
+    });
+  };
+
+  const changeDock = (next: ChatDock) => {
+    saveChatDock(next);
+    setDock(next);
+    setChatSize(loadChatSize(next));
+  };
+
+  const resizeChat = (size: number, done: boolean) => {
+    const next = clampChatSize(dock, size);
+    setChatSize(next);
+    if (done) saveChatSize(dock, next);
   };
 
   const zoomBy = (direction: 1 | -1) => {
@@ -669,6 +761,11 @@ export function WhiteboardView({
       onTool={(tool) => api?.setActiveTool({ type: tool })}
       onToggleLock={toggleLock}
       onFont={changeFont}
+      textColor={textColor}
+      onTextColor={changeTextColor}
+      hasSelection={hasSelection}
+      onCopy={() => void copySelection(false)}
+      onCut={() => void copySelection(true)}
       onIcons={() => setIconsOpen((open) => !open)}
       onGrid={() =>
         setGrid((value) => {
@@ -719,7 +816,7 @@ export function WhiteboardView({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className={`flex min-h-0 flex-1 ${dock === "bottom" ? "flex-col" : ""}`}>
         <div ref={canvasBox} className="relative min-h-0 min-w-0 flex-1">
           {indexError ? (
             <div role="alert" className="flex h-full items-center justify-center p-6 text-center text-[13px] text-red-300/90">
@@ -783,6 +880,10 @@ export function WhiteboardView({
             cwd={cwd ?? dir!}
             getScene={getScene}
             applyOps={applyOps}
+            dock={dock}
+            size={chatSize}
+            onDock={changeDock}
+            onResize={resizeChat}
             onClose={toggleChat}
           />
         ) : null}

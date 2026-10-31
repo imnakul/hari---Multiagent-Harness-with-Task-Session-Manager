@@ -1951,6 +1951,12 @@ function ModelFlyout({
                         setKeyboardActive(false);
                         onActive(index);
                       }}
+                      // Fork (L-205): a click anywhere on the row picks the
+                      // model, not only on its name; the favorite star stops
+                      // its own click.
+                      onClick={() => {
+                        if (!disabled) onPick(item);
+                      }}
                     >
                       <button
                         ref={highlighted ? activeRef : undefined}
@@ -1965,8 +1971,7 @@ function ModelFlyout({
                             : undefined
                         }
                         onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => onPick(item)}
-                        className="flex min-w-0 flex-1 items-center gap-2 px-1.5 text-left text-[13px] disabled:cursor-not-allowed"
+                        className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-1.5 text-left text-[13px] disabled:cursor-not-allowed"
                       >
                         <span className="min-w-0 flex-1 truncate">
                           {item.name}

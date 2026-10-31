@@ -91,9 +91,36 @@ export type WhiteboardChatMessage = {
   /** Short note of what the reply drew, e.g. "Drew 6 items". */
   note?: string;
   error?: boolean;
+  /** Names of documents sent with a user message (L-199). */
+  attachments?: string[];
 };
 
 export type WhiteboardReply = { text: string; ops: WhiteboardOps | null };
+
+/** A text document attached to a message, read into the prompt (L-199). */
+export type WhiteboardAttachment = { name: string; text: string };
+
+/** Per-file and total text limits, so a big paste can't swamp the helper. */
+export const ATTACHMENT_CHAR_LIMIT = 60_000;
+export const ATTACHMENTS_TOTAL_LIMIT = 120_000;
+
+function attachmentLines(attachments: readonly WhiteboardAttachment[]): string[] {
+  if (!attachments.length) return [];
+  let left = ATTACHMENTS_TOTAL_LIMIT;
+  const blocks: string[] = [];
+  for (const attachment of attachments) {
+    if (left <= 0) break;
+    const limit = Math.min(ATTACHMENT_CHAR_LIMIT, left);
+    const body = attachment.text.length > limit ? `${attachment.text.slice(0, limit)}\n[…cut]` : attachment.text;
+    left -= Math.min(attachment.text.length, limit);
+    blocks.push(`--- ${attachment.name} ---\n${body.trim()}\n--- end of ${attachment.name} ---`);
+  }
+  return [
+    "The user attached these documents. Read them and draw from them when asked:",
+    ...blocks,
+    "",
+  ];
+}
 
 const SCENE_LIMIT = 120;
 const ADD_LIMIT = 200;
@@ -154,6 +181,8 @@ export function buildWhiteboardPrompt(input: {
   history: readonly WhiteboardChatMessage[];
   scene: readonly SceneElementLike[];
   locked?: boolean;
+  /** Documents the user attached to this message (L-199). */
+  attachments?: readonly WhiteboardAttachment[];
 }): string {
   const scene = describeScene(input.scene);
   const history = input.history
@@ -191,6 +220,7 @@ export function buildWhiteboardPrompt(input: {
       : "The sheet is empty.",
     "",
     history.length ? `Conversation so far:\n${history.join("\n")}\n` : "",
+    ...attachmentLines(input.attachments ?? []),
     `User: ${input.message.trim()}`,
   ]
     .filter((line, index, all) => line !== "" || all[index - 1] !== "")

@@ -566,13 +566,13 @@ describe("session folder persistence", () => {
 });
 
 describe("draft group collapsed state", () => {
-  it("is collapsed until the user chooses, and a saved choice wins", () => {
-    expect(loadDraftSessionsCollapsed("/tmp/project")).toBe(true);
-    saveDraftSessionsCollapsed("/tmp/project", false);
+  it("is open until the user collapses it, and a saved choice wins (L-198)", () => {
     expect(loadDraftSessionsCollapsed("/tmp/project")).toBe(false);
-    expect(loadDraftSessionsCollapsed("/tmp/other")).toBe(true);
     saveDraftSessionsCollapsed("/tmp/project", true);
     expect(loadDraftSessionsCollapsed("/tmp/project")).toBe(true);
+    expect(loadDraftSessionsCollapsed("/tmp/other")).toBe(false);
+    saveDraftSessionsCollapsed("/tmp/project", false);
+    expect(loadDraftSessionsCollapsed("/tmp/project")).toBe(false);
   });
 });
 

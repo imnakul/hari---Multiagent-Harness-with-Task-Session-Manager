@@ -165,7 +165,7 @@ export function QuickModelSelector({
   return (
     <section
       aria-label="Model selector"
-      className="flex min-h-0 flex-col border-t border-stroke"
+      className="flex min-h-min flex-col border-t border-stroke"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -220,7 +220,7 @@ export function QuickModelSelector({
           );
         })}
       </nav>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-min min-w-0 flex-1 flex-col">
         <label className="flex h-10 shrink-0 items-center gap-2 border-b border-stroke px-4 text-content/40">
           <Search className="size-3.5 shrink-0" />
           <input
@@ -267,7 +267,7 @@ export function QuickModelSelector({
           id={listId}
           role="listbox"
           aria-label="Models"
-          className="h-60 min-h-0 overflow-y-auto overscroll-none p-2"
+          className="h-60 min-h-36 overflow-y-auto overscroll-none p-2"
         >
           {models.length ? (
             models.map((item, index) => (

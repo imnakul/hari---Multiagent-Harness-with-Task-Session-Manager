@@ -19,6 +19,7 @@ import {
   CheckCircle,
   Focus,
   FolderTree,
+  Globe,
   GripVertical,
   Settings,
   X,
@@ -150,6 +151,7 @@ type Props = {
   onOpenTasks?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenBrowser?: () => void;
   onOpenSettings?: () => void;
   footer?: ReactNode;
 };
@@ -254,6 +256,7 @@ export function FocusView({
   onOpenTasks,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenBrowser,
   onOpenSettings,
   footer,
 }: Props): ReactNode {
@@ -845,6 +848,11 @@ export function FocusView({
           {onOpenWhiteboard ? (
             <IconButton label="Whiteboard" onClick={onOpenWhiteboard}>
               <Whiteboard className="size-3.5" strokeWidth={1.75} />
+            </IconButton>
+          ) : null}
+          {onOpenBrowser ? (
+            <IconButton label="Browser" onClick={onOpenBrowser}>
+              <Globe className="size-3.5" strokeWidth={1.75} />
             </IconButton>
           ) : null}
           {onOpenSettings ? (

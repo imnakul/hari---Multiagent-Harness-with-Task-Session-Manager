@@ -28,7 +28,8 @@ export const WHITEBOARD_FONTS: readonly WhiteboardFont[] = [
   { id: 1, family: "Virgil", label: "Virgil", extra: false },
 ];
 
-export const DEFAULT_WHITEBOARD_FONT_ID = 5;
+/** New sheets start in Shantell Sans (fork, L-199; was Excalifont). */
+export const DEFAULT_WHITEBOARD_FONT_ID = 102;
 
 export function whiteboardFont(id: number | undefined): WhiteboardFont | undefined {
   return WHITEBOARD_FONTS.find((font) => font.id === id);

@@ -91,7 +91,7 @@ describe("quote actions (L-188)", () => {
     expect(bar?.className).toContain("float-right");
     await act(async () => action("Copy quote")!.click());
     expect(copy).toHaveBeenCalledWith(quoted);
-    expect(action("Quote copied")).not.toBeNull();
+    expect(action("Copy quote")!.title).toBe("Quote copied");
   });
 
   it("adds the quote to notes and to a task with its reply id", async () => {
@@ -108,7 +108,8 @@ describe("quote actions (L-188)", () => {
     render({}, true);
     expect(action("Add to notes")).toBeNull();
     expect(action("Add Task")).toBeNull();
-    const button = action("Wait for the response to finish")!;
+    const button = action("Copy quote")!;
+    expect(button.title).toBe("Wait for the response to finish");
     expect(button.disabled).toBe(true);
   });
 

@@ -59,6 +59,7 @@ type Props = {
   onOpenNotes?: () => void;
   onOpenTasks?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenBrowser?: () => void;
   onOpenKanban?: () => void;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -83,6 +84,7 @@ export function MenuBar({
   onOpenNotes,
   onOpenTasks,
   onOpenWhiteboard,
+  onOpenBrowser,
   onOpenKanban,
   onZoomIn,
   onZoomOut,
@@ -183,6 +185,9 @@ export function MenuBar({
         case "open_whiteboard":
           onOpenWhiteboard?.();
           break;
+        case "open_browser":
+          onOpenBrowser?.();
+          break;
         case "open_tasks":
           onOpenTasks?.();
           break;
@@ -258,6 +263,7 @@ export function MenuBar({
       onOpenNotes,
       onOpenTasks,
       onOpenWhiteboard,
+      onOpenBrowser,
       onOpenKanban,
       onShowSourceControl,
       onToggleSidebar,
@@ -383,6 +389,9 @@ export function MenuBar({
           ...(onOpenTasks ? [{ kind: "item" as const, id: "open_tasks", label: "Task Manager" }] : []),
           ...(onOpenWhiteboard
             ? [{ kind: "item" as const, id: "open_whiteboard", label: "Whiteboard" }]
+            : []),
+          ...(onOpenBrowser
+            ? [{ kind: "item" as const, id: "open_browser", label: "Browser" }]
             : []),
           ...(onOpenNotes
             ? [{ kind: "item" as const, id: "open_notes", label: "Notes" }]

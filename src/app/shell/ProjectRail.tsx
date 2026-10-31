@@ -16,6 +16,7 @@ import {
   Settings,
   Zap,
   Whiteboard,
+  Globe,
 } from "../../shared/ui/icons";
 import {
   useEffect,
@@ -145,8 +146,10 @@ type Props = {
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenBrowser?: () => void;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  browserActive?: boolean;
   onTogglePanel?: () => void;
   onSelectProject: (path: string) => void;
   onOpenProject: () => void;
@@ -202,8 +205,10 @@ export function ProjectRail({
   kanbanActive = false,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenBrowser,
   automationsActive = false,
   whiteboardActive = false,
+  browserActive = false,
   onTogglePanel,
   onSelectProject,
   onOpenProject,
@@ -407,6 +412,7 @@ export function ProjectRail({
     notesActive || tasksActive || kanbanActive || selectedProvider !== null ||
     automationsActive ||
     whiteboardActive ||
+    browserActive ||
     !!monos?.activeId;
   const pinnedIds = sections.pinned.map((item) => item.path);
   const projectIds = groupedProjectSections.ungrouped.map((item) => item.path);
@@ -504,6 +510,15 @@ export function ProjectRail({
                 onClick={onOpenWhiteboard}
                 active={whiteboardActive}
                 ariaLabel="Whiteboard"
+              />
+            ) : null}
+            {onOpenBrowser ? (
+              <RailAction
+                label="Browser"
+                icon={Globe}
+                onClick={onOpenBrowser}
+                active={browserActive}
+                ariaLabel="Browser"
               />
             ) : null}
             {onOpenKanban ? <SessionManagerRailAction onClick={onOpenKanban} active={kanbanActive} /> : null}

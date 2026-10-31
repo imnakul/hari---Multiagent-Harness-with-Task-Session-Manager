@@ -66,6 +66,8 @@ import Comment01Icon from "@hugeicons/core-free-icons/Comment01Icon";
 import CommentAdd01Icon from "@hugeicons/core-free-icons/CommentAdd01Icon";
 import ComputerTerminal01Icon from "@hugeicons/core-free-icons/ComputerTerminal01Icon";
 import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import Attachment01Icon from "@hugeicons/core-free-icons/Attachment01Icon";
+import ScissorIcon from "@hugeicons/core-free-icons/ScissorIcon";
 import CursorMagicSelection04Icon from "@hugeicons/core-free-icons/CursorMagicSelection04Icon";
 import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
 import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
@@ -231,6 +233,8 @@ export const CloudUpload = wrap(CloudUploadIcon, "CloudUpload");
 export const Clock = wrap(Clock01Icon, "Clock");
 export const Code = wrap(SourceCodeIcon, "Code");
 export const Copy = wrap(Copy01Icon, "Copy");
+export const Paperclip = wrap(Attachment01Icon, "Paperclip");
+export const Scissors = wrap(ScissorIcon, "Scissors");
 export const CursorMagicSelection = wrap(
   CursorMagicSelection04Icon,
   "CursorMagicSelection",

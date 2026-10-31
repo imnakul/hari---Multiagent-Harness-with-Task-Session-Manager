@@ -2,6 +2,7 @@ import type {
   AgentModel,
   ModelSetting,
 } from "../../../../features/sessions/model/models";
+import { modelsFor } from "../../../../features/sessions/model/models";
 import type { ProcessedUsage } from "../../../../features/sessions/model/tokenAccounting";
 import type { HarnessSessionInput } from "../../core/types";
 
@@ -47,10 +48,14 @@ export function cliSpawnArgs(
   const model = input.model.startsWith("antigravity-cli:")
     ? input.model.slice("antigravity-cli:".length)
     : input.model;
-  if (model && model !== "default") args.push("--model", model);
   const effort = input.modelSettings?.effort;
-  if (effort && ["low", "medium", "high"].includes(effort))
-    args.push("--effort", effort);
+  if (model && model !== "default")
+    args.push(
+      "--model",
+      cliModelSlug(model, effort, modelsFor("antigravity-cli")),
+    );
+  // agy 1.4.11+ rejects --effort beside any named model; only its configured default takes it.
+  else if (effort && EFFORTS.includes(effort)) args.push("--effort", effort);
   if (nativeId) {
     if (!nativeConversationId(nativeId))
       throw new Error(
@@ -67,21 +72,51 @@ export function userMessage(text: string): string {
   return JSON.stringify({ event: "user", message: { content: text } });
 }
 
-const EFFORT: ModelSetting = {
-  id: "effort",
-  label: "Reasoning",
-  kind: "select",
-  value: "high",
-  options: ["low", "medium", "high"].map((value) => ({
-    value,
-    label: value[0].toUpperCase() + value.slice(1),
-  })),
-};
+const EFFORTS = ["low", "medium", "high"];
+const VARIANT = /^(.+)-(low|medium|high)$/;
 
-/** The official `agy models` output is a slug followed by its display name. */
+function effortSetting(values: string[]): ModelSetting {
+  return {
+    id: "effort",
+    label: "Reasoning",
+    kind: "select",
+    value: values.includes("high") ? "high" : values[values.length - 1],
+    options: values.map((value) => ({
+      value,
+      label: value[0].toUpperCase() + value.slice(1),
+    })),
+  };
+}
+
+/**
+ * agy names its reasoning level in the slug (`gemini-3.8-flash-high`), so the
+ * Reasoning choice picks the matching listed variant. A saved level the model
+ * does not list keeps the saved slug instead of inventing one.
+ */
+export function cliModelSlug(
+  slug: string,
+  effort: string | undefined,
+  models: AgentModel[],
+): string {
+  const variant = slug.match(VARIANT);
+  if (!variant || !effort || effort === variant[2]) return slug;
+  const group = models.find(
+    (model) => model.nativeId?.match(VARIANT)?.[1] === variant[1],
+  );
+  const listed = group?.settings?.find((setting) => setting.id === "effort");
+  return listed?.options.some((option) => option.value === effort)
+    ? `${variant[1]}-${effort}`
+    : slug;
+}
+
+/**
+ * The official `agy models` output is a slug followed by its display name.
+ * Variants that differ only by reasoning level become one model whose
+ * Reasoning setting picks the variant.
+ */
 export function cliModels(output: string): AgentModel[] {
   const seen = new Set<string>();
-  return output
+  const rows = output
     .replace(/\x1b\[[0-9;]*m/g, "")
     .split(/\r?\n/)
     .flatMap((line) => {
@@ -95,16 +130,44 @@ export function cliModels(output: string): AgentModel[] {
       )
         return [];
       seen.add(match[1]);
+      return [{ slug: match[1], name: match[2].trim() }];
+    });
+  const levels = new Map<string, string[]>();
+  for (const row of rows) {
+    const variant = row.slug.match(VARIANT);
+    if (variant)
+      levels.set(variant[1], [...(levels.get(variant[1]) ?? []), variant[2]]);
+  }
+  const grouped = new Set<string>();
+  return rows.flatMap((row): AgentModel[] => {
+    const base = row.slug.match(VARIANT)?.[1];
+    const values = base ? (levels.get(base) ?? []) : [];
+    if (!base || values.length < 2)
       return [
         {
-          id: `antigravity-cli:${match[1]}`,
-          harness: "antigravity-cli" as const,
-          nativeId: match[1],
-          name: match[2].trim(),
-          settings: [EFFORT],
+          id: `antigravity-cli:${row.slug}`,
+          harness: "antigravity-cli",
+          nativeId: row.slug,
+          name: row.name,
         },
       ];
-    });
+    if (grouped.has(base)) return [];
+    grouped.add(base);
+    const setting = effortSetting(
+      EFFORTS.filter((value) => values.includes(value)),
+    );
+    const slug = `${base}-${setting.value}`;
+    const name = rows.find((item) => item.slug === slug)?.name ?? row.name;
+    return [
+      {
+        id: `antigravity-cli:${slug}`,
+        harness: "antigravity-cli",
+        nativeId: slug,
+        name: name.replace(/\s*\((?:low|medium|high)\)\s*$/i, ""),
+        settings: [setting],
+      },
+    ];
+  });
 }
 
 function count(value: unknown): number {

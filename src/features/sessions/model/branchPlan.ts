@@ -102,3 +102,22 @@ export function convertToPrefixSummary(session: Session, reason: BranchSummaryRe
 export function markBranchUncertain(session: Session): Session {
   return rewriteOrigin(session, origin => origin.mode === "native" ? { ...origin, status: "uncertain" } : origin);
 }
+
+/**
+ * A Claude fork not sent yet whose parent transcript can be copied to another
+ * account (fork, L-200): the fork then starts there with the full history.
+ */
+export function pendingClaudeFork(session: Session): NonNullable<BranchOrigin["fork"]> | undefined {
+  if (session.harness !== "claude" || session.providerSessionId || session.busy) return undefined;
+  const origin = pendingBranchOrigin(session);
+  if (origin?.mode !== "native" || origin.status !== "pending" || origin.harness !== "claude") return undefined;
+  return origin.fork?.sourceProviderSessionId ? origin.fork : undefined;
+}
+
+/** Points a pending fork, and the chat, at the account its parent was copied to. */
+export function moveBranchForkAccount(session: Session, accountId: string): Session {
+  const moved = rewriteOrigin(session, origin => origin.fork
+    ? { ...origin, fork: { ...origin.fork, providerAccountId: accountId } }
+    : origin);
+  return { ...moved, providerAccountId: accountId };
+}

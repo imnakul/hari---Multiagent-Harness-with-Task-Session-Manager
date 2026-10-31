@@ -399,3 +399,20 @@ it("fails before spawning or sending if a selected custom agent disappeared", as
   expect(mocks.spawn).not.toHaveBeenCalled();
   expect(mocks.write).not.toHaveBeenCalled();
 });
+
+it("shows agy's own reason when it exits before the first turn", async () => {
+  const reason =
+    'invalid model selection (--model "gemini-3.8-flash-high" --effort "medium"): --model gemini-3.8-flash-high conflicts with --effort=medium';
+  mocks.spawn.mockImplementation(async (id) => {
+    emit(id, {
+      event: "result",
+      result: { conversation_id: "", status: "ERROR", error: reason, num_turns: 0 },
+    });
+    listeners.get(id)!.exit(1);
+  });
+  const cli = await import("./antigravityCli");
+  await expect(cli.sendCliTurn(input)).rejects.toThrow(
+    `Antigravity CLI stopped (1): ${reason}`,
+  );
+  expect(mocks.write).not.toHaveBeenCalled();
+});

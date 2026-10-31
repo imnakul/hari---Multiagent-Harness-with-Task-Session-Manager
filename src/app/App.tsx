@@ -69,6 +69,7 @@ import {
   type SubmissionAcceptance,
 } from "./model/submissionAcceptance";
 import { SavePromptDialogHost } from "../features/prompts/ui/SavePromptDialog";
+import { LinkContextMenu } from "../features/browser/ui/LinkContextMenu";
 import { SessionMetadataAutoWriter } from "../features/sessions/ui/SessionMetadataAutoWriter";
 import type { CiRepairRequest } from "../features/inbox/model/ciRepair";
 import { ciRepairSessions } from "../features/inbox/model/ciRepairSessions";
@@ -147,6 +148,7 @@ import {
   isViewTab,
   monoForTab,
   monoTabId,
+  newTabViews,
   nextDisplayedTabAfterClose,
   reconcileTitleTabOrder,
   type AppView,
@@ -244,6 +246,11 @@ import {
   zoomOutUiScale,
 } from "../features/settings/model/uiScale";
 import { resolveZoomKeybinding } from "../features/settings/model/zoomKeybinding";
+import {
+  nextBrowserRequest,
+  subscribeOpenInBrowser,
+  type BrowserRequest,
+} from "../features/browser/model/browserRequest";
 import { resolveAppShortcut } from "../features/settings/model/appShortcuts";
 import { toggleSessionPanel } from "../features/sessions/model/sessionPanel";
 import { runUpdateFlow } from "./model/updater";
@@ -564,6 +571,7 @@ import {
   continuedMarker,
   continueCostNote,
   continueClaudeSession,
+  copyClaudeSession,
 } from "../features/providers/model/continueOnAccount";
 import {
   hasInteractiveClaude,
@@ -1010,7 +1018,11 @@ import {
   createSidechatSession,
   sidechatContextForSend,
 } from "../features/sessions/model/sidechatSubmit";
-import { planBranch } from "../features/sessions/model/branchPlan";
+import {
+  moveBranchForkAccount,
+  pendingClaudeFork,
+  planBranch,
+} from "../features/sessions/model/branchPlan";
 import { saveSessionLink } from "../features/sessions/model/sessionLinks";
 import { sendBranchTurn } from "../features/sessions/model/branchFlow";
 import {
@@ -1093,6 +1105,14 @@ const WhiteboardView = lazySurface(
   async () => {
     const module = await import("../features/whiteboard/ui/WhiteboardView");
     return { default: module.WhiteboardView };
+  },
+  { suspense: false },
+);
+// Fork (L-203): the Browser tab loads on first open.
+const BrowserView = lazySurface(
+  async () => {
+    const module = await import("../features/browser/ui/BrowserView");
+    return { default: module.BrowserView };
   },
   { suspense: false },
 );
@@ -1626,6 +1646,11 @@ function Workspace({
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
   const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
+  // Fork (L-203): the Browser tab and the page it was last asked to open.
+  const [browserViewOpen, setBrowserViewOpen] = useState(false);
+  const [browserRequest, setBrowserRequest] = useState<BrowserRequest | null>(
+    null,
+  );
   const [openAppViews, setOpenAppViews] = useState<AppView[]>([]);
   // Monos open as title tabs in the inset layout, by Mono id.
   const [openMonoTabs, setOpenMonoTabs] = useState<string[]>([]);
@@ -1642,7 +1667,9 @@ function Workspace({
           ? "automations"
           : whiteboardViewOpen
             ? "whiteboard"
-            : undefined;
+            : browserViewOpen
+              ? "browser"
+              : undefined;
   const rememberAppView = useCallback((view: AppView) => {
     setOpenAppViews((current) =>
       current.includes(view) ? current : [...current, view],
@@ -1767,6 +1794,7 @@ function Workspace({
     recordKind: "notes" as "notes" | "tasks" | "kanban",
     automations: false,
     whiteboard: false,
+    browser: false,
   });
   const [updateNotice, setUpdateNotice] = useState(installedUpdate);
   const [whatsNewVersion, setWhatsNewVersion] = useState<string | null>(null);
@@ -2016,6 +2044,7 @@ function Workspace({
       (!recordsViewOpen || (boardOpen && boardPaneVisible)) &&
       !automationsViewOpen &&
       !whiteboardViewOpen &&
+      !browserViewOpen &&
       !settingsOpen &&
       !monoViewId,
     standaloneSessionId: inboxViewOpen
@@ -2024,6 +2053,7 @@ function Workspace({
           !recordsViewOpen &&
           !automationsViewOpen &&
           !whiteboardViewOpen &&
+          !browserViewOpen &&
           !settingsOpen
         ? (monoViewId ?? undefined)
         : undefined,
@@ -2033,6 +2063,7 @@ function Workspace({
       !notesViewOpen &&
       !automationsViewOpen &&
       !whiteboardViewOpen &&
+      !browserViewOpen &&
       !settingsOpen
         ? shownMonoSessionId
         : undefined,
@@ -2045,6 +2076,8 @@ function Workspace({
   automationsViewOpenRef.current = automationsViewOpen;
   const whiteboardViewOpenRef = useRef(whiteboardViewOpen);
   whiteboardViewOpenRef.current = whiteboardViewOpen;
+  const browserViewOpenRef = useRef(browserViewOpen);
+  browserViewOpenRef.current = browserViewOpen;
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
   const sessionNavigationIdsRef = useRef<readonly string[]>([]);
@@ -2811,6 +2844,7 @@ function Workspace({
             (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
             !automationsViewOpenRef.current &&
             !whiteboardViewOpenRef.current &&
+            !browserViewOpenRef.current &&
             !settingsOpenRef.current
           ) {
             setComposerFocused(true);
@@ -2850,6 +2884,7 @@ function Workspace({
     recordsViewOpen,
     automationsViewOpen,
     whiteboardViewOpen,
+    browserViewOpen,
     settingsOpen,
     flushForegroundHarnessEvents,
   ]);
@@ -3347,6 +3382,47 @@ function Workspace({
     accountId: string;
   } | null>(null);
 
+  /** Copies the parent's transcript so the unsent fork starts on `accountId` (L-200). */
+  const moveForkToAccount = useCallback(
+    async (
+      source: Session,
+      fork: NonNullable<ReturnType<typeof pendingClaudeFork>>,
+      accountId: string,
+    ): Promise<void> => {
+      const fromAccount =
+        fork.providerAccountId ??
+        source.providerAccountId ??
+        selectedProviderAccountId("claude", source.cwd);
+      if (fromAccount !== accountId) {
+        try {
+          await copyClaudeSession({
+            fromAccount,
+            toAccount: accountId,
+            sessionId: fork.sourceProviderSessionId,
+            cwd: fork.workCwd,
+          });
+        } catch (reason) {
+          void message(
+            `Couldn't copy the original chat to ${providerAccountLabel("claude", accountId)}: ${
+              reason instanceof Error ? reason.message : String(reason)
+            }`,
+            { title: "MonoCode", kind: "warning" },
+          );
+          setContinueOffer({ sessionId: source.id, accountId });
+          return;
+        }
+      }
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === source.id && pendingClaudeFork(session)
+            ? moveBranchForkAccount(session, accountId)
+            : session,
+        ),
+      );
+    },
+    [],
+  );
+
   const onProviderAccountChange = useCallback(
     (sessionId: string, accountId: string) => {
       const source = sessionsRef.current.find(
@@ -3378,15 +3454,18 @@ function Workspace({
         void usageLimitAccountChangeRef.current?.(source.id, accountId);
         return;
       }
-      // Fork feature L-102: a Claude chat with a native transcript can carry
-      // its history to the other account instead of starting empty.
-      if (canContinueOnAccount(source)) {
-        setContinueOffer({ sessionId: source.id, accountId });
+      // L-200: a Claude fork not sent yet takes its parent's history along.
+      const fork = pendingClaudeFork(source);
+      if (fork) {
+        void moveForkToAccount(source, fork, accountId);
         return;
       }
-      openNewChatOnAccount(source, accountId);
+      // Fork feature L-102: a Claude chat with a native transcript can carry
+      // its history to the other account; any other started chat is asked
+      // each time: a new chat with a context card, or an empty one (L-200).
+      setContinueOffer({ sessionId: source.id, accountId });
     },
-    [openNewChatOnAccount],
+    [moveForkToAccount],
   );
 
   const continueBlockedFor = useCallback(
@@ -3483,6 +3562,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setBrowserViewOpen(false);
     const cwd = sidebarCwd;
     const session = newWorkspaceSession(cwd, sessionDefaults?.runtimeMode);
     const tab = newTab(session.id);
@@ -3504,6 +3584,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       const existing = findRemoteSessionTab(
         tabsRef.current,
         sessionsRef.current,
@@ -3567,6 +3648,7 @@ function Workspace({
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
         setWhiteboardViewOpen(false);
+        setBrowserViewOpen(false);
         const cwd =
           item.projectPath || active?.cwd || sessionDefaults?.cwd || projectCwd;
         setSidebarTab("sessions", cwd);
@@ -3636,6 +3718,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       const cwd =
         (card.sourceCwd && looksLikeProject(card.sourceCwd)
           ? card.sourceCwd
@@ -5934,6 +6017,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       lastMonoIdRef.current = monoId;
       const session = await ensureMonoSession(monoId, {
         home: homeDir,
@@ -5961,6 +6045,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setMonoViewId(session.id);
       if (insetLayoutRef.current) {
         setOpenMonoTabs((current) =>
@@ -6107,6 +6192,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       if (looksLikeProject(session.cwd))
         setProjectCwd(normalizeProjectPath(session.cwd));
       const linkedUpdate = linkedSessionUpdatesRef.current.get(session.id);
@@ -6225,6 +6311,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
       setSidebarTab("sessions", session.cwd);
@@ -6905,6 +6992,7 @@ function Workspace({
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
             whiteboardViewOpenRef.current ||
+            browserViewOpenRef.current ||
             settingsOpenRef.current ||
             filePickerOpenRef.current ||
             whatsNewVersionRef.current,
@@ -7193,6 +7281,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setBrowserViewOpen(false);
     setSelectedProvider((current) => (current === provider ? null : provider));
     setSessionSidebarOpen(true);
     saveSessionSidebarOpen(true);
@@ -7225,6 +7314,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
       setSelectedProvider(null);
@@ -7860,6 +7950,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
 
       // At most one folder can take the blank session, and it keeps the
       // retargeting rules `onCwdChange` already owns.
@@ -10670,6 +10761,7 @@ function Workspace({
           setRecordsViewOpen(false);
           setAutomationsViewOpen(false);
           setWhiteboardViewOpen(false);
+          setBrowserViewOpen(false);
           setSidebarTab("sessions", session.cwd);
         }
 
@@ -10832,6 +10924,7 @@ function Workspace({
             setRecordsViewOpen(false);
             setAutomationsViewOpen(false);
             setWhiteboardViewOpen(false);
+            setBrowserViewOpen(false);
             setSidebarTab("sessions", cwd);
           },
           submit: (id, text, attachments, options) =>
@@ -14290,6 +14383,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       onOpenApprovalSession(sessionId, intent);
     },
     [onOpenApprovalSession],
@@ -14579,6 +14673,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setBrowserViewOpen(false);
     setFilePickerInitialQuery("");
     setFilePickerResetToken((token) => token + 1);
     setFilePickerOpen(true);
@@ -14589,6 +14684,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setBrowserViewOpen(false);
     setFilePickerInitialQuery(">");
     setFilePickerResetToken((token) => token + 1);
     setFilePickerOpen(true);
@@ -14606,6 +14702,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setBrowserViewOpen(false);
     setSidebarTab("files");
     setFilesSearchOpen(true);
     setSearchFocusToken((token) => token + 1);
@@ -14624,6 +14721,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setSearchViewOpen(true);
       setSearchViewFocusToken((token) => token + 1);
     });
@@ -14644,6 +14742,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setInboxViewOpen(true);
     });
   }, []);
@@ -14658,6 +14757,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setInboxViewOpen(false);
       const cwd =
         sessionsRef.current.find((session) => session.id === sessionId)?.cwd ??
@@ -14764,6 +14864,7 @@ function Workspace({
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setRecordKind("notes");
       setRecordsViewOpen(true);
     });
@@ -14780,6 +14881,7 @@ function Workspace({
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setRecordKind("tasks");
       setRecordsViewOpen(true);
     });
@@ -14796,6 +14898,7 @@ function Workspace({
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setRecordKind("kanban");
       setRecordsViewOpen(true);
     });
@@ -14816,6 +14919,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setAutomationsViewOpen(true);
     });
   }, []);
@@ -14835,6 +14939,7 @@ function Workspace({
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
+      setBrowserViewOpen(false);
       setWhiteboardViewOpen(true);
     });
   }, []);
@@ -14843,6 +14948,30 @@ function Workspace({
     setWhiteboardViewOpen(false);
   }, []);
 
+  // Fork (L-203): the Browser tab, opened bare or with a page to load.
+  const onOpenBrowser = useCallback((url?: string) => {
+    workspaceNavigation.cancel();
+    if (url) setBrowserRequest((current) => nextBrowserRequest(current, url));
+    startTransition(() => {
+      closeMonoView();
+      rememberAppView("browser");
+      setFilePickerOpen(false);
+      setSettingsOpen(false);
+      setSearchViewOpen(false);
+      setInboxViewOpen(false);
+      setRecordsViewOpen(false);
+      setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
+      setBrowserViewOpen(true);
+    });
+  }, []);
+
+  const onLeaveBrowser = useCallback(() => {
+    setBrowserViewOpen(false);
+  }, []);
+
+  useEffect(() => subscribeOpenInBrowser((url) => onOpenBrowser(url)), [onOpenBrowser]);
+
   const onOpenAutomationSession = useCallback(
     async (sessionId: string) => {
       const session = await ensureOpenSession(sessionId);
@@ -14850,6 +14979,7 @@ function Workspace({
         throw new Error("This conversation is no longer available.");
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
@@ -14874,6 +15004,7 @@ function Workspace({
           recordKind: recordKindRef.current,
           automations: automationsViewOpenRef.current,
           whiteboard: whiteboardViewOpenRef.current,
+          browser: browserViewOpenRef.current,
         };
       }
       startTransition(() => {
@@ -14883,6 +15014,7 @@ function Workspace({
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
         setWhiteboardViewOpen(false);
+        setBrowserViewOpen(false);
         if (section) {
           setSettingsSection(section);
           saveSettingsSection(section);
@@ -14949,6 +15081,7 @@ function Workspace({
       kanban: leavingFocus(onOpenKanban),
       automations: leavingFocus(onOpenAutomations),
       whiteboard: leavingFocus(onOpenWhiteboard),
+      browser: leavingFocus(() => onOpenBrowser()),
       settings: leavingFocus(onOpenSettings),
       notificationSettings: leavingFocus(onOpenNotificationSettings),
     };
@@ -14961,6 +15094,7 @@ function Workspace({
     onOpenKanban,
     onOpenAutomations,
     onOpenWhiteboard,
+    onOpenBrowser,
     onOpenSettings,
     onOpenNotificationSettings,
   ]);
@@ -14982,6 +15116,7 @@ function Workspace({
     );
     setAutomationsViewOpen(returnView.automations);
     setWhiteboardViewOpen(returnView.whiteboard);
+    setBrowserViewOpen(returnView.browser);
     setSettingsOpen(false);
   }, []);
 
@@ -15025,10 +15160,15 @@ function Workspace({
     if (automationsViewOpen) {
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       return;
     }
     if (whiteboardViewOpen) {
       setWhiteboardViewOpen(false);
+      return;
+    }
+    if (browserViewOpen) {
+      setBrowserViewOpen(false);
       return;
     }
     if (monoViewIdRef.current) {
@@ -15047,6 +15187,7 @@ function Workspace({
     recordsViewOpen,
     automationsViewOpen,
     whiteboardViewOpen,
+    browserViewOpen,
   ]);
 
   const onRailForward = useCallback(() => {
@@ -15056,6 +15197,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setBrowserViewOpen(false);
     onVisitForward();
   }, [onVisitForward]);
 
@@ -15196,6 +15338,7 @@ function Workspace({
           kanban: onOpenKanban,
           automations: onOpenAutomations,
           whiteboard: onOpenWhiteboard,
+          browser: () => onOpenBrowser(),
         };
         open[view]();
         return;
@@ -15206,6 +15349,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
       activateTab(id);
     },
     [
@@ -15218,6 +15362,7 @@ function Workspace({
       onOpenKanban,
       onOpenAutomations,
       onOpenWhiteboard,
+      onOpenBrowser,
     ],
   );
 
@@ -15254,6 +15399,7 @@ function Workspace({
       }
       if (view === "automations") setAutomationsViewOpen(false);
       if (view === "whiteboard") setWhiteboardViewOpen(false);
+      if (view === "browser") setBrowserViewOpen(false);
       if (nextId) navigation.select?.(nextId);
     });
   }, []);
@@ -15592,6 +15738,7 @@ function Workspace({
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
             whiteboardViewOpenRef.current ||
+            browserViewOpenRef.current ||
             settingsOpenRef.current ||
             filePickerOpenRef.current ||
             Boolean(whatsNewVersionRef.current);
@@ -15617,8 +15764,9 @@ function Workspace({
         }
         if (
           (cmd === "split-right" || cmd === "split-down") &&
-          target?.closest(".cm-editor")
+          target?.closest(".cm-editor, .excalidraw")
         ) {
+          // In the whiteboard Ctrl+D duplicates the selection (fork, L-199).
           return;
         }
         const inPicker =
@@ -15691,6 +15839,7 @@ function Workspace({
         (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
         !automationsViewOpenRef.current &&
         !whiteboardViewOpenRef.current &&
+        !browserViewOpenRef.current &&
         !(
           e.target instanceof Element &&
           e.target.closest("[data-session-drop], [data-agent-tab]")
@@ -16450,6 +16599,7 @@ function Workspace({
     inboxViewOpen ||
     recordsViewOpen ||
     automationsViewOpen ||
+    browserViewOpen ||
     whiteboardViewOpen;
   const compactProjectRail = collapsedProjectRailMode === "compact";
   const compactRailActive = compactProjectRail && !projectRailOpen;
@@ -16555,6 +16705,9 @@ function Workspace({
     if (monoViewIdRef.current) closeMonoView();
     onNew();
   };
+  // Fork (L-206): the arrow beside the tab strip's + opens these views.
+  const newTabViewList = newTabViews((view) => view !== "notes" || notesEnabled);
+  const onOpenViewFromTitleBar = (view: AppView) => sidebarPages[view]();
   const workspaceTitleBar = (
     <TitleBar
       // A Mono in full view stands apart from the project's tabs, except
@@ -16623,6 +16776,8 @@ function Workspace({
       onOpenNotes={notesEnabled ? onOpenNotes : undefined}
       onOpenTasks={onOpenTasks}
       onOpenKanban={sessionManagerInSidebar ? onOpenKanban : undefined}
+      newTabViews={newTabViewList}
+      onOpenView={onOpenViewFromTitleBar}
       onClose={onCloseDisplayedTab}
       onCloseMany={onCloseDisplayedTabs}
       onCloseAll={onCloseAllDisplayedTabs}
@@ -16742,6 +16897,7 @@ function Workspace({
         inboxViewOpen ||
         recordsViewOpen ||
         automationsViewOpen ||
+        browserViewOpen ||
         whiteboardViewOpen
       }
       canGoForward={tabVisitNav.canForward}
@@ -16775,12 +16931,14 @@ function Workspace({
       onOpenNotes={notesEnabled ? sidebarPages.notes : undefined}
       onOpenAutomations={sidebarPages.automations}
       onOpenWhiteboard={sidebarPages.whiteboard}
+      onOpenBrowser={sidebarPages.browser}
       onGoToFile={onGoToFile}
       searchActive={searchViewOpen}
       inboxActive={inboxViewOpen}
       notesActive={recordsViewOpen && recordKind === "notes"}
       automationsActive={automationsViewOpen}
       whiteboardActive={whiteboardViewOpen}
+      browserActive={browserViewOpen}
       notesEnabled={notesEnabled}
       // The inset layout has no project rail: the sidebar header's menu
       // switches projects.
@@ -16926,6 +17084,7 @@ function Workspace({
       onOpenTasks={insetLayout ? undefined : sidebarPages.tasks}
       onOpenAutomations={insetLayout ? undefined : sidebarPages.automations}
       onOpenWhiteboard={insetLayout ? undefined : sidebarPages.whiteboard}
+      onOpenBrowser={insetLayout ? undefined : sidebarPages.browser}
       onOpenSettings={insetLayout ? undefined : sidebarPages.settings}
       footer={usageFooter}
     />
@@ -16949,6 +17108,7 @@ function Workspace({
         >
           {titleBarSpansWindow && !focusMode ? workspaceTitleBar : null}
           <SavePromptDialogHost />
+          <LinkContextMenu />
           <SessionMetadataAutoWriter />
           {continueOffer
             ? (() => {
@@ -16956,13 +17116,41 @@ function Workspace({
                   (session) => session.id === continueOffer.sessionId,
                 );
                 if (!offered) return null;
+                let lastUser = offered.blocks.length - 1;
+                while (
+                  lastUser >= 0 &&
+                  (offered.blocks[lastUser]!.role !== "user" ||
+                    offered.blocks[lastUser]!.draft)
+                )
+                  lastUser--;
                 return (
                   <ContinueOnAccountDialog
                     accountLabel={providerAccountLabel(
-                      "claude",
+                      offered.harness as ProviderAccountProvider,
                       continueOffer.accountId,
                     )}
                     blockedReason={continueBlockedFor(offered)}
+                    canContinueHere={canContinueOnAccount(offered)}
+                    onCard={
+                      lastUser >= 0 && !offered.worktreeRemoved
+                        ? (preset) => {
+                            setContinueOffer(null);
+                            onContinue(
+                              offered.id,
+                              {
+                                target: {
+                                  harness: offered.harness,
+                                  model: offered.model,
+                                  modelSettings: offered.modelSettings,
+                                },
+                                accountId: continueOffer.accountId,
+                                preset,
+                              },
+                              offered.blocks.slice(lastUser),
+                            );
+                          }
+                        : undefined
+                    }
                     onContinue={async () => {
                       await continueOnAccount(
                         continueOffer.sessionId,
@@ -17045,6 +17233,7 @@ function Workspace({
                       inboxViewOpen ||
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
+                      browserViewOpen ||
                       whiteboardViewOpen
                         ? "hidden"
                         : "flex min-h-0 min-w-0 flex-1 flex-col"
@@ -17055,6 +17244,7 @@ function Workspace({
                       inboxViewOpen ||
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
+                      browserViewOpen ||
                       whiteboardViewOpen
                     }
                     inert={
@@ -17064,6 +17254,7 @@ function Workspace({
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
                       whiteboardViewOpen ||
+                      browserViewOpen ||
                       undefined
                     }
                   >
@@ -17092,6 +17283,8 @@ function Workspace({
                         onOpenInbox={onOpenInbox}
                         onOpenNotes={notesEnabled ? onOpenNotes : undefined}
                         onOpenTasks={onOpenTasks}
+                        onOpenWhiteboard={sidebarPages.whiteboard}
+                        onOpenBrowser={sidebarPages.browser}
                         onOpenKanban={onOpenKanban}
                         onZoomIn={() => {
                           const next = saveUiScale(
@@ -17302,6 +17495,7 @@ function Workspace({
                                 !recordsViewOpen &&
                                 !automationsViewOpen &&
                                 !whiteboardViewOpen &&
+                                !browserViewOpen &&
                                 !monoViewId &&
                                 activeLinkedWorkItemPanel?.sessionId ===
                                   panel.sessionId
@@ -17541,6 +17735,22 @@ function Workspace({
                         compactRail={!insetLayout && compactRailActive}
                         cwd={projectCwd}
                         onClose={onLeaveWhiteboard}
+                        onToggleSidebar={onToggleSidebar}
+                      />
+                    </AppViewSurface>
+                  ) : null}
+                  {browserViewOpen ||
+                  (insetLayout && openAppViews.includes("browser")) ? (
+                    <AppViewSurface active={browserViewOpen}>
+                      <BrowserView
+                        active={browserViewOpen}
+                        request={browserRequest}
+                        tabbed={insetLayout}
+                        besideRail={
+                          insetLayout || projectRailOpen || compactProjectRail
+                        }
+                        compactRail={!insetLayout && compactRailActive}
+                        onClose={onLeaveBrowser}
                         onToggleSidebar={onToggleSidebar}
                       />
                     </AppViewSurface>

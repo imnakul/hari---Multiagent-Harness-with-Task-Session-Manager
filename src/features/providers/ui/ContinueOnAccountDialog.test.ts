@@ -62,9 +62,9 @@ describe("ContinueOnAccountDialog", () => {
     ).not.toBeNull();
   });
 
-  it("New chat keeps today's behaviour and Continue here copies", async () => {
+  it("Empty new chat keeps today's behaviour and Continue here copies", async () => {
     const handlers = render({});
-    await act(async () => button("New chat").click());
+    await act(async () => button("Empty new chat").click());
     expect(handlers.onNewChat).toHaveBeenCalledTimes(1);
     expect(handlers.onContinue).not.toHaveBeenCalled();
     await act(async () => button("Continue here").click());
@@ -88,5 +88,27 @@ describe("ContinueOnAccountDialog", () => {
     await act(async () => button("Continue here").click());
     expect(container.textContent).toContain("already has a different version");
     expect(button("Continue here").disabled).toBe(false);
+  });
+
+  it("Continue with card sends the picked preset", async () => {
+    const onCard = vi.fn();
+    render({ onCard });
+    await act(async () => button("Continue with card").click());
+    expect(onCard).toHaveBeenCalledWith("quick");
+    const balanced = [...container.querySelectorAll('[role="radio"], button')].find(
+      (node) => node.textContent === "Balanced",
+    ) as HTMLElement;
+    await act(async () => balanced.click());
+    await act(async () => button("Continue with card").click());
+    expect(onCard).toHaveBeenLastCalledWith("balanced");
+  });
+
+  it("offers only the card and an empty chat when the history can't move", () => {
+    render({ canContinueHere: false, onCard: vi.fn(), blockedReason: "Stop it or wait." });
+    expect(container.textContent).toContain("can't move");
+    expect(container.textContent).not.toContain("is not cached");
+    expect(container.textContent).not.toContain("Stop it or wait.");
+    expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Continue here")).toBe(false);
+    expect(button("Continue with card").disabled).toBe(false);
   });
 });

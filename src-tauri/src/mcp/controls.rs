@@ -51,10 +51,10 @@ fn set_enabled(
 ) -> Result<(), String> {
     if !matches!(
         provider,
-        "claude" | "codex" | "opencode" | "antigravity-cli"
+        "claude" | "codex" | "opencode" | "antigravity-cli" | "antigravity"
     ) {
         return Err(
-            "Enable/Disable is supported for Claude Code, Codex, OpenCode and Antigravity CLI"
+            "Enable/Disable is supported for Claude Code, Codex, OpenCode and Antigravity"
                 .into(),
         );
     }
@@ -101,7 +101,7 @@ fn set_enabled(
         update_file(&selected, |raw| match provider {
             "codex" => edit_codex(raw, name, enabled),
             "opencode" => edit_opencode(raw, name, enabled),
-            "antigravity-cli" => edit_antigravity_cli(raw, name, enabled),
+            "antigravity-cli" | "antigravity" => edit_antigravity_cli(raw, name, enabled),
             _ => unreachable!(),
         })
     }

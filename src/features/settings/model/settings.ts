@@ -530,6 +530,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "streaming pacing immediate latency performance animation",
   },
   {
+    id: "code-wrap",
+    section: "chat",
+    label: "Wrap code",
+    keywords: "code block long lines wrap horizontal scroll",
+  },
+  {
     id: "link-previews",
     section: "chat",
     label: "Link previews",

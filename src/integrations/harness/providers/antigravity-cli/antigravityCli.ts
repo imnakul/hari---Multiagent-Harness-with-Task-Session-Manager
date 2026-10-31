@@ -51,6 +51,8 @@ type Live = {
   turns: number;
   stopped: boolean;
   startupError?: Error;
+  /** agy's own reason when it stops before a turn (bad model, flags, sign-in). */
+  exitReason?: string;
   resumed: boolean;
   lastStep: number;
 };
@@ -332,13 +334,17 @@ async function ensureLive(
       lives.delete(input.sessionId);
       unwatchChild(input.sessionId);
       live.startupError = new Error(
-        `Antigravity CLI exited before its turn completed (${String(code)}). ${CLI_HELP}`,
+        live.exitReason
+          ? `Antigravity CLI stopped (${String(code)}): ${live.exitReason}`
+          : `Antigravity CLI exited before its turn completed (${String(code)}). ${CLI_HELP}`,
       );
       live.initialize(live.startupError);
       live.active?.finish(live.startupError);
     },
     (line): void => {
       if (live.stopped) return;
+      const reason = line.match(/^s*error:s*(.+)$/i)?.[1]?.trim();
+      if (reason) live.exitReason ??= reason;
       if (
         /authentication required|keyring.*locked|not (?:authenticated|signed in)/i.test(
           line,
@@ -427,7 +433,12 @@ function readEvent(
     return;
   }
   const active = live.active;
-  if (!active) return;
+  if (!active) {
+    const failed = event.event === "result" ? record(event.result) : undefined;
+    if (typeof failed?.error === "string" && failed.error.trim())
+      live.exitReason = failed.error.trim();
+    return;
+  }
   if (event.event === "step_update") {
     const step = record(event.step_update);
     if (

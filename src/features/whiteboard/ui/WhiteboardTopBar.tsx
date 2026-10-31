@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   Clean,
+  Copy,
   Cursor,
   Download,
   FitScreen,
@@ -16,6 +17,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Scissors,
   SelectAll,
   SmilePlus,
   TextFont,
@@ -161,6 +163,11 @@ export function WhiteboardTopBar({
   onTool,
   onToggleLock,
   onFont,
+  textColor,
+  onTextColor,
+  hasSelection,
+  onCopy,
+  onCut,
   onIcons,
   onGrid,
   onSnap,
@@ -191,6 +198,12 @@ export function WhiteboardTopBar({
   onTool: (tool: "selection" | "hand") => void;
   onToggleLock: () => void;
   onFont: (id: number) => void;
+  /** Hex colour for new and selected text (L-199). */
+  textColor: string;
+  onTextColor: (color: string) => void;
+  hasSelection: boolean;
+  onCopy: () => void;
+  onCut: () => void;
   onIcons: () => void;
   onGrid: () => void;
   onSnap: () => void;
@@ -211,6 +224,7 @@ export function WhiteboardTopBar({
   const locked = !!sheet?.locked;
   const editable = ready && !locked;
   const font = whiteboardFont(fontId) ?? WHITEBOARD_FONTS[0]!;
+  const swatch = /^#[0-9a-f]{6}$/i.test(textColor) ? textColor : "#1e1e1e";
   const close = () => setMenu(null);
   const toggle = (next: NonNullable<typeof menu>) => setMenu((open) => (open === next ? null : next));
 
@@ -293,6 +307,31 @@ export function WhiteboardTopBar({
       >
         <SmilePlus aria-hidden className="size-3.5" />
       </button>
+      <label
+        title="Text colour (any colour)"
+        aria-disabled={!editable}
+        className={`${ICON_BUTTON} cursor-pointer text-content/60 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-35 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent/60`}
+      >
+        <span
+          aria-hidden
+          className="size-3.5 rounded-full border border-content/25"
+          style={{ backgroundColor: swatch }}
+        />
+        <input
+          type="color"
+          aria-label="Text colour"
+          value={swatch}
+          disabled={!editable}
+          onChange={(event) => onTextColor(event.target.value)}
+          className="sr-only"
+        />
+      </label>
+      <ToolButton label="Copy selection" disabled={!editable || !hasSelection} onClick={onCopy}>
+        <Copy aria-hidden className="size-3.5" />
+      </ToolButton>
+      <ToolButton label="Cut selection" disabled={!editable || !hasSelection} onClick={onCut}>
+        <Scissors aria-hidden className="size-3.5" />
+      </ToolButton>
 
       <Divider />
       <ToolButton label="Grid" pressed={grid} disabled={!ready} onClick={onGrid}>

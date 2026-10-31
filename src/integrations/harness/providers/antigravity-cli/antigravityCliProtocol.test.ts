@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cliModels,
+  cliModelSlug,
   cliSpawnArgs,
   cliUsage,
   nativeConversationId,
@@ -16,6 +17,14 @@ import {
 } from "../../../../features/sessions/model/session";
 
 const id = "055a398f-db14-4c5f-abbb-1bf03f8120a7";
+const LISTED = [
+  "Fetching available models...",
+  "gemini-3.8-flash-high\tGemini 3.8 Flash (High)",
+  "gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)",
+  "gemini-3.8-flash-low\tGemini 3.8 Flash (Low)",
+  "claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)",
+  "gpt-oss-120b-medium\tGPT-OSS 120B (Medium)",
+].join("\n");
 const input = {
   sessionId: "one",
   cwd: "/repo",
@@ -43,9 +52,44 @@ describe("official agy headless protocol", () => {
     expect(cliSpawnArgs({ ...input, runtimeMode: "full-access" })).toContain(
       "--dangerously-skip-permissions",
     );
+  });
+  it("never sends --effort beside a named model; only the configured default takes it", () => {
+    // agy 1.4.11 exits 1 for "--model gemini-3.8-flash-high --effort medium".
     expect(
-      cliSpawnArgs({ ...input, modelSettings: { effort: "high" } }),
-    ).toContain("--effort");
+      cliSpawnArgs({ ...input, modelSettings: { effort: "medium" } }),
+    ).not.toContain("--effort");
+    const fallback = cliSpawnArgs({
+      ...input,
+      model: "antigravity-cli:default",
+      modelSettings: { effort: "low" },
+    });
+    expect(fallback).not.toContain("--model");
+    expect(fallback.slice(fallback.indexOf("--effort"), fallback.indexOf("--effort") + 2)).toEqual(["--effort", "low"]);
+  });
+  it("maps the Reasoning choice to the listed variant slug", () => {
+    const models = cliModels(LISTED);
+    expect(cliModelSlug("gemini-3.8-flash-high", "medium", models)).toBe("gemini-3.8-flash-medium");
+    expect(cliModelSlug("gemini-3.8-flash-low", "high", models)).toBe("gemini-3.8-flash-high");
+    expect(cliModelSlug("gemini-3.8-flash-high", undefined, models)).toBe("gemini-3.8-flash-high");
+    // A single listed level, or no catalog yet, keeps the saved slug instead of inventing one.
+    expect(cliModelSlug("gpt-oss-120b-medium", "high", models)).toBe("gpt-oss-120b-medium");
+    expect(cliModelSlug("gemini-3.8-flash-high", "low", [])).toBe("gemini-3.8-flash-high");
+    expect(cliModelSlug("claude-sonnet-4-6", "high", models)).toBe("claude-sonnet-4-6");
+  });
+  it("groups reasoning variants into one model with a Reasoning setting", () => {
+    const models = cliModels(LISTED);
+    expect(models.map((model) => [model.id, model.name])).toEqual([
+      ["antigravity-cli:gemini-3.8-flash-high", "Gemini 3.8 Flash"],
+      ["antigravity-cli:claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"],
+      ["antigravity-cli:gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"],
+    ]);
+    expect(models[0].settings?.[0]).toMatchObject({
+      id: "effort",
+      value: "high",
+      options: [{ value: "low" }, { value: "medium" }, { value: "high" }],
+    });
+    expect(models[1].settings).toBeUndefined();
+    expect(models[2].settings).toBeUndefined();
   });
   it("rejects ACP native IDs and hides unsupported attachment/approval controls", () => {
     expect(nativeConversationId(id)).toBe(id);

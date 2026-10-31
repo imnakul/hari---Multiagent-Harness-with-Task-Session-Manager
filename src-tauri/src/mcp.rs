@@ -77,8 +77,8 @@ fn server_from_json(provider: &str, name: &str, config: &str) -> Result<(String,
             object.insert("args".into(), serde_json::json!(args));
         }
     }
-    if provider == "antigravity-cli" {
-        // Antigravity CLI reads remote servers from `serverUrl`; accept the
+    if is_antigravity(provider) {
+        // Antigravity CLI and ACP read remote servers from `serverUrl`; accept the
         // common `url` spelling from other providers' snippets.
         let object = server.as_object_mut().unwrap();
         if !object.contains_key("serverUrl") {
@@ -92,7 +92,7 @@ fn server_from_json(provider: &str, name: &str, config: &str) -> Result<(String,
         .and_then(Value::as_str)
         .is_some_and(|s| !s.is_empty());
     let url = server
-        .get(if provider == "antigravity-cli" {
+        .get(if is_antigravity(provider) {
             "serverUrl"
         } else {
             "url"
@@ -103,6 +103,17 @@ fn server_from_json(provider: &str, name: &str, config: &str) -> Result<(String,
         return Err("Server needs either a command or a URL".into());
     }
     Ok((name, server))
+}
+
+/// Antigravity CLI and ACP share one config format (`disabled`, `serverUrl`).
+fn is_antigravity(provider: &str) -> bool {
+    matches!(provider, "antigravity-cli" | "antigravity")
+}
+
+/// ACP runs with GEMINI_HOME set to MonoCode's private profile
+/// (`antigravity_acp::profile_directory`), so it reads this file, not ~/.gemini.
+pub(crate) fn antigravity_acp_mcp_config(home: &Path) -> PathBuf {
+    home.join(".monocode/providers/antigravity/config/mcp_config.json")
 }
 
 #[tauri::command]
@@ -123,7 +134,7 @@ pub async fn mcp_add(
             return Err("Project directory does not exist".into());
         }
         match provider.as_str() {
-            "cursor" | "claude_desktop" | "antigravity-cli" => {
+            "cursor" | "claude_desktop" | "antigravity-cli" | "antigravity" => {
                 let path = match (provider.as_str(), scope.as_str()) {
                     ("cursor", "user") => Path::new(&home).join(".cursor/mcp.json"),
                     ("cursor", "project") => project.join(".cursor/mcp.json"),
@@ -132,6 +143,7 @@ pub async fn mcp_add(
                         Path::new(&home).join(".gemini/config/mcp_config.json")
                     }
                     ("antigravity-cli", "project") => project.join(".agents/mcp_config.json"),
+                    ("antigravity", "user") => antigravity_acp_mcp_config(Path::new(&home)),
                     ("claude_desktop", "user") => claude_desktop_config(Path::new(&home)),
                     _ => return Err("Unsupported scope for this provider".into()),
                 };
@@ -500,7 +512,7 @@ fn discover(
                 .and_then(|entry| entry.get("mcpServers")),
         );
     }
-    // CLI uses dedicated user/workspace files; do not scan ACP/IDE settings.
+    // CLI uses dedicated user/workspace files; ACP reads its private profile; do not scan IDE settings.
     add_json_file(
         &mut connections,
         "antigravity-cli",
@@ -513,6 +525,13 @@ fn discover(
         "antigravity-cli",
         "project",
         &project.join(".agents/mcp_config.json"),
+        "mcpServers",
+    );
+    add_json_file(
+        &mut connections,
+        "antigravity",
+        "user",
+        &antigravity_acp_mcp_config(home),
         "mcpServers",
     );
     let cursor = home.join(".cursor/mcp.json");
@@ -670,9 +689,9 @@ fn add_json_servers(
             config_path: path.to_string_lossy().into_owned(),
             transport: transport(config).into(),
             enabled: provider == "claude"
-                || (provider == "antigravity-cli"
+                || (is_antigravity(provider)
                     && config.get("disabled").and_then(Value::as_bool) != Some(true))
-                || (provider != "antigravity-cli"
+                || (!is_antigravity(provider)
                     && config.get("enabled").and_then(Value::as_bool) != Some(false)
                     && config.get("disabled").and_then(Value::as_bool) != Some(true)),
         });
@@ -869,6 +888,45 @@ mod tests {
             .collect();
         assert_eq!(names, [("new", true), ("old", false)]);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovers_antigravity_acp_servers_in_its_private_profile() {
+        let home = std::env::temp_dir().join(format!("monocode-mcp-acp-{}", uuid::Uuid::new_v4()));
+        let project = home.join("repo");
+        std::fs::create_dir_all(&project).unwrap();
+        // The IDE file under ~/.gemini/antigravity is not what ACP reads.
+        let ide = home.join(".gemini/antigravity/mcp_config.json");
+        std::fs::create_dir_all(ide.parent().unwrap()).unwrap();
+        std::fs::write(&ide, r#"{"mcpServers":{"ide-only":{"command":"x"}}}"#).unwrap();
+        let path = antigravity_acp_mcp_config(&home);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"mcpServers":{"notion":{"command":"npx"},"old":{"command":"x","disabled":true}}}"#,
+        )
+        .unwrap();
+        let (name, server) =
+            server_from_json("antigravity", "docs", r#"{"url":"https://example.test/mcp"}"#).unwrap();
+        assert_eq!(server["serverUrl"], "https://example.test/mcp");
+        write_json_server(&path, &name, server).unwrap();
+        let found = discover(&home, &project, None, &home.join("desktop.json"), None);
+        let mut acp: Vec<_> = found
+            .iter()
+            .filter(|row| row.provider == "antigravity")
+            .map(|row| (row.name.as_str(), row.scope.as_str(), row.transport.as_str(), row.enabled))
+            .collect();
+        acp.sort();
+        assert_eq!(
+            acp,
+            [
+                ("docs", "user", "http", true),
+                ("notion", "user", "stdio", true),
+                ("old", "user", "stdio", false),
+            ]
+        );
+        assert!(!found.iter().any(|row| row.name == "ide-only"));
+        std::fs::remove_dir_all(home).unwrap();
     }
 
     #[test]

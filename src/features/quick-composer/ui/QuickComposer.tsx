@@ -124,6 +124,8 @@ import {
 
 /** Tallest the prompt grows before it scrolls, in px. */
 const PROMPT_MAX_HEIGHT = 220;
+/** With a picker open the prompt gives up room so the list stays usable (fork, L-198). */
+const PROMPT_PICKER_HEIGHT = 88;
 
 /** Commands the floating composer offers after a leading `/`. */
 const MODE_COMMANDS = [
@@ -417,8 +419,11 @@ export function QuickComposer({
     const field = promptRef.current;
     if (!field) return;
     field.style.height = "auto";
-    field.style.height = `${Math.min(field.scrollHeight, PROMPT_MAX_HEIGHT)}px`;
-  }, [prompt, leadingMode?.name]);
+    field.style.height = `${Math.min(
+      field.scrollHeight,
+      picker ? PROMPT_PICKER_HEIGHT : PROMPT_MAX_HEIGHT,
+    )}px`;
+  }, [prompt, leadingMode?.name, picker]);
 
   const onGitOpenChange = useCallback((open: boolean) => {
     setGitOpen(open);
@@ -1306,7 +1311,7 @@ export function QuickComposer({
         </div>
       ) : null}
       {picker && picker !== "attachments" ? (
-        <div ref={pickerRef} key={picker} className="flex min-h-0 flex-col">
+        <div ref={pickerRef} key={picker} className="flex min-h-min flex-col">
           {picker === "commands" ? (
             <div
               ref={listRef}

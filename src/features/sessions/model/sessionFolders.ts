@@ -599,11 +599,11 @@ export function loadReminderSessionsCollapsed(cwd: string): boolean {
 
 /**
  * Whether this project's Drafts group is collapsed (saved per project).
- * Collapsed until the user chooses otherwise: an explicit `false` (expanded)
- * is stored, so only a project with nothing saved defaults to collapsed.
+ * Open until the user collapses it, so new drafts show at the top of the
+ * list (fork, L-198; was collapsed by default).
  */
 export function loadDraftSessionsCollapsed(cwd: string): boolean {
-  return loadGroupCollapsed(cwd, DRAFTS_COLLAPSED_KEY, true);
+  return loadGroupCollapsed(cwd, DRAFTS_COLLAPSED_KEY);
 }
 
 function loadGroupCollapsed(
@@ -644,14 +644,13 @@ export function saveDraftSessionsCollapsed(
   cwd: string,
   collapsed: boolean,
 ): void {
-  saveGroupCollapsed(cwd, collapsed, DRAFTS_COLLAPSED_KEY, true);
+  saveGroupCollapsed(cwd, collapsed, DRAFTS_COLLAPSED_KEY);
 }
 
 function saveGroupCollapsed(
   cwd: string,
   collapsed: boolean,
   storeKey: string,
-  keepExpanded = false,
 ): void {
   const key = storageKey(cwd);
   if (!key) return;
@@ -662,7 +661,7 @@ function saveGroupCollapsed(
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
         ? { ...(parsed as Record<string, unknown>) }
         : {};
-    if (collapsed || keepExpanded) store[key] = collapsed;
+    if (collapsed) store[key] = true;
     else delete store[key];
     localStorage.setItem(storeKey, JSON.stringify(store));
   } catch {

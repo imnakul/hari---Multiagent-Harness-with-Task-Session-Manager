@@ -6,9 +6,25 @@ export const APP_VIEW_LABELS = {
   kanban: "Session Manager",
   automations: "Automations",
   whiteboard: "Whiteboard",
+  browser: "Browser",
 } as const;
 
 export type AppView = keyof typeof APP_VIEW_LABELS;
+
+/** Views the arrow beside the tab strip's + offers, in menu order (fork, L-206). */
+const NEW_TAB_VIEW_ORDER: readonly AppView[] = [
+  "browser",
+  "whiteboard",
+  "notes",
+  "tasks",
+  "kanban",
+  "automations",
+  "inbox",
+];
+
+export function newTabViews(available: (view: AppView) => boolean = () => true): AppView[] {
+  return NEW_TAB_VIEW_ORDER.filter(available);
+}
 
 export function appViewTabId(view: AppView): string {
   return `app-view:${view}`;

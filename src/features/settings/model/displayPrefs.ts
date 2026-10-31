@@ -82,6 +82,11 @@ export const loadPacedReveal = pacedReveal.load;
 export const savePacedReveal = pacedReveal.save;
 export const usePacedReveal = pacedReveal.useFlag;
 
+/** Wrap long lines in chat code blocks (fork, L-197). */
+const codeWrap = flagStore("monocode.codeWrap", true, "monocode:codewrapchange");
+export const saveCodeWrap = codeWrap.save;
+export const useCodeWrap = codeWrap.useFlag;
+
 /** Experimental Continue button on replies (L-189). */
 const continueMode = flagStore(
   "monocode.continueMode",

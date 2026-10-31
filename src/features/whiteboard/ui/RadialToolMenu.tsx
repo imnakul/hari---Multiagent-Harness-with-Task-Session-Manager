@@ -2,14 +2,16 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
 import {
   ArrowUpRight,
   Circle,
+  Copy,
   Cursor,
   Diamond,
   Eraser,
   Frame,
   Hand,
-  Image,
   Line,
   PencilDraw,
+  Scissors,
+  SmilePlus,
   Square,
   TextTool,
   type IconComponent,
@@ -30,7 +32,10 @@ export type WheelTool =
   | "eraser"
   | "frame";
 
-export const WHEEL_TOOLS: readonly { tool: WheelTool; label: string; key: string; Icon: IconComponent }[] = [
+/** A drawing tool, or one of the wheel's actions on the selection (L-199). */
+export type WheelAction = WheelTool | "icons" | "copy" | "cut";
+
+export const WHEEL_TOOLS: readonly { tool: WheelAction; label: string; key: string; Icon: IconComponent }[] = [
   { tool: "selection", label: "Select", key: "V", Icon: Cursor },
   { tool: "hand", label: "Hand", key: "H", Icon: Hand },
   { tool: "rectangle", label: "Rectangle", key: "R", Icon: Square },
@@ -40,12 +45,16 @@ export const WHEEL_TOOLS: readonly { tool: WheelTool; label: string; key: string
   { tool: "line", label: "Line", key: "L", Icon: Line },
   { tool: "freedraw", label: "Draw", key: "P", Icon: PencilDraw },
   { tool: "text", label: "Text", key: "T", Icon: TextTool },
-  { tool: "image", label: "Image", key: "9", Icon: Image },
+  { tool: "icons", label: "Icons", key: "I", Icon: SmilePlus },
   { tool: "eraser", label: "Eraser", key: "E", Icon: Eraser },
   { tool: "frame", label: "Frame", key: "F", Icon: Frame },
+  { tool: "copy", label: "Copy", key: "C", Icon: Copy },
+  { tool: "cut", label: "Cut", key: "X", Icon: Scissors },
 ];
 
-const RADIUS = 78;
+const WHEEL_ACTIONS = new Set<WheelAction>(["icons", "copy", "cut"]);
+
+const RADIUS = 98;
 const BUTTON = 40;
 const SIZE = RADIUS * 2 + BUTTON + 8;
 
@@ -63,7 +72,7 @@ export function RadialToolMenu({
   x: number;
   y: number;
   activeTool: string;
-  onPick: (tool: WheelTool) => void;
+  onPick: (action: WheelAction) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -151,8 +160,8 @@ export function RadialToolMenu({
               buttons.current[index] = node;
             }}
             type="button"
-            role="menuitemradio"
-            aria-checked={active}
+            role={WHEEL_ACTIONS.has(item.tool) ? "menuitem" : "menuitemradio"}
+            aria-checked={WHEEL_ACTIONS.has(item.tool) ? undefined : active}
             aria-label={`${item.label} (${item.key})`}
             title={`${item.label} — ${item.key}`}
             onClick={() => onPick(item.tool)}

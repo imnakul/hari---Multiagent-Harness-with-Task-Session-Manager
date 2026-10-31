@@ -1,4 +1,88 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 04:59 IST — Open a view from the + beside the tabs (L-206)
+- Type: feature
+- What: + beside the tabs still starts a new session; a small arrow beside it (or right-click on +) lists Browser, Whiteboard, Notes, Task Manager, Session Manager, Automations and Inbox. The Windows menu bar now lists Whiteboard and Browser.
+- Why: User asked whether + offers the Browser; picked A (keep + one click for a session, add a list beside it).
+- Files: `src/features/workspace/model/appViewTabs.ts`, `src/app/shell/TitleBar.tsx`, `TitleBarNewTabMenu.test.ts` (new), `src/app/shell/MenuBar.tsx`, `src/app/App.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; vitest TitleBar, TitleBarMenu, TitleBarNewTabMenu, MenuBar, appViewTabs: 42 passed; desktop check manual
+## 2026-10-31 01:23 IST — Model picker rows click anywhere (L-205)
+- Type: fix
+- What: Clicking anywhere on a model row in the composer's model list picks that model.
+- Why: User report: a switch only happened when clicking right on the name; the clickable part was text height inside a taller row.
+- Files: `src/features/sessions/ui/ModelPicker.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest browser, link menu, interactive helper, whiteboard helper, ModelPicker, nativeContextMenu, whiteboard: 97 passed (iconCatalog timed out once under parallel load, passes alone); Rust tests not run (rustc crash on this PC); desktop check manual
+## 2026-10-31 01:23 IST — Whiteboard agent: Interactive CLI Claude (L-204)
+- Type: feature
+- What: A Claude mode pill (Structured / Interactive CLI) in the whiteboard agent; Interactive runs the real Claude CLI in a hidden terminal for each question.
+- Why: User: offer the interactive Claude CLI there instead of the built-in SDK helper; no MCP bridge.
+- Files: `src/integrations/harness/providers/claude/claudeInteractiveHelper.ts` (+test), `src/integrations/harness/core/whiteboardHelper.ts`, `src/features/whiteboard/model/whiteboardPrefs.ts`, `src/features/whiteboard/ui/WhiteboardChat.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest browser, link menu, interactive helper, whiteboard helper, ModelPicker, nativeContextMenu, whiteboard: 97 passed (iconCatalog timed out once under parallel load, passes alone); Rust tests not run (rustc crash on this PC); desktop check manual
+## 2026-10-31 01:23 IST — Browser tab (L-203)
+- Type: feature
+- What: A Browser view with Back, Forward, Reload, an address bar that also searches, and Open in default browser, reachable from the sidebar, rail, Focus header and view tabs.
+- Why: User picked 1-A and asked to build it directly, without a spec.
+- Files: `src-tauri/Cargo.toml`, `src-tauri/src/browser_view.rs` (new), `src-tauri/src/lib.rs`, `src/features/browser/` (new, +test), `src/app/App.tsx`, `src/app/shell/Sidebar.tsx`, `ProjectRail.tsx`, `TitleBar.tsx`, `appViewTabs.ts`, `src/features/focus/ui/FocusView.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest browser, link menu, interactive helper, whiteboard helper, ModelPicker, nativeContextMenu, whiteboard: 97 passed (iconCatalog timed out once under parallel load, passes alone); Rust tests not run (rustc crash on this PC); desktop check manual
+## 2026-10-31 01:23 IST — Link right-click menu (L-202)
+- Type: feature
+- What: Right-click on a web link: Open in MonoCode browser, Open in default browser, Copy link, Copy link text; keyboard and Escape supported.
+- Why: User picked 2-A.
+- Files: `src/features/browser/model/linkMenu.ts` (+test), `src/features/browser/ui/LinkContextMenu.tsx`, `src/app/App.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest browser, link menu, interactive helper, whiteboard helper, ModelPicker, nativeContextMenu, whiteboard: 97 passed (iconCatalog timed out once under parallel load, passes alone); Rust tests not run (rustc crash on this PC); desktop check manual
+## 2026-10-31 00:52 IST — Monos panel icons no longer under the bell (L-201)
+- Type: fix
+- What: A Mono's overview panel header now leaves room for four window buttons (bell, minimize, maximize, close) instead of three.
+- Why: User screenshot: in Monos mode an icon overlapped the notifications bell. Upstream's reserve predates the fork's bell (L-91).
+- Files: `src/features/monos/ui/MonoSidebar.tsx`, `MonoSidebar.test.ts` (new), `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; vitest MonoSidebar + MonoOverview 10 passed; desktop check manual
+## 2026-10-31 00:49 IST — Account switch asks each time (L-200)
+- Type: feature + fix
+- What: Switching account on an unsent Claude fork copies the original chat's history to that account, so the fork keeps full history. Other started chats get a dialog: Continue here (Claude with its own history), Continue with card (Quick or Balanced, new chat beside on the new account) or Empty new chat.
+- Why: A fork had no Claude conversation yet, so a switch silently opened an empty chat. User locked "Ask each time".
+- Files: `src/features/sessions/model/branchPlan.ts` (+test), `src/features/providers/ui/ContinueOnAccountDialog.tsx` (+test), `src/app/App.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest 722 files / 7913 passed, 2 skipped (run with --maxWorkers=2: the default run ran out of memory on this PC); desktop check manual
+## 2026-10-31 00:49 IST — Whiteboard agent pickers, attachments, dock; Ctrl+D, Copy/Cut, colour (L-199)
+- Type: feature
+- What: Agent panel beside or below the sheet and resizable; Model, Effort and Account pickers; text attachments the agent reads; Ctrl+D duplicates; tool lock on by default and remembered; Shantell Sans for new sheets; text colour, Copy and Cut in the top bar and round picker (icons in place of Image).
+- Why: User's whiteboard list ("draw something, and ask AI to refine it").
+- Files: `src/features/whiteboard/` (`whiteboardPrefs.ts`, `whiteboardClipboard.ts` +test, `whiteboardAgent.ts`, `whiteboardFonts.ts`, `WhiteboardChat.tsx`, `WhiteboardView.tsx`, `WhiteboardTopBar.tsx`, `RadialToolMenu.tsx`), `src/integrations/harness/core/whiteboardHelper.ts`, `src/app/App.tsx`, `src/shared/ui/icons.tsx`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest 722 files / 7913 passed, 2 skipped (run with --maxWorkers=2: the default run ran out of memory on this PC); desktop check manual
+## 2026-10-31 00:49 IST — Draft composer model list; drafts on top (L-198)
+- Type: feature
+- What: Add Draft uses the main composer's model list; drafts sit at the top of the project list, open by default, and open when a new draft arrives.
+- Why: User list.
+- Files: `src/features/quick-composer/ui/QuickComposer.tsx`, `QuickModelSelector.tsx`, `src/features/sessions/model/sessionFolders.ts` (+test), `src/app/shell/Sidebar.tsx`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest 722 files / 7913 passed, 2 skipped (run with --maxWorkers=2: the default run ran out of memory on this PC); desktop check manual
+## 2026-10-31 00:49 IST — Wrap code setting; shared block actions (L-197)
+- Type: feature
+- What: Settings → Chat → Wrap code (on), with a hanging indent; tables, code, quotes, images and Mermaid share one action bar.
+- Why: User list.
+- Files: `src/features/sessions/ui/` (`BlockActions.tsx`, `markdownBlockContext.ts`, `AgentMarkdown.tsx`, `HighlightedCodeBlock.tsx`, `MarkdownTable.tsx`, `MarkdownQuote.tsx`, tests), `src/features/settings/model/displayPrefs.ts`, `settings.ts`, `SettingsView.tsx`, `src/styles/index.css`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest 722 files / 7913 passed, 2 skipped (run with --maxWorkers=2: the default run ran out of memory on this PC); desktop check manual
+## 2026-10-31 00:49 IST — Account name after the model in the sidebar (L-196)
+- Type: feature
+- What: Sidebar chat cards show "Opus 5.5 · imnakul" when the provider has 2+ accounts.
+- Why: User list; locked 1A 2A.
+- Files: `src-tauri/src/session_store.rs`, `src/features/sessions/data/sessionStore.ts`, `sessionHistory.ts`, `src/features/sessions/ui/useCompactModelLabels.ts`, `SessionCard.tsx`, `src/app/shell/Sidebar.tsx`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅ (old dead-code warning); vitest 722 files / 7913 passed, 2 skipped (run with --maxWorkers=2: the default run ran out of memory on this PC); desktop check manual
+## 2026-10-30 22:05 IST — Antigravity CLI Reasoning and real errors; Antigravity ACP MCP rows (L-195)
+- Type: fix
+- What: Antigravity CLI groups reasoning variants into one model with a Reasoning choice that picks the listed variant slug, sends `--effort` only for agy's default model, and shows agy's own error when it exits before a turn. Settings → MCP shows Antigravity ACP's private-profile servers (`~/.monocode/providers/antigravity/config/mcp_config.json`) as toggleable Antigravity ACP rows.
+- Why: CLI chats with Gemini 3.8 Flash and a reasoning level exited with code 1 (agy rejects `--effort` beside a named model); ACP's MCP servers were invisible. User picked these two; CLI image support left for later.
+- Files: `src/integrations/harness/providers/antigravity-cli/antigravityCliProtocol.ts`, `antigravityCli.ts`, their tests; `src-tauri/src/mcp.rs`, `src-tauri/src/mcp/controls.rs`, `src-tauri/src/mcp/controls/tests.rs`; `src/features/settings/model/mcp.ts`, `src/features/settings/ui/McpSettings.tsx`; `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc ✅; cargo check ✅; `cargo test --lib mcp` 40 passed ✅; vitest 7904 passed, 2 skipped, 1 failed (`iconCatalog.test.ts` timed out under full-suite load; passes 5/5 alone) ✅; desktop check manual
 ## 2026-10-30 10:32 IST — 0.16.0-local20 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local20: 0.16.0-local19 plus the Whiteboard tab with a drawing agent (L-194) and Summary tidy, Send now, Continue pickers, Antigravity helper, Operator on OpenCode 2.x (L-193).

@@ -3,6 +3,7 @@ import { useSessionMetadataHoverCard } from "../../features/sessions/ui/SessionM
 import { useSessionLabel } from "../../features/sessions/ui/useSessionMetadata";
 import {
   CheckCircle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Code,
@@ -20,6 +21,7 @@ import {
   X,
   Zap,
   Whiteboard,
+  Globe,
 } from "../../shared/ui/icons";
 import {
   memo,
@@ -85,6 +87,7 @@ const APP_VIEW_ICONS = {
   kanban: MessageMultiple,
   automations: Zap,
   whiteboard: Whiteboard,
+  browser: Globe,
 };
 
 export type Tab = {
@@ -178,6 +181,9 @@ type Props = {
   onOpenNotes?: () => void;
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
+  /** Inset layout: views the arrow beside + offers (fork, L-206). */
+  newTabViews?: readonly AppView[];
+  onOpenView?: (view: AppView) => void;
   onClose: (id: string) => void;
   onCloseMany: (ids: string[], fallbackId: string) => void;
   /** Closes the given tabs, keeping the active one as a blank session. */
@@ -843,6 +849,8 @@ function TitleBarComponent({
   onOpenNotes,
   onOpenTasks,
   onOpenKanban,
+  newTabViews = [],
+  onOpenView,
   onClose,
   onCloseMany,
   onCloseAll,
@@ -936,6 +944,35 @@ function TitleBarComponent({
     x: number;
     y: number;
   } | null>(null);
+  const newTabButton = useRef<HTMLButtonElement>(null);
+  const [newTabMenuOpen, setNewTabMenuOpen] = useState(false);
+  const newTabMenuItems: ExplorerMenuItem[] =
+    onOpenView && newTabViews.length > 0
+      ? [
+          {
+            kind: "item",
+            id: "session",
+            label: "New session",
+            shortcut: `${MOD}T`,
+            icon: <Plus className="size-3.5" strokeWidth={1.75} />,
+          },
+          { kind: "sep" },
+          ...newTabViews.map((view): ExplorerMenuItem => {
+            const Icon = APP_VIEW_ICONS[view];
+            return {
+              kind: "item",
+              id: view,
+              label: APP_VIEW_LABELS[view],
+              icon: <Icon className="size-3.5" strokeWidth={1.75} />,
+            };
+          }),
+        ]
+      : [];
+  const onPickNewTab = (id: string) => {
+    setNewTabMenuOpen(false);
+    if (id === "session") onNewSession?.();
+    else onOpenView?.(id as AppView);
+  };
   const syncTabOverflow = useCallback(() => {
     const el = tabStripRef.current;
     const next = el
@@ -1453,16 +1490,43 @@ function TitleBarComponent({
               })}
               {onNewSession ? (
                 // Sized and plated like an inactive tab beside it.
-                <button
-                  type="button"
-                  title={`New session (${MOD}T)`}
-                  aria-label={`New session (${MOD}T)`}
-                  data-tauri-drag-region="false"
-                  onClick={onNewSession}
-                  className="ml-0.5 grid size-7.5 shrink-0 cursor-default place-items-center rounded-md bg-content/4 text-content/50 opacity-65 hover:bg-content/7 hover:text-content hover:opacity-100 focus-visible:opacity-100"
+                <div
+                  data-new-tab-group
+                  className={`ml-0.5 flex shrink-0 items-center gap-px ${newTabMenuOpen ? "[&>button]:opacity-100" : ""}`}
                 >
-                  <Plus className="size-3.5" strokeWidth={1.75} />
-                </button>
+                  <button
+                    type="button"
+                    title={`New session (${MOD}T)`}
+                    aria-label={`New session (${MOD}T)`}
+                    data-tauri-drag-region="false"
+                    onClick={onNewSession}
+                    onContextMenu={(event) => {
+                      if (newTabMenuItems.length === 0) return;
+                      event.preventDefault();
+                      setNewTabMenuOpen(true);
+                    }}
+                    className={`grid size-7.5 shrink-0 cursor-default place-items-center bg-content/4 text-content/50 opacity-65 hover:bg-content/7 hover:text-content hover:opacity-100 focus-visible:opacity-100 ${newTabMenuItems.length > 0 ? "rounded-l-md" : "rounded-md"}`}
+                  >
+                    <Plus className="size-3.5" strokeWidth={1.75} />
+                  </button>
+                  {/* Fork (L-206): the other views a tab can hold. */}
+                  {newTabMenuItems.length > 0 ? (
+                    <button
+                      ref={newTabButton}
+                      type="button"
+                      title="Open a view in a new tab"
+                      aria-label="Open a view in a new tab"
+                      aria-haspopup="menu"
+                      aria-expanded={newTabMenuOpen}
+                      data-new-tab-menu-trigger
+                      data-tauri-drag-region="false"
+                      onClick={() => setNewTabMenuOpen((open) => !open)}
+                      className="grid h-7.5 w-4 shrink-0 cursor-default place-items-center rounded-r-md bg-content/4 text-content/50 opacity-65 hover:bg-content/7 hover:text-content hover:opacity-100 focus-visible:opacity-100"
+                    >
+                      <ChevronDown className="size-3" strokeWidth={1.75} />
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>
@@ -1489,6 +1553,17 @@ function TitleBarComponent({
           ariaLabel={`Tab actions for ${tabCopy(contextTab).headline}`}
           onPick={onPickTabMenu}
           onClose={() => setTabMenu(null)}
+        />
+      ) : null}
+      {newTabMenuOpen && newTabButton.current && newTabMenuItems.length > 0 ? (
+        <ExplorerMenu
+          anchor={newTabButton.current}
+          width={220}
+          items={newTabMenuItems}
+          ariaLabel="New tab"
+          ignore="[data-new-tab-menu-trigger]"
+          onPick={onPickNewTab}
+          onClose={() => setNewTabMenuOpen(false)}
         />
       ) : null}
     </header>

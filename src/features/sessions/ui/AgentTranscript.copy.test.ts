@@ -21,14 +21,14 @@ it("saves a table from the transcript with its structure and follows notes avail
     root.render(createElement(AgentTranscript, { ...props, onSaveNote: save })),
   );
   const button = container.querySelector<HTMLButtonElement>(
-    '[aria-label="Add table to Note"]',
+    '[aria-label="Table actions"] [aria-label="Add to notes"]',
   );
   expect(button).not.toBeNull();
   await act(async () => button!.click());
   expect(save).toHaveBeenCalledWith(table);
   act(() => root.render(createElement(AgentTranscript, props)));
   expect(
-    container.querySelector('[aria-label="Add table to Note"]'),
+    container.querySelector('[aria-label="Table actions"] [aria-label="Add to notes"]'),
   ).toBeNull();
   expect(container.querySelector('[aria-label="Copy table"]')).not.toBeNull();
 });
@@ -310,9 +310,9 @@ it("opens Session Manager capture for the exact reply and handover fenced block 
   })));
   const buttons = [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Add Draft to Sessions"]')];
   expect(buttons).toHaveLength(2);
-  await act(async () => buttons.find(button => button.classList.contains("markdown-code-copy"))!.click());
+  await act(async () => buttons.find(button => button.closest("[data-block-actions]"))!.click());
   expect(compose).toHaveBeenLastCalledWith(handover);
-  await act(async () => buttons.find(button => !button.classList.contains("markdown-code-copy"))!.click());
+  await act(async () => buttons.find(button => !button.closest("[data-block-actions]"))!.click());
   expect(compose).toHaveBeenLastCalledWith(response);
   await act(async () => root.render(createElement(AgentTranscript, { blocks: [{ id: "answer", role: "assistant", text: response }] })));
   expect(container.querySelector('[aria-label="Add Draft to Sessions"]')).toBeNull();

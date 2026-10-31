@@ -1,4 +1,3 @@
-import { AddToSessionManagerButton } from "../../session-board/ui/SessionManagerCapture";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -63,10 +62,10 @@ import { isNoteImagePath } from "../../notes";
 import { IS_MAC, IS_WIN } from "../../../platform/tauri/platform";
 import { InboxMedia } from "../../inbox/ui/InboxMedia";
 import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
-import { TextWrap } from "../../../shared/ui/icons";
 import { loadProjectImagePreviewUrl } from "../model/attachments";
 import { MarkdownTable, MarkdownTableContext } from "./MarkdownTable";
 import { MarkdownQuote } from "./MarkdownQuote";
+import { BlockActions, useBlockActionCount } from "./BlockActions";
 import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
@@ -93,7 +92,7 @@ import {
 import { parseStreamingMarkdown } from "./streamingMarkdown";
 import { HighlightedCodeBlock } from "./HighlightedCodeBlock";
 import { TranscriptPacing, TranscriptVisibility } from "./transcriptVisibility";
-import { usePacedReveal } from "../../settings/model/displayPrefs";
+import { useCodeWrap, usePacedReveal } from "../../settings/model/displayPrefs";
 import {
   useStreamPresentation,
   type StreamMeasurement,
@@ -399,7 +398,8 @@ function MarkdownCode({
 }: MarkdownCodeProps) {
   const incomplete = useIsCodeFenceIncomplete();
   // Before the inline/mermaid returns so hook order never changes.
-  const [wrap, setWrap] = useState(true);
+  const wrap = useCodeWrap();
+  const actions = useBlockActionCount();
   const block = Object.prototype.hasOwnProperty.call(props, "data-block");
   if (!block) {
     const text = textContent(children);
@@ -473,7 +473,11 @@ function MarkdownCode({
   );
 
   return (
-    <div className="markdown-code-shell" dir="ltr">
+    <div
+      className="markdown-code-shell"
+      dir="ltr"
+      style={codeActionsWidth(actions)}
+    >
       {iconName ? (
         <span className="markdown-code-icon" aria-hidden="true">
           <FileTypeIcon name={iconName} isDir={false} />
@@ -484,22 +488,7 @@ function MarkdownCode({
       ) : isPlaintextFallback ? (
         <span className="markdown-code-fallback-label">{fence.language}</span>
       ) : null}
-      <CodeCopyButton code={code} />
-      <button
-        type="button"
-        title={wrap ? "Don't wrap lines" : "Wrap lines"}
-        aria-label="Wrap lines"
-        aria-pressed={wrap}
-        className={`markdown-code-copy markdown-code-wrap ${wrap ? "is-on" : ""}`}
-        onClick={() => setWrap((on) => !on)}
-      >
-        <TextWrap aria-hidden className="size-3.5" strokeWidth={1.75} />
-      </button>
-      <AddToSessionManagerButton
-        text={code.replace(/\r?\n$/, "")}
-        code
-        disabled={incomplete}
-      />
+      <CodeActions code={code} disabled={incomplete} />
       <HighlightedCodeBlock
         code={code}
         isIncomplete={incomplete}
@@ -512,46 +501,32 @@ function MarkdownCode({
   );
 }
 
-function CodeCopyButton({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<number | null>(null);
-
-  useEffect(() => {
-    setCopied(false);
-    return () => {
-      if (timer.current != null) window.clearTimeout(timer.current);
-    };
-  }, [code]);
-
+/** The shared block actions, pinned top-right over the code header (fork, L-197). */
+function CodeActions({
+  code,
+  label = "code",
+  disabled = false,
+}: {
+  code: string;
+  label?: string;
+  disabled?: boolean;
+}) {
+  const anchor = useRef<HTMLDivElement>(null);
   return (
-    <button
-      type="button"
-      title={copied ? "Copied" : "Copy code"}
-      aria-label={copied ? "Copied" : "Copy code"}
-      className={`markdown-code-copy ${copied ? "is-copied" : ""}`}
-      onClick={() => {
-        void copyText(code.replace(/\r?\n$/, "")).then(
-          () => {
-            setCopied(true);
-            if (timer.current != null) window.clearTimeout(timer.current);
-            timer.current = window.setTimeout(() => setCopied(false), 1500);
-          },
-          () => {},
-        );
-      }}
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <g className="markdown-code-copy-pages">
-          <path d="M12 4H6a2 2 0 0 0-2 2v6" />
-          <rect x="7" y="7" width="9" height="9" rx="1.5" />
-        </g>
-        <path
-          className="markdown-code-copy-check"
-          d="M4.5 10.5 8.2 14 15.5 6.5"
-        />
-      </svg>
-    </button>
+    <div ref={anchor} className="markdown-code-actions">
+      <BlockActions
+        label={label}
+        anchor={anchor}
+        disabled={disabled}
+        content={() => ({ text: code.replace(/\r?\n$/, "") })}
+      />
+    </div>
   );
+}
+
+/** Lets the path and first line leave room for however many actions show. */
+function codeActionsWidth(count: number): CSSProperties {
+  return { "--code-actions-width": `${count * 24 + (count - 1) * 2}px` } as CSSProperties;
 }
 
 type MarkdownImageProps = ComponentProps<"img"> & { node?: unknown };
@@ -697,7 +672,24 @@ function NoteAssetImage({
   );
 }
 
-function MarkdownImage({
+/** Images in replies get the shared block actions on hover (fork, L-197). */
+function MarkdownImage(props: MarkdownImageProps) {
+  const { documentImages } = useContext(FileOpenContext);
+  const url = typeof props.src === "string" ? props.src.trim() : "";
+  const image = <MarkdownImageContent {...props} />;
+  if (documentImages || !url) return image;
+  const markdown = `![${props.alt ?? ""}](${url.startsWith("data:") ? "data:…" : url})`;
+  return (
+    <span data-overlay-actions="" className="relative inline-block max-w-full align-top">
+      {image}
+      <span className="markdown-overlay-actions absolute top-1 right-1 z-[2] rounded-lg border border-content/10 bg-surface p-0.5 shadow-sm">
+        <BlockActions label="image" content={() => ({ text: markdown })} />
+      </span>
+    </span>
+  );
+}
+
+function MarkdownImageContent({
   src,
   alt,
   node: _node,
@@ -1181,6 +1173,7 @@ function MermaidBlock({
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const colorScheme = useColorScheme();
+  const actions = useBlockActionCount();
 
   useEffect(() => {
     if (incomplete) {
@@ -1212,11 +1205,15 @@ function MermaidBlock({
 
   if (incomplete || failed) {
     return (
-      <div className="markdown-code-shell" dir="ltr">
+      <div
+        className="markdown-code-shell"
+        dir="ltr"
+        style={codeActionsWidth(actions)}
+      >
         <span className="markdown-code-icon" aria-hidden="true">
           <FileTypeIcon name="diagram.mmd" isDir={false} />
         </span>
-        <CodeCopyButton code={code} />
+        <CodeActions code={code} label="diagram" disabled={incomplete} />
         <HighlightedCodeBlock
           code={code}
           isIncomplete={incomplete}
@@ -1234,12 +1231,19 @@ function MermaidBlock({
   }
 
   return (
-    <div
-      className="mermaid-block overflow-x-auto rounded-[10px] border border-content/10 bg-content/6 p-3"
-      data-streamdown="mermaid-block"
-      dir="ltr"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div data-overlay-actions="" className="relative" dir="ltr">
+      <div
+        className="mermaid-block overflow-x-auto rounded-[10px] border border-content/10 bg-content/6 p-3"
+        data-streamdown="mermaid-block"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <span className="markdown-overlay-actions absolute top-1.5 right-1.5 z-[2] rounded-lg border border-content/10 bg-surface p-0.5 shadow-sm">
+        <BlockActions
+          label="diagram"
+          content={() => ({ text: mermaidFence(code) })}
+        />
+      </span>
+    </div>
   );
 }
 
@@ -1379,4 +1383,9 @@ function inlineFileName(value: string): string | undefined {
   return extension && /^[a-z][a-z0-9+-]{0,11}$/i.test(extension)
     ? fileName
     : undefined;
+}
+
+function mermaidFence(code: string): string {
+  const fence = "```";
+  return `${fence}mermaid\n${code.replace(/\r?\n$/, "")}\n${fence}`;
 }

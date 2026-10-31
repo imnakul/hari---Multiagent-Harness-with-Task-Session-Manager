@@ -369,6 +369,8 @@ import {
   saveComposerAutocorrect,
   saveContinueMode,
   savePacedReveal,
+  saveCodeWrap,
+  useCodeWrap,
   usePacedReveal,
   saveMaskEmails,
   saveNewLayoutPromptDismissed,
@@ -1551,6 +1553,7 @@ function GeneralPage({
 function ChatPage() {
   const [aiHelper, setAiHelper] = useState(loadAiHelperSettings);
   const pacedReveal = usePacedReveal();
+  const codeWrap = useCodeWrap();
   const linkPreviewMode = useLinkPreviewMode();
   const [transcriptLayout, setTranscriptLayout] =
     useState<TranscriptLayout>(loadTranscriptLayout);
@@ -1722,6 +1725,13 @@ function ChatPage() {
             on={pacedReveal}
             onChange={savePacedReveal}
           />
+        </Row>
+        <Row
+          id="code-wrap"
+          label="Wrap code"
+          description="Wrap long lines in code blocks so they stay inside the block. Turn this off to scroll long lines sideways instead."
+        >
+          <Toggle label="Wrap code" on={codeWrap} onChange={saveCodeWrap} />
         </Row>
         <Row
           id="link-previews"

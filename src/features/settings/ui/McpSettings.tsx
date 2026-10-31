@@ -46,6 +46,7 @@ const PROVIDERS: Provider[] = [
   "cursor",
   "opencode",
   "antigravity-cli",
+  "antigravity",
 ];
 const SCOPES: Record<Provider, Scope[]> = {
   claude: ["local", "project", "user"],
@@ -54,6 +55,8 @@ const SCOPES: Record<Provider, Scope[]> = {
   cursor: ["project", "user"],
   opencode: ["project", "user"],
   "antigravity-cli": ["project", "user"],
+  // ACP reads only its private profile file; MonoCode starts it without workspace servers.
+  antigravity: ["user"],
 };
 
 function serverRowIdentity(server: ServerRow): string {
@@ -74,7 +77,8 @@ function serverCanBeToggled(server: ServerRow): boolean {
     (server.provider === "claude" ||
       server.provider === "codex" ||
       server.provider === "opencode" ||
-      server.provider === "antigravity-cli")
+      server.provider === "antigravity-cli" ||
+      server.provider === "antigravity")
   );
 }
 
@@ -682,6 +686,7 @@ function McpConnections({
                 )}
                 {server.provider !== "claude_desktop" &&
                 server.provider !== "antigravity-cli" &&
+                server.provider !== "antigravity" &&
                 server.transport &&
                 !["stdio", "local", "ws"].includes(server.transport) ? (
                   <button

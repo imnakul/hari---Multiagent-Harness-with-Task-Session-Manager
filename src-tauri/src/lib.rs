@@ -5,6 +5,7 @@ pub mod antigravity_acp;
 mod antigravity_cli;
 mod artifacts;
 mod automations;
+mod browser_view;
 mod azure_devops;
 mod background_work;
 mod chat_background;
@@ -404,6 +405,12 @@ pub fn run() {
             menu::dispatch(app, event.id().as_ref());
         })
         .invoke_handler(tauri::generate_handler![
+            browser_view::browser_open,
+            browser_view::browser_navigate,
+            browser_view::browser_set_bounds,
+            browser_view::browser_set_visible,
+            browser_view::browser_history,
+            browser_view::browser_close,
             mobile_access::mobile_status,
             mobile_access::mobile_configure,
             mobile_access::mobile_invite,
