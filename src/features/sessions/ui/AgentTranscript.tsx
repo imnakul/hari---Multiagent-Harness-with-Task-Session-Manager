@@ -2795,6 +2795,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
         cwd={cwd}
         onOpenFile={onOpenFile}
         localMedia={localMedia}
+        linkPreviews
       />
     </div>
   );
@@ -2816,7 +2817,7 @@ function ReviewReportBlock({
       data-selectable-agent-response={block.streaming ? undefined : block.id}
       className="min-w-0 px-4 pb-1 pt-3 text-content"
     >
-      <AgentMarkdown text={block.text} streaming={block.streaming} cwd={cwd} />
+      <AgentMarkdown text={block.text} streaming={block.streaming} cwd={cwd} linkPreviews />
       {report.issues.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 pt-2">
           {report.issues.map((issue, index) => (
@@ -3944,6 +3945,7 @@ export function MonoActivityTrail({
                 cwd={cwd}
                 onOpenFile={onOpenFile}
                 className="mono-run-report"
+                linkPreviews
               />
             </li>
           );
@@ -4163,6 +4165,7 @@ function ActivityPhaseGroup({
                     text={headline.text}
                     cwd={cwd}
                     onOpenFile={onOpenFile}
+                    linkPreviews={headline.role !== "reasoning"}
                   />
                 </div>
               ) : null}
@@ -4505,6 +4508,7 @@ function SubagentPanel({
                     text={report}
                     cwd={cwd}
                     onOpenFile={onOpenFile}
+                    linkPreviews
                   />
                 )}
               </div>
@@ -4917,7 +4921,7 @@ function ActivityNoteRow({
       </button>
       {open ? (
         <div className="min-w-0 pb-2">
-          <AgentMarkdown text={block.text} cwd={cwd} onOpenFile={onOpenFile} />
+          <AgentMarkdown text={block.text} cwd={cwd} onOpenFile={onOpenFile} linkPreviews />
         </div>
       ) : null}
     </div>

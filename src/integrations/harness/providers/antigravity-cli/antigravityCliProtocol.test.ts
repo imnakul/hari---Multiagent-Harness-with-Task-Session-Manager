@@ -9,6 +9,7 @@ import {
   usageDelta,
   userMessage,
   validateCliPrompt,
+  cliPromptText,
 } from "./antigravityCliProtocol";
 import {
   harnessSupportsAttachments,
@@ -91,10 +92,11 @@ describe("official agy headless protocol", () => {
     expect(models[1].settings).toBeUndefined();
     expect(models[2].settings).toBeUndefined();
   });
-  it("rejects ACP native IDs and hides unsupported attachment/approval controls", () => {
+  it("rejects ACP native IDs and hides unsupported approval controls", () => {
     expect(nativeConversationId(id)).toBe(id);
     expect(() => cliSpawnArgs(input, "agy-acp:v1:one")).toThrow();
-    expect(harnessSupportsAttachments("antigravity-cli")).toBe(false);
+    expect(harnessSupportsAttachments("antigravity-cli")).toBe(true);
+    expect(harnessSupportsAttachments("fx")).toBe(false);
     expect(harnessSupportsAttachments("antigravity")).toBe(true);
     expect(runtimeModesForHarness("antigravity-cli")).toEqual([
       "supervised",
@@ -156,4 +158,20 @@ it("passes a custom agent as a separate argument and rejects paths or option inj
   for (const agent of ["../other", "--dangerously-skip-permissions", "bad name", ""]) {
     expect(() => cliSpawnArgs({ ...input, modelSettings: { antigravityAgent: agent } })).toThrow("Invalid");
   }
+});
+
+describe("cliPromptText (L-209)", () => {
+  it("sends files as saved paths and text notes as their text", () => {
+    const shot = { id: "a", name: "shot.png", mimeType: "image/png", kind: "image" as const, size: 4, path: "C:\tmp\shot.png" };
+    const note = { id: "b", name: "Console", mimeType: "text/plain", kind: "file" as const, size: 4, text: "TypeError: x" };
+    expect(cliPromptText("fix it", [shot, note])).toBe(
+      `fix it\n\nAttached file (read from disk): ${JSON.stringify(shot.path)}\n\nTypeError: x`,
+    );
+    expect(cliPromptText("plain")).toBe("plain");
+  });
+
+  it("refuses a file with no saved copy instead of dropping it", () => {
+    const lost = { id: "c", name: "lost.png", mimeType: "image/png", kind: "image" as const, size: 4 };
+    expect(() => cliPromptText("look", [lost])).toThrow("no local file path");
+  });
 });

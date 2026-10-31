@@ -1,18 +1,17 @@
 import {
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
   type RefObject,
 } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { readBinaryFile } from "../../../platform/tauri/fs";
+import { Globe } from "../../../shared/ui/icons";
 import { Popover } from "../../../shared/ui/Popover";
 import { sniffImageMime } from "../../files/model/filePreview";
 import {
-  collectWebLinks,
+  fetchLinkPreviewMetadata,
   fetchRichLinkPreview,
   type LinkPreviewMetadata,
 } from "../model/linkPreview";
@@ -269,28 +268,6 @@ function WebLinkCard({ url }: { url: string }) {
   );
 }
 
-export const INLINE_LINK_PREVIEW_LIMIT = 3;
-
-/**
- * Cards under a finished reply for its first few web links, for the "Always"
- * link preview setting. Each card fetches only once it nears the viewport, and
- * a link whose page offers nothing to show gets no card.
- */
-export function InlineLinkPreviews({ markdown }: { markdown: string }) {
-  const links = useMemo(
-    () => collectWebLinks(markdown, INLINE_LINK_PREVIEW_LIMIT),
-    [markdown],
-  );
-  if (!links.length) return null;
-  return (
-    <div className="mt-2 flex flex-col gap-2">
-      {links.map((link) => (
-        <InlineLinkCard key={link.url} url={link.url} />
-      ))}
-    </div>
-  );
-}
-
 function useNearViewport<T extends Element>(): [RefObject<T | null>, boolean] {
   const ref = useRef<T>(null);
   const [near, setNear] = useState(false);
@@ -313,58 +290,60 @@ function useNearViewport<T extends Element>(): [RefObject<T | null>, boolean] {
   return [ref, near];
 }
 
-function InlineLinkCard({ url }: { url: string }) {
-  const [ref, near] = useNearViewport<HTMLAnchorElement>();
-  const state = useRichLinkPreview(url, near);
-  const metadata = state.status === "ready" ? state.metadata : null;
-  const title = metadata?.title?.trim();
-  const description = metadata?.description?.trim();
-  const empty =
-    state.status === "unavailable" ||
-    (metadata && !title && !description && !metadata.imageDataUrl);
-  if (empty) return null;
+/**
+ * Fork (L-212): with Link previews set to Always, a web link in a chat shows
+ * as a chip: the site's icon and, for a bare URL, the page's title (the site
+ * name when the page has none). Only the title and icon are fetched, once the
+ * link nears the screen; the full card still opens on hover.
+ */
+export function WebLinkChipLabel({
+  url,
+  bare,
+  children,
+}: {
+  url: string;
+  /** The link's text is its own URL, so the page title can replace it. */
+  bare: boolean;
+  children: ReactNode;
+}) {
+  const [ref, near] = useNearViewport<HTMLSpanElement>();
+  const [metadata, setMetadata] = useState<LinkPreviewMetadata | null>(null);
+  const [iconFailed, setIconFailed] = useState(false);
+  useEffect(() => {
+    if (!near) return;
+    let cancelled = false;
+    fetchLinkPreviewMetadata(url).then(
+      (value) => {
+        if (!cancelled) setMetadata(value);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [url, near]);
+  const icon = iconFailed ? null : metadata?.faviconDataUrl;
   return (
-    <a
+    <span
       ref={ref}
-      href={url}
-      data-link-card={url}
-      aria-label={title ? `${title} (${hostOf(url)})` : url}
-      className="group/card flex min-h-[5.5rem] w-full max-w-[520px] overflow-hidden rounded-lg border border-content/10 bg-content/[0.03] text-left font-sans no-underline transition-colors duration-150 hover:border-content/15 hover:bg-content/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      onClick={(event) => {
-        event.preventDefault();
-        void openUrl(url).catch((error) => {
-          console.error("Failed to open web link:", error);
-        });
-      }}
+      data-link-chip={url}
+      className="inline-flex max-w-[min(100%,28rem)] items-center gap-1 rounded-md bg-content/[0.06] px-1.5 align-[-0.25em] leading-normal"
     >
-      <span className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-2.5">
-        <SiteLine url={url} metadata={metadata} />
-        {state.status === "loading" ? (
-          <TextSkeleton />
-        ) : (
-          <>
-            <span className="truncate text-[13px] font-semibold leading-snug text-content">
-              {title || hostOf(url)}
-            </span>
-            {description ? (
-              <span className="line-clamp-3 text-xs leading-snug text-content/60">
-                {description}
-              </span>
-            ) : null}
-          </>
-        )}
-      </span>
-      {/* The card grows with its text (site, title, up to three lines); the
-          image column stretches to match instead of fixing the height. */}
-      {metadata?.imageDataUrl ? (
-        <PreviewImage
-          src={metadata.imageDataUrl}
-          className="w-32 self-stretch rounded-none border-l border-content/10"
+      {icon ? (
+        <img
+          src={icon}
+          alt=""
+          draggable={false}
+          className="size-3.5 shrink-0 rounded-sm object-contain"
+          onError={() => setIconFailed(true)}
         />
-      ) : state.status === "loading" ? (
-        <span className="block w-32 shrink-0 self-stretch animate-pulse border-l border-content/10 bg-content/[0.06] motion-reduce:animate-none" />
-      ) : null}
-    </a>
+      ) : (
+        <Globe aria-hidden className="size-3.5 shrink-0 text-content/45" />
+      )}
+      <span className="truncate">
+        {bare ? metadata?.title?.trim() || hostOf(url) : children}
+      </span>
+    </span>
   );
 }
 

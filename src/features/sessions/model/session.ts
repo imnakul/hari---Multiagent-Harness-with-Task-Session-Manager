@@ -673,7 +673,8 @@ export const HARNESS_TITLE: Record<HarnessId, string> = {
 
 /** These headless transports cannot receive attachment prompt blocks. */
 export function harnessSupportsAttachments(id: HarnessId): boolean {
-  return id !== "fx" && id !== "antigravity-cli";
+  // Fork (L-209): Antigravity CLI gets attachments as saved file paths.
+  return id !== "fx";
 }
 
 /** CLI headless policy has no interactive approval channel. */

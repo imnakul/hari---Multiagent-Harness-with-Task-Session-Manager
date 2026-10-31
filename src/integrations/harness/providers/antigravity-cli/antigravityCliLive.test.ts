@@ -250,19 +250,11 @@ it("runs read-only usage reports without starting a conversation or writing stre
   expect(mocks.write).not.toHaveBeenCalled();
 });
 
-it("rejects attachments and forking without starting any child", async () => {
+it("rejects Plan and forking without starting any child", async () => {
   const cli = await import("./antigravityCli");
   await expect(
     cli.sendCliTurn({ ...input, intent: "plan", runtimeMode: "full-access" }),
   ).rejects.toThrow("Plan mode");
-  await expect(
-    cli.sendCliTurn({
-      ...input,
-      attachments: [
-        { id: "file", name: "x", kind: "file" },
-      ] as SendTurnInput["attachments"],
-    }),
-  ).rejects.toThrow("text only");
   await expect(
     cli.sendCliTurn({ ...input, fork: { sourceProviderSessionId: nativeId } }),
   ).rejects.toThrow("forking");

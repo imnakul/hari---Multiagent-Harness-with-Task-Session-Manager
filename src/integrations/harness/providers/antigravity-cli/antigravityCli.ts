@@ -28,6 +28,7 @@ import {
   usageDelta,
   userMessage,
   validateCliPrompt,
+  cliPromptText,
 } from "./antigravityCliProtocol";
 
 type Active = {
@@ -111,12 +112,6 @@ export function sendCliTurn(input: SendTurnInput): Promise<void> {
         "Antigravity CLI does not expose a verified headless Plan mode. Use Antigravity ACP for this workflow, or turn Plan off explicitly.",
       ),
     );
-  if (input.attachments?.length)
-    return Promise.reject(
-      new Error(
-        "Antigravity CLI headless input supports text only. Choose Antigravity ACP to send attachments.",
-      ),
-    );
   if (input.fork)
     return Promise.reject(
       new NativeForkError(
@@ -145,7 +140,7 @@ export function sendCliTurn(input: SendTurnInput): Promise<void> {
     .catch((): void => {})
     .then(async (): Promise<void> => {
       if (epoch(input.sessionId) !== startedAt) return;
-      const report = reportArgs(input.text);
+      const report = input.attachments?.length ? undefined : reportArgs(input.text);
       if (report) {
         const { path } = await probeHarnessBinary("antigravity-cli");
         if (epoch(input.sessionId) !== startedAt) return;
@@ -163,6 +158,7 @@ export function sendCliTurn(input: SendTurnInput): Promise<void> {
         return;
       }
       validateCliPrompt(input.text);
+      const prompt = cliPromptText(input.text, input.attachments);
       const agent = cliAgentName(input.modelSettings);
       const boundAgent = lives.get(input.sessionId)?.agent ?? resumes.get(input.sessionId)?.agent;
       if (boundAgent !== undefined && boundAgent !== agent)
@@ -206,7 +202,7 @@ export function sendCliTurn(input: SendTurnInput): Promise<void> {
             stepUsage: new Map(),
             doneSteps: new Set(),
           };
-          void writeChild(input.sessionId, userMessage(input.text))
+          void writeChild(input.sessionId, userMessage(prompt))
             .then((): void => {
               if (!current.stopped && epoch(input.sessionId) === startedAt)
                 input.onAccepted?.();

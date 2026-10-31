@@ -2,8 +2,8 @@ import { useSyncExternalStore } from "react";
 
 /**
  * How eagerly chat replies preview their web links (L-119). `hover` fetches a
- * page only once its link is hovered; `always` also shows cards under a
- * finished reply, fetched as they scroll into view.
+ * page only once its link is hovered; `always` also turns each link into a
+ * chip with the site icon and page title, fetched as it nears the screen (L-212).
  */
 export type LinkPreviewMode = "off" | "hover" | "always";
 

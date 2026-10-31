@@ -30,6 +30,7 @@ describe("sessionMetadataHelperTargets (L-190)", () => {
       { provider: "codex", model: "m" },
       { provider: "opencode" },
       { provider: "claude" },
+      { provider: "antigravity-cli" },
       { provider: "antigravity" },
     ]);
   });

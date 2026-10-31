@@ -301,6 +301,7 @@ import {
   firstEnabledHarness,
   getModelSnapshot,
   hasLiveCatalog,
+  isPickerProviderVisible,
   loadDefaultModels,
   loadHiddenPickerProviders,
   loadLastModelChoice,
@@ -1741,7 +1742,7 @@ function ChatPage() {
         <Row
           id="link-previews"
           label="Link previews"
-          description="Preview web links in replies with the page's image, title and description. On hover fetches a page only when you point at its link; Always also shows up to three cards under each finished reply as it scrolls into view. Previews stay in memory and are never saved to disk."
+          description="Preview web links in replies with the page's image, title and description. On hover fetches a page only when you point at its link; Always also shows each link as a chip with the site's icon and the page title (or the site name) once the reply finishes. Previews stay in memory and are never saved to disk."
         >
           <Segmented
             label="Link previews"
@@ -2127,6 +2128,9 @@ function AiHelperTargetEditor({
   const warnings: string[] = [];
   if (hasHarnessEvidence(target.provider) && !isHarnessAvailable(target.provider)) {
     warnings.push("Not installed. MonoCode will skip it.");
+  }
+  if (target.provider === "antigravity" && !isPickerProviderVisible("antigravity")) {
+    warnings.push("Hidden in Providers. MonoCode will skip it.");
   }
   if (
     target.accountId !== undefined &&

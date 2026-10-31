@@ -1,5 +1,6 @@
 import { registerHarness, type HarnessAdapter } from "../../core/registry";
 import { refreshAntigravityCliCatalog } from "./antigravityCliCatalog";
+import { runAntigravityCliHelperPrompt } from "./antigravityCliHelper";
 import {
   bindCliSession,
   forgetCliSession,
@@ -27,6 +28,7 @@ export const antigravityCliAdapter: HarnessAdapter = {
   forgetSession: forgetCliSession,
   bindSession: bindCliSession,
   refreshCatalog: refreshAntigravityCliCatalog,
+  runHelperPrompt: runAntigravityCliHelperPrompt,
   commands: {
     discover: async () => [
       {

@@ -11957,6 +11957,93 @@ function Workspace({
   );
   usageLimitAccountChangeRef.current = onUsageLimitAccountChange;
 
+  /**
+   * Fork (L-210): a Mono keeps one long conversation, so picking another account
+   * moves it there instead of opening a new chat. Claude carries its native
+   * transcript; otherwise the Mono continues from a handoff summary, after asking.
+   */
+  const onMonoAccountChange = useCallback(
+    async (sessionId: string, accountId: string) => {
+      const session = sessionsRef.current.find((entry) => entry.id === sessionId);
+      if (
+        !session ||
+        session.busy ||
+        !supportsProviderAccounts(session.harness) ||
+        !providerAccountExists(session.harness, accountId) ||
+        usageLimitSwitching.current.has(sessionId)
+      )
+        return;
+      if (session.usageLimit) {
+        await onUsageLimitAccountChange(sessionId, accountId);
+        return;
+      }
+      const currentId =
+        session.providerAccountId ??
+        selectedProviderAccountId(session.harness, session.cwd);
+      if (currentId === accountId) return;
+      if (!session.providerSessionId) {
+        updateSessionState(sessionsRef, setSessions, (sessions) =>
+          sessions.map((entry) =>
+            entry.id === sessionId ? { ...entry, providerAccountId: accountId } : entry,
+          ),
+        );
+        return;
+      }
+      const blocked = continueBlockedReason(session, hasInteractiveClaude(sessionId));
+      if (blocked) {
+        await message(blocked, { title: "Switch account", kind: "warning" });
+        return;
+      }
+      const label = providerAccountLabel(session.harness, accountId);
+      let carried = false;
+      let carryError = `${HARNESS_TITLE[session.harness]} cannot copy this conversation to ${label}.`;
+      if (session.harness === "claude") {
+        usageLimitSwitching.current.add(sessionId);
+        try {
+          await transferHarnessSessionAccount({
+            harness: session.harness,
+            threadId: sessionId,
+            providerSessionId: session.providerSessionId,
+            cwd: sessionWorkCwd(session),
+            fromAccountId: session.providerAccountId,
+            toAccountId: accountId,
+            blocks: session.blocks,
+          });
+          carried = true;
+        } catch (error) {
+          carryError = error instanceof Error ? error.message : String(error);
+        } finally {
+          usageLimitSwitching.current.delete(sessionId);
+        }
+      }
+      if (
+        !carried &&
+        !(await ask(
+          `${carryError}
+
+Continue on ${label} with a handoff summary? Its soul and memory stay; the provider conversation starts fresh.`,
+          { title: `Switch to ${label}?`, kind: "warning", okLabel: "Use handoff summary", cancelLabel: "Keep current account" },
+        ))
+      )
+        return;
+      const latest = sessionsRef.current.find((entry) => entry.id === sessionId);
+      // The Mono moved on while the transcript was copied.
+      if (
+        !latest ||
+        latest.busy ||
+        latest.providerSessionId !== session.providerSessionId ||
+        !sameProviderAccountId(latest.providerAccountId, session.providerAccountId)
+      )
+        return;
+      updateSessionState(sessionsRef, setSessions, (sessions) =>
+        sessions.map((entry) =>
+          entry.id === sessionId ? withUsageLimitAccount(entry, accountId, carried) : entry,
+        ),
+      );
+    },
+    [onUsageLimitAccountChange],
+  );
+
   const [usageLimitTick, setUsageLimitTick] = useState(0);
   useEffect(() => {
     const now = Date.now();
@@ -16576,6 +16663,18 @@ function Workspace({
         model={monoViewSession.model}
         modelSettings={monoViewSession.modelSettings}
         runtimeMode={monoViewSession.runtimeMode}
+        providerAccount={
+          supportsProviderAccounts(monoViewSession.harness)
+            ? {
+                accountId:
+                  monoViewSession.providerAccountId ??
+                  selectedProviderAccountId(monoViewSession.harness, monoViewSession.cwd),
+                opensNewChat: false,
+                onSelect: (accountId) =>
+                  void onMonoAccountChange(monoViewSession.id, accountId),
+              }
+            : undefined
+        }
         busy={!!monoViewSession.busy}
         onModelChange={(harness, model) =>
           onModelChange(monoViewSession.id, harness, model)

@@ -9,7 +9,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { transferProviderSession } from "./child";
 import type { GeneratedSessionTitle } from "../../../features/sessions/model/sessionTitle";
 import type { PrContent } from "../../../features/source-control/model/gitText";
-import { hasLiveCatalog } from "../../../features/sessions/model/models";
+import { hasLiveCatalog, isPickerProviderVisible } from "../../../features/sessions/model/models";
 import type { UserQuestionReply } from "../../../features/sessions/model/userQuestion";
 import type { McpFormReply } from "../../../features/sessions/model/mcpForm";
 import type { NativeCommandProvider } from "./nativeCommands";
@@ -664,6 +664,8 @@ export async function refreshHarnessCatalogs(
         // Explicit dropdown opens and manual Recheck can replace stale or
         // fallback catalogs; routine refreshes skip once a live list lands.
         if (!options?.force && hasLiveCatalog(adapter.id)) return;
+        // Fork (L-208): a hidden Antigravity ACP starts only on a manual Recheck.
+        if (!options?.force && adapter.id === "antigravity" && !isPickerProviderVisible("antigravity")) return;
         await adapter.refreshCatalog().catch((error: unknown) => {
           console.debug(`[monocode] ${adapter.id} catalog`, error);
         });

@@ -1061,6 +1061,9 @@ export const AI_HELPER_PROVIDERS = [
   "claude",
   "codex",
   "opencode",
+  // Fork (L-208): the CLI runs one short process per helper call; listed
+  // before ACP so automatic fallbacks never park a session on its runtime.
+  "antigravity-cli",
   "antigravity",
 ] as const satisfies readonly HarnessId[];
 

@@ -3,6 +3,8 @@ import type {
   ModelSetting,
 } from "../../../../features/sessions/model/models";
 import { modelsFor } from "../../../../features/sessions/model/models";
+import { attachmentPathText } from "../../../../features/sessions/model/attachments";
+import type { Attachment } from "../../../../features/sessions/model/session";
 import type { ProcessedUsage } from "../../../../features/sessions/model/tokenAccounting";
 import type { HarnessSessionInput } from "../../core/types";
 
@@ -229,4 +231,13 @@ export function validateCliPrompt(text: string): void {
     throw new Error(
       "Antigravity CLI interactive slash commands are unavailable in a streaming chat. Use /usage or /models for reports; use the agy terminal for interactive controls and compaction.",
     );
+}
+
+/**
+ * Fork (L-209): `agy` stream-json input is text only, so each attachment travels as
+ * the path of its saved copy (or a text note's own text) and the agent opens it.
+ */
+export function cliPromptText(text: string, attachments: Attachment[] = []): string {
+  if (!attachments.length) return text;
+  return [text, ...attachments.map(attachmentPathText)].filter((part) => part.trim()).join("\n\n");
 }

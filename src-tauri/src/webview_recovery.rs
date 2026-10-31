@@ -9,11 +9,18 @@
 //! `RELOAD_PERIOD` so a page that crashes on load cannot loop. Every failure
 //! is appended to `webview-crashes.log` in the app data folder.
 //!
-//! Other failure kinds are logged only: a browser-process exit takes the
-//! whole WebView2 with it (a reload cannot help), an unresponsive renderer
-//! may still recover, and WebView2 restarts its own GPU process.
+//! Fork (L-213): a browser-process exit takes the whole WebView2 with it, so
+//! a reload cannot help. Windows that run out of committed memory (error
+//! 1455) end that way and the window stayed grey. The dead window is now
+//! destroyed and built again under the same label, sharing the reload limit;
+//! its chats are not stopped and the app does not quit while it is rebuilt.
+//!
+//! Other failure kinds are logged only: an unresponsive renderer may still
+//! recover, and WebView2 restarts its own GPU process.
 
 use std::collections::{HashMap, HashSet};
+#[cfg(windows)]
+use tauri::{PhysicalPosition, PhysicalSize};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -21,6 +28,9 @@ use tauri::{State, WebviewWindow};
 
 const MAX_RELOADS: usize = 3;
 const RELOAD_PERIOD: Duration = Duration::from_secs(120);
+/// How long after a rebuild a last-window exit request is treated as part of
+/// the rebuild rather than a quit.
+const REBUILD_GRACE: Duration = Duration::from_secs(15);
 
 /// WebView2's `COREWEBVIEW2_PROCESS_FAILED_KIND`, by its documented values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +70,8 @@ impl FailureKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Response {
     Reload,
+    /// The WebView2 browser process exited: build the window again.
+    Rebuild,
     /// The page crashed, but it already reloaded `MAX_RELOADS` times lately.
     GiveUp,
     LogOnly,
@@ -71,6 +83,8 @@ pub(crate) fn decide(kind: FailureKind, recent_reloads: usize) -> Response {
     match kind {
         FailureKind::RenderExited if recent_reloads < MAX_RELOADS => Response::Reload,
         FailureKind::RenderExited => Response::GiveUp,
+        FailureKind::BrowserExited if recent_reloads < MAX_RELOADS => Response::Rebuild,
+        FailureKind::BrowserExited => Response::GiveUp,
         _ => Response::LogOnly,
     }
 }
@@ -81,6 +95,19 @@ pub(crate) fn decide(kind: FailureKind, recent_reloads: usize) -> Response {
 pub struct WebviewRecovery {
     reloads: Mutex<HashMap<String, Vec<Instant>>>,
     recovered: Mutex<HashSet<String>>,
+    #[cfg(windows)]
+    rebuilding: Mutex<HashMap<String, Restore>>,
+    last_rebuild: Mutex<Option<Instant>>,
+}
+
+/// Where the dead window was, so its replacement opens in the same place.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Restore {
+    visible: bool,
+    maximized: bool,
+    position: Option<PhysicalPosition<i32>>,
+    size: Option<PhysicalSize<u32>>,
 }
 
 impl WebviewRecovery {
@@ -100,6 +127,17 @@ impl WebviewRecovery {
         recovered.insert(label.to_string());
     }
 
+    fn note_rebuild(&self, now: Instant) {
+        *self.last_rebuild.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
+    }
+
+    fn rebuilt_since(&self, now: Instant) -> bool {
+        self.last_rebuild
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some_and(|at| now.duration_since(at) < REBUILD_GRACE)
+    }
+
     fn take_recovered(&self, label: &str) -> bool {
         let mut recovered = self.recovered.lock().unwrap_or_else(|e| e.into_inner());
         recovered.remove(label)
@@ -113,8 +151,16 @@ pub fn take_webview_recovery(window: WebviewWindow, state: State<'_, WebviewReco
     state.take_recovered(window.label())
 }
 
+/// True for a short while after a window was rebuilt, so the exit request
+/// Tauri sends when the dead window was the last one does not quit the app.
+pub(crate) fn rebuilding_recently(app: &tauri::AppHandle) -> bool {
+    use tauri::Manager;
+    app.try_state::<WebviewRecovery>()
+        .is_some_and(|state| state.rebuilt_since(Instant::now()))
+}
+
 #[cfg(windows)]
-pub(crate) use platform::install;
+pub(crate) use platform::{install, take_rebuild};
 
 #[cfg(windows)]
 mod platform {
@@ -125,7 +171,7 @@ mod platform {
     use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_PROCESS_FAILED_KIND;
     use webview2_com::ProcessFailedEventHandler;
 
-    use super::{decide, FailureKind, Response, WebviewRecovery};
+    use super::{decide, FailureKind, Response, Restore, WebviewRecovery};
 
     /// Registers the crash handler on `window`'s WebView2. Failure to
     /// register is logged; the window works as before without recovery.
@@ -172,12 +218,77 @@ mod platform {
                 }
                 Some(Err(_)) | None => "reload failed",
             },
-            Response::GiveUp => "not reloaded: too many crashes in two minutes",
+            Response::Rebuild => match app.get_webview_window(label) {
+                Some(window) => {
+                    let restore = Restore {
+                        visible: window.is_visible().unwrap_or(true),
+                        maximized: window.is_maximized().unwrap_or(false),
+                        position: window.outer_position().ok(),
+                        size: window.inner_size().ok(),
+                    };
+                    state
+                        .rebuilding
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(label.to_string(), restore);
+                    state.note_reload(label, now);
+                    state.note_rebuild(now);
+                    // Not from inside the WebView2 callback itself.
+                    let target = window.clone();
+                    match app.run_on_main_thread(move || {
+                        let _ = target.destroy();
+                    }) {
+                        Ok(()) => "rebuilding the window",
+                        Err(_) => "rebuild failed",
+                    }
+                }
+                None => "rebuild failed: window gone",
+            },
+            Response::GiveUp => "not recovered: too many crashes in two minutes",
             Response::LogOnly => "logged only",
         };
         let line = format!("window {label}: {}; {action}", kind.label());
         eprintln!("monocode: webview crash: {line}");
         append_log(app, &line);
+    }
+
+    /// Called when a window is destroyed. If crash recovery destroyed it,
+    /// starts building its replacement and returns true, so the caller skips
+    /// what a real close does (stopping its chats, quitting on the last one).
+    pub(crate) fn take_rebuild(app: &AppHandle, label: &str) -> bool {
+        let state = app.state::<WebviewRecovery>();
+        let Some(restore) = state
+            .rebuilding
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(label)
+        else {
+            return false;
+        };
+        state.note_rebuild(Instant::now());
+        let app = app.clone();
+        let label = label.to_string();
+        // Building waits on the event loop, so not on the loop thread itself.
+        std::thread::spawn(move || {
+            let line = match crate::window::reopen_session_window(&app, &label, restore.visible) {
+                Ok(window) => {
+                    if let Some(size) = restore.size {
+                        let _ = window.set_size(size);
+                    }
+                    if let Some(position) = restore.position {
+                        let _ = window.set_position(position);
+                    }
+                    if restore.maximized {
+                        let _ = window.maximize();
+                    }
+                    format!("window {label}: rebuilt after the browser process exited")
+                }
+                Err(error) => format!("window {label}: rebuild failed: {error}"),
+            };
+            eprintln!("monocode: webview crash: {line}");
+            append_log(&app, &line);
+        });
+        true
     }
 
     fn append_log(app: &AppHandle, line: &str) {
@@ -219,10 +330,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reloads_only_when_the_page_process_exits() {
+    fn reloads_when_the_page_process_exits_and_rebuilds_when_webview2_does() {
         assert_eq!(decide(FailureKind::RenderExited, 0), Response::Reload);
+        assert_eq!(decide(FailureKind::BrowserExited, 0), Response::Rebuild);
         for kind in [
-            FailureKind::BrowserExited,
             FailureKind::RenderUnresponsive,
             FailureKind::FrameRenderExited,
             FailureKind::GpuExited,
@@ -236,6 +347,18 @@ mod tests {
     fn stops_reloading_after_three_recent_reloads() {
         assert_eq!(decide(FailureKind::RenderExited, 2), Response::Reload);
         assert_eq!(decide(FailureKind::RenderExited, 3), Response::GiveUp);
+        assert_eq!(decide(FailureKind::BrowserExited, 2), Response::Rebuild);
+        assert_eq!(decide(FailureKind::BrowserExited, 3), Response::GiveUp);
+    }
+
+    #[test]
+    fn treats_exit_requests_shortly_after_a_rebuild_as_part_of_it() {
+        let state = WebviewRecovery::default();
+        let start = Instant::now();
+        assert!(!state.rebuilt_since(start));
+        state.note_rebuild(start);
+        assert!(state.rebuilt_since(start + Duration::from_secs(1)));
+        assert!(!state.rebuilt_since(start + REBUILD_GRACE));
     }
 
     #[test]

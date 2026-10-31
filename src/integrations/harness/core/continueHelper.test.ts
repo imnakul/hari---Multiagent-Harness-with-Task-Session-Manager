@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ import type { ContinueChoice } from "../../../features/sessions/model/continueCa
 import type { Block } from "../../../features/sessions/model/session";
 import type { AiHelperTarget } from "../../../features/settings/model/settings";
 import { HelperToolAttemptError } from "./helperIsolation";
+import { savePickerProviderVisible } from "../../../features/sessions/model/models";
 import {
   continueHelperAvailable,
   continueHelperTargets,
@@ -41,6 +43,7 @@ describe("continueHelperTargets (L-189)", () => {
       "opencode",
       "claude",
       "codex",
+      "antigravity-cli",
     ]);
   });
 
@@ -54,6 +57,7 @@ describe("continueHelperTargets (L-189)", () => {
       "claude",
       "codex",
       "opencode",
+      "antigravity-cli",
       "antigravity",
     ]);
   });
@@ -62,6 +66,16 @@ describe("continueHelperTargets (L-189)", () => {
     expect(continueHelperAvailable({ provider: "antigravity" })).toBe(true);
     mocks.isHarnessAvailable.mockReturnValueOnce(false);
     expect(continueHelperAvailable({ provider: "antigravity" })).toBe(false);
+  });
+
+  it("skips Antigravity ACP while it is hidden in Providers (L-208)", () => {
+    savePickerProviderVisible("antigravity", false);
+    try {
+      expect(continueHelperAvailable({ provider: "antigravity" })).toBe(false);
+      expect(continueHelperAvailable({ provider: "antigravity-cli" })).toBe(true);
+    } finally {
+      savePickerProviderVisible("antigravity", true);
+    }
   });
 });
 

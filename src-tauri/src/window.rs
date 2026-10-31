@@ -87,14 +87,41 @@ pub fn open_session_window(app: &AppHandle, reveal: bool) -> Result<WebviewWindo
         .ok_or("missing main window config")?
         .clone();
 
-    configure_session_window(&mut config, reveal);
     let id = WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed);
     config.label = if reveal {
         format!("window-{id}")
     } else {
         format!("quick-session-{}", uuid::Uuid::new_v4())
     };
+    build_session_window(app, config, reveal)
+}
 
+/// Fork (L-213): a workspace window built again under its old label after
+/// its WebView2 died, so the page restores the same tabs and chats.
+#[cfg(target_os = "windows")]
+pub(crate) fn reopen_session_window(
+    app: &AppHandle,
+    label: &str,
+    reveal: bool,
+) -> Result<WebviewWindow, String> {
+    let mut config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .ok_or("missing main window config")?
+        .clone();
+    config.label = label.to_string();
+    build_session_window(app, config, reveal)
+}
+
+fn build_session_window(
+    app: &AppHandle,
+    mut config: tauri::utils::config::WindowConfig,
+    reveal: bool,
+) -> Result<WebviewWindow, String> {
+    configure_session_window(&mut config, reveal);
     let build = || {
         WebviewWindowBuilder::from_config(app, &config)
             .map_err(|err| err.to_string())?

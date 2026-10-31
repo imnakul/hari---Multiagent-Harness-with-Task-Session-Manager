@@ -866,6 +866,12 @@ pub fn run() {
             ..
         } => {
             window::forget_quit_window(handle, &label);
+            // Fork (L-213): crash recovery destroyed it to build it again, so
+            // its chats keep running.
+            #[cfg(target_os = "windows")]
+            if webview_recovery::take_rebuild(handle, &label) {
+                return;
+            }
             let other_window = window::workspace_windows(handle)
                 .iter()
                 .any(|window| window.label() != label);
@@ -885,6 +891,10 @@ pub fn run() {
             // ⌘Q is a separate menu handler and arrives with an exit code.
             // Linux and Windows have no dock, so the last close is a quit.
             if !should_request_quit(code) {
+                return;
+            }
+            // Fork (L-213): the last window was destroyed only to be rebuilt.
+            if code.is_none() && webview_recovery::rebuilding_recently(handle) {
                 return;
             }
             window::request_quit(handle);

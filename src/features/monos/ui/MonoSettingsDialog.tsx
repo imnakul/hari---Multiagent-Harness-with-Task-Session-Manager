@@ -13,7 +13,11 @@ import { Popover } from "../../../shared/ui/Popover";
 import { Settings, Sparkles, StickyNote } from "../../../shared/ui/icons";
 import type { HarnessId, RuntimeMode } from "../../sessions/model/session";
 import { AccessPicker } from "../../sessions/ui/AccessPicker";
-import { ModelPicker, ModelSettingRows } from "../../sessions/ui/ModelPicker";
+import {
+  ModelPicker,
+  ModelSettingRows,
+  type ModelPickerAccount,
+} from "../../sessions/ui/ModelPicker";
 import { PixelMascot } from "../../projects/ui/PixelMascot";
 import {
   defaultMonoName,
@@ -53,6 +57,8 @@ type Props = {
   model: string;
   modelSettings: Record<string, string>;
   runtimeMode: RuntimeMode;
+  /** Fork (L-210): which signed-in account it runs on, inside the model menu. */
+  providerAccount?: ModelPickerAccount;
   busy?: boolean;
   initialSection?: MonoSettingsSection;
   onModelChange: (harness: HarnessId, model: string) => void;
@@ -138,6 +144,7 @@ function GeneralSection({
   model,
   modelSettings,
   runtimeMode,
+  providerAccount,
   busy = false,
   onModelChange,
   onModelSettingsChange,
@@ -179,6 +186,7 @@ function GeneralSection({
             hideSettings
             side="bottom"
             variant="plain"
+            providerAccount={providerAccount}
             onChange={onModelChange}
             onSettingsChange={onModelSettingsChange}
           />

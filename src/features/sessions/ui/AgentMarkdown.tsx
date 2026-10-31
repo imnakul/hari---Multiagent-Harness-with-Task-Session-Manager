@@ -70,7 +70,7 @@ import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
   ImagePathHoverPreview,
-  InlineLinkPreviews,
+  WebLinkChipLabel,
   WebLinkHoverPreview,
 } from "./ChatHoverPreviews";
 import { useLinkPreviewMode } from "../../settings/model/linkPreviewSettings";
@@ -214,6 +214,8 @@ const FileOpenContext = createContext<{
 const RemoteMediaContext = createContext(false);
 /** Show local images and videos a reply links to, rather than the links. */
 const LocalMediaContext = createContext(false);
+/** Fork (L-212): web links in chats get a hover card and, on Always, a chip. */
+const ChatLinksContext = createContext({ hover: false, chips: false });
 
 const REVEAL_LABEL = IS_MAC
   ? "Reveal in Finder"
@@ -330,11 +332,13 @@ function MarkdownLink({
   const file = href ? resolveWorkspaceFileReference(href, cwd) : undefined;
   const label = textContent(children);
   const localMedia = useContext(LocalMediaContext);
-  const linkPreviewMode = useLinkPreviewMode();
+  const chatLinks = useContext(ChatLinksContext);
   if (allowRemoteMedia && href && isInboxMediaUrl(href)) {
     return <InboxMedia src={href} alt={label} />;
   }
 
+  const webHref =
+    !file && href && /^https?:\/\//i.test(href) ? href : undefined;
   const link = (
     <a
       href={href}
@@ -362,7 +366,13 @@ function MarkdownLink({
         onFileContextMenu(event, file.path, file.navigation);
       }}
     >
-      {children}
+      {chatLinks.chips && webHref ? (
+        <WebLinkChipLabel url={webHref} bare={isBareLink(label, webHref)}>
+          {children}
+        </WebLinkChipLabel>
+      ) : (
+        children
+      )}
     </a>
   );
   if (localMedia && file && isLocalMediaPath(file.path)) {
@@ -376,15 +386,16 @@ function MarkdownLink({
     );
   }
   // Chats only: a page card for web links, fetched on hover (L-119 setting).
-  if (
-    localMedia &&
-    linkPreviewMode !== "off" &&
-    !file &&
-    href &&
-    /^https?:\/\//i.test(href)
-  )
-    return <WebLinkHoverPreview url={href}>{link}</WebLinkHoverPreview>;
+  if (chatLinks.hover && webHref)
+    return <WebLinkHoverPreview url={webHref}>{link}</WebLinkHoverPreview>;
   return link;
+}
+
+/** A link whose text is its own URL (autolinked), so a page title can replace it. */
+export function isBareLink(label: string, href: string): boolean {
+  const strip = (value: string) =>
+    value.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  return !label.trim() || strip(label) === strip(href);
 }
 
 type MarkdownCodeProps = ComponentProps<"code"> & { node?: unknown };
@@ -833,6 +844,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   onOpenFile,
   allowRemoteMedia,
   localMedia,
+  linkPreviews = localMedia,
   hardBreaks,
   onSaveNote,
   documentPath,
@@ -848,6 +860,8 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   allowRemoteMedia?: boolean;
   /** Show local images and videos the text links to, in place of the links. */
   localMedia?: boolean;
+  /** Fork (L-212): chat text, whose web links follow Link previews. Defaults to `localMedia`. */
+  linkPreviews?: boolean;
   /** Show a newline inside a block as a line break, as a document does (#591). */
   hardBreaks?: boolean;
   onSaveNote?: (text: string) => void | Promise<void>;
@@ -917,6 +931,17 @@ export const AgentMarkdown = memo(function AgentMarkdown({
     visible && !pacedReveal,
   );
   const paced = pacedReveal ? smooth : immediate;
+  // Chips wait for the finished text so a half-streamed URL is never fetched.
+  const chatLinksHover = !!linkPreviews && linkPreviewMode !== "off";
+  const chatLinksChips =
+    chatLinksHover &&
+    linkPreviewMode === "always" &&
+    !streaming &&
+    !paced.revealing;
+  const chatLinks = useMemo(
+    () => ({ hover: chatLinksHover, chips: chatLinksChips }),
+    [chatLinksHover, chatLinksChips],
+  );
   const presented = useStreamPresentation(measurement, text.length, visible);
   // Only instrumentation needs the expected block list outside Streamdown.
   // Feed that same list to its parser so measuring never doubles the parsing.
@@ -1028,6 +1053,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
   return (
     <RemoteMediaContext.Provider value={remoteMedia}>
       <LocalMediaContext.Provider value={!!localMedia}>
+        <ChatLinksContext.Provider value={chatLinks}>
         <FileOpenContext.Provider value={fileOpen}>
           <>
             {/* Streamdown takes no style; a contents box passes the fade timing down. */}
@@ -1050,12 +1076,6 @@ export const AgentMarkdown = memo(function AgentMarkdown({
                 </Streamdown>
               </MarkdownCommit.Provider></MarkdownTableContext.Provider>
             </div>
-            {localMedia &&
-            linkPreviewMode === "always" &&
-            !streaming &&
-            !paced.revealing ? (
-              <InlineLinkPreviews markdown={text} />
-            ) : null}
             {fileMenu ? (
               <ExplorerMenu
                 x={fileMenu.x}
@@ -1074,6 +1094,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
             ) : null}
           </>
         </FileOpenContext.Provider>
+        </ChatLinksContext.Provider>
       </LocalMediaContext.Provider>
     </RemoteMediaContext.Provider>
   );

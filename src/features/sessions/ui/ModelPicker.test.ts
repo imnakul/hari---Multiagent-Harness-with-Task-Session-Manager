@@ -514,6 +514,66 @@ describe("model picker", () => {
     expect(container.querySelectorAll('[role="option"]')).toHaveLength(2);
   });
 
+  it("lists free OpenCode models in their own group at the top (L-211)", () => {
+    setHarnessModels("opencode", [
+      {
+        id: "opencode:openai/gpt-5.6-luna",
+        harness: "opencode",
+        name: "GPT-5.6 Luna",
+        nativeId: "openai/gpt-5.6-luna",
+        provider: { id: "openai", name: "OpenAI" },
+      },
+      {
+        id: "opencode:opencode/minimax-m3-free",
+        harness: "opencode",
+        name: "MiniMax M3 Free",
+        nativeId: "opencode/minimax-m3-free",
+        provider: { id: "opencode", name: "OpenCode Zen" },
+      },
+      {
+        id: "opencode:opencode/claude-freeform",
+        harness: "opencode",
+        name: "Claude Freeform",
+        nativeId: "opencode/claude-freeform",
+        provider: { id: "opencode", name: "OpenCode Zen" },
+      },
+    ]);
+    act(() =>
+      root.render(
+        createElement(ModelPicker, {
+          harness: "opencode",
+          model: "opencode:openai/gpt-5.6-luna",
+          values: {},
+          onChange: vi.fn(),
+          onSettingsChange: vi.fn(),
+        }),
+      ),
+    );
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
+        .click(),
+    );
+    hover(
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent?.startsWith("Model"),
+      )!,
+    );
+
+    expect(
+      [...container.querySelectorAll('[role="group"]')].map((group) =>
+        group.getAttribute("aria-label"),
+      ),
+    ).toEqual(["Free", "OpenAI", "OpenCode Zen"]);
+    const free = container.querySelector('[role="group"][aria-label="Free"]')!;
+    expect(free.textContent).toContain("MiniMax M3 Free");
+    expect(free.textContent).not.toContain("Claude Freeform");
+    // The first option in the list is the free model, so arrow keys match the headings.
+    expect(container.querySelector('[role="option"]')?.getAttribute("aria-label")).toBe(
+      "MiniMax M3 Free, OpenCode Zen",
+    );
+  });
+
   it("groups omp models by provider in keyboard order", () => {
     // omp sorts by model name, so providers arrive interleaved.
     setHarnessModels("omp", [

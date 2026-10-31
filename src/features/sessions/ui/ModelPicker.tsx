@@ -301,9 +301,22 @@ function modelProvider(item: AgentModel): { id: string; name: string } {
   return item.provider ?? { id: item.harness, name: HARNESS_TITLE[item.harness] };
 }
 
+const FREE_GROUP = { id: "free", name: "Free" };
+
+/** Fork (L-211): OpenCode's free models (named "… Free") get their own group. */
+export function isFreeOpenCodeModel(item: AgentModel): boolean {
+  return item.harness === "opencode" && /\bfree\b/i.test(`${item.name} ${item.nativeId ?? ""}`);
+}
+
+/** The heading a model is listed under. */
+function modelGroupKey(item: AgentModel): { id: string; name: string } {
+  return isFreeOpenCodeModel(item) ? FREE_GROUP : modelProvider(item);
+}
+
 /**
- * Keeps each provider's models contiguous (in first-seen provider order) so
- * keyboard navigation, which walks this list, matches the grouped headings.
+ * Keeps each provider's models contiguous (in first-seen provider order, with
+ * the Free group first) so keyboard navigation, which walks this list, matches
+ * the grouped headings.
  */
 function inProviderOrder(
   tab: ModelPickerTab,
@@ -311,8 +324,9 @@ function inProviderOrder(
 ): AgentModel[] {
   if (!groupsByProvider(tab, models)) return models;
   const groups = new Map<string, AgentModel[]>();
+  if (models.some(isFreeOpenCodeModel)) groups.set(FREE_GROUP.id, []);
   for (const item of models) {
-    const id = modelProvider(item).id;
+    const id = modelGroupKey(item).id;
     const group = groups.get(id);
     if (group) group.push(item);
     else groups.set(id, [item]);
@@ -333,7 +347,7 @@ function modelGroups(tab: ModelPickerTab, models: AgentModel[]): ModelGroup[] {
 
   const groups = new Map<string, ModelGroup>();
   models.forEach((item, index) => {
-    const provider = modelProvider(item);
+    const provider = modelGroupKey(item);
     let group = groups.get(provider.id);
     if (!group) {
       group = { id: provider.id, name: provider.name, models: [] };

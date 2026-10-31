@@ -11,6 +11,11 @@ export const HELPER_ISOLATION: Record<
   claude: { verified: true },
   codex: { verified: true },
   opencode: { verified: true },
+  "antigravity-cli": {
+    verified: false,
+    reason:
+      "Antigravity CLI's built-in tools can't be switched off. If it tries to use one, MonoCode stops it and the reply fails.",
+  },
   antigravity: {
     verified: false,
     reason:

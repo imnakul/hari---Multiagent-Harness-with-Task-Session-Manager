@@ -9,8 +9,12 @@ import {
 } from "../../sessions/model/session";
 import { MonoSettingsDialog } from "./MonoSettingsDialog";
 
+const pickerProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("../../sessions/ui/ModelPicker", () => ({
-  ModelPicker: () => null,
+  ModelPicker: (props: Record<string, unknown>) => {
+    pickerProps.push(props);
+    return null;
+  },
   ModelSettingRows: () => null,
 }));
 
@@ -64,6 +68,7 @@ async function render(
   runtimeMode: RuntimeMode = "auto",
   busy = false,
   onReset?: () => Promise<void>,
+  providerAccount?: { accountId: string; opensNewChat: boolean; onSelect: (id: string) => void },
 ) {
   await act(async () =>
     root.render(
@@ -77,6 +82,7 @@ async function render(
         modelSettings: {},
         runtimeMode,
         busy,
+        providerAccount,
         onModelChange: vi.fn(),
         onModelSettingsChange: vi.fn(),
         onRuntimeModeChange,
@@ -199,4 +205,14 @@ it("explains when permissions take effect while the Mono is working", async () =
   expect(document.querySelector("[data-access-picker]")?.textContent).toContain(
     "Access changes apply to the next turn. Stop and resend to apply them now.",
   );
+});
+
+it("passes the account choice into its model menu without opening a new chat (L-210)", async () => {
+  const onSelect = vi.fn();
+  pickerProps.length = 0;
+  await render("auto", false, undefined, { accountId: "work", opensNewChat: false, onSelect });
+  const account = pickerProps.at(-1)?.providerAccount as { accountId: string; opensNewChat: boolean; onSelect: (id: string) => void };
+  expect(account).toMatchObject({ accountId: "work", opensNewChat: false });
+  account.onSelect("personal");
+  expect(onSelect).toHaveBeenCalledWith("personal");
 });

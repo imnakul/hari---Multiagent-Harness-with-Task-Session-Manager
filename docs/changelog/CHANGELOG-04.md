@@ -1,4 +1,25 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 09:16 IST — Grey window rebuilt after a WebView2 crash (L-213)
+- Type: fix
+- What: On Windows, when WebView2's main (browser) process dies, the window is closed and opened again under the same name and place; its chats keep running and the app does not quit. At most 3 recoveries per window in 2 minutes, shared with page reloads.
+- Why: User saw the window turn grey with no way back except quitting. Crash dumps (29–31 Oct) show WebView2's browser process stopping itself when Windows ran out of committed memory (error 1455); L-160 only logged this kind. The memory was held by ~28 never-closed Antigravity ACP helper sessions and ~370 MCP node processes (27 GB), which L-208 stops; the user approved ending them (789 processes, 25 GB freed).
+- Files: `src-tauri/src/` (webview_recovery.rs, lib.rs, window.rs), `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: cargo check clean (old warning only); Rust tests not run on this PC. Desktop UI not checked by the agent.
+## 2026-10-31 08:54 IST — Smart link chips for Link previews: Always (L-212)
+- Type: feature + fix
+- What: With Link previews on Always, every web link in agent text (final answers, text between steps, review and Mono reports, subagent reports) shows as a chip with the site icon and page title, or the site name when the page has none; the hover card stays. Cards under replies removed. Settings wording updated.
+- Why: User saw Always previews only sometimes. Cause: cards appeared only under the final answer block, at most three, vanished when a page had nothing and hid while streaming. User locked 1A, 2A, 3A.
+- Files: `src/features/sessions/ui/` (AgentMarkdown.tsx, ChatHoverPreviews.tsx, AgentTranscript.tsx, AgentMarkdownLinkPreviews.test.ts), `src/features/settings/` (model/linkPreviewSettings.ts, ui/SettingsView.tsx), `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc clean; vitest full suite 7954 passed, 2 skipped, 1 failed (iconCatalog timed out at 12.6 s under load; passes alone in 1.5 s). Desktop UI not checked by the agent.
+## 2026-10-31 08:31 IST — Antigravity helpers on the CLI, CLI attachments, Mono account picker, free OpenCode group (L-208 to L-211)
+- Type: feature + fix
+- What: Antigravity CLI can be the AI helper (one short `agy` process per call, stopped after the reply); a hidden Antigravity ACP is skipped as a helper and no longer started to read models (only Recheck starts it). Antigravity CLI chats accept images and files, sent as saved paths. Mono settings show the Account picker with 2+ accounts. OpenCode free models get a Free group at the top of the picker.
+- Why: Process pile-up came from ACP helper and model-check sessions that were never closed (each with localharness and every MCP server); user asked to move helpers to the CLI and hide ACP. User also asked for CLI attachments, a Mono account choice and free OpenCode models without searching.
+- Files: `src/integrations/harness/providers/antigravity-cli/` (antigravityCliHelper.ts (new, +test), antigravityCliAdapter.ts, antigravityCli.ts, antigravityCliProtocol.ts (+test), antigravityCliLive.test.ts), `src/integrations/harness/core/` (continueHelper.ts (+test), helperText.ts, helperIsolation.ts, registry.ts, sessionMetadataHelper.test.ts), `src/features/settings/` (model/settings.ts, ui/SettingsView.tsx), `src/features/sessions/` (model/session.ts, ui/ModelPicker.tsx (+test)), `src/features/monos/ui/MonoSettingsDialog.tsx` (+test), `src/app/App.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc clean; vitest full suite 7954 passed, 2 skipped. Desktop UI not checked by the agent.
 ## 2026-10-31 06:32 IST — Browser side panel, tabs and chat context (L-207)
 - Type: feature
 - What: Browser panel beside the chat (Ctrl+Shift+U, resizable), tabs with sleeping hidden tabs, own storage with password saving and autofill, zoom, width presets, Inspect, reload without cache, copy address, address suggestions, downloads notice; Pick + comment, Screenshot (page or area) and console/network rows add chips to the composer without sending; terminal links open in MonoCode's Browser (setting); process monitor Browser row.
