@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Where web links clicked in a terminal open (fork, L-207): MonoCode's own
- * Browser, or the system's default browser.
+ * Where clicked web links open (fork, L-207; L-220 widened it from terminals
+ * to chats, notes and previews): MonoCode's own Browser, or the system's
+ * default browser. The names and storage key stay, so the saved choice holds.
  */
 export type TerminalLinkTarget = "monocode" | "default";
 

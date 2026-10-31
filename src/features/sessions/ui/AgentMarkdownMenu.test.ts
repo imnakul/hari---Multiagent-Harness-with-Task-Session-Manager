@@ -2,6 +2,7 @@
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveTerminalLinkTarget } from "../../settings/model/terminalLinkSettings";
 import { AgentMarkdown } from "./AgentMarkdown";
 
 const actions = vi.hoisted(() => ({
@@ -119,7 +120,8 @@ describe("AgentMarkdown file link context menu", () => {
     expect(menu).toBeNull();
   });
 
-  it("opens external web links in the default browser", async () => {
+  it("opens external web links in the default browser when set", async () => {
+    saveTerminalLinkTarget("default");
     props = {
       text: "[Website](https://example.com/docs)",
       cwd: "/repo",
@@ -137,6 +139,25 @@ describe("AgentMarkdown file link context menu", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(actions.openUrl).toHaveBeenCalledWith("https://example.com/docs");
     expect(props.onOpenFile).not.toHaveBeenCalled();
+    saveTerminalLinkTarget("monocode");
+  });
+
+  it("opens external web links in MonoCode's Browser by default (L-220)", async () => {
+    saveTerminalLinkTarget("monocode");
+    const opened: unknown[] = [];
+    const listen = (event: Event) => opened.push((event as CustomEvent).detail);
+    window.addEventListener("monocode:open-in-browser", listen);
+    props = { text: "[Website](https://example.com/docs)", cwd: "/repo" };
+    render();
+
+    const link = container.querySelector<HTMLAnchorElement>("a")!;
+    await act(async () =>
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+    );
+    window.removeEventListener("monocode:open-in-browser", listen);
+
+    expect(opened).toEqual(["https://example.com/docs"]);
+    expect(actions.openUrl).not.toHaveBeenCalled();
   });
 
   it("also recognizes inline-code file references", () => {

@@ -544,8 +544,8 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
   {
     id: "terminal-links",
     section: "chat",
-    label: "Terminal links",
-    keywords: "terminal url localhost open browser default monocode click",
+    label: "Web links",
+    keywords: "web links terminal chat notes url localhost open browser default monocode click",
   },
   {
     id: "follow-up",

@@ -1757,11 +1757,11 @@ function ChatPage() {
         </Row>
         <Row
           id="terminal-links"
-          label="Terminal links"
-          description="Where web links you click in a terminal open, such as a dev server's localhost address. MonoCode opens them in the Browser panel beside the chat when it is open, otherwise in the Browser tab."
+          label="Web links"
+          description="Where web links you click open: in chats, notes, previews and terminals (such as a dev server's localhost address). MonoCode opens them in the Browser panel beside the chat when it is open, otherwise in the Browser tab. Right-click a link to pick the other one."
         >
           <Segmented
-            label="Terminal links"
+            label="Web links"
             value={terminalLinkTarget}
             options={[
               { value: "monocode", label: "MonoCode" },

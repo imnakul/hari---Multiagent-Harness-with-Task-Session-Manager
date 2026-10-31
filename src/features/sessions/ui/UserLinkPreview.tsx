@@ -1,4 +1,4 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openWebLink } from "../../browser/model/openWebLink";
 import {
   useCallback,
   useEffect,
@@ -577,7 +577,5 @@ function labelColor(value: string): string {
 function openExternalLink(event: MouseEvent<HTMLAnchorElement>, url: string) {
   event.preventDefault();
   event.stopPropagation();
-  void openUrl(url).catch((error) => {
-    console.error("Failed to open web link:", error);
-  });
+  openWebLink(url);
 }

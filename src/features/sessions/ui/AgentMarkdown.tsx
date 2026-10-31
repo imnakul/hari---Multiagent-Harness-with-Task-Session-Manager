@@ -1,5 +1,4 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   createContext,
   isValidElement,
@@ -32,6 +31,7 @@ import {
   ExplorerMenu,
   type ExplorerMenuItem,
 } from "../../files/ui/ExplorerMenu";
+import { openWebLink } from "../../browser/model/openWebLink";
 import { FileActionError } from "../../files/ui/FileActionError";
 import { FileTypeIcon } from "../../files/ui/FileTypeIcon";
 import { boundedCode } from "../../files/editor/codeHighlightPlugin";
@@ -363,11 +363,8 @@ function MarkdownLink({
           return;
         }
         event.preventDefault();
-        if (href && /^https?:\/\//i.test(href)) {
-          void openUrl(href).catch((error) => {
-            console.error("Failed to open web link:", error);
-          });
-        }
+        // Fork (L-220): MonoCode's Browser or the default one, per Settings.
+        if (href) openWebLink(href);
       }}
       onContextMenu={(event) => {
         onContextMenu?.(event);

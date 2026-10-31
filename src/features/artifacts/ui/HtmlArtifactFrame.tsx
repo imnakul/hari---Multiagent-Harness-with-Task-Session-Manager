@@ -1,4 +1,4 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openWebLink } from "../../browser/model/openWebLink";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { htmlArtifactUrl } from "../artifacts";
 
@@ -128,7 +128,7 @@ export function HtmlArtifactFrame({
           /^https?:\/\//i.test(url) &&
           document.activeElement === frame
         )
-          void openUrl(url).catch(() => undefined);
+          openWebLink(url);
       }
     };
     window.addEventListener("message", receive);

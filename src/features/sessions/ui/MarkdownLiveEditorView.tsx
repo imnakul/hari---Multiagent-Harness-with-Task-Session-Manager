@@ -13,6 +13,7 @@ import {
   placeholder as placeholderText,
 } from "@codemirror/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { openWebLink } from "../../browser/model/openWebLink";
 import {
   useEffect,
   useLayoutEffect,
@@ -34,6 +35,11 @@ const OPENABLE_LINK = /^(https?:|mailto:)/i;
 /** Opens a web or mail link from Live mode (Ctrl/Cmd+click); ignores others. */
 export function openMarkdownLink(url: string): void {
   if (!OPENABLE_LINK.test(url)) return;
+  // Fork (L-220): web links follow Settings → Web links.
+  if (/^https?:/i.test(url)) {
+    openWebLink(url);
+    return;
+  }
   void openUrl(url).catch((error: unknown) => {
     console.error("[markdown-live] could not open link", error);
   });

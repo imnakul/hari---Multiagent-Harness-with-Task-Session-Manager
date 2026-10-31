@@ -37,6 +37,7 @@ vi.mock("../../inbox/model/githubTasks", () => ({
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { githubWorkItem, githubWorkItemDetails } from "../../inbox/model/githubTasks";
 import type { UserLink } from "../model/linkPreview";
+import { saveTerminalLinkTarget } from "../../settings/model/terminalLinkSettings";
 import { UserLinkPreview } from "./UserLinkPreview";
 
 const link: UserLink = {
@@ -141,6 +142,7 @@ describe("GitHub work item link preview", () => {
   });
 
   it("keeps the chip clickable and opens the original URL", () => {
+    saveTerminalLinkTarget("default");
     act(() => root.render(createElement(UserLinkPreview, { link })));
     const chip = container.querySelector<HTMLAnchorElement>(
       '[data-github-work-item-chip="pr"]',
@@ -149,6 +151,7 @@ describe("GitHub work item link preview", () => {
     act(() => chip.click());
 
     expect(openUrl).toHaveBeenCalledWith(link.url);
+    saveTerminalLinkTarget("monocode");
   });
 
   it("uses a compact treatment centered with inline message text", () => {

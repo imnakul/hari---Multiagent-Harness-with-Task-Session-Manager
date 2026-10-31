@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 11:10 IST — One Web links setting for chats, notes and terminals (L-220)
+- Type: feature
+- What: Settings → Chat → Web links (MonoCode or Default browser) now covers links clicked in chats, message link chips, notes and HTML previews, not only terminals. Default stays MonoCode; the saved Terminal links choice carries over.
+- Why: User asked for chat links to have the same Default | MonoCode choice, or one toggle for both; one toggle chosen.
+- Files: `src/features/browser/model/openWebLink.ts` (new), `src/features/sessions/ui/` (AgentMarkdown.tsx, UserLinkPreview.tsx, MarkdownLiveEditorView.tsx, two tests), `src/features/artifacts/ui/HtmlArtifactFrame.tsx`, `src/features/terminal/ui/TerminalView.tsx`, `src/features/settings/` (SettingsView.tsx, settings.ts, terminalLinkSettings.ts), `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; vitest (sessions, terminal, settings, artifacts, browser, platform) 243 files, 2699 tests passed. Desktop UI not checked by the agent.
+
 ## 2026-10-31 10:59 IST — Chats work with a Browser page open; panels slide (L-218, L-219)
 - Type: fix + feature
 - What: With a Browser tab open, chats no longer fail with "current webview is not a WebviewWindow" and "Couldn't load reminders" no longer appears. The Browser panel and the Session overview slide in and out while the chat narrows smoothly; the Browser page shows as a still picture during the slide.
