@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 11:15 IST — 0.16.0-local22 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local22: 0.16.0-local21 plus the Browser page freezing under overlays (L-214), MonoCode right-click menu in the Browser (L-215), custom size presets (L-216), Always-mode link cards (L-217), chats and reminders working with a Browser page open (L-218), sliding Browser and Session overview panels (L-219) and the one Web links setting (L-220).
+- Why: User asked to commit and build a new version.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local22-web-links-panel-slides-chat-fix_x64.exe` (19,563,581 bytes, SHA-256 E617843C6B5135E619A946DE4CC8733D94999C5A178E97453F5FD951073BBE9C, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from 799749c2 + version bump (committed as the release commit)
+- Verified: build ✅ (npm run build:windows); tests as listed in the L-214 to L-220 entries; desktop check manual
+
 ## 2026-10-31 11:10 IST — One Web links setting for chats, notes and terminals (L-220)
 - Type: feature
 - What: Settings → Chat → Web links (MonoCode or Default browser) now covers links clicked in chats, message link chips, notes and HTML previews, not only terminals. Default stays MonoCode; the saved Terminal links choice carries over.
