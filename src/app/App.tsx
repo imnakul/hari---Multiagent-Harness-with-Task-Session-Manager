@@ -1669,6 +1669,10 @@ function Workspace({
     subscribeBrowser,
     () => browserStore().panelWidth,
   );
+  // Fork (L-219): kept mounted while the panel slides out.
+  const [browserPanelMounted, setBrowserPanelMounted] =
+    useState(browserPanelOpen);
+  if (browserPanelOpen && !browserPanelMounted) setBrowserPanelMounted(true);
   const [openAppViews, setOpenAppViews] = useState<AppView[]>([]);
   // Monos open as title tabs in the inset layout, by Mono id.
   const [openMonoTabs, setOpenMonoTabs] = useState<string[]>([]);
@@ -2109,7 +2113,6 @@ function Workspace({
     Boolean(monoViewId);
   const anyAppViewOpenRef = useRef(anyAppViewOpen);
   anyAppViewOpenRef.current = anyAppViewOpen;
-  const browserPanelShown = browserPanelOpen && !anyAppViewOpen;
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
   const sessionNavigationIdsRef = useRef<readonly string[]>([]);
@@ -17654,12 +17657,14 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                               }
                             />
                           ))}
-                          {browserPanelOpen ? (
+                          {browserPanelOpen || browserPanelMounted ? (
                             <BrowserSidePanel
-                              visible={browserPanelShown}
+                              open={browserPanelOpen}
+                              visible={!anyAppViewOpen}
                               width={browserPanelWidth}
                               onWidth={setBrowserPanelWidth}
                               onClose={() => setBrowserPanelOpen(false)}
+                              onGone={() => setBrowserPanelMounted(false)}
                             />
                           ) : null}
                         </main>

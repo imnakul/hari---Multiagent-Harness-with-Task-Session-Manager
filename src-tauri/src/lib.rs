@@ -270,38 +270,54 @@ mod home_tests {
 
 #[tauri::command]
 fn set_traffic_lights_visible(
-    #[allow(unused_variables)] window: tauri::WebviewWindow,
+    #[allow(unused_variables)] window: tauri::Window,
     #[allow(unused_variables)] visible: bool,
 ) {
+    // Fork (L-218): a Browser page in the window stops it counting as a
+    // `WebviewWindow`, so take the plain window and look the pair up here.
     #[cfg(target_os = "macos")]
-    macos::set_visible(&window, visible);
+    if let Some(window) = window.get_webview_window(window.label()) {
+        macos::set_visible(&window, visible);
+    }
 }
 
 #[tauri::command]
 fn set_window_background_blur(
-    #[allow(unused_variables)] window: tauri::WebviewWindow,
+    #[allow(unused_variables)] window: tauri::Window,
     #[allow(unused_variables)] radius: u8,
 ) {
+    // Fork (L-218): a Browser page in the window stops it counting as a
+    // `WebviewWindow`, so take the plain window and look the pair up here.
     #[cfg(target_os = "macos")]
-    macos::set_background_blur_radius(&window, radius);
+    if let Some(window) = window.get_webview_window(window.label()) {
+        macos::set_background_blur_radius(&window, radius);
+    }
 }
 
 #[tauri::command]
 fn set_dock_badge(
-    #[allow(unused_variables)] window: tauri::WebviewWindow,
+    #[allow(unused_variables)] window: tauri::Window,
     #[allow(unused_variables)] count: u32,
 ) {
+    // Fork (L-218): a Browser page in the window stops it counting as a
+    // `WebviewWindow`, so take the plain window and look the pair up here.
     #[cfg(target_os = "macos")]
-    macos::set_window_badge(&window, count);
+    if let Some(window) = window.get_webview_window(window.label()) {
+        macos::set_window_badge(&window, count);
+    }
 }
 
 #[tauri::command]
 fn set_trackpad_zoom_enabled(
-    #[allow(unused_variables)] window: tauri::WebviewWindow,
+    #[allow(unused_variables)] window: tauri::Window,
     #[allow(unused_variables)] enabled: bool,
 ) {
+    // Fork (L-218): a Browser page in the window stops it counting as a
+    // `WebviewWindow`, so take the plain window and look the pair up here.
     #[cfg(target_os = "macos")]
-    trackpad_zoom::set_enabled(&window, enabled);
+    if let Some(window) = window.get_webview_window(window.label()) {
+        trackpad_zoom::set_enabled(&window, enabled);
+    }
 }
 
 // Async so the window is built off the main thread. Building it from a sync
@@ -395,7 +411,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 if let Some(window) = app.get_webview_window("main") {
-                    window::prepare_windows_window(&window);
+                    window::prepare_windows_window(window.as_ref());
                     webview_recovery::install(&window);
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -419,6 +435,8 @@ pub fn run() {
             browser_view::browser_set_visible,
             browser_view::browser_history,
             browser_view::browser_close,
+            browser_view::browser_context_element,
+            browser_view::browser_page_action,
             mobile_access::mobile_status,
             mobile_access::mobile_configure,
             mobile_access::mobile_invite,
@@ -853,7 +871,7 @@ pub fn run() {
             window::ensure_launch_window_visible(handle);
             #[cfg(target_os = "windows")]
             {
-                if let Some(window) = handle.get_webview_window("main") {
+                if let Some(window) = handle.get_window("main") {
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();

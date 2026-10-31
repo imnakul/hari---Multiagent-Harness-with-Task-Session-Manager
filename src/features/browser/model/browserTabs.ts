@@ -18,14 +18,13 @@ import {
   type PicksPayload,
 } from "./browserContext";
 import { isWebUrl, loadLastBrowserUrl } from "./browserRequest";
-
-export type SizePreset = "fit" | 375 | 768 | 1280;
-export const SIZE_PRESETS: { value: SizePreset; label: string }[] = [
-  { value: "fit", label: "Fit" },
-  { value: 375, label: "Phone · 375" },
-  { value: 768, label: "Tablet · 768" },
-  { value: 1280, label: "Laptop · 1280" },
-];
+import {
+  loadCustomSizes,
+  parseSize,
+  saveCustomSizes,
+  type PageSize,
+  type SizePreset,
+} from "./browserSizes";
 
 export type PickMode = "element" | "area";
 
@@ -36,8 +35,9 @@ export type BrowserTab = {
   loading: boolean;
   /** The user's zoom; the page also shrinks to fit a size preset. */
   zoom: number;
-  preset: SizePreset;
-  /** Shrink applied so a preset wider than the space still fits (≤ 1). */
+  /** A fixed page size (L-216), or null to fit the space. */
+  size: PageSize | null;
+  /** Shrink applied so a size larger than the space still fits (≤ 1). */
   fit: number;
   /** A native page exists for this tab. */
   opened: boolean;
@@ -61,6 +61,8 @@ export type BrowserStore = {
   panelOpen: boolean;
   panelWidth: number;
   downloads: BrowserDownload[];
+  /** Page sizes the user saved (L-216). */
+  customSizes: SizePreset[];
   /** A short message under the toolbar (attached, failed…). */
   notice: { key: number; text: string; tone: "info" | "error" } | null;
 };
@@ -81,7 +83,7 @@ function blankTab(id: number, url = ""): BrowserTab {
     title: "",
     loading: false,
     zoom: 1,
-    preset: "fit",
+    size: null,
     fit: 1,
     opened: false,
     pending: null,
@@ -96,7 +98,7 @@ function loadInitial(): BrowserStore {
   let activeId = 1;
   try {
     const saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "null") as {
-      tabs?: { id: number; url: string; title?: string; preset?: SizePreset }[];
+      tabs?: { id: number; url: string; title?: string; size?: unknown; preset?: unknown }[];
       active?: number;
     } | null;
     tabs = (saved?.tabs ?? [])
@@ -105,7 +107,7 @@ function loadInitial(): BrowserStore {
       .map((tab) => ({
         ...blankTab(tab.id, isWebUrl(tab.url) ? tab.url : ""),
         title: tab.title ?? "",
-        preset: SIZE_PRESETS.some((p) => p.value === tab.preset) ? tab.preset! : "fit",
+        size: parseSize(tab.size ?? tab.preset),
       }));
     activeId = saved?.active ?? tabs[0]?.id ?? 1;
   } catch {
@@ -125,7 +127,15 @@ function loadInitial(): BrowserStore {
   } catch {
     // keep defaults
   }
-  return { tabs, activeId, panelOpen, panelWidth, downloads: [], notice: null };
+  return {
+    tabs,
+    activeId,
+    panelOpen,
+    panelWidth,
+    downloads: [],
+    customSizes: loadCustomSizes(),
+    notice: null,
+  };
 }
 
 let state: BrowserStore = loadInitial();
@@ -136,7 +146,7 @@ function persist() {
     localStorage.setItem(
       TABS_KEY,
       JSON.stringify({
-        tabs: state.tabs.map(({ id, url, title, preset }) => ({ id, url, title, preset })),
+        tabs: state.tabs.map(({ id, url, title, size }) => ({ id, url, title, size })),
         active: state.activeId,
       }),
     );
@@ -265,8 +275,21 @@ export function closeAllPages() {
   });
 }
 
-export function setPreset(id: number, preset: SizePreset) {
-  updateTab(id, () => ({ preset }), true);
+export function setPageSize(id: number, size: PageSize | null) {
+  const next = size ? (size.height ? { width: size.width, height: size.height } : { width: size.width }) : null;
+  updateTab(id, () => ({ size: next }), true);
+}
+
+export function addCustomSize(preset: SizePreset) {
+  const customSizes = [...state.customSizes, preset];
+  saveCustomSizes(customSizes);
+  set({ customSizes });
+}
+
+export function removeCustomSize(id: string) {
+  const customSizes = state.customSizes.filter((preset) => preset.id !== id);
+  saveCustomSizes(customSizes);
+  set({ customSizes });
 }
 
 export function setFit(id: number, fit: number) {

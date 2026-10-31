@@ -39,7 +39,7 @@ use tauri::window::{Effect, EffectsBuilder};
 use tauri::LogicalSize;
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    WebviewWindowBuilder, Window,
 };
 use tauri_plugin_global_shortcut::{
     GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent, ShortcutState,
@@ -161,7 +161,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 /// the application on webview creation, so recheck native focus at execution
 /// time: the user may have switched apps since the frontend scheduled it.
 #[tauri::command]
-pub async fn quick_composer_prepare(app: AppHandle, window: WebviewWindow) -> Result<bool, String> {
+pub async fn quick_composer_prepare(app: AppHandle, window: Window) -> Result<bool, String> {
     if !crate::window::is_workspace_window(window.label()) {
         return Err("Only a workspace can prepare the composer.".into());
     }
@@ -323,6 +323,7 @@ pub async fn quick_composer_submit(
             // a second submission sees the first submission's mounting window.
             let target = target_or_create(launch_target(&handle), request.reveal, |reveal| {
                 crate::window::open_session_window(&handle, reveal)
+                    .map(|window| window.as_ref().window())
             })?;
             screenshots::persist(&handle, &mut request.attachments)?;
             let reveal = request.reveal;
@@ -533,7 +534,7 @@ fn encode_capture_png(width: usize, height: usize, rgba: &[u8]) -> Result<Vec<u8
 #[tauri::command]
 pub fn quick_composer_take(
     app: AppHandle,
-    window: WebviewWindow,
+    window: Window,
     state: State<'_, QuickComposerState>,
 ) -> Result<Option<delivery::Delivery>, String> {
     if !crate::window::is_workspace_window(window.label()) {
@@ -543,14 +544,12 @@ pub fn quick_composer_take(
         .pending
         .lock()
         .map_err(|err| err.to_string())?
-        .claim(window.label(), |label| {
-            app.get_webview_window(label).is_some()
-        }))
+        .claim(window.label(), |label| app.get_window(label).is_some()))
 }
 
 #[tauri::command]
 pub fn quick_composer_ack(
-    window: WebviewWindow,
+    window: Window,
     state: State<'_, QuickComposerState>,
     id: String,
 ) -> Result<(), String> {
@@ -578,7 +577,7 @@ fn target_or_create<T>(
 
 /// The window the user last looked at, else the first one. Hidden windows
 /// count: close-to-dock keeps them running.
-fn launch_target(app: &AppHandle) -> Option<WebviewWindow> {
+fn launch_target(app: &AppHandle) -> Option<Window> {
     let windows = workspace_windows(app);
     windows
         .iter()

@@ -22,6 +22,7 @@ import {
   X,
 } from "../../../shared/ui/icons";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
+import { SlidePanel } from "../../../shared/ui/SlidePanel";
 import { Toggle } from "../../../shared/ui/Toggle";
 import type { Block, Session } from "../model/session";
 import {
@@ -187,12 +188,39 @@ export function SessionPanelDock(props: DockProps): ReactNode {
     observer.observe(row);
     return () => observer.disconnect();
   }, [props.row]);
-  if (!view.open) return null;
   const folded = rowWidth > 0 && rowWidth - view.width < DOCK_MIN_CHAT;
-  if (!folded)
-    return <SessionPanel {...props} view={view} onClose={() => saveSessionPanelView({ open: false })} />;
-  if (!overlay)
-    return (
+  // Fork (L-219): the panel slides in and out, and stays mounted until it has
+  // slid out. Already open when the chat mounts: no slide.
+  const open = view.open && (!folded || overlay);
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
+  const settled = useRef(false);
+  useEffect(() => {
+    settled.current = true;
+  }, []);
+  const panel =
+    open || mounted ? (
+      <SlidePanel
+        open={open}
+        appear={settled.current}
+        className={folded ? "absolute inset-y-0 right-0 z-20" : ""}
+        onGone={() => setMounted(false)}
+      >
+        <SessionPanel
+          {...props}
+          view={
+            folded
+              ? { ...view, width: Math.min(view.width, Math.max(SESSION_PANEL_MIN_WIDTH, rowWidth - 16)) }
+              : view
+          }
+          onClose={folded ? () => setOverlay(false) : () => saveSessionPanelView({ open: false })}
+        />
+      </SlidePanel>
+    ) : null;
+  if (!view.open || !folded || overlay) return panel;
+  return (
+    <>
+      {panel}
       <button
         type="button"
         onClick={() => setOverlay(true)}
@@ -203,15 +231,7 @@ export function SessionPanelDock(props: DockProps): ReactNode {
         <GlassBackdrop />
         <PanelRight aria-hidden className="relative z-[1] size-4" strokeWidth={1.75} />
       </button>
-    );
-  return (
-    <div className="absolute inset-y-0 right-0 z-20 flex">
-      <SessionPanel
-        {...props}
-        view={{ ...view, width: Math.min(view.width, Math.max(SESSION_PANEL_MIN_WIDTH, rowWidth - 16)) }}
-        onClose={() => setOverlay(false)}
-      />
-    </div>
+    </>
   );
 }
 

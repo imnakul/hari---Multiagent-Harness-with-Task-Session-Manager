@@ -26,6 +26,22 @@ short entry in the Current changelog file.
 | `docs/notes/…` | Only when a spec or changelog entry links to a file there | Large research records and logs; never browse |
 | `docs/remote-access.md` | Remote host questions | Upstream's own file: never edit, so merges stay clean |
 
+## Tauri windows: never `WebviewWindow` for workspace windows (L-218)
+
+The Browser adds its pages as extra webviews inside the main window. From then on
+Tauri stops treating that window as a `WebviewWindow`: a command that takes one fails
+with "current webview is not a WebviewWindow" (every chat turn broke, and "Couldn't
+load reminders" appeared), and `get_webview_window` / `webview_windows()` skip it.
+
+- Commands that a workspace window can call take `tauri::Window` (or `Webview` when
+  they need the page). Lookups of workspace windows use `get_window` / `windows()`.
+- `WebviewWindow` stays only for the quick composer and its Git popup (their own
+  windows), for startup in `lib.rs`, and in macOS-only files (not converted: they are
+  not built on this fork).
+- Upstream adds and changes these freely. On every upstream merge, run
+  `npx vitest run src/platform/tauri/windowArgs.test.ts`; if it fails, convert the new
+  code, don't widen the allowlist unless the command is composer-only.
+
 ## Desktop UI verification from MonoCode
 
 Do not assign native desktop UI inspection or smoke tests to an agent running

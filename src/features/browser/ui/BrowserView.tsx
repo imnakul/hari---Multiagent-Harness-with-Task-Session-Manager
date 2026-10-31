@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   useCallback,
@@ -37,7 +38,9 @@ import { Popover } from "../../../shared/ui/Popover";
 import { deliverKeptAttachments } from "../../sessions/model/attachToChat";
 import { UI_SCALE_CHANGE_EVENT } from "../../settings/model/uiScale";
 import { shortUrl } from "../model/browserContext";
+import { menuPoint, type BrowserContextTarget } from "../model/browserMenu";
 import { addressFromInput, overlapsPage } from "../model/browserRequest";
+import { BUILT_IN_SIZES, fitScale, newCustomSize, sameSize, sizeLabel } from "../model/browserSizes";
 import {
   activeTab,
   applyZoom,
@@ -53,14 +56,16 @@ import {
   newTab,
   selectTab,
   setFit,
+  addCustomSize,
+  removeCustomSize,
+  setPageSize,
   setPicking,
-  setPreset,
   showNotice,
-  SIZE_PRESETS,
   takePending,
   useBrowserStore,
   type BrowserTab,
 } from "../model/browserTabs";
+import { BrowserContextMenu } from "./BrowserContextMenu";
 import { BrowserDevtools } from "./BrowserDevtools";
 
 const ICON_BUTTON =
@@ -100,6 +105,12 @@ function ToolButton({
 const MENU_ITEM =
   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-content/85 hover:bg-content/10 disabled:opacity-40";
 
+const SIZE_BUTTON =
+  "rounded-md px-2 py-1 text-left text-[12px] text-content/75 hover:bg-content/10 aria-pressed:bg-accent/15 aria-pressed:text-accent";
+
+const SIZE_INPUT =
+  "rounded-md border border-stroke bg-content/[0.04] px-2 py-1 text-[12px] text-content outline-none placeholder:text-content/35 focus:border-accent/60";
+
 /** Layers MonoCode draws outside the app root: menus, dialogs, toasts. */
 function coveringLayer(pageRect: DOMRect): boolean {
   const visit = (element: Element, depth: number): boolean => {
@@ -123,6 +134,15 @@ function coveringLayer(pageRect: DOMRect): boolean {
     if (visit(child, 0)) return true;
   }
   return false;
+}
+
+/** A quick picture of the visible page as a data URL, or null after ~300 ms. */
+async function capturePage(tab: number): Promise<string | null> {
+  const timeout = new Promise<null>((done) => window.setTimeout(() => done(null), 300));
+  const shot = invoke<string>("browser_screenshot", { tab, clip: null, quick: true })
+    .then((data) => `data:image/jpeg;base64,${data}`)
+    .catch(() => null);
+  return Promise.race([shot, timeout]);
 }
 
 function physicalBounds(rect: DOMRect) {
@@ -154,6 +174,8 @@ export function BrowserView({
   tabbed = false,
   besideRail = false,
   compactRail = false,
+  still = false,
+  onStill,
   onClose,
   onToggleSidebar,
 }: {
@@ -163,10 +185,15 @@ export function BrowserView({
   tabbed?: boolean;
   besideRail?: boolean;
   compactRail?: boolean;
+  /** The panel is sliding: show the page as a still picture (L-219). */
+  still?: boolean;
+  /** Called once the page is still (or within ~150 ms) after `still` turns on. */
+  onStill?: () => void;
   onClose: () => void;
   onToggleSidebar?: () => void;
 }) {
   const store = useBrowserStore();
+  const customSizes = store.customSizes;
   const tab = activeTab(store);
   const frame = useRef<HTMLDivElement>(null);
   const pageBox = useRef<HTMLDivElement>(null);
@@ -177,10 +204,15 @@ export function BrowserView({
   const [address, setAddress] = useState(tab.url);
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState<"more" | "shot" | null>(null);
+  // The New size form starts closed each time the More menu opens.
+  useEffect(() => {
+    if (menu !== "more") setSizeForm(null);
+  }, [menu]);
   const [devtools, setDevtools] = useState(false);
   const [servers, setServers] = useState<{ port: number; name: string }[]>([]);
   const [highlight, setHighlight] = useState(-1);
-  const [frameWidth, setFrameWidth] = useState(0);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const [sizeForm, setSizeForm] = useState<{ name: string; width: string; height: string; error?: string } | null>(null);
   const opening = useRef(new Set<number>());
 
   // The address bar follows the page unless the user is typing.
@@ -233,29 +265,110 @@ export function BrowserView({
     else addressRef.current?.focus();
   }, [active, tab.id, tab.pending, tab.opened, tab.url, go]);
 
-  // Keep the native view on the page area, and out of the way of
-  // MonoCode's own menus and dialogs, which it would otherwise paint over.
+  // Keep the native view on the page area. MonoCode's own menus, dialogs
+  // and toasts would sit under it, so while one overlaps the page, the page
+  // shows as a still picture and the native view hides (L-214).
   const shownId = tab.opened ? tab.id : null;
+  const [frozen, setFrozenState] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<
+    { target: BrowserContextTarget; x: number; y: number } | null
+  >(null);
+  const view = useRef({
+    shown: null as boolean | null,
+    /** Bumped to cancel a picture still being taken. */
+    capture: 0,
+    pending: false,
+    /** The user clicked the picture: live page even though covered. */
+    liveAnyway: false,
+    /** The right-click menu is open. */
+    hold: false,
+    /** The side panel is sliding (L-219). */
+    still,
+    frozen: null as string | null,
+    freeze: null as (() => Promise<void>) | null,
+    /** Hide the page now, dropping a picture still being taken. */
+    hide: null as (() => void) | null,
+    sync: null as (() => void) | null,
+  });
   useEffect(() => {
     if (!active || shownId == null) return;
+    const state = view.current;
+    state.shown = null;
+    state.pending = false;
+    state.liveAnyway = false;
     let last = "";
-    let shown: boolean | null = null;
+    let unfreeze = 0;
+    const setFrozen = (image: string | null) => {
+      state.frozen = image;
+      setFrozenState(image);
+    };
+    const showPage = (visible: boolean) => {
+      if (state.shown === visible) return;
+      state.shown = visible;
+      void invoke("browser_set_visible", { visible }).catch(() => {});
+    };
+    // Picture first, hide second, so the swap does not flash.
+    const freeze = async () => {
+      window.clearTimeout(unfreeze);
+      unfreeze = 0;
+      if (state.shown !== true) {
+        showPage(false);
+        return;
+      }
+      const token = ++state.capture;
+      state.pending = true;
+      const image = await capturePage(shownId);
+      if (token !== state.capture) return;
+      state.pending = false;
+      if (image) {
+        setFrozen(image);
+        await new Promise((done) => requestAnimationFrame(done));
+        if (token !== state.capture) return;
+      }
+      showPage(false);
+    };
+    state.freeze = freeze;
+    state.hide = () => {
+      state.capture += 1;
+      state.pending = false;
+      showPage(false);
+    };
     const sync = () => {
       const rect = bounds();
-      const visible = Boolean(rect) && !document.hidden && !coveringLayer(rect!);
-      if (visible && rect) {
+      const covered = rect ? coveringLayer(rect) : false;
+      if (!covered) state.liveAnyway = false;
+      const live =
+        Boolean(rect) &&
+        !document.hidden &&
+        !state.hold &&
+        !state.still &&
+        (!covered || state.liveAnyway);
+      if (live && rect) {
         const next = physicalBounds(rect);
         const key = `${next.x},${next.y},${next.width},${next.height}`;
         if (key !== last) {
           last = key;
           void invoke("browser_set_bounds", { bounds: next }).catch(() => {});
         }
-      }
-      if (visible !== shown) {
-        shown = visible;
-        void invoke("browser_set_visible", { visible }).catch(() => {});
+        if (state.pending) {
+          state.capture += 1;
+          state.pending = false;
+        }
+        showPage(true);
+        // Drop the picture once the live page has painted over it.
+        if (state.frozen && !unfreeze) {
+          unfreeze = window.setTimeout(() => {
+            unfreeze = 0;
+            setFrozen(null);
+          }, 80);
+        }
+      } else if (rect && !document.hidden && state.shown === true) {
+        if (!state.pending) void freeze();
+      } else if (!state.pending) {
+        showPage(false);
       }
     };
+    state.sync = sync;
     sync();
     const observer = new ResizeObserver(sync);
     if (pageBox.current) observer.observe(pageBox.current);
@@ -270,25 +383,93 @@ export function BrowserView({
       window.removeEventListener(UI_SCALE_CHANGE_EVENT, sync);
       document.removeEventListener("visibilitychange", sync);
       window.clearInterval(timer);
+      window.clearTimeout(unfreeze);
+      state.capture += 1;
+      state.pending = false;
+      state.freeze = null;
+      state.hide = null;
+      state.sync = null;
+      setFrozen(null);
       void invoke("browser_set_visible", { visible: false }).catch(() => {});
     };
   }, [active, shownId, bounds]);
+
+  // The side panel sliding in or out: the page waits as a picture, since the
+  // native view cannot follow the slide frame by frame (L-219). A slow picture
+  // gives way after ~150 ms so the slide never waits long.
+  const onStillRef = useRef(onStill);
+  onStillRef.current = onStill;
+  useEffect(() => {
+    const state = view.current;
+    state.still = still;
+    if (!still) {
+      state.sync?.();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      onStillRef.current?.();
+    };
+    const cap = window.setTimeout(() => {
+      state.hide?.();
+      finish();
+    }, 150);
+    void (state.freeze?.() ?? Promise.resolve()).then(finish);
+    return () => window.clearTimeout(cap);
+  }, [still]);
+
+  // Right-click on the page: freeze it, then open MonoCode's menu where the
+  // click was (L-215).
+  useEffect(() => {
+    if (!active || shownId == null) return;
+    let alive = true;
+    const unlisten = listen<BrowserContextTarget>("browser://context-menu", (event) => {
+      const target = event.payload;
+      const box = pageBox.current?.getBoundingClientRect();
+      if (target.tab !== shownId || !box) return;
+      const state = view.current;
+      state.hold = true;
+      void (state.freeze?.() ?? Promise.resolve()).then(() => {
+        if (!alive) return;
+        setContextMenu({ target, ...menuPoint(target, box, window.devicePixelRatio || 1) });
+      });
+    });
+    return () => {
+      alive = false;
+      view.current.hold = false;
+      setContextMenu(null);
+      void unlisten.then((stop) => stop());
+    };
+  }, [active, shownId]);
+
+  const closeContextMenu = useCallback(() => {
+    view.current.hold = false;
+    setContextMenu(null);
+  }, []);
 
   // The space the page can use, for size presets.
   useEffect(() => {
     const node = frame.current;
     if (!node) return;
-    const observer = new ResizeObserver(() => setFrameWidth(node.clientWidth));
+    const measure = () => setFrameSize({ width: node.clientWidth, height: node.clientHeight });
+    const observer = new ResizeObserver(measure);
     observer.observe(node);
-    setFrameWidth(node.clientWidth);
+    measure();
     return () => observer.disconnect();
   }, []);
 
-  // A preset wider than the space shrinks the page to fit, so a laptop
-  // layout still shows whole in a narrow panel.
-  const fit =
-    tab.preset === "fit" || frameWidth <= 0 ? 1 : Math.min(1, frameWidth / tab.preset);
-  const boxWidth = tab.preset === "fit" ? undefined : Math.min(tab.preset, frameWidth || tab.preset);
+  // A size larger than the space shrinks the page to fit (both sides), so a
+  // laptop layout still shows whole in a narrow panel.
+  const fit = fitScale(tab.size, frameSize);
+  const boxStyle = tab.size
+    ? {
+        flex: "none",
+        width: Math.floor(tab.size.width * fit),
+        height: tab.size.height ? Math.floor(tab.size.height * fit) : undefined,
+      }
+    : undefined;
   useEffect(() => {
     if (!active || Math.abs(tab.fit - fit) < 0.005) return;
     setFit(tab.id, fit);
@@ -601,13 +782,34 @@ export function BrowserView({
           </button>
         </p>
       ) : null}
-      <div ref={frame} className="relative flex min-h-0 min-w-0 flex-1 justify-center bg-content/[0.03]">
+      <div
+        ref={frame}
+        className={`relative flex min-h-0 min-w-0 flex-1 justify-center bg-content/[0.03] ${tab.size?.height ? "items-center" : ""}`}
+      >
         <div
           ref={pageBox}
-          className="relative h-full min-w-0 flex-1"
-          style={boxWidth ? { flex: "none", width: boxWidth } : undefined}
+          className={`relative min-w-0 flex-1 ${tab.size?.height ? "" : "h-full"}`}
+          style={boxStyle}
           title={tab.title || undefined}
         >
+          {frozen && tab.opened ? (
+            <button
+              type="button"
+              aria-label="Page (paused while a menu or message is open). Click to bring it back."
+              title="Click to bring the live page back"
+              onClick={() => {
+                view.current.liveAnyway = true;
+              }}
+              className="absolute inset-0 cursor-default"
+            >
+              <img
+                src={frozen}
+                alt=""
+                draggable={false}
+                className="block size-full select-none"
+              />
+            </button>
+          ) : null}
           {tab.opened ? null : (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
               <Globe aria-hidden className="size-6 text-content/30" />
@@ -652,6 +854,16 @@ export function BrowserView({
         </ul>
       ) : null}
       {devtools ? <BrowserDevtools tab={tab} onClose={() => setDevtools(false)} /> : null}
+
+      {contextMenu && contextMenu.target.tab === tab.id ? (
+        <BrowserContextMenu
+          target={contextMenu.target}
+          tab={tab}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={closeContextMenu}
+        />
+      ) : null}
 
       {editing && suggestions.length ? (
         <Popover
@@ -734,20 +946,117 @@ export function BrowserView({
               <ZoomIn aria-hidden className="size-3.5" />
             </ToolButton>
           </div>
-          <div className="px-2 pb-1 pt-1.5 text-[11px] text-content/45">Page width</div>
+          <div className="px-2 pb-1 pt-1.5 text-[11px] text-content/45">Page size</div>
           <div className="grid grid-cols-2 gap-1 px-1 pb-1">
-            {SIZE_PRESETS.map((preset) => (
+            <button
+              type="button"
+              aria-pressed={tab.size === null}
+              onClick={() => setPageSize(tab.id, null)}
+              className={SIZE_BUTTON}
+            >
+              Fit
+            </button>
+            {BUILT_IN_SIZES.map((preset) => (
               <button
-                key={preset.value}
+                key={preset.id}
                 type="button"
-                aria-pressed={tab.preset === preset.value}
-                onClick={() => setPreset(tab.id, preset.value)}
-                className="rounded-md px-2 py-1 text-left text-[12px] text-content/75 hover:bg-content/10 aria-pressed:bg-accent/15 aria-pressed:text-accent"
+                aria-pressed={sameSize(tab.size, preset)}
+                onClick={() => setPageSize(tab.id, { width: preset.width })}
+                className={SIZE_BUTTON}
               >
-                {preset.label}
+                {preset.name} <span className="tabular-nums text-content/40">{sizeLabel(preset)}</span>
               </button>
             ))}
           </div>
+          {customSizes.length ? (
+            <ul role="list" className="px-1 pb-1">
+              {customSizes.map((preset) => (
+                <li key={preset.id} className="group flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-pressed={sameSize(tab.size, preset)}
+                    onClick={() =>
+                      setPageSize(tab.id, preset.height ? { width: preset.width, height: preset.height } : { width: preset.width })
+                    }
+                    className={`${SIZE_BUTTON} flex min-w-0 flex-1 items-center gap-2`}
+                  >
+                    <span className="truncate">{preset.name}</span>
+                    <span className="ml-auto shrink-0 tabular-nums text-content/40">{sizeLabel(preset)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove size ${preset.name}`}
+                    onClick={() => removeCustomSize(preset.id)}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-content/40 opacity-0 transition-opacity duration-100 hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <X aria-hidden className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {sizeForm ? (
+            <form
+              className="flex flex-col gap-1 px-2 pb-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const made = newCustomSize(customSizes, sizeForm);
+                if ("error" in made) {
+                  setSizeForm({ ...sizeForm, error: made.error });
+                  return;
+                }
+                addCustomSize(made.preset);
+                setPageSize(tab.id, made.preset.height ? { width: made.preset.width, height: made.preset.height } : { width: made.preset.width });
+                setSizeForm(null);
+              }}
+            >
+              <input
+                autoFocus
+                aria-label="Size name"
+                placeholder="Name (optional)"
+                value={sizeForm.name}
+                maxLength={40}
+                onChange={(event) => setSizeForm({ ...sizeForm, name: event.target.value, error: undefined })}
+                className={SIZE_INPUT}
+              />
+              <div className="flex items-center gap-1">
+                <input
+                  aria-label="Width"
+                  placeholder="Width"
+                  inputMode="numeric"
+                  value={sizeForm.width}
+                  onChange={(event) => setSizeForm({ ...sizeForm, width: event.target.value, error: undefined })}
+                  className={`${SIZE_INPUT} w-0 flex-1 tabular-nums`}
+                />
+                <span aria-hidden className="text-[12px] text-content/40">×</span>
+                <input
+                  aria-label="Height (optional)"
+                  placeholder="Height"
+                  inputMode="numeric"
+                  value={sizeForm.height}
+                  onChange={(event) => setSizeForm({ ...sizeForm, height: event.target.value, error: undefined })}
+                  className={`${SIZE_INPUT} w-0 flex-1 tabular-nums`}
+                />
+                <button type="submit" className="rounded-md bg-accent/15 px-2 py-1 text-[12px] text-accent hover:bg-accent/25">
+                  Add
+                </button>
+              </div>
+              {sizeForm.error ? (
+                <p role="alert" className="text-[11px] text-red-400">
+                  {sizeForm.error}
+                </p>
+              ) : null}
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSizeForm({ name: "", width: "", height: "" })}
+              className="mx-1 mb-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] text-content/60 hover:bg-content/10 hover:text-content"
+            >
+              <Plus aria-hidden className="size-3" />
+              New size…
+            </button>
+          )}
           <div className="my-1 h-px bg-stroke" />
           <button type="button" role="menuitem" className={MENU_ITEM} disabled={!tab.opened} onClick={() => { setMenu(null); history("hardReload"); }}>
             <RotateCcw aria-hidden className="size-3.5 text-content/50" />

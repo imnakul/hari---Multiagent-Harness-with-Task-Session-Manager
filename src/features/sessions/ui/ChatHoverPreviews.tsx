@@ -347,6 +347,58 @@ export function WebLinkChipLabel({
   );
 }
 
+/**
+ * Fork (L-217): with Link previews set to Always, a web link alone on its line
+ * shows as a page card in place: site, title, description and image. It loads
+ * once it nears the screen, keeps one size while loading so the reply does not
+ * jump, and falls back to the chip when the page has no preview.
+ */
+export function WebLinkCardLink({
+  url,
+  label,
+}: {
+  url: string;
+  /** The link's own words; null for a bare URL. */
+  label: string | null;
+}) {
+  const [ref, near] = useNearViewport<HTMLSpanElement>();
+  const state = useRichLinkPreview(url, near);
+  if (state.status === "unavailable") {
+    return (
+      <WebLinkChipLabel url={url} bare={label === null}>
+        {label}
+      </WebLinkChipLabel>
+    );
+  }
+  const metadata = state.status === "ready" ? state.metadata : null;
+  const title = metadata?.title?.trim() || label || hostOf(url);
+  const description = metadata?.description?.trim();
+  return (
+    <span
+      ref={ref}
+      data-link-card={url}
+      className="my-1 flex h-[5.5rem] w-[26rem] max-w-full overflow-hidden rounded-lg border border-stroke bg-content/[0.03] text-content transition-colors duration-100 ease-out hover:bg-content/[0.06]"
+    >
+      <span className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-2">
+        <SiteLine url={url} metadata={metadata} />
+        {state.status === "loading" ? (
+          <TextSkeleton />
+        ) : (
+          <>
+            <span className="truncate text-[13px] font-semibold leading-snug">{title}</span>
+            {description ? (
+              <span className="line-clamp-2 text-xs leading-snug text-content/60">{description}</span>
+            ) : null}
+          </>
+        )}
+      </span>
+      {metadata?.imageDataUrl ? (
+        <PreviewImage src={metadata.imageDataUrl} className="h-full w-[7.5rem] rounded-r-[7px]" />
+      ) : null}
+    </span>
+  );
+}
+
 type ImageState =
   | { status: "loading" }
   | { status: "ready"; url: string }

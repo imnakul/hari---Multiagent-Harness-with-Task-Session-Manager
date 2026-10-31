@@ -52,6 +52,12 @@ even if every test is green — tests cover most, not all:
 10. **Windows platform rules** — everything behind `#[cfg(windows)]`, no spawned
     consoles, job objects + tree-kill, PATH/PATHEXT/registry discovery, backend is
     authoritative for health.
+11. **Tauri commands take `Window`, not `WebviewWindow`** (L-218). Browser pages are
+    extra webviews in the main window, which then stops counting as a
+    `WebviewWindow`: such commands fail and `get_webview_window` / `webview_windows()`
+    skip it. Upstream's `WebviewWindow` arguments and lookups must be converted
+    (`get_window` / `windows()`). Locked by `src/platform/tauri/windowArgs.test.ts`;
+    rule in `AGENTS.md` ("Tauri windows").
 
 One-line definition (use verbatim): **upstream-compatible by construction** —
 platform-gated, regression-free on all targets, independently testable, documented.
@@ -136,6 +142,9 @@ Order of work, repeat until clean:
      columns are unioned (`is_draft`, `automation_id`), extend **every** SELECT that
      feeds the mapper and update schema-version asserts (`assert_eq!(version, …)`).
    - Rust: duplicate `#[tauri::command]` registrations in `lib.rs` — keep one.
+   - Rust: new or changed upstream commands taking `WebviewWindow`, or new
+     `get_webview_window` / `webview_windows()` lookups → convert to `Window` /
+     `get_window` / `windows()` (§0 item 11; `windowArgs.test.ts` fails until done).
    - TS: duplicate keys in `Record<…>` maps and arrays (`HARNESSES`, `HARNESS_TITLE`),
      `export function` defined twice (`resolveAntigravityBinary`), `useCallback`
      missing its `}, []);` before the next block.

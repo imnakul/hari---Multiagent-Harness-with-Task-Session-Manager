@@ -70,6 +70,7 @@ import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
   ImagePathHoverPreview,
+  WebLinkCardLink,
   WebLinkChipLabel,
   WebLinkHoverPreview,
 } from "./ChatHoverPreviews";
@@ -80,6 +81,7 @@ import {
   rehypeRestoreImageSources,
 } from "./documentImageSources";
 import { rehypeHardBreaks } from "./hardBreaks";
+import { rehypeSoleLinks } from "./soleLinks";
 import {
   pacedRevealPreferred,
   rehypeWordFade,
@@ -325,8 +327,9 @@ function MarkdownLink({
   onClick,
   onContextMenu,
   dir,
+  "data-link-card": soleLink,
   ...props
-}: MarkdownLinkProps) {
+}: MarkdownLinkProps & { "data-link-card"?: unknown }) {
   const allowRemoteMedia = useContext(RemoteMediaContext);
   const { cwd, onOpenFile, onFileContextMenu } = useContext(FileOpenContext);
   const file = href ? resolveWorkspaceFileReference(href, cwd) : undefined;
@@ -339,10 +342,16 @@ function MarkdownLink({
 
   const webHref =
     !file && href && /^https?:\/\//i.test(href) ? href : undefined;
+  // Always mode: a link alone on its line shows as a page card (L-217).
+  const card = chatLinks.chips && !!webHref && soleLink !== undefined;
   const link = (
     <a
       href={href}
-      className={`chat-link hover:underline ${className ?? ""}`}
+      className={
+        card
+          ? `block w-fit max-w-full rounded-lg no-underline focus-visible:outline-2 focus-visible:outline-accent ${className ?? ""}`
+          : `chat-link hover:underline ${className ?? ""}`
+      }
       {...props}
       dir={dir ?? "auto"}
       onClick={(event) => {
@@ -366,7 +375,9 @@ function MarkdownLink({
         onFileContextMenu(event, file.path, file.navigation);
       }}
     >
-      {chatLinks.chips && webHref ? (
+      {card && webHref ? (
+        <WebLinkCardLink url={webHref} label={isBareLink(label, webHref) ? null : label} />
+      ) : chatLinks.chips && webHref ? (
         <WebLinkChipLabel url={webHref} bare={isBareLink(label, webHref)}>
           {children}
         </WebLinkChipLabel>
@@ -386,7 +397,7 @@ function MarkdownLink({
     );
   }
   // Chats only: a page card for web links, fetched on hover (L-119 setting).
-  if (chatLinks.hover && webHref)
+  if (chatLinks.hover && webHref && !card)
     return <WebLinkHoverPreview url={webHref}>{link}</WebLinkHoverPreview>;
   return link;
 }
@@ -1007,9 +1018,12 @@ export const AgentMarkdown = memo(function AgentMarkdown({
         : MARKDOWN_REHYPE_PLUGINS;
   // Hard breaks go last, so nothing after them undoes them, and after the word
   // fade, whose word spans would otherwise hide the newlines from them.
+  // Sole links are marked after sanitizing, which would drop the mark (L-217).
   const rehypePlugins = useMemo(
     () =>
-      hardBreaks ? [...baseRehypePlugins, rehypeHardBreaks] : baseRehypePlugins,
+      hardBreaks
+        ? [...baseRehypePlugins, rehypeSoleLinks, rehypeHardBreaks]
+        : [...baseRehypePlugins, rehypeSoleLinks],
     [baseRehypePlugins, hardBreaks],
   );
 

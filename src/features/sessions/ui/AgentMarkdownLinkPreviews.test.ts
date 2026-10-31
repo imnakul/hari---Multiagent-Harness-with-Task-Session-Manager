@@ -72,6 +72,39 @@ describe("AgentMarkdown link previews", () => {
   });
 });
 
+describe("AgentMarkdown link cards (L-217)", () => {
+  afterEach(() => saveLinkPreviewMode("hover"));
+
+  const lines = [
+    "See this:",
+    "",
+    "https://solo.example.com/post",
+    "",
+    "- [Docs](https://docs.example.com/start)",
+    "- Read https://inline.example.com/a for more",
+    "",
+    "Mixed https://mixed.example.com/x text.",
+  ].join("\n");
+
+  function cards(markup: string): string[] {
+    return [...markup.matchAll(/data-link-card="([^"]+)"/g)].map((m) => m[1]!);
+  }
+
+  it("shows a link alone in its paragraph or list item as a card when always on", () => {
+    saveLinkPreviewMode("always");
+    const markup = renderToStaticMarkup(createElement(AgentMarkdown, { text: lines, localMedia: true }));
+    expect(cards(markup)).toEqual(["https://solo.example.com/post", "https://docs.example.com/start"]);
+    // Links inside prose stay chips.
+    expect(chipUrls(markup)).toEqual(["https://inline.example.com/a", "https://mixed.example.com/x"]);
+  });
+
+  it("shows no cards in hover mode", () => {
+    const markup = renderToStaticMarkup(createElement(AgentMarkdown, { text: lines, localMedia: true }));
+    expect(cards(markup)).toEqual([]);
+    expect(markup).not.toContain("data-link-card");
+  });
+});
+
 describe("isBareLink", () => {
   it("matches a link whose text is its own address", () => {
     expect(isBareLink("https://example.com/blog", "https://example.com/blog")).toBe(true);

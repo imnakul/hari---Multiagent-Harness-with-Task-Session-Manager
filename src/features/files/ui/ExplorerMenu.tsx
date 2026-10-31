@@ -48,6 +48,11 @@ type Props = (
   onClose: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  /**
+   * Fork (L-215): pointer hover is drawn by the Popover's gliding marker
+   * instead of each item's own background; the keyboard highlight stays.
+   */
+  glide?: boolean;
 };
 
 const MENU_WIDTH = 228;
@@ -82,6 +87,7 @@ export function ExplorerMenu({
   onClose,
   onMouseEnter,
   onMouseLeave,
+  glide = false,
 }: Props) {
   const menuId = useId();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -93,6 +99,8 @@ export function ExplorerMenu({
     anchor: HTMLButtonElement;
   } | null>(null);
   const [submenuActive, setSubmenuActive] = useState(-1);
+  // Whether the pointer (not the keyboard) last moved the highlight.
+  const [pointer, setPointer] = useState(false);
   const submenuItem = submenu ? items[submenu.index] : undefined;
   const submenuItems =
     submenuItem?.kind === "item" ? submenuItem.submenu : undefined;
@@ -155,6 +163,7 @@ export function ExplorerMenu({
   };
 
   const onMenuKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key.startsWith("Arrow")) setPointer(false);
     if (e.key === "ArrowLeft" && !submenuItems && onBack) {
       e.preventDefault();
       e.stopPropagation();
@@ -218,6 +227,9 @@ export function ExplorerMenu({
     inSubmenu = false,
   ) => {
     const highlighted = index === (inSubmenu ? submenuActive : active);
+    // With glide, the marker shows pointer hover; items paint only the
+    // keyboard highlight.
+    const painted = highlighted && !(glide && pointer);
     const hasSubmenu = !!item.submenu?.length;
     return (
       <button
@@ -238,9 +250,11 @@ export function ExplorerMenu({
             : undefined
         }
         disabled={item.disabled}
+        data-shared-hover-tone={item.danger ? "danger" : undefined}
         onMouseDown={(e) => e.preventDefault()}
         onMouseEnter={(e) => {
           cancelClose();
+          setPointer(true);
           if (inSubmenu) {
             setSubmenuActive(index);
             submenuRef.current?.focus();
@@ -269,12 +283,16 @@ export function ExplorerMenu({
           item.disabled
             ? "text-content/30"
             : item.danger
-              ? highlighted
+              ? painted
                 ? "bg-red-500/20 text-red-300"
-                : "text-red-300/90 hover:bg-red-500/15"
-              : highlighted
+                : glide
+                  ? "text-red-300/90"
+                  : "text-red-300/90 hover:bg-red-500/15"
+              : painted
                 ? "bg-selection text-content"
-                : "text-content hover:bg-content/5"
+                : glide
+                  ? "text-content"
+                  : "text-content hover:bg-content/5"
         }`}
       >
         {item.icon ? (

@@ -27,8 +27,12 @@ const PICK_EVENT: &str = "browser://pick";
 const DEVTOOLS_EVENT: &str = "browser://devtools";
 const DOWNLOAD_EVENT: &str = "browser://download";
 const NEW_TAB_EVENT: &str = "browser://new-tab";
+const CONTEXT_MENU_EVENT: &str = "browser://context-menu";
 const BRIDGE: &str = "__monocodeBridge";
 const PICKER_JS: &str = include_str!("browser_picker.js");
+/// Remembers what was right-clicked, so the menu's element items (L-215)
+/// can describe it afterwards.
+const CONTEXT_TARGET_JS: &str = "addEventListener('contextmenu',function(e){window.__monocodeContextTarget=(e.composedPath&&e.composedPath()[0])||e.target},true);";
 /// A page can call the bridge too; anything bigger than real picks is dropped.
 const MAX_BRIDGE_BYTES: usize = 128 * 1024;
 
@@ -157,6 +161,7 @@ fn create<R: Runtime>(
         .background_color(tauri::window::Color(255, 255, 255, 255))
         .data_directory(profile)
         .zoom_hotkeys_enabled(true)
+        .initialization_script(CONTEXT_TARGET_JS)
         .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about" | "data" | "blob"))
         .on_page_load(move |webview, payload| {
             let loading = matches!(payload.event(), PageLoadEvent::Started);
@@ -397,17 +402,24 @@ pub async fn browser_devtools(app: AppHandle, tab: u32) -> Result<(), String> {
     }
 }
 
-/// A PNG of the visible page, or of `clip`, as base64.
+/// A PNG of the visible page, or of `clip`, as base64. `quick` returns a fast
+/// JPEG of the visible page instead (the frozen picture under overlays, L-214).
 #[tauri::command]
 pub async fn browser_screenshot(
     app: AppHandle,
     tab: u32,
     clip: Option<BrowserClip>,
+    quick: Option<bool>,
 ) -> Result<String, String> {
     let webview = tab_view(&app, tab)?;
     #[cfg(windows)]
     {
         let params = match clip {
+            _ if quick == Some(true) => json!({
+                "format": "jpeg",
+                "quality": 80,
+                "optimizeForSpeed": true,
+            }),
             Some(c) if c.width >= 1.0 && c.height >= 1.0 => json!({
                 "format": "png",
                 "clip": { "x": c.x, "y": c.y, "width": c.width, "height": c.height, "scale": 1 },
@@ -422,8 +434,65 @@ pub async fn browser_screenshot(
     }
     #[cfg(not(windows))]
     {
-        let _ = (webview, clip);
+        let _ = (webview, clip, quick);
         Err("Screenshots are available on Windows for now".into())
+    }
+}
+
+/// The element the user last right-clicked (L-215): the picker's description
+/// plus its HTML, or null when the page has none.
+#[tauri::command]
+pub async fn browser_context_element(app: AppHandle, tab: u32) -> Result<Value, String> {
+    let webview = tab_view(&app, tab)?;
+    #[cfg(windows)]
+    {
+        let expression = format!(
+            "{PICKER_JS};window.__monocodePicker && window.__monocodePicker.describeContext()"
+        );
+        let result = native::cdp(
+            &webview,
+            "Runtime.evaluate",
+            json!({ "expression": expression, "returnByValue": true }),
+        )
+        .await?;
+        Ok(result["result"]["value"].clone())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = webview;
+        Err("Element details are available on Windows for now".into())
+    }
+}
+
+/// Right-click menu actions that need the page itself: "print", or
+/// "clearSiteData" (all storage for the page's origin, then reload).
+#[tauri::command]
+pub async fn browser_page_action(app: AppHandle, tab: u32, action: String) -> Result<(), String> {
+    let webview = tab_view(&app, tab)?;
+    match action.as_str() {
+        "print" => webview.eval("window.print()").map_err(|e| e.to_string()),
+        "clearSiteData" => {
+            let url = webview.url().map_err(|e| e.to_string())?;
+            let origin = url.origin();
+            if !origin.is_tuple() {
+                return Err("This page has no site data to clear".into());
+            }
+            #[cfg(windows)]
+            {
+                native::cdp(
+                    &webview,
+                    "Storage.clearDataForOrigin",
+                    json!({ "origin": origin.ascii_serialization(), "storageTypes": "all" }),
+                )
+                .await?;
+                webview.reload().map_err(|e| e.to_string())
+            }
+            #[cfg(not(windows))]
+            {
+                Err("Clearing site data is available on Windows for now".into())
+            }
+        }
+        other => Err(format!("Unknown page action: {other}")),
     }
 }
 
@@ -655,19 +724,116 @@ pub(crate) fn devtools_entry(event: &str, p: &Value) -> Option<Value> {
 
 #[cfg(windows)]
 mod native {
-    use super::{emit_state, on_cdp_event, BrowserState, BrowserTabs, BRIDGE};
-    use serde_json::Value;
+    use super::{
+        emit_state, on_cdp_event, BrowserState, BrowserTabs, BRIDGE, CONTEXT_MENU_EVENT,
+        HOST_WINDOW,
+    };
+    use serde_json::{json, Value};
     use std::time::Duration;
-    use tauri::{Manager, Runtime, Webview};
+    use tauri::{Emitter, Manager, Runtime, Webview};
     use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2, ICoreWebView2Settings4, ICoreWebView2_3,
+        ICoreWebView2, ICoreWebView2ContextMenuTarget, ICoreWebView2Settings4,
+        ICoreWebView2_11, ICoreWebView2_3, COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND,
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_AUDIO, COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_IMAGE,
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_SELECTED_TEXT,
+        COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_VIDEO,
     };
     use webview2_com::{
         take_pwstr, CallDevToolsProtocolMethodCompletedHandler,
-        DevToolsProtocolEventReceivedEventHandler, TrySuspendCompletedHandler,
-        ZoomFactorChangedEventHandler,
+        ContextMenuRequestedEventHandler, DevToolsProtocolEventReceivedEventHandler,
+        TrySuspendCompletedHandler, ZoomFactorChangedEventHandler,
     };
-    use windows_core::{Interface, HSTRING, PWSTR};
+    use windows_core::{Interface, BOOL, HSTRING, PWSTR};
+
+    /// Same layout as Win32 `POINT` (the `windows` crate is not a direct dependency).
+    #[repr(C)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    unsafe fn target_text(
+        read: impl FnOnce(*mut PWSTR) -> windows_core::Result<()>,
+        cap: usize,
+    ) -> String {
+        let mut value = PWSTR::null();
+        if read(&mut value).is_err() || value.is_null() {
+            return String::new();
+        }
+        take_pwstr(value).chars().take(cap).collect()
+    }
+
+    unsafe fn target_flag(read: impl FnOnce(*mut BOOL) -> windows_core::Result<()>) -> bool {
+        let mut value = BOOL::default();
+        read(&mut value).is_ok() && value.as_bool()
+    }
+
+    /// Replaces Edge's right-click menu with MonoCode's (L-215), except in text
+    /// boxes, where Edge's menu keeps spelling and paste.
+    unsafe fn hook_context_menu<R: Runtime>(
+        core: &ICoreWebView2,
+        app: tauri::AppHandle<R>,
+        tab: u32,
+    ) -> windows_core::Result<()> {
+        let core = core.cast::<ICoreWebView2_11>()?;
+        let handler = ContextMenuRequestedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let target: ICoreWebView2ContextMenuTarget = args.ContextMenuTarget()?;
+            if target_flag(|v| target.IsEditable(v)) {
+                return Ok(());
+            }
+            let mut kind = COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND::default();
+            let _ = target.Kind(&mut kind);
+            let kind = match kind {
+                COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_IMAGE => "image",
+                COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_SELECTED_TEXT => "selection",
+                COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_AUDIO => "audio",
+                COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_VIDEO => "video",
+                _ => "page",
+            };
+            let mut at = Point { x: 0, y: 0 };
+            let _ = args.Location(&mut at as *mut Point as *mut _);
+            let link = if target_flag(|v| target.HasLinkUri(v)) {
+                target_text(|v| target.LinkUri(v), 4000)
+            } else {
+                String::new()
+            };
+            let link_text = if link.is_empty() {
+                String::new()
+            } else {
+                target_text(|v| target.LinkText(v), 300)
+            };
+            let source = if target_flag(|v| target.HasSourceUri(v)) {
+                target_text(|v| target.SourceUri(v), 4000)
+            } else {
+                String::new()
+            };
+            let selection = if target_flag(|v| target.HasSelection(v)) {
+                target_text(|v| target.SelectionText(v), 4000)
+            } else {
+                String::new()
+            };
+            args.SetHandled(true)?;
+            let _ = app.emit_to(
+                HOST_WINDOW,
+                CONTEXT_MENU_EVENT,
+                json!({
+                    "tab": tab,
+                    "x": at.x,
+                    "y": at.y,
+                    "kind": kind,
+                    "pageUrl": target_text(|v| target.PageUri(v), 4000),
+                    "linkUrl": link,
+                    "linkText": link_text,
+                    "sourceUrl": source,
+                    "selection": selection,
+                }),
+            );
+            Ok(())
+        }));
+        let mut token = 0i64;
+        core.add_ContextMenuRequested(&handler, &mut token)
+    }
 
     const EVENTS: [&str; 8] = [
         "Runtime.bindingCalled",
@@ -751,6 +917,7 @@ mod native {
                 }));
                 let mut token = 0i64;
                 let _ = controller.add_ZoomFactorChanged(&handler, &mut token);
+                let _ = hook_context_menu(&core, app.clone(), tab);
                 fire(&core, "Runtime.enable", "{}");
                 fire(&core, "Log.enable", "{}");
                 fire(&core, "Network.enable", r#"{"maxPostDataSize":8192}"#);

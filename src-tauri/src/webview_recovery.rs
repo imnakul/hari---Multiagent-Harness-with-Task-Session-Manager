@@ -24,7 +24,7 @@ use tauri::{PhysicalPosition, PhysicalSize};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{State, WebviewWindow};
+use tauri::{State, Window};
 
 const MAX_RELOADS: usize = 3;
 const RELOAD_PERIOD: Duration = Duration::from_secs(120);
@@ -147,7 +147,7 @@ impl WebviewRecovery {
 /// True once after this window's page was reloaded by crash recovery, so the
 /// page can tell the user why it just restarted.
 #[tauri::command]
-pub fn take_webview_recovery(window: WebviewWindow, state: State<'_, WebviewRecovery>) -> bool {
+pub fn take_webview_recovery(window: Window, state: State<'_, WebviewRecovery>) -> bool {
     state.take_recovered(window.label())
 }
 
@@ -211,14 +211,14 @@ mod platform {
         let now = Instant::now();
         let response = decide(kind, state.recent_reloads(label, now));
         let action = match response {
-            Response::Reload => match app.get_webview_window(label).map(|w| w.reload()) {
+            Response::Reload => match app.get_webview(label).map(|w| w.reload()) {
                 Some(Ok(())) => {
                     state.note_reload(label, now);
                     "reloaded the page"
                 }
                 Some(Err(_)) | None => "reload failed",
             },
-            Response::Rebuild => match app.get_webview_window(label) {
+            Response::Rebuild => match app.get_window(label) {
                 Some(window) => {
                     let restore = Restore {
                         visible: window.is_visible().unwrap_or(true),

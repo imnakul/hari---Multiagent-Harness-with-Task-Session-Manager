@@ -1,4 +1,19 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 10:59 IST — Chats work with a Browser page open; panels slide (L-218, L-219)
+- Type: fix + feature
+- What: With a Browser tab open, chats no longer fail with "current webview is not a WebviewWindow" and "Couldn't load reminders" no longer appears. The Browser panel and the Session overview slide in and out while the chat narrows smoothly; the Browser page shows as a still picture during the slide.
+- Why: User found every chat in every session broke while one Browser tab was open, and the panels jumped open and shut (locked 1-A: switch to `tauri::Window`; 3-A: chat narrows with the panel). Rule recorded in `AGENTS.md` and the intake runbook so upstream merges keep it.
+- Files: `src-tauri/src/` (control.rs, mobile_access.rs, reminders.rs, webview_recovery.rs, window.rs, lib.rs, quick_composer.rs), `src/platform/tauri/windowArgs.test.ts` (new), `src/shared/ui/SlidePanel.tsx` (new), `src/features/browser/ui/` (BrowserSidePanel.tsx, BrowserView.tsx), `src/features/sessions/ui/SessionPanel.tsx`, `src/app/App.tsx`, `AGENTS.md`, `docs/NOTES.md`, `docs/specs/browser-context-menu-freeze.md`, `docs/specs/SPECS.md`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc clean; cargo check clean; vitest (sessions, browser, shared, platform, app) 282 files, 2838 tests passed; the new guard flags all 14 old `WebviewWindow` commands in control.rs, reminders.rs and window.rs. Desktop UI not checked by the agent.
+
+## 2026-10-31 10:21 IST — Browser freeze, right-click menu, custom sizes, link cards (L-214 to L-217)
+- Type: feature + fix
+- What: A toast or menu over the Browser freezes the page as a picture instead of blanking it. Right-clicking a Browser page opens MonoCode's menu with link, image, selection, page, tools and Developer items and a gliding hover. Custom page sizes (name, width, optional height) in More → Page size. With Link previews on Always, a link alone on its line shows as a page card in place.
+- Why: User saw the page vanish under the reminders toast and the right-click menu, asked for MonoCode's menu with development actions and a glide hover, custom viewport sizes, and cards for links in Always mode (locked 1A). Investigating the reminders toast found that Tauri stops treating the main window as a webview window once a Browser page is attached; recorded as an open decision in the spec, not fixed.
+- Files: `src-tauri/src/` (browser_view.rs, browser_picker.js, lib.rs), `src/features/browser/` (model/browserMenu.ts (new, +test), model/browserSizes.ts (new, +test), model/browserTabs.ts, ui/BrowserContextMenu.tsx (new), ui/BrowserView.tsx), `src/features/files/ui/ExplorerMenu.tsx`, `src/features/sessions/ui/` (soleLinks.ts (new), AgentMarkdown.tsx, ChatHoverPreviews.tsx, AgentMarkdownLinkPreviews.test.ts), `docs/specs/browser-context-menu-freeze.md`, `docs/specs/SPECS.md`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc clean; cargo check clean; vitest (sessions, browser, files) 230 files, 2376 tests passed. Desktop UI not checked by the agent.
 ## 2026-10-31 09:22 IST — 0.16.0-local21 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local21: 0.16.0-local20 plus the Browser tab, link menu, whiteboard and chat upgrades (L-195 to L-206), the Browser side panel (L-207), Antigravity helpers through the CLI (L-208), Antigravity CLI attachments as saved paths (L-209), Mono account picker (L-210), OpenCode Free group in the model picker (L-211), smart link chips (L-212) and the grey-window rebuild (L-213).

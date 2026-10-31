@@ -415,5 +415,20 @@
     if (notify) send({ kind: "cancel" });
   }
 
-  window.__monocodePicker = { start, stop: () => stop(false) };
+  // L-215: the element under the last right-click (remembered by an
+  // initialization script), for the right-click menu's developer items.
+  function describeContext() {
+    let el = window.__monocodeContextTarget;
+    if (el && el.nodeType !== 1) el = el.parentElement;
+    if (!el || !el.isConnected) return null;
+    return {
+      url: location.href,
+      title: document.title,
+      viewport: { width: innerWidth, height: innerHeight },
+      item: describe(el),
+      html: String(el.outerHTML || "").slice(0, 20000),
+    };
+  }
+
+  window.__monocodePicker = { start, stop: () => stop(false), describeContext };
 })();
