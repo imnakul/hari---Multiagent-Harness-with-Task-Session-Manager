@@ -425,6 +425,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             browser_view::browser_open,
             browser_view::browser_select,
+            browser_view::browser_preload,
             browser_view::browser_zoom,
             browser_view::browser_devtools,
             browser_view::browser_screenshot,

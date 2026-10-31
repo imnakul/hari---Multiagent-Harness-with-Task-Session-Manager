@@ -57,9 +57,11 @@ import {
   type WhiteboardIndex,
 } from "../model/sheets";
 import {
+  loadSheetChat,
   loadSheetScene,
   loadWhiteboardIndex,
   revealWhiteboardDir,
+  saveSheetChat,
   saveSheetScene,
   saveWhiteboardIndex,
   trashSheetFiles,
@@ -87,6 +89,14 @@ import { iconSvg, svgDataUrl, type CatalogIcon } from "./iconCatalog";
 import { IconLibraryPicker } from "./IconLibraryPicker";
 import { RadialToolMenu, type WheelAction } from "./RadialToolMenu";
 import { WhiteboardChat } from "./WhiteboardChat";
+import {
+  forgetSheet,
+  publishChat,
+  publishedChat,
+  registerCanvas,
+  takePending,
+  withDrawnNote,
+} from "../model/whiteboardRuns";
 import { WhiteboardTopBar, type ExportKind } from "./WhiteboardTopBar";
 
 registerWhiteboardFonts(FONT_FAMILY as unknown as Record<string, number>);
@@ -404,6 +414,7 @@ export function WhiteboardView({
     );
     if (!confirmed) return;
     const id = sheet.id;
+    forgetSheet(id);
     window.clearTimeout(saveTimer.current);
     latest.current = null;
     blockedSaves.current.add(id);
@@ -717,6 +728,29 @@ export function WhiteboardView({
 
   const getScene = useCallback(() => api?.getSceneElements() ?? [], [api]);
 
+  // Fork (L-223): agent runs that finish while this sheet is closed leave
+  // their drawing changes waiting; draw them once its canvas is back, and
+  // let runs still going draw straight onto it.
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  useEffect(() => {
+    if (!api || !activeId) return;
+    const id = activeId;
+    const draw = (ops: WhiteboardOps) => (lockedRef.current ? "Not drawn: the sheet is locked" : applyOps(ops));
+    const waiting = takePending(id);
+    if (waiting) {
+      const note = draw(waiting.ops) ?? "Nothing to change";
+      void (async () => {
+        const chat = publishedChat(id) ?? (await loadSheetChat(id).catch(() => null));
+        if (!chat) return;
+        const next = withDrawnNote(chat, waiting.at, note);
+        publishChat(id, next);
+        await saveSheetChat(id, next).catch(() => undefined);
+      })();
+    }
+    return registerCanvas(id, draw);
+  }, [api, activeId, applyOps]);
+
   // Right-click on the canvas opens the tool wheel; Shift + right-click keeps
   // Excalidraw's own menu. Capture runs before Excalidraw's React handler.
   useEffect(() => {
@@ -879,7 +913,6 @@ export function WhiteboardView({
             locked={locked}
             cwd={cwd ?? dir!}
             getScene={getScene}
-            applyOps={applyOps}
             dock={dock}
             size={chatSize}
             onDock={changeDock}

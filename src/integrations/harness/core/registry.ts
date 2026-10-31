@@ -1,5 +1,6 @@
 import type { NativeContextBreakdown } from "../../../features/sessions/model/contextBreakdown";
 import type {
+  Attachment,
   Block,
   HarnessId,
   TaskListMeta,
@@ -48,6 +49,8 @@ export type HelperPromptInput = {
   /** e.g. `{ effort }` (L-192); providers ignore keys they do not use. */
   modelSettings?: Record<string, string>;
   outputSchema?: Record<string, unknown>;
+  /** Fork (L-221): images for the Whiteboard agent. Claude, Codex and OpenCode send them; others ignore them. */
+  attachments?: Attachment[];
 };
 
 /** One-shot, isolated text generation shared by titles and side questions. */

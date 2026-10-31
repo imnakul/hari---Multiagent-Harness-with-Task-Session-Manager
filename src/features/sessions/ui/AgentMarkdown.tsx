@@ -327,9 +327,10 @@ function MarkdownLink({
   onClick,
   onContextMenu,
   dir,
-  "data-link-card": soleLink,
+  "data-link-card": cardMark,
+  "data-card-below": cardBelow,
   ...props
-}: MarkdownLinkProps & { "data-link-card"?: unknown }) {
+}: MarkdownLinkProps & { "data-link-card"?: unknown; "data-card-below"?: unknown }) {
   const allowRemoteMedia = useContext(RemoteMediaContext);
   const { cwd, onOpenFile, onFileContextMenu } = useContext(FileOpenContext);
   const file = href ? resolveWorkspaceFileReference(href, cwd) : undefined;
@@ -342,8 +343,11 @@ function MarkdownLink({
 
   const webHref =
     !file && href && /^https?:\/\//i.test(href) ? href : undefined;
-  // Always mode: a link alone on its line shows as a page card (L-217).
-  const card = chatLinks.chips && !!webHref && soleLink !== undefined;
+  // Always mode: every web link's page card shows on its line (L-217,
+  // L-224). A copy made for under the line shows nothing outside it.
+  const below = cardMark === "below";
+  const card = chatLinks.chips && !!webHref && cardMark !== undefined;
+  if (below && !card) return null;
   const link = (
     <a
       href={href}
@@ -373,7 +377,11 @@ function MarkdownLink({
       }}
     >
       {card && webHref ? (
-        <WebLinkCardLink url={webHref} label={isBareLink(label, webHref) ? null : label} />
+        <WebLinkCardLink
+          url={webHref}
+          label={isBareLink(label, webHref) ? null : label}
+          chipWhenUnavailable={!below}
+        />
       ) : chatLinks.chips && webHref ? (
         <WebLinkChipLabel url={webHref} bare={isBareLink(label, webHref)}>
           {children}
@@ -394,7 +402,8 @@ function MarkdownLink({
     );
   }
   // Chats only: a page card for web links, fetched on hover (L-119 setting).
-  if (chatLinks.hover && webHref && !card)
+  const cardShownBelow = chatLinks.chips && cardBelow !== undefined;
+  if (chatLinks.hover && webHref && !card && !cardShownBelow)
     return <WebLinkHoverPreview url={webHref}>{link}</WebLinkHoverPreview>;
   return link;
 }

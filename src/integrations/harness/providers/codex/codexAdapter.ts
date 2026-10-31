@@ -59,6 +59,7 @@ export const codexAdapter: HarnessAdapter = {
     model,
     modelSettings,
     outputSchema,
+    attachments,
   }) =>
     runCodexTextPrompt({
       cwd,
@@ -69,6 +70,7 @@ export const codexAdapter: HarnessAdapter = {
       modelSettings,
       outputSchema,
       helperOnly: true,
+      ...(attachments?.length ? { attachments } : {}),
     }),
   runTextPrompt: runCodexTextPrompt,
   stopTextPrompt: stopCodexTextPrompt,

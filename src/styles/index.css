@@ -499,6 +499,43 @@ html:not(.is-mac) #root {
   }
 }
 
+/* Fork (L-222): while the Browser shows its page as a still picture (L-214),
+   menus and toasts sit over a bright web page that the light glass cannot
+   hold text against, so they turn nearly solid in the panel colour. The blur
+   setting still applies. */
+/* Fork (L-222): Browser device sizes sit in a thin glass rim: the menu tint
+   and blur, colours behind lifted a little, bright edges inside and out and a
+   soft shadow. Glass shows what is behind it (the wallpaper, when one is set). */
+.browser-device-rim {
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--color-content) var(--popover-surface-opacity),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(var(--popover-backdrop-blur)) saturate(1.4);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.16),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.28),
+    0 0 0 1px rgb(0 0 0 / 0.22),
+    0 14px 36px -10px rgb(0 0 0 / 0.5);
+}
+
+@supports (backdrop-filter: blur(0px)) {
+  .browser-device-rim {
+    backdrop-filter: blur(var(--popover-backdrop-blur)) saturate(1.4);
+  }
+}
+
+.browser-device-rim > * {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14);
+}
+
+html.browser-page-paused .popover-surface,
+html.browser-page-paused .approval-toast {
+  background: color-mix(in srgb, var(--color-background-base) 90%, transparent);
+}
+
 html.is-mac,
 html.has-glass,
 html.has-native-glass:not(.theme-light),

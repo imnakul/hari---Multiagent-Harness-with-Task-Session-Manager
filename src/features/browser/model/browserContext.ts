@@ -49,7 +49,18 @@ export type NetworkRow = {
   error?: string;
   size?: number;
   done: boolean;
+  /** Shown in the details only, never in a chat note (L-222). */
+  requestHeaders?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
 };
+
+/** Headers as sorted name/value pairs for the details view (L-222). */
+export function headerEntries(headers?: Record<string, string> | null): [string, string][] {
+  if (!headers) return [];
+  return Object.entries(headers)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
 
 /** Styles worth naming for a visual change; the box gives size already. */
 const STYLE_KEYS = [

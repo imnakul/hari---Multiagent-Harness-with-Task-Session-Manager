@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askWhiteboardAgent, whiteboardAgentTargets } from "./whiteboardHelper";
+import { askWhiteboardAgent, whiteboardAgentTargets, whiteboardSeesImages } from "./whiteboardHelper";
 
 const FENCE = "```";
 
@@ -53,6 +53,33 @@ describe("whiteboard agent helper", () => {
       },
     });
     expect(outcome).toMatchObject({ ok: false, cancelled: true });
+  });
+
+  it("sends images only to helpers that take pictures in the prompt (L-221)", () => {
+    expect(whiteboardSeesImages({ provider: "claude" })).toBe(true);
+    expect(whiteboardSeesImages({ provider: "claude" }, true)).toBe(false);
+    expect(whiteboardSeesImages({ provider: "codex" })).toBe(true);
+    expect(whiteboardSeesImages({ provider: "opencode" })).toBe(true);
+    expect(whiteboardSeesImages({ provider: "antigravity" } as never)).toBe(false);
+  });
+
+  it("refuses images for a helper that can't see them, without running it (L-221)", async () => {
+    let ran = false;
+    const outcome = await askWhiteboardAgent({
+      target: { provider: "claude" },
+      cwd: "C:/tmp",
+      prompt: "x",
+      interactive: true,
+      images: [{ id: "1", name: "shot.png", mimeType: "image/png", kind: "image", size: 3, data: "AAAA" }],
+      isAvailable: () => true,
+      run: async () => {
+        ran = true;
+        return "never";
+      },
+    });
+    expect(ran).toBe(false);
+    expect(outcome).toMatchObject({ ok: false, cancelled: false });
+    expect(!outcome.ok && outcome.message).toContain("can't see images");
   });
 
   it("lists the AI helper settings first, without repeats or unavailable providers", () => {

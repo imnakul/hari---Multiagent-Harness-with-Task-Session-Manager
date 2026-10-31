@@ -1,5 +1,5 @@
 import { modelsFor } from "../../../../features/sessions/model/models";
-import type { TurnIntent } from "../../../../features/sessions/model/session";
+import type { Attachment, TurnIntent } from "../../../../features/sessions/model/session";
 import {
   execChild,
   freeHarnessPort,
@@ -22,6 +22,7 @@ import {
   parseServerUrlFromOutput,
   stringField,
   textDeltaEvent,
+  toOpenCodePromptParts,
   type OpenCodePart,
 } from "./opencodeProtocol";
 import { HelperToolAttemptError } from "../../core/helperIsolation";
@@ -77,6 +78,8 @@ export async function runOpenCodeTextPrompt(input: {
   intent?: TurnIntent;
   helperOnly?: boolean;
   prompt: string;
+  /** Fork (L-221): pictures sent with the prompt itself, no tools needed. */
+  attachments?: Attachment[];
   timeoutMs?: number;
   signal?: AbortSignal;
   onEvent?: (event: HarnessEvent) => void;
@@ -96,6 +99,7 @@ async function promptOnLive(input: {
   intent?: TurnIntent;
   helperOnly?: boolean;
   prompt: string;
+  attachments?: Attachment[];
   timeoutMs?: number;
   signal?: AbortSignal;
   onEvent?: (event: HarnessEvent) => void;
@@ -114,7 +118,9 @@ async function promptOnLive(input: {
         model: session.model,
         agent: openCodeTextAgent(input.intent, session.modelSettings),
         variant: session.modelSettings?.variant,
-        parts: [{ type: "text", text: input.prompt }],
+        parts: input.attachments?.length
+          ? toOpenCodePromptParts(input.prompt, input.attachments)
+          : [{ type: "text", text: input.prompt }],
         timeoutMs: input.timeoutMs ?? REQUEST_TIMEOUT_MS,
       }),
       ...(abort.promise ? [abort.promise] : []),

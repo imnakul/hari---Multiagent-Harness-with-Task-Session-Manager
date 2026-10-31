@@ -1,15 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   askWhiteboardAgent,
   whiteboardAgentTargets,
+  whiteboardSeesImages,
 } from "../../../integrations/harness/core/whiteboardHelper";
+import {
+  attachmentsFromFiles,
+  filesFromClipboard,
+  isVisionImage,
+  loadAttachmentPreviewUrl,
+  revokeAttachment,
+} from "../../sessions/model/attachments";
 import {
   providerAccounts,
   subscribeProviderAccounts,
   supportsProviderAccounts,
 } from "../../providers/model/providerAccounts";
 import { modelEffortSetting, modelsFor, preferredModelId } from "../../sessions/model/models";
-import { HARNESS_TITLE } from "../../sessions/model/session";
+import { HARNESS_TITLE, type Attachment } from "../../sessions/model/session";
 import type { AiHelperTarget } from "../../settings/model/settings";
 import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
 import { Popover } from "../../../shared/ui/Popover";
@@ -34,8 +50,19 @@ import {
   type SceneElementLike,
   type WhiteboardAttachment,
   type WhiteboardChatMessage,
-  type WhiteboardOps,
+  type WhiteboardImageRef,
 } from "../model/whiteboardAgent";
+import {
+  drawOrQueue,
+  endRun,
+  isRunning,
+  publishChat,
+  publishedChat,
+  startRun,
+  stopRun,
+  subscribeChats,
+  subscribeRuns,
+} from "../model/whiteboardRuns";
 import {
   CHAT_SIZE_LIMITS,
   loadAgentChoice,
@@ -57,6 +84,45 @@ const SUGGESTIONS = [
 const TEXT_FILE =
   /\.(txt|md|markdown|mdx|json|jsonc|ya?ml|toml|csv|tsv|xml|html?|css|scss|js|jsx|ts|tsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|cs|c|cc|cpp|h|hpp|sh|ps1|sql|graphql|mermaid|mmd|ini|env|log)$/i;
 const MAX_FILE_BYTES = 2_000_000;
+/** Images go to the agent as pictures (L-221); providers refuse much bigger ones. */
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+const isImageFile = (file: File) =>
+  file.type ? isVisionImage(file.type) : IMAGE_FILE.test(file.name);
+
+/** A sent image in the chat, read back from its saved copy. */
+function SentImage({ image }: { image: WhiteboardImageRef }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (image.path) {
+      void loadAttachmentPreviewUrl(image.path).then((url) => {
+        if (live) setSrc(url);
+      });
+    }
+    return () => {
+      live = false;
+    };
+  }, [image.path]);
+  return src ? (
+    <img
+      src={src}
+      alt={image.name}
+      title={image.name}
+      draggable={false}
+      className="size-16 rounded-lg object-cover outline outline-1 -outline-offset-1 outline-content/10"
+    />
+  ) : (
+    <span
+      title={image.name}
+      className="flex h-6 max-w-40 items-center gap-1 truncate rounded-md bg-content/10 px-1.5 text-[11px] text-content/55"
+    >
+      <Paperclip aria-hidden className="size-3 shrink-0" />
+      <span className="truncate">{image.name}</span>
+    </span>
+  );
+}
 
 let rememberedTarget: AiHelperTarget | undefined;
 const sameTarget = (a: AiHelperTarget, b: AiHelperTarget) =>
@@ -79,7 +145,6 @@ export function WhiteboardChat({
   locked,
   cwd,
   getScene,
-  applyOps,
   dock,
   size,
   onDock,
@@ -91,8 +156,6 @@ export function WhiteboardChat({
   locked: boolean;
   cwd: string;
   getScene: () => readonly SceneElementLike[];
-  /** Applies the agent's changes; returns a short summary, or null if nothing changed. */
-  applyOps: (ops: WhiteboardOps) => string | null;
   dock: ChatDock;
   /** Width beside the canvas, or height below it, in pixels. */
   size: number;
@@ -109,19 +172,21 @@ export function WhiteboardChat({
   );
   const [choice, setChoice] = useState<AgentChoice>(() => (target ? loadAgentChoice(target.provider) : {}));
   const [attachments, setAttachments] = useState<WhiteboardAttachment[]>([]);
+  const [images, setImages] = useState<Attachment[]>([]);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+  useEffect(() => () => imagesRef.current.forEach(revokeAttachment), []);
   const [messages, setMessages] = useState<WhiteboardChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Fork (L-223): runs outlive this panel; see whiteboardRuns.
+  const busy = useSyncExternalStore(subscribeRuns, () => isRunning(sheetId));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const pickerButton = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const abort = useRef<AbortController | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  const sheetRef = useRef(sheetId);
-  sheetRef.current = sheetId;
   const accountsVersion = useAccountsVersion();
 
   const provider = target?.provider;
@@ -167,16 +232,24 @@ export function WhiteboardChat({
     let live = true;
     setLoaded(false);
     setMessages([]);
-    loadSheetChat(sheetId).then((history) => {
-      if (!live) return;
-      setMessages(history);
-      setLoaded(true);
+    const unsubscribe = subscribeChats((id, next) => {
+      if (id === sheetId) setMessages(next);
     });
+    const published = publishedChat(sheetId);
+    if (published) {
+      setMessages(published);
+      setLoaded(true);
+    } else {
+      loadSheetChat(sheetId).then((history) => {
+        if (!live) return;
+        setMessages(publishedChat(sheetId) ?? history);
+        setLoaded(true);
+      });
+    }
+    // Leaving the sheet doesn't stop its run (L-223); only Stop does.
     return () => {
       live = false;
-      abort.current?.abort();
-      abort.current = null;
-      setBusy(false);
+      unsubscribe();
     };
   }, [sheetId]);
 
@@ -186,7 +259,7 @@ export function WhiteboardChat({
   }, [messages, busy]);
 
   const commit = useCallback((id: string, next: WhiteboardChatMessage[]) => {
-    if (sheetRef.current === id) setMessages(next);
+    publishChat(id, next);
     void saveSheetChat(id, next).catch(() => undefined);
   }, []);
 
@@ -194,7 +267,25 @@ export function WhiteboardChat({
     setAttachError(null);
     const added: WhiteboardAttachment[] = [];
     const refused: string[] = [];
+    const pictures: Attachment[] = [];
     for (const file of files) {
+      if (isImageFile(file)) {
+        if (file.size > MAX_IMAGE_BYTES) {
+          refused.push(`${file.name || "image"} (over 5 MB)`);
+          continue;
+        }
+        const [picture] = await attachmentsFromFiles([file]).catch(() => []);
+        if (picture?.data) pictures.push(picture);
+        else {
+          if (picture) revokeAttachment(picture);
+          refused.push(`${file.name || "image"} (couldn't read)`);
+        }
+        continue;
+      }
+      if (file.type.startsWith("image/")) {
+        refused.push(`${file.name || "image"} (use PNG, JPG, GIF or WebP)`);
+        continue;
+      }
       if (!TEXT_FILE.test(file.name) && !file.type.startsWith("text/")) {
         refused.push(`${file.name} (not a text file)`);
         continue;
@@ -215,7 +306,8 @@ export function WhiteboardChat({
         ...added,
       ]);
     }
-    if (refused.length) setAttachError(`Not attached: ${refused.join(", ")}. Paste its text instead.`);
+    if (pictures.length) setImages((current) => [...current, ...pictures]);
+    if (refused.length) setAttachError(`Not attached: ${refused.join(", ")}. For a document, paste its text instead.`);
     input.current?.focus();
   };
 
@@ -223,6 +315,13 @@ export function WhiteboardChat({
     const message = text.trim();
     if (!message || busy || !loaded) return;
     if (!runTarget) return;
+    const pictures = images;
+    if (pictures.length && !whiteboardSeesImages(runTarget, interactive)) {
+      setAttachError(
+        `${interactive ? "Claude's Interactive CLI mode" : HARNESS_TITLE[runTarget.provider]} can't see images here. Switch to Claude (Structured), Codex or OpenCode, or remove the image.`,
+      );
+      return;
+    }
     const id = sheetId;
     const history = messages;
     const sent = attachments;
@@ -233,53 +332,59 @@ export function WhiteboardChat({
         text: message,
         at: Date.now(),
         ...(sent.length ? { attachments: sent.map((item) => item.name) } : {}),
+        ...(pictures.length
+          ? { images: pictures.map((item) => ({ name: item.name, ...(item.path ? { path: item.path } : {}) })) }
+          : {}),
       },
     ];
     commit(id, withUser);
     setDraft("");
     setAttachments([]);
+    setImages([]);
     setAttachError(null);
-    setBusy(true);
     const controller = new AbortController();
-    abort.current = controller;
+    startRun(id, controller);
     const outcome = await askWhiteboardAgent({
       target: runTarget,
       cwd,
-      prompt: buildWhiteboardPrompt({ message, history, scene: getScene(), locked, attachments: sent }),
+      prompt: buildWhiteboardPrompt({
+        message,
+        history,
+        scene: getScene(),
+        locked,
+        attachments: sent,
+        imageNames: pictures.map((item) => item.name),
+      }),
+      ...(pictures.length ? { images: pictures } : {}),
       ...(effortSetting && effort ? { modelSettings: { [effortSetting.id]: effort } } : {}),
       signal: controller.signal,
       ...(interactive ? { interactive: true } : {}),
     });
-    if (abort.current === controller) abort.current = null;
-    if (sheetRef.current !== id) return;
-    setBusy(false);
+    endRun(id, controller);
+    pictures.forEach(revokeAttachment);
     if (!outcome.ok) {
       if (outcome.cancelled) return;
       commit(id, [...withUser, { role: "assistant", text: outcome.message, at: Date.now(), error: true }]);
       return;
     }
+    // The sheet may be closed by now: then its drawing waits until it opens.
+    const at = Date.now();
     let note: string | undefined;
     if (outcome.reply.ops) {
-      note = locked
-        ? "Not drawn: the sheet is locked"
-        : (applyOps(outcome.reply.ops) ?? "Nothing to change");
+      note = locked ? "Not drawn: the sheet is locked" : drawOrQueue(id, outcome.reply.ops, at);
     }
     commit(id, [
       ...withUser,
       {
         role: "assistant",
         text: outcome.reply.text || (note ? "" : "Done."),
-        at: Date.now(),
+        at,
         ...(note ? { note } : {}),
       },
     ]);
   };
 
-  const stop = () => {
-    abort.current?.abort();
-    abort.current = null;
-    setBusy(false);
-  };
+  const stop = () => stopRun(sheetId);
 
   // Drag the inner edge to resize: left edge beside the canvas, top edge below it.
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -392,6 +497,13 @@ export function WhiteboardChat({
         {messages.map((message, index) =>
           message.role === "user" ? (
             <div key={index} className="flex flex-col items-end gap-1">
+              {message.images?.length ? (
+                <div className="flex max-w-[85%] flex-wrap justify-end gap-1">
+                  {message.images.map((image, at) => (
+                    <SentImage key={`${image.path ?? image.name}:${at}`} image={image} />
+                  ))}
+                </div>
+              ) : null}
               {message.attachments?.length ? (
                 <p className="flex max-w-[85%] items-center gap-1 truncate text-[11px] text-content/45">
                   <Paperclip aria-hidden className="size-3 shrink-0" />
@@ -449,6 +561,37 @@ export function WhiteboardChat({
           </p>
         ) : null}
         <div className="rounded-xl border border-content/10 bg-content/5 focus-within:border-content/25">
+          {images.length ? (
+            <ul role="list" aria-label="Attached images" className="flex flex-wrap gap-1.5 px-2 pt-2">
+              {images.map((item) => (
+                <li key={item.id} className="group relative" title={item.name}>
+                  {item.previewUrl ? (
+                    <img
+                      src={item.previewUrl}
+                      alt={item.name}
+                      draggable={false}
+                      className="size-12 rounded-lg object-cover outline outline-1 -outline-offset-1 outline-content/10"
+                    />
+                  ) : (
+                    <span className="flex size-12 items-center justify-center rounded-lg bg-content/10 text-content/50">
+                      <Paperclip aria-hidden className="size-4" />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${item.name}`}
+                    onClick={() => {
+                      revokeAttachment(item);
+                      setImages((current) => current.filter((next) => next.id !== item.id));
+                    }}
+                    className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-content/15 bg-surface text-content/60 shadow-sm transition-colors duration-100 hover:text-content"
+                  >
+                    <X aria-hidden className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {attachments.length ? (
             <ul role="list" aria-label="Attached documents" className="flex flex-wrap gap-1 px-2 pt-2">
               {attachments.map((item) => (
@@ -482,7 +625,7 @@ export function WhiteboardChat({
             disabled={!target}
             onChange={(event) => setDraft(event.target.value)}
             onPaste={(event) => {
-              const files = Array.from(event.clipboardData.files);
+              const files = filesFromClipboard(event.clipboardData);
               if (!files.length) return;
               event.preventDefault();
               void addFiles(files);
@@ -564,8 +707,8 @@ export function WhiteboardChat({
             <button
               type="button"
               className={ICON_BUTTON}
-              aria-label="Attach documents"
-              title="Attach text documents (or paste a file)"
+              aria-label="Attach images or documents"
+              title="Attach images or text documents (or paste them)"
               disabled={!target || busy}
               onClick={() => fileInput.current?.click()}
             >

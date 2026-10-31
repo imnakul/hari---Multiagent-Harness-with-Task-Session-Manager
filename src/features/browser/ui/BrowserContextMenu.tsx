@@ -13,6 +13,7 @@ import {
   type BrowserContextTarget,
   type BrowserMenuAction,
 } from "../model/browserMenu";
+import { openInBackgroundTab } from "../model/backgroundTabs";
 import { SEARCH_URL } from "../model/browserRequest";
 import {
   attachNote,
@@ -88,6 +89,9 @@ export function BrowserContextMenu({
     switch (id) {
       case "link.newTab":
         newTab(target.linkUrl);
+        break;
+      case "link.background":
+        openInBackgroundTab(target.linkUrl);
         break;
       case "link.external":
         void openUrl(target.linkUrl).catch(report);

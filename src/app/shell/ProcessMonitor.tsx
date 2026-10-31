@@ -35,6 +35,7 @@ import {
   type ProcessMonitorStats,
 } from "./processMonitorModel";
 import { ChevronRight, Loader, Square } from "../../shared/ui/icons";
+import { closeAllPages } from "../../features/browser/model/browserTabs";
 
 type Props = {
   sessions: Session[];
@@ -311,7 +312,7 @@ function EnabledProcessMonitor({
                 ) : null}
                 {browser ? (
                   <>
-                    <div className="flex items-center gap-2 py-2">
+                    <div className="group flex items-center gap-2 py-2">
                       <DisclosureButton
                         label="Browser"
                         expanded={expanded.has(`browser:${browser.pid}`)}
@@ -333,7 +334,22 @@ function EnabledProcessMonitor({
                         gpu={browser.gpu}
                         measuring={browser.memory != null}
                       />
-                      <span aria-hidden className="size-6 shrink-0" />
+                      {/* Fork (L-225): close every Browser page to free its
+                          memory; the tabs stay and load again when opened. */}
+                      <button
+                        type="button"
+                        aria-label="Stop all Browser pages"
+                        title="Stop all Browser pages"
+                        className="grid size-6 shrink-0 place-items-center rounded text-content/60 opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400 focus-visible:opacity-100 motion-reduce:transition-none"
+                        onClick={() => {
+                          closeAllPages();
+                          setNotice(
+                            "Browser pages stopped. Their tabs stay listed and load again when opened.",
+                          );
+                        }}
+                      >
+                        <Square aria-hidden className="size-3 fill-current" />
+                      </button>
                     </div>
                     {expanded.has(`browser:${browser.pid}`) ? (
                       <ProcessList

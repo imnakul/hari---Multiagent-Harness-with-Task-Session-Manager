@@ -356,14 +356,18 @@ export function WebLinkChipLabel({
 export function WebLinkCardLink({
   url,
   label,
+  chipWhenUnavailable = true,
 }: {
   url: string;
   /** The link's own words; null for a bare URL. */
   label: string | null;
+  /** False for a card under its line, whose chip is already in the text. */
+  chipWhenUnavailable?: boolean;
 }) {
   const [ref, near] = useNearViewport<HTMLSpanElement>();
   const state = useRichLinkPreview(url, near);
   if (state.status === "unavailable") {
+    if (!chipWhenUnavailable) return null;
     return (
       <WebLinkChipLabel url={url} bare={label === null}>
         {label}

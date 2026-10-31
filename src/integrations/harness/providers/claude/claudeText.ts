@@ -32,7 +32,7 @@ import {
   tryParseJsonRecord,
   turnStatusFromResult,
 } from "./claudeProtocol";
-import type { TurnIntent } from "../../../../features/sessions/model/session";
+import type { Attachment, TurnIntent } from "../../../../features/sessions/model/session";
 import type { HarnessEvent } from "../../core/types";
 import { mergeStream } from "../../core/streamText";
 import { claudeMeasurement, finiteCount, helperTraceContext, observeHarnessEvent } from "../../../../features/debug-inspector/model/trace";
@@ -151,6 +151,8 @@ export async function runClaudeTextPrompt(input: {
   intent?: TurnIntent;
   helperOnly?: boolean;
   prompt: string;
+  /** Fork (L-221): pictures sent with the prompt itself, no tools needed. */
+  attachments?: Attachment[];
   timeoutMs?: number;
   signal?: AbortSignal;
   onEvent?: (event: HarnessEvent) => void;
@@ -174,6 +176,7 @@ async function promptOnLive(input: {
   intent?: TurnIntent;
   helperOnly?: boolean;
   prompt: string;
+  attachments?: Attachment[];
   timeoutMs?: number;
   signal?: AbortSignal;
   onEvent?: (event: HarnessEvent) => void;
@@ -224,6 +227,7 @@ async function promptOnLive(input: {
       JSON.stringify(
         buildClaudeUserMessage({
           text: input.prompt,
+          ...(input.attachments?.length ? { attachments: input.attachments } : {}),
           effort: settings.promptEffort,
         }),
       ),

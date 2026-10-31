@@ -95,3 +95,15 @@ export function overlapsPage(page: Rect, layer: Rect): boolean {
     layer.bottom > page.top
   );
 }
+
+const SHOW_EVENT = "monocode:show-browser";
+
+/** Brings MonoCode's Browser on screen without loading anything new. */
+export function showMonoBrowser() {
+  window.dispatchEvent(new Event(SHOW_EVENT));
+}
+
+export function subscribeShowBrowser(onShow: () => void) {
+  window.addEventListener(SHOW_EVENT, onShow);
+  return () => window.removeEventListener(SHOW_EVENT, onShow);
+}

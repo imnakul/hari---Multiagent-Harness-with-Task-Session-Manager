@@ -51,8 +51,9 @@ describe("AgentMarkdown link previews", () => {
       "https://news.example.net/today",
       "https://fourth.example.dev/",
     ]);
-    // The hover card still wraps each chip.
-    expect(markup).toContain('<span><a href="https://example.org/guide"');
+    // Each chip's card is under its line, so no hover card wraps it (L-224).
+    expect(markup).not.toContain('<span><a href="https://example.org/guide"');
+    expect(markup.match(/link-cards-below/g)).toHaveLength(2);
   });
 
   it("keeps a link's own words and shows the site name for a bare URL until the title loads", () => {
@@ -93,9 +94,36 @@ describe("AgentMarkdown link cards (L-217)", () => {
   it("shows a link alone in its paragraph or list item as a card when always on", () => {
     saveLinkPreviewMode("always");
     const markup = renderToStaticMarkup(createElement(AgentMarkdown, { text: lines, localMedia: true }));
-    expect(cards(markup)).toEqual(["https://solo.example.com/post", "https://docs.example.com/start"]);
-    // Links inside prose stay chips.
+    expect(cards(markup)).toEqual([
+      "https://solo.example.com/post",
+      "https://docs.example.com/start",
+      "https://inline.example.com/a",
+      "https://mixed.example.com/x",
+    ]);
+    // Links inside prose stay chips, with their cards under the line (L-224).
     expect(chipUrls(markup)).toEqual(["https://inline.example.com/a", "https://mixed.example.com/x"]);
+  });
+
+  it("shows a labelled link as its card, and cards under a line of text (L-224)", () => {
+    saveLinkPreviewMode("always");
+    const text = [
+      "- **GitHub:** [owner/repo](https://github.com/owner/repo)",
+      "- See [one](https://one.example.com/) and [two](https://two.example.com/), or [one](https://one.example.com/) again.",
+    ].join("\n");
+    const markup = renderToStaticMarkup(createElement(AgentMarkdown, { text, localMedia: true }));
+    expect(cards(markup)).toEqual([
+      "https://github.com/owner/repo",
+      "https://one.example.com/",
+      "https://two.example.com/",
+    ]);
+    expect(chipUrls(markup)).toEqual([
+      "https://one.example.com/",
+      "https://two.example.com/",
+      "https://one.example.com/",
+    ]);
+    expect(markup).toContain("GitHub:");
+    // The copies under the line are left out of the tab order.
+    expect(markup.match(/tabindex="-1"/g)).toHaveLength(2);
   });
 
   it("shows no cards in hover mode", () => {

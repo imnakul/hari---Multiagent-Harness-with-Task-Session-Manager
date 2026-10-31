@@ -246,7 +246,7 @@ import {
   zoomOutUiScale,
 } from "../features/settings/model/uiScale";
 import { resolveZoomKeybinding } from "../features/settings/model/zoomKeybinding";
-import { subscribeOpenInBrowser } from "../features/browser/model/browserRequest";
+import { subscribeOpenInBrowser, subscribeShowBrowser } from "../features/browser/model/browserRequest";
 import {
   browserStore,
   requestPage,
@@ -15073,9 +15073,13 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   // Fork (L-203): the Browser tab, opened bare or with a page to load.
   const onOpenBrowser = useCallback((url?: string) => {
     if (url) requestPage(url);
-    // Fork (L-207): with the side panel open beside a chat, a link opens
-    // there; the full Browser view is for when no chat is showing.
-    if (url && browserStore().panelOpen && !anyAppViewOpenRef.current) return;
+    // Fork (L-207, L-227): a link opened while a chat is showing opens the
+    // side panel beside it; the full Browser view is for when another view
+    // covers the chats (or the Browser tab is opened bare).
+    if (url && !anyAppViewOpenRef.current) {
+      setBrowserPanelOpen(true);
+      return;
+    }
     workspaceNavigation.cancel();
     startTransition(() => {
       closeMonoView();
@@ -15107,6 +15111,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   }, []);
 
   useEffect(() => subscribeOpenInBrowser((url) => onOpenBrowser(url)), [onOpenBrowser]);
+  // Fork (L-224): Show on the "Opened in a background tab" notice.
+  useEffect(() => subscribeShowBrowser(() => onOpenBrowser()), [onOpenBrowser]);
 
   const onOpenAutomationSession = useCallback(
     async (sessionId: string) => {

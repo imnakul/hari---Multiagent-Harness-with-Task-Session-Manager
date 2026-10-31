@@ -157,7 +157,7 @@ export const claudeAdapter: HarnessAdapter = {
   generatePrContent: generateClaudePrContent,
   generateBranchName: generateClaudeBranchName,
   warmupText: warmupClaudeText,
-  runHelperPrompt: ({ cwd, prompt, timeoutMs, providerAccountId, model, modelSettings }) =>
+  runHelperPrompt: ({ cwd, prompt, timeoutMs, providerAccountId, model, modelSettings, attachments }) =>
     runClaudeTextPrompt({
       cwd,
       prompt,
@@ -166,6 +166,7 @@ export const claudeAdapter: HarnessAdapter = {
       model,
       modelSettings,
       helperOnly: true,
+      ...(attachments?.length ? { attachments } : {}),
     }),
   runTextPrompt: (input) => {
     if (isClaudeInteractive(input.modelSettings))

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_BODY_CHARS,
   consoleNote,
+  headerEntries,
   networkNote,
   noteName,
   picksNote,
@@ -95,5 +96,32 @@ describe("browser context notes", () => {
     expect(textualMime("image/png")).toBe(false);
     expect(textualMime()).toBe(false);
     expect(noteName("Console", "x".repeat(100)).length).toBe(48);
+  });
+});
+
+describe("headerEntries (L-222)", () => {
+  it("sorts headers by name and skips odd values", () => {
+    expect(
+      headerEntries({ "x-b": "2", Accept: "*/*", "content-type": "text/html", bad: 3 as unknown as string }),
+    ).toEqual([
+      ["Accept", "*/*"],
+      ["content-type", "text/html"],
+      ["x-b", "2"],
+    ]);
+    expect(headerEntries(undefined)).toEqual([]);
+  });
+
+  it("keeps headers out of the chat note", () => {
+    const note = networkNote({
+      kind: "network",
+      id: "1",
+      method: "GET",
+      url: "https://example.com/api",
+      status: 200,
+      done: true,
+      requestHeaders: { authorization: "Bearer secret" },
+      responseHeaders: { "set-cookie": "session=secret" },
+    });
+    expect(note).not.toContain("secret");
   });
 });

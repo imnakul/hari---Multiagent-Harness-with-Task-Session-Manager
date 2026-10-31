@@ -93,7 +93,12 @@ export type WhiteboardChatMessage = {
   error?: boolean;
   /** Names of documents sent with a user message (L-199). */
   attachments?: string[];
+  /** Images sent with a user message, saved in the temp folder (L-221). */
+  images?: WhiteboardImageRef[];
 };
+
+/** A sent image: its name, and where its copy was saved for the thumbnail. */
+export type WhiteboardImageRef = { name: string; path?: string };
 
 export type WhiteboardReply = { text: string; ops: WhiteboardOps | null };
 
@@ -118,6 +123,14 @@ function attachmentLines(attachments: readonly WhiteboardAttachment[]): string[]
   return [
     "The user attached these documents. Read them and draw from them when asked:",
     ...blocks,
+    "",
+  ];
+}
+
+function imageLines(names: readonly string[]): string[] {
+  if (!names.length) return [];
+  return [
+    `The user attached ${names.length > 1 ? `${names.length} images` : "an image"} to this message (${names.join(", ")}); ${names.length > 1 ? "they come" : "it comes"} with this prompt. Look at ${names.length > 1 ? "them" : "it"} and draw from ${names.length > 1 ? "them" : "it"} when asked.`,
     "",
   ];
 }
@@ -183,6 +196,8 @@ export function buildWhiteboardPrompt(input: {
   locked?: boolean;
   /** Documents the user attached to this message (L-199). */
   attachments?: readonly WhiteboardAttachment[];
+  /** Names of images sent with this message as pictures (L-221). */
+  imageNames?: readonly string[];
 }): string {
   const scene = describeScene(input.scene);
   const history = input.history
@@ -190,7 +205,10 @@ export function buildWhiteboardPrompt(input: {
     .slice(-HISTORY_LIMIT)
     .map((message) => {
       const who = message.role === "user" ? "User" : "You";
-      const note = message.note ? ` (${message.note})` : "";
+      const shown = message.images?.length
+        ? ` (attached image${message.images.length > 1 ? "s" : ""}: ${message.images.map((image) => image.name).join(", ")})`
+        : "";
+      const note = (message.note ? ` (${message.note})` : "") + shown;
       return `${who}: ${oneLine(message.text, HISTORY_TEXT_LIMIT)}${note}`;
     });
   return [
@@ -221,6 +239,7 @@ export function buildWhiteboardPrompt(input: {
     "",
     history.length ? `Conversation so far:\n${history.join("\n")}\n` : "",
     ...attachmentLines(input.attachments ?? []),
+    ...imageLines(input.imageNames ?? []),
     `User: ${input.message.trim()}`,
   ]
     .filter((line, index, all) => line !== "" || all[index - 1] !== "")
@@ -428,6 +447,19 @@ export function parseChatHistory(raw: string | null | undefined): WhiteboardChat
           typeof message.text === "string" &&
           typeof message.at === "number",
       )
+      .map((message) => {
+        if (message.images === undefined) return message;
+        // Saved by hand or by another build: keep only well-formed image refs.
+        const images = (Array.isArray(message.images) ? (message.images as unknown[]) : [])
+          .filter(isRaw)
+          .filter((image) => typeof image.name === "string")
+          .map((image) => ({
+            name: image.name as string,
+            ...(typeof image.path === "string" ? { path: image.path } : {}),
+          }));
+        const { images: _dropped, ...rest } = message;
+        return images.length ? { ...rest, images } : rest;
+      })
       .slice(-200);
   } catch {
     return [];

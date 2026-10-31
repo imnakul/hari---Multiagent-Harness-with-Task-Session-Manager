@@ -34,6 +34,7 @@ export function webLinkAt(
 
 export const LINK_MENU_ITEMS = [
   { id: "open-mono", label: "Open in MonoCode browser" },
+  { id: "open-background", label: "Open in background tab" },
   { id: "open-default", label: "Open in default browser" },
   { id: "copy-link", label: "Copy link" },
   { id: "copy-text", label: "Copy link text" },

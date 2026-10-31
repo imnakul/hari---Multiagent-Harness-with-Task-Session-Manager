@@ -19,6 +19,7 @@ export type BrowserContextTarget = {
 
 export type BrowserMenuAction =
   | "link.newTab"
+  | "link.background"
   | "link.external"
   | "link.copy"
   | "link.chat"
@@ -81,6 +82,7 @@ export function browserMenuItems(
   const link = target.linkUrl
     ? [
         item("link.newTab", "Open link in new tab"),
+        item("link.background", "Open link in background tab"),
         item("link.external", "Open link in default browser"),
         item("link.copy", "Copy link address"),
         item("link.chat", "Add link to chat"),

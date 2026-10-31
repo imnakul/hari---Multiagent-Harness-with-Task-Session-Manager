@@ -17,6 +17,7 @@ import { IS_MAC } from "../../../platform/tauri/platform";
 import {
   ChevronLeft,
   ChevronRight,
+  Bookmark,
   Code,
   Copy,
   ExternalLink,
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   RotateCcw,
   SelectAll,
+  Star,
   Target,
   Terminal,
   X,
@@ -37,10 +39,20 @@ import {
 import { Popover } from "../../../shared/ui/Popover";
 import { deliverKeptAttachments } from "../../sessions/model/attachToChat";
 import { UI_SCALE_CHANGE_EVENT } from "../../settings/model/uiScale";
+import { openInBackgroundTab } from "../model/backgroundTabs";
+import { removeBookmark, tabLinksText, toggleBookmark, useBookmarks } from "../model/browserBookmarks";
 import { shortUrl } from "../model/browserContext";
 import { menuPoint, type BrowserContextTarget } from "../model/browserMenu";
 import { addressFromInput, overlapsPage } from "../model/browserRequest";
-import { BUILT_IN_SIZES, fitScale, newCustomSize, sameSize, sizeLabel } from "../model/browserSizes";
+import {
+  BUILT_IN_SIZES,
+  DEVICE_GAP,
+  DEVICE_RIM,
+  fitScale,
+  newCustomSize,
+  sameSize,
+  sizeLabel,
+} from "../model/browserSizes";
 import {
   activeTab,
   applyZoom,
@@ -62,6 +74,7 @@ import {
   setPicking,
   showNotice,
   takePending,
+  markShowing,
   useBrowserStore,
   type BrowserTab,
 } from "../model/browserTabs";
@@ -136,6 +149,9 @@ function coveringLayer(pageRect: DOMRect): boolean {
   return false;
 }
 
+/** Browser views (tab and side panel) showing their page as a picture now. */
+let pausedPages = 0;
+
 /** A quick picture of the visible page as a data URL, or null after ~300 ms. */
 async function capturePage(tab: number): Promise<string | null> {
   const timeout = new Promise<null>((done) => window.setTimeout(() => done(null), 300));
@@ -161,7 +177,15 @@ function tabLabel(tab: BrowserTab): string {
   return "New tab";
 }
 
-type Suggestion = { url: string; label: string; detail: string };
+type Suggestion = { url: string; label: string; detail: string; bookmark?: boolean };
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
 
 /**
  * Fork (L-203, L-207): web pages inside MonoCode, as a full view tab or a
@@ -201,9 +225,13 @@ export function BrowserView({
   const addressBox = useRef<HTMLLabelElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
   const shotButton = useRef<HTMLButtonElement>(null);
+  const bookmarksButton = useRef<HTMLButtonElement>(null);
   const [address, setAddress] = useState(tab.url);
   const [editing, setEditing] = useState(false);
-  const [menu, setMenu] = useState<"more" | "shot" | null>(null);
+  const [menu, setMenu] = useState<"more" | "shot" | "bookmarks" | null>(null);
+  // Fork (L-226): bookmarks, and whether the shown page is one.
+  const bookmarks = useBookmarks();
+  const saved = !!tab.url && bookmarks.some((item) => item.url === tab.url);
   // The New size form starts closed each time the More menu opens.
   useEffect(() => {
     if (menu !== "more") setSizeForm(null);
@@ -265,6 +293,30 @@ export function BrowserView({
     else addressRef.current?.focus();
   }, [active, tab.id, tab.pending, tab.opened, tab.url, go]);
 
+  // Tabs opened in the background load out of sight while this view shows
+  // (L-224); the page stays asleep until its tab is picked.
+  const waiting = store.tabs
+    .filter((item) => item.id !== tab.id && item.pending)
+    .map((item) => item.id)
+    .join(",");
+  useEffect(() => {
+    if (!active) return;
+    return markShowing();
+  }, [active]);
+  useEffect(() => {
+    if (!active || !waiting) return;
+    const rect = bounds();
+    if (!rect) return;
+    for (const item of browserStore().tabs) {
+      if (item.id === tab.id || !item.pending) continue;
+      const url = takePending(item.id);
+      if (!url) continue;
+      invoke("browser_preload", { tab: item.id, url, bounds: physicalBounds(rect) })
+        .then(() => markOpened(item.id))
+        .catch((cause: unknown) => showNotice(String(cause), "error"));
+    }
+  }, [active, waiting, tab.id, bounds]);
+
   // Keep the native view on the page area. MonoCode's own menus, dialogs
   // and toasts would sit under it, so while one overlaps the page, the page
   // shows as a still picture and the native view hides (L-214).
@@ -273,6 +325,17 @@ export function BrowserView({
   const [contextMenu, setContextMenu] = useState<
     { target: BrowserContextTarget; x: number; y: number } | null
   >(null);
+  // Menus and toasts turn nearly solid while the page is a picture (L-222).
+  const paused = Boolean(frozen);
+  useEffect(() => {
+    if (!paused) return;
+    pausedPages += 1;
+    document.documentElement.classList.add("browser-page-paused");
+    return () => {
+      pausedPages -= 1;
+      if (!pausedPages) document.documentElement.classList.remove("browser-page-paused");
+    };
+  }, [paused]);
   const view = useRef({
     shown: null as boolean | null,
     /** Bumped to cancel a picture still being taken. */
@@ -461,8 +524,13 @@ export function BrowserView({
   }, []);
 
   // A size larger than the space shrinks the page to fit (both sides), so a
-  // laptop layout still shows whole in a narrow panel.
-  const fit = fitScale(tab.size, frameSize);
+  // laptop layout still shows whole in a narrow panel. The gap and the glass
+  // rim around a fixed size come out of the space first (L-222).
+  const around = 2 * (DEVICE_GAP + DEVICE_RIM);
+  const fit = fitScale(tab.size, {
+    width: frameSize.width - around,
+    height: frameSize.height - around,
+  });
   const boxStyle = tab.size
     ? {
         flex: "none",
@@ -505,19 +573,25 @@ export function BrowserView({
       label: `localhost:${server.port}`,
       detail: `Running · ${server.name}`,
     }));
+    const marked: Suggestion[] = bookmarks.map((item) => ({
+      url: item.url,
+      label: item.title || shortUrl(item.url, 80),
+      detail: shortUrl(item.url, 80),
+      bookmark: true,
+    }));
     const pages: Suggestion[] = recents.map((item) => ({
       url: item.url,
       label: item.title || shortUrl(item.url, 80),
       detail: shortUrl(item.url, 80),
     }));
-    const all = [...local, ...pages].filter(
+    const all = [...marked, ...local, ...pages].filter(
       (item, index, list) => list.findIndex((other) => other.url === item.url) === index,
     );
     const matches = typed
       ? all.filter((item) => `${item.url} ${item.label}`.toLowerCase().includes(query))
       : all;
     return matches.slice(0, 8);
-  }, [editing, address, servers, recents, tab.url]);
+  }, [editing, address, servers, recents, bookmarks, tab.url]);
 
   const loadServers = () => {
     void invoke<{ port: number; name: string }[]>("browser_local_servers")
@@ -569,6 +643,7 @@ export function BrowserView({
     else if (event.key === "-") zoomBy(-0.1);
     else if (event.key === "0") zoomBy(0);
     else if (event.shiftKey && event.key.toLowerCase() === "r") history("hardReload");
+    else if (!event.shiftKey && event.key.toLowerCase() === "d") toggleSaved();
     else return;
     event.preventDefault();
   };
@@ -578,6 +653,21 @@ export function BrowserView({
       .writeText(tab.url)
       .then(() => showNotice("Address copied"))
       .catch(() => showNotice("Couldn't copy the address", "error"));
+  };
+
+  const toggleSaved = () => {
+    if (!tab.url) return;
+    const added = toggleBookmark(tab.url, tab.title);
+    showNotice(added ? "Bookmark added" : "Bookmark removed");
+  };
+
+  const copyTabLinks = () => {
+    const text = tabLinksText(store.tabs);
+    const count = text ? text.split("\n").length : 0;
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => showNotice(count === 1 ? "Copied 1 tab link" : `Copied ${count} tab links`))
+      .catch(() => showNotice("Couldn't copy the tab links", "error"));
   };
 
   const togglePick = () => setPicking(tab.id, tab.picking === "element" ? null : "element");
@@ -702,6 +792,18 @@ export function BrowserView({
             onKeyDown={onAddressKey}
             className="min-w-0 flex-1 bg-transparent text-[13px] text-content outline-none placeholder:text-content/40"
           />
+          {tab.url && !editing ? (
+            <button
+              type="button"
+              aria-label={saved ? "Remove bookmark" : "Bookmark this page"}
+              title={saved ? "Remove bookmark (Ctrl+D)" : "Bookmark this page (Ctrl+D)"}
+              aria-pressed={saved}
+              onClick={toggleSaved}
+              className="grid size-5 shrink-0 place-items-center rounded text-content/40 transition-colors duration-100 hover:bg-content/10 hover:text-content aria-pressed:text-accent"
+            >
+              <Star aria-hidden className={`size-3.5 ${saved ? "fill-current" : ""}`} />
+            </button>
+          ) : null}
           {tab.zoom !== 1 ? (
             <button
               type="button"
@@ -733,6 +835,14 @@ export function BrowserView({
       </ToolButton>
       <ToolButton label="Console and network" pressed={devtools} onClick={() => setDevtools(!devtools)}>
         <Terminal aria-hidden className="size-3.5" />
+      </ToolButton>
+      <ToolButton
+        label="Bookmarks"
+        buttonRef={bookmarksButton}
+        pressed={menu === "bookmarks"}
+        onClick={() => setMenu(menu === "bookmarks" ? null : "bookmarks")}
+      >
+        <Bookmark aria-hidden className="size-3.5" />
       </ToolButton>
       <ToolButton label="More" buttonRef={moreButton} onClick={() => setMenu(menu === "more" ? null : "more")}>
         <MoreHorizontal aria-hidden className="size-3.5" />
@@ -785,40 +895,47 @@ export function BrowserView({
       <div
         ref={frame}
         className={`relative flex min-h-0 min-w-0 flex-1 justify-center bg-content/[0.03] ${tab.size?.height ? "items-center" : ""}`}
+        style={tab.size ? { padding: DEVICE_GAP } : undefined}
       >
+        {/* A fixed size sits in a thin glass rim; the page inside is never cut (L-222). */}
         <div
-          ref={pageBox}
-          className={`relative min-w-0 flex-1 ${tab.size?.height ? "" : "h-full"}`}
-          style={boxStyle}
-          title={tab.title || undefined}
+          className={tab.size ? `browser-device-rim flex-none ${tab.size.height ? "" : "h-full"}` : "contents"}
+          style={tab.size ? { padding: DEVICE_RIM } : undefined}
         >
-          {frozen && tab.opened ? (
-            <button
-              type="button"
-              aria-label="Page (paused while a menu or message is open). Click to bring it back."
-              title="Click to bring the live page back"
-              onClick={() => {
-                view.current.liveAnyway = true;
-              }}
-              className="absolute inset-0 cursor-default"
-            >
-              <img
-                src={frozen}
-                alt=""
-                draggable={false}
-                className="block size-full select-none"
-              />
-            </button>
-          ) : null}
-          {tab.opened ? null : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-              <Globe aria-hidden className="size-6 text-content/30" />
-              <p className="text-[13px] text-content/70">Search or type an address above.</p>
-              <p className="max-w-sm text-[12px] text-content/45">
-                Right-click a link in a chat and pick Open in MonoCode to load it here.
-              </p>
-            </div>
-          )}
+          <div
+            ref={pageBox}
+            className={`relative min-w-0 flex-1 ${tab.size?.height ? "" : "h-full"}`}
+            style={boxStyle}
+            title={tab.title || undefined}
+          >
+            {frozen && tab.opened ? (
+              <button
+                type="button"
+                aria-label="Page (paused while a menu or message is open). Click to bring it back."
+                title="Click to bring the live page back"
+                onClick={() => {
+                  view.current.liveAnyway = true;
+                }}
+                className="absolute inset-0 cursor-default"
+              >
+                <img
+                  src={frozen}
+                  alt=""
+                  draggable={false}
+                  className="block size-full select-none"
+                />
+              </button>
+            ) : null}
+            {tab.opened ? null : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+                <Globe aria-hidden className="size-6 text-content/30" />
+                <p className="text-[13px] text-content/70">Search or type an address above.</p>
+                <p className="max-w-sm text-[12px] text-content/45">
+                  Right-click a link in a chat and pick Open in MonoCode to load it here.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {store.downloads.length ? (
@@ -889,7 +1006,11 @@ export function BrowserView({
               onClick={() => openAddress(item.url)}
               className={`${MENU_ITEM} ${index === highlight ? "bg-content/10" : ""}`}
             >
-              <Globe aria-hidden className="size-3.5 shrink-0 text-content/40" />
+              {item.bookmark ? (
+                <Star aria-hidden className="size-3.5 shrink-0 fill-current text-accent/80" />
+              ) : (
+                <Globe aria-hidden className="size-3.5 shrink-0 text-content/40" />
+              )}
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
               <span className="max-w-[45%] shrink-0 truncate text-[11px] text-content/40">{item.detail}</span>
             </button>
@@ -923,6 +1044,58 @@ export function BrowserView({
             <SelectAll aria-hidden className="size-3.5 text-content/50" />
             Drag an area
           </button>
+        </Popover>
+      ) : null}
+
+      {menu === "bookmarks" ? (
+        <Popover anchor={bookmarksButton} side="bottom" align="end" gap={4} width={300} role="menu" aria-label="Bookmarks" onDismiss={() => setMenu(null)} className="p-1">
+          <button type="button" role="menuitem" className={MENU_ITEM} disabled={!tab.url} onClick={toggleSaved}>
+            <Star aria-hidden className={`size-3.5 ${saved ? "fill-current text-accent" : "text-content/50"}`} />
+            {saved ? "Remove this page" : "Bookmark this page"}
+            <span className="ml-auto text-[11px] text-content/40">Ctrl+D</span>
+          </button>
+          <div className="my-1 h-px bg-stroke" />
+          {bookmarks.length ? (
+            <div className="max-h-80 overflow-y-auto">
+              {bookmarks.map((item) => (
+                <div key={item.url} className="group flex items-center">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    title={`${item.url}\nCtrl+click or middle-click: open in a background tab`}
+                    className={`${MENU_ITEM} min-w-0 flex-1`}
+                    onClick={(event) => {
+                      setMenu(null);
+                      if (event.ctrlKey || event.metaKey) openInBackgroundTab(item.url);
+                      else navigateTab(tab.id, item.url);
+                    }}
+                    onAuxClick={(event) => {
+                      if (event.button !== 1) return;
+                      event.preventDefault();
+                      openInBackgroundTab(item.url);
+                    }}
+                  >
+                    <Globe aria-hidden className="size-3.5 shrink-0 text-content/40" />
+                    <span className="min-w-0 flex-1 truncate">{item.title || shortUrl(item.url, 80)}</span>
+                    <span className="max-w-[40%] shrink-0 truncate text-[11px] text-content/40">{hostOf(item.url)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove bookmark ${item.title || item.url}`}
+                    title="Remove bookmark"
+                    onClick={() => removeBookmark(item.url)}
+                    className="ml-0.5 grid size-6 shrink-0 place-items-center rounded-md text-content/45 opacity-0 hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <X aria-hidden className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="px-2 py-2 text-[12px] text-content/50">
+              No bookmarks yet. Click the star in the address bar, or press Ctrl+D.
+            </p>
+          )}
         </Popover>
       ) : null}
 
@@ -961,7 +1134,7 @@ export function BrowserView({
                 key={preset.id}
                 type="button"
                 aria-pressed={sameSize(tab.size, preset)}
-                onClick={() => setPageSize(tab.id, { width: preset.width })}
+                onClick={() => setPageSize(tab.id, { width: preset.width, height: preset.height })}
                 className={SIZE_BUTTON}
               >
                 {preset.name} <span className="tabular-nums text-content/40">{sizeLabel(preset)}</span>
@@ -1065,6 +1238,19 @@ export function BrowserView({
           <button type="button" role="menuitem" className={MENU_ITEM} disabled={!tab.url} onClick={() => { setMenu(null); copyAddress(); }}>
             <Copy aria-hidden className="size-3.5 text-content/50" />
             Copy address
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={MENU_ITEM}
+            disabled={!store.tabs.some((item) => item.url || item.pending)}
+            onClick={() => {
+              setMenu(null);
+              copyTabLinks();
+            }}
+          >
+            <Copy aria-hidden className="size-3.5 text-content/50" />
+            Copy all tab links
           </button>
           <button
             type="button"

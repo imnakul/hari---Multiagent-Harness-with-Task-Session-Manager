@@ -43,8 +43,15 @@ export const openCodeAdapter: HarnessAdapter = {
   generatePrContent: generateOpenCodePrContent,
   generateBranchName: generateOpenCodeBranchName,
   warmupText: warmupOpenCodeText,
-  runHelperPrompt: ({ cwd, prompt, timeoutMs, model }) =>
-    runOpenCodeTextPrompt({ cwd, prompt, timeoutMs, model, helperOnly: true }),
+  runHelperPrompt: ({ cwd, prompt, timeoutMs, model, attachments }) =>
+    runOpenCodeTextPrompt({
+      cwd,
+      prompt,
+      timeoutMs,
+      model,
+      helperOnly: true,
+      ...(attachments?.length ? { attachments } : {}),
+    }),
   runTextPrompt: runOpenCodeTextPrompt,
   stopTextPrompt: stopOpenCodeTextPrompt,
 };

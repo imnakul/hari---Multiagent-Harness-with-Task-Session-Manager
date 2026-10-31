@@ -284,6 +284,14 @@ it("shows the Browser's pages as their own row and adds them to the total", asyn
   expect(container.textContent).toContain(
     "Pages in the Browser tab and panel · 3 processes",
   );
+  // Stop closes every Browser page at once; the tabs stay (L-225).
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Stop all Browser pages"]')!
+      .click(),
+  );
+  expect(mocks.invoke).toHaveBeenCalledWith("browser_close", { tab: null });
+  expect(container.textContent).toContain("Browser pages stopped.");
 });
 it("totals only readable parts when a chat cannot be read", async () => {
   mocks.invoke.mockResolvedValue(

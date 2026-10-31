@@ -1,4 +1,4 @@
-import { HARNESS_TITLE } from "../../../features/sessions/model/session";
+import { HARNESS_TITLE, type Attachment } from "../../../features/sessions/model/session";
 import {
   AI_HELPER_PROVIDERS,
   loadAiHelperSettings,
@@ -66,6 +66,16 @@ export function whiteboardTargetLabel(target: AiHelperTarget): string {
   return target.model ? `${name} · ${target.model}` : name;
 }
 
+/**
+ * Fork (L-221): helpers that take images inside the prompt itself. The rest
+ * (Antigravity, Claude's Interactive CLI) could only open a saved file with a
+ * tool, and Whiteboard helpers run without tools.
+ */
+export function whiteboardSeesImages(target: AiHelperTarget, interactive = false): boolean {
+  if (target.provider === "claude") return !interactive;
+  return target.provider === "codex" || target.provider === "opencode";
+}
+
 export async function askWhiteboardAgent(input: {
   target: AiHelperTarget;
   cwd: string;
@@ -75,12 +85,15 @@ export async function askWhiteboardAgent(input: {
   signal?: AbortSignal;
   /** Claude only: answer through the Claude CLI in a hidden terminal (L-204). */
   interactive?: boolean;
+  /** Images sent as pictures with the prompt (L-221); need `data`. */
+  images?: Attachment[];
   isAvailable?: (target: AiHelperTarget) => boolean;
   run?: HelperRun;
 }): Promise<WhiteboardAgentOutcome> {
   const isAvailable = input.isAvailable ?? continueHelperAvailable;
   const settings = input.modelSettings && Object.keys(input.modelSettings).length ? input.modelSettings : undefined;
   const interactive = input.interactive === true && input.target.provider === "claude";
+  const images = input.images?.length ? input.images : undefined;
   const run: HelperRun =
     input.run ??
     ((target, prompt, timeoutMs) =>
@@ -102,10 +115,19 @@ export async function askWhiteboardAgent(input: {
         providerAccountId: target.accountId,
         model: target.model,
         ...(settings ? { modelSettings: settings } : {}),
+        ...(images ? { attachments: images } : {}),
       }));
   const name = HARNESS_TITLE[input.target.provider];
   if (!isAvailable(input.target)) {
     return { ok: false, cancelled: false, message: `${name} is not available as an AI helper.` };
+  }
+  if (images && !whiteboardSeesImages(input.target, interactive)) {
+    const what = interactive ? "Claude's Interactive CLI mode" : name;
+    return {
+      ok: false,
+      cancelled: false,
+      message: `${what} can't see images here. Switch to Claude (Structured), Codex or OpenCode, or remove the image.`,
+    };
   }
   const result = await runHelperPipeline({
     targets: [input.target],

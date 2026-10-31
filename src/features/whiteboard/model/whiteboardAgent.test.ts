@@ -207,3 +207,33 @@ describe("chat history and summaries", () => {
     expect(describeOps({ clear: true, remove: [], update: [], add: [] })).toBe("Cleared the sheet");
   });
 });
+
+describe("whiteboard images (L-221)", () => {
+  it("tells the agent about images sent with this message", () => {
+    const prompt = buildWhiteboardPrompt({ message: "draw this", history: [], scene: [], imageNames: ["shot.png"] });
+    expect(prompt).toContain("attached an image to this message (shot.png)");
+    expect(prompt.indexOf("shot.png")).toBeLessThan(prompt.indexOf("User: draw this"));
+  });
+
+  it("names earlier images in the history without sending them again", () => {
+    const prompt = buildWhiteboardPrompt({
+      message: "again",
+      history: [{ role: "user", text: "draw this", at: 1, images: [{ name: "a.png", path: "C:/t/a.png" }] }],
+      scene: [],
+    });
+    expect(prompt).toContain("User: draw this (attached image: a.png)");
+    expect(prompt).not.toContain("attached an image to this message");
+  });
+
+  it("keeps well-formed saved image refs and drops broken ones", () => {
+    const raw = JSON.stringify({
+      messages: [
+        { role: "user", text: "a", at: 1, images: [{ name: "a.png", path: "C:/t/a.png" }, { path: 3 }, "x"] },
+        { role: "user", text: "b", at: 2, images: "nope" },
+      ],
+    });
+    const [first, second] = parseChatHistory(raw);
+    expect(first!.images).toEqual([{ name: "a.png", path: "C:/t/a.png" }]);
+    expect(second!.images).toBeUndefined();
+  });
+});

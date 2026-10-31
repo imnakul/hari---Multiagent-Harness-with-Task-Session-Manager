@@ -21,6 +21,7 @@ import { isWebUrl, loadLastBrowserUrl } from "./browserRequest";
 import {
   loadCustomSizes,
   parseSize,
+  withBuiltInHeight,
   saveCustomSizes,
   type PageSize,
   type SizePreset,
@@ -107,7 +108,7 @@ function loadInitial(): BrowserStore {
       .map((tab) => ({
         ...blankTab(tab.id, isWebUrl(tab.url) ? tab.url : ""),
         title: tab.title ?? "",
-        size: parseSize(tab.size ?? tab.preset),
+        size: withBuiltInHeight(parseSize(tab.size ?? tab.preset)),
       }));
     activeId = saved?.active ?? tabs[0]?.id ?? 1;
   } catch {
@@ -218,6 +219,34 @@ export function newTab(url?: string): number {
   tab.pending = url ?? null;
   set({ tabs: [...state.tabs, tab], activeId: id }, true);
   return id;
+}
+
+/**
+ * Opens `url` in a new tab behind the shown one (fork, L-224). The shown
+ * Browser loads it out of sight; with no Browser showing, it loads then.
+ */
+export function backgroundTab(url: string): number {
+  const id = Math.max(0, ...state.tabs.map((tab) => tab.id)) + 1;
+  const tab = blankTab(id);
+  // The address is saved too, so the tab comes back after a restart.
+  tab.url = url;
+  tab.pending = url;
+  set({ tabs: [...state.tabs, tab] }, true);
+  return id;
+}
+
+/** How many Browser views are on screen (the tab, the side panel). */
+let showingViews = 0;
+
+export function markShowing(): () => void {
+  showingViews += 1;
+  return () => {
+    showingViews -= 1;
+  };
+}
+
+export function browserShowing(): boolean {
+  return showingViews > 0;
 }
 
 /** Loads `url` in the shown tab, or a new one when it already has a page. */
@@ -410,8 +439,23 @@ type StatePayload = {
 
 type DevtoolsEntry =
   | (Omit<ConsoleRow, "kind"> & { kind: "console" })
-  | { kind: "request"; id: string; method: string; url: string; type?: string; postData?: string | null }
-  | { kind: "response"; id: string; status: number; statusText?: string; mimeType?: string }
+  | {
+      kind: "request";
+      id: string;
+      method: string;
+      url: string;
+      type?: string;
+      postData?: string | null;
+      headers?: Record<string, string> | null;
+    }
+  | {
+      kind: "response";
+      id: string;
+      status: number;
+      statusText?: string;
+      mimeType?: string;
+      headers?: Record<string, string> | null;
+    }
   | { kind: "failed"; id: string; error?: string; canceled?: boolean }
   | { kind: "finished"; id: string; size?: number };
 
@@ -436,6 +480,7 @@ function onDevtools(id: number, entry: DevtoolsEntry) {
         url: entry.url,
         type: entry.type,
         postData: entry.postData ?? null,
+        ...(entry.headers ? { requestHeaders: entry.headers } : {}),
         done: false,
       };
       return { network: [...rest, row].slice(-MAX_NETWORK) };
@@ -443,7 +488,13 @@ function onDevtools(id: number, entry: DevtoolsEntry) {
     const network = tab.network.map((row) => {
       if (row.id !== entry.id) return row;
       if (entry.kind === "response") {
-        return { ...row, status: entry.status, statusText: entry.statusText, mimeType: entry.mimeType };
+        return {
+          ...row,
+          status: entry.status,
+          statusText: entry.statusText,
+          mimeType: entry.mimeType,
+          ...(entry.headers ? { responseHeaders: entry.headers } : {}),
+        };
       }
       if (entry.kind === "failed") {
         return { ...row, error: entry.canceled ? "canceled" : (entry.error ?? "failed"), done: true };

@@ -15,11 +15,26 @@ export const MAX_SIZE = 4000;
 export const MAX_CUSTOM_SIZES = 12;
 const CUSTOM_KEY = "monocode.browser.sizes";
 
+/** Fork (L-222): real device shapes, so Phone no longer fills the height. */
 export const BUILT_IN_SIZES: SizePreset[] = [
-  { id: "phone", name: "Phone", width: 375 },
-  { id: "tablet", name: "Tablet", width: 768 },
-  { id: "laptop", name: "Laptop", width: 1280 },
+  { id: "phone", name: "Phone", width: 375, height: 812 },
+  { id: "tablet", name: "Tablet", width: 768, height: 1024 },
+  { id: "laptop", name: "Laptop", width: 1280, height: 800 },
 ];
+
+/** Space a fixed size gives up around the page: gap to the edge plus the glass rim (L-222). */
+export const DEVICE_GAP = 12;
+export const DEVICE_RIM = 6;
+
+/**
+ * A tab saved with a built-in width only (before L-222) gets that size's
+ * height, so it still shows as Phone, Tablet or Laptop.
+ */
+export function withBuiltInHeight(size: PageSize | null): PageSize | null {
+  if (!size || size.height) return size;
+  const preset = BUILT_IN_SIZES.find((item) => item.width === size.width);
+  return preset?.height ? { width: preset.width, height: preset.height } : size;
+}
 
 const validSide = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= MIN_SIZE && value <= MAX_SIZE;

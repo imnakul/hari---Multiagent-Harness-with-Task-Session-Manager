@@ -46,6 +46,7 @@ describe("browserMenuItems", () => {
     };
     expect(ids(browserMenuItems(target))).toEqual([
       "link.newTab",
+      "link.background",
       "link.external",
       "link.copy",
       "link.chat",

@@ -20,6 +20,7 @@ import { HelperToolAttemptError } from "../../core/helperIsolation";
 import { JsonRpcClient, type JsonRpcId } from "../../core/jsonRpc";
 import { prepareCodexMonoContext } from "./codexStore";
 import type { TextPromptInput } from "../../core/registry";
+import type { Attachment } from "../../../../features/sessions/model/session";
 
 import { mergeStream, streamTextDelta } from "../../core/streamText";
 
@@ -54,6 +55,8 @@ type LiveText = {
 type CodexTextPromptInput = TextPromptInput & {
   helperOnly?: boolean;
   outputSchema?: Record<string, unknown>;
+  /** Fork (L-221): pictures sent with the prompt itself, no tools needed. */
+  attachments?: Attachment[];
 };
 type CodexTextSessionInput = Omit<CodexTextPromptInput, "prompt"> & {
   prompt?: string;
@@ -169,6 +172,7 @@ async function promptOnLive(input: CodexTextPromptInput): Promise<string> {
         threadId: session.threadId,
         runtimeMode: TEXT_RUNTIME_MODE,
         prompt: input.prompt,
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         model: session.model || undefined,
         effort: session.effort,
         serviceTier: session.serviceTier,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BUILT_IN_SIZES,
+  withBuiltInHeight,
   fitScale,
   MAX_CUSTOM_SIZES,
   newCustomSize,
@@ -59,11 +60,20 @@ describe("newCustomSize", () => {
     });
   });
 
+  it("gives built-in sizes a device height (L-222)", () => {
+    expect(BUILT_IN_SIZES.every((preset) => typeof preset.height === "number")).toBe(true);
+    expect(withBuiltInHeight({ width: 375 })).toEqual({ width: 375, height: 812 });
+    expect(withBuiltInHeight({ width: 500 })).toEqual({ width: 500 });
+    expect(withBuiltInHeight({ width: 375, height: 600 })).toEqual({ width: 375, height: 600 });
+    expect(withBuiltInHeight(null)).toBeNull();
+  });
+
   it("explains what is wrong", () => {
     expect(newCustomSize(empty, { name: "", width: "abc", height: "" })).toHaveProperty("error");
     expect(newCustomSize(empty, { name: "", width: "100", height: "" })).toHaveProperty("error");
     expect(newCustomSize(empty, { name: "", width: "800", height: "5000" })).toHaveProperty("error");
-    expect(newCustomSize(empty, { name: "", width: String(BUILT_IN_SIZES[0]!.width), height: "" })).toEqual({
+    const phone = BUILT_IN_SIZES[0]!;
+    expect(newCustomSize(empty, { name: "", width: String(phone.width), height: String(phone.height) })).toEqual({
       error: "That size is already in the list",
     });
     const full = Array.from({ length: MAX_CUSTOM_SIZES }, (_, index) => ({

@@ -1,4 +1,51 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 18:34 IST — Links open in the Browser side panel beside the chat (L-227)
+- Type: change
+- What: A web link opened in MonoCode (normal click, or Open in MonoCode browser from the link menu) opens the Browser side panel beside the chat instead of the full Browser view. With another view covering the chats, it still opens the full view.
+- Why: User request: keep the chat in view, the way the composer's Browser button does.
+- Files: `src/app/App.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; vitest (browser, app, windowArgs) 520 passed. Desktop UI not checked by the agent.
+
+## 2026-10-31 18:13 IST — Browser bookmarks and Copy all tab links (L-226)
+- Type: feature
+- What: A star in the Browser's address bar (or Ctrl+D) bookmarks the page; a Bookmarks menu opens (Ctrl/middle-click: background tab) or removes them, and bookmarks lead the address suggestions. More → Copy all tab links copies every tab's address, one per line.
+- Why: User picked bookmarks and copy all tab links (3A); Chrome extensions were not chosen.
+- Files: `src/features/browser/model/browserBookmarks.ts` (new, +test), `src/features/browser/ui/BrowserView.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; vitest (browser, ProcessMonitor, windowArgs) 52 passed. Desktop UI not checked by the agent.
+
+## 2026-10-31 18:09 IST — Link cards on every line, background tabs, Stop all Browser pages (L-224, L-225)
+- Type: feature
+- What: With Link previews on Always, every web link line shows its page card (in place after a short label, or under a line of text). Open in background tab from the chat and Browser link menus, Ctrl+click or middle-click loads a link in MonoCode's Browser without switching, with a Show notice when the Browser is hidden; background tabs survive a restart. The process monitor's Browser row gets a Stop button that closes every Browser page and keeps the tabs.
+- Why: User saw cards only on hover with Always on (1A: all links), asked for a silent background tab (2A), and a way to stop forgotten Browser pages from the process monitor.
+- Files: `src/features/sessions/ui/` (soleLinks.ts, AgentMarkdown.tsx, ChatHoverPreviews.tsx, AgentMarkdownLinkPreviews.test.ts), `src/features/browser/` (model/backgroundTabs.ts (new, +test), model/browserTabs.ts, model/browserRequest.ts, model/linkMenu.ts, model/browserMenu.ts (+test), ui/BackgroundTabToast.tsx (new), ui/LinkContextMenu.tsx, ui/BrowserContextMenu.tsx, ui/BrowserView.tsx), `src/app/App.tsx`, `src/app/shell/ProcessMonitor.tsx` (+test), `src-tauri/src/browser_view.rs`, `src-tauri/src/lib.rs`, `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; cargo test browser_view 4 passed; vitest (AgentMarkdown*, browser, ProcessMonitor, settings, windowArgs) 627 passed. Desktop UI not checked by the agent.
+
+## 2026-10-31 13:53 IST — 0.16.0-local23 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local23: 0.16.0-local22 plus Whiteboard chat images (L-221), Browser details, device sizes with a glass rim, steady zoom and readable menus (L-222), and Whiteboard agent runs that keep going in the background (L-223).
+- Why: User asked for a new build to install.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local23-browser-details-device-rim-whiteboard-background_x64.exe` (19,547,929 bytes, SHA-256 0D675BFDF531F81906CFCDE2F7C9E7B2489A1F31218C407DB7A4ADF6B13F8F46, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from the working tree (L-221 to L-223) on top of d1de5585; the version bump is the release commit after the L-221 to L-227 commit, so this installer does not include L-224 to L-227
+- Verified: build ✅ (npm run build:windows); tests as listed in the L-221 and L-222/L-223 entries; desktop check manual
+
+## 2026-10-31 13:38 IST — Browser details, device sizes, steady zoom; Whiteboard runs in the background (L-222, L-223)
+- Type: feature + fix
+- What: Console and Network rows open details (message and source; request Headers, Payload, Response) instead of going straight to the chat, with a separate Add to chat on the row and in the details; request and response headers are captured for the details only. Phone, Tablet and Laptop show a device-height page in a thin glass rim. A page's zoom holds after reloads and sign-ins (it jumped to 110%). Menus and toasts stay readable over a paused Browser page. A Whiteboard agent run keeps going after leaving the sheet or the Whiteboard and draws when the sheet is open again.
+- Why: User reported the 110% zoom, a too-tall phone view, rows attaching on click, see-through menus, and the Whiteboard agent stopping when they switched tabs; picks approved ("go with your picks").
+- Files: `src-tauri/src/browser_view.rs`, `src/features/browser/` (model/browserContext.ts (+test), model/browserSizes.ts (+test), model/browserTabs.ts, ui/BrowserView.tsx, ui/BrowserDevtools.tsx, ui/BrowserDevtoolsDetails.tsx (new)), `src/styles/index.css`, `src/features/whiteboard/` (model/whiteboardRuns.ts (new, +test), ui/WhiteboardChat.tsx, ui/WhiteboardView.tsx), `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; cargo test browser_view 4 passed; vitest (browser, whiteboard, whiteboard helper, windowArgs) 83 passed, 1 timed out under load (`iconCatalog.test.ts`, passes alone). Desktop UI not checked by the agent.
+## 2026-10-31 12:57 IST — Images in the Whiteboard agent chat (L-221)
+- Type: feature
+- What: The Whiteboard agent chat accepts images by paste or the paperclip (PNG, JPG, GIF, WebP, up to 5 MB). They show as thumbnails, go to the agent as pictures (Claude Structured, Codex, OpenCode) and stay in the chat history; other helpers get a clear "can't see images" message instead of sending.
+- Why: User couldn't add images: the chat took text files only (L-199) and refused images with "not a text file" (locked 1A save to the temp folder, 2A thumbnails).
+- Files: `src/features/whiteboard/ui/WhiteboardChat.tsx`, `src/features/whiteboard/model/whiteboardAgent.ts` (+ test), `src/integrations/harness/core/whiteboardHelper.ts` (+ test), `src/integrations/harness/core/registry.ts`, `src/integrations/harness/providers/claude/` (claudeAdapter.ts, claudeText.ts), `providers/codex/` (codexAdapter.ts, codexText.ts), `providers/opencode/` (opencodeAdapter.ts, opencodeText.ts), `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; vitest (whiteboard, whiteboard helper, Claude, Codex, OpenCode providers) 887 passed, 1 timed out under load (`iconCatalog.test.ts`, passes alone). Desktop UI not checked by the agent.
+
 ## 2026-10-31 11:15 IST — 0.16.0-local22 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local22: 0.16.0-local21 plus the Browser page freezing under overlays (L-214), MonoCode right-click menu in the Browser (L-215), custom size presets (L-216), Always-mode link cards (L-217), chats and reminders working with a Browser page open (L-218), sliding Browser and Session overview panels (L-219) and the one Web links setting (L-220).

@@ -48,6 +48,22 @@ struct TabsState {
     visible: bool,
     picking: HashMap<u32, String>,
     browser_pid: Option<u32>,
+    /// Fork (L-222): the zoom MonoCode set per tab, and whether a page is
+    /// loading. The page engine puts back a zoom it remembers for a site
+    /// while a page loads; that is undone so the tab keeps its own zoom.
+    zoom: HashMap<u32, TabZoom>,
+}
+
+#[derive(Clone, Copy)]
+struct TabZoom {
+    want: f64,
+    loading: bool,
+}
+
+impl Default for TabZoom {
+    fn default() -> Self {
+        Self { want: 1.0, loading: false }
+    }
 }
 
 impl BrowserTabs {
@@ -174,6 +190,11 @@ fn create<R: Runtime>(
                     ..Default::default()
                 },
             );
+            // A tab loaded in the background sleeps once its page is in (L-224).
+            #[cfg(windows)]
+            if !loading && webview.state::<BrowserTabs>().lock().active != Some(tab) {
+                native::suspend(&webview);
+            }
             // A new page drops the injected tool; put it back while it is on.
             if !loading {
                 let mode = webview.state::<BrowserTabs>().lock().picking.get(&tab).cloned();
@@ -281,6 +302,30 @@ pub async fn browser_open(
     activate(&app, &tabs, tab, Some(bounds))
 }
 
+/// Loads `url` in browser tab `tab` out of sight, leaving the shown tab as it
+/// is (fork, L-224: Open in background tab). The page sleeps once loaded.
+#[tauri::command]
+pub async fn browser_preload(
+    app: AppHandle,
+    tabs: State<'_, BrowserTabs>,
+    tab: u32,
+    url: String,
+    bounds: BrowserBounds,
+) -> Result<(), String> {
+    let url = parse_web_url(&url)?;
+    if tabs.lock().active == Some(tab) {
+        return browser_open(app, tabs, tab, url.to_string(), bounds).await;
+    }
+    match app.get_webview(&label(tab)) {
+        Some(webview) => {
+            #[cfg(windows)]
+            native::resume(&webview);
+            webview.navigate(url).map_err(|e| e.to_string())
+        }
+        None => create(&app, tab, url, bounds)?.hide().map_err(|e| e.to_string()),
+    }
+}
+
 /// Switches to a tab that already has a page.
 #[tauri::command]
 pub async fn browser_select(
@@ -363,6 +408,7 @@ pub async fn browser_close(
             webview.close().map_err(|e| e.to_string())?;
             let mut state = tabs.lock();
             state.picking.remove(&id);
+            state.zoom.remove(&id);
             if state.active == Some(id) {
                 state.active = None;
             }
@@ -375,6 +421,12 @@ pub async fn browser_close(
 #[tauri::command]
 pub async fn browser_zoom(app: AppHandle, tab: u32, factor: f64) -> Result<(), String> {
     let factor = if factor.is_finite() { factor.clamp(0.25, 5.0) } else { 1.0 };
+    app.state::<BrowserTabs>()
+        .lock()
+        .zoom
+        .entry(tab)
+        .or_default()
+        .want = factor;
     tab_view(&app, tab)?
         .set_zoom(factor)
         .map_err(|e| e.to_string())?;
@@ -583,6 +635,21 @@ fn on_cdp_event<R: Runtime>(app: &AppHandle<R>, tab: u32, event: &str, json: &st
     }
 }
 
+/// Request or response headers as name → text, capped (L-222). Shown in the
+/// Network details only; notes added to a chat leave them out.
+fn headers_of(value: &Value) -> Value {
+    let Some(map) = value.as_object() else { return Value::Null };
+    let headers = map
+        .iter()
+        .take(80)
+        .map(|(name, value)| {
+            let text = value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string());
+            (cap(name, 200), Value::String(cap(&text, 2000)))
+        })
+        .collect();
+    Value::Object(headers)
+}
+
 fn cap(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
@@ -695,6 +762,7 @@ pub(crate) fn devtools_entry(event: &str, p: &Value) -> Option<Value> {
                 "url": cap(r["url"].as_str().unwrap_or_default(), 2000),
                 "type": p["type"],
                 "postData": r["postData"].as_str().map(|s| cap(s, 8000)),
+                "headers": headers_of(&r["headers"]),
             }))
         }
         "Network.responseReceived" => {
@@ -705,6 +773,7 @@ pub(crate) fn devtools_entry(event: &str, p: &Value) -> Option<Value> {
                 "status": r["status"],
                 "statusText": r["statusText"],
                 "mimeType": r["mimeType"],
+                "headers": headers_of(&r["headers"]),
             }))
         }
         "Network.loadingFailed" => Some(json!({
@@ -741,6 +810,7 @@ mod native {
     use webview2_com::{
         take_pwstr, CallDevToolsProtocolMethodCompletedHandler,
         ContextMenuRequestedEventHandler, DevToolsProtocolEventReceivedEventHandler,
+        NavigationCompletedEventHandler, NavigationStartingEventHandler,
         TrySuspendCompletedHandler, ZoomFactorChangedEventHandler,
     };
     use windows_core::{Interface, BOOL, HSTRING, PWSTR};
@@ -904,6 +974,24 @@ mod native {
                     if let Some(sender) = sender {
                         let mut zoom = 1.0f64;
                         sender.ZoomFactor(&mut zoom)?;
+                        // A change while a page loads is the engine's
+                        // remembered site zoom: put the tab's own back (L-222).
+                        // Any other change is the user's (Ctrl+scroll) and
+                        // becomes the tab's zoom.
+                        let restore = {
+                            let state = zoom_app.state::<BrowserTabs>();
+                            let mut tabs = state.lock();
+                            let entry = tabs.zoom.entry(tab).or_default();
+                            if entry.loading && (zoom - entry.want).abs() > 0.001 {
+                                Some(entry.want)
+                            } else {
+                                entry.want = zoom;
+                                None
+                            }
+                        };
+                        if let Some(want) = restore {
+                            return sender.SetZoomFactor(want);
+                        }
                         emit_state(
                             &zoom_app,
                             BrowserState {
@@ -917,6 +1005,36 @@ mod native {
                 }));
                 let mut token = 0i64;
                 let _ = controller.add_ZoomFactorChanged(&handler, &mut token);
+                let start_app = app.clone();
+                let starting = NavigationStartingEventHandler::create(Box::new(move |_, _| {
+                    start_app
+                        .state::<BrowserTabs>()
+                        .lock()
+                        .zoom
+                        .entry(tab)
+                        .or_default()
+                        .loading = true;
+                    Ok(())
+                }));
+                let _ = core.add_NavigationStarting(&starting, &mut token);
+                let done_app = app.clone();
+                let done_controller = controller.clone();
+                let completed = NavigationCompletedEventHandler::create(Box::new(move |_, _| {
+                    let want = {
+                        let state = done_app.state::<BrowserTabs>();
+                        let mut tabs = state.lock();
+                        let entry = tabs.zoom.entry(tab).or_default();
+                        entry.loading = false;
+                        entry.want
+                    };
+                    let mut zoom = 1.0f64;
+                    done_controller.ZoomFactor(&mut zoom)?;
+                    if (zoom - want).abs() > 0.001 {
+                        done_controller.SetZoomFactor(want)?;
+                    }
+                    Ok(())
+                }));
+                let _ = core.add_NavigationCompleted(&completed, &mut token);
                 let _ = hook_context_menu(&core, app.clone(), tab);
                 fire(&core, "Runtime.enable", "{}");
                 fire(&core, "Log.enable", "{}");
@@ -1039,5 +1157,28 @@ mod tests {
         assert_eq!(row["text"], "slow 3");
         assert_eq!(row["source"], "http://localhost:5173/src/a.ts:10");
         assert!(devtools_entry("Page.frameNavigated", &json!({})).is_none());
+    }
+
+    #[test]
+    fn network_rows_carry_headers() {
+        let request = devtools_entry(
+            "Network.requestWillBeSent",
+            &json!({
+                "requestId": "1",
+                "type": "Fetch",
+                "request": { "method": "GET", "url": "http://localhost:3002/api", "headers": { "Accept": "*/*" } },
+            }),
+        )
+        .unwrap();
+        assert_eq!(request["headers"]["Accept"], "*/*");
+        let response = devtools_entry(
+            "Network.responseReceived",
+            &json!({
+                "requestId": "1",
+                "response": { "status": 200, "mimeType": "application/json", "headers": { "x-count": 3 } },
+            }),
+        )
+        .unwrap();
+        assert_eq!(response["headers"]["x-count"], "3");
     }
 }
