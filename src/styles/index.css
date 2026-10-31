@@ -507,7 +507,8 @@ html:not(.is-mac) #root {
    and blur, colours behind lifted a little, bright edges inside and out and a
    soft shadow. Glass shows what is behind it (the wallpaper, when one is set). */
 .browser-device-rim {
-  border-radius: 14px;
+  /* Fork (L-228): outer corner = the rim (DEVICE_RIM) around the square page. */
+  border-radius: 6px;
   background: color-mix(
     in srgb,
     var(--color-content) var(--popover-surface-opacity),

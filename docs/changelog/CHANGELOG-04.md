@@ -1,4 +1,28 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 19:32 IST — 0.16.0-local24 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local24: 0.16.0-local23 plus background tabs (L-224), Browser bookmarks and copy all tab links (L-226), links opening in the side panel beside the chat (L-227), link card and side panel edge fixes (L-228) and link card styles (L-229), with the other L-224 to L-227 changes in commit df482908.
+- Why: User asked for a new build to install after checking the card styles in dev.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local24-link-card-styles-links-beside-chat-bookmarks_x64.exe` (19,549,480 bytes, SHA-256 B9D88C8AB31CA2B592996B2DEEA1C6FA56F48BF0034255A9C881C135AFD8F895, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built from the working tree on top of 0bcac7ec; L-228, L-229 and the version bump were committed right after, with no other changes
+- Verified: build ✅ (npm run build:windows); tests as listed in the L-228 and L-229 entries; desktop check manual
+
+## 2026-10-31 19:23 IST — Card style setting for chat link cards: Compact, Wide, Large, Large side (L-229)
+- Type: feature
+- What: With Link previews set to Always, Settings → Card style picks how link cards in replies look. Compact is today's card; Wide shows more text across the reply; Large puts a big image above the text; Large side puts it beside the text. Large styles keep a sharper preview image, in memory only.
+- Why: User request: a wider card to read more, and a large card with a bigger image and more detail.
+- Files: `src/features/settings/model/linkPreviewSettings.ts`, `src/features/settings/model/linkPreviewSettings.test.ts`, `src/features/settings/model/settings.ts`, `src/features/settings/ui/SettingsView.tsx`, `src/features/sessions/ui/ChatHoverPreviews.tsx`, `src/features/sessions/ui/AgentMarkdownLinkPreviews.test.ts`, `src/features/sessions/model/linkPreview.ts`, `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; vitest (settings, sessions) 2532 passed, plus the new card style tests. Desktop UI not checked by the agent.
+
+## 2026-10-31 19:05 IST — Link cards no longer cut off text; side panel edge resizes along its full height (L-228)
+- Type: fix
+- What: Chat link cards show the whole title and both description lines. The Browser side panel's left edge can be dragged anywhere along its height, not only beside the toolbar. A page size picked while a menu is open no longer stretches the paused page picture. The device frame's corner is 6px to match its rim. The Web links setting's description matches L-227.
+- Why: User report from a dev-mode test: the card's text was clipped, and the page covered the resize edge below the toolbar.
+- Files: `src/features/sessions/ui/ChatHoverPreviews.tsx`, `src/features/browser/ui/BrowserView.tsx`, `src/styles/index.css`, `src/features/settings/ui/SettingsView.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: see git log
+- Verified: tsc clean; vitest (browser, sessions, windowArgs) 2066 passed. Desktop UI not checked by the agent.
+
 ## 2026-10-31 18:34 IST — Links open in the Browser side panel beside the chat (L-227)
 - Type: change
 - What: A web link opened in MonoCode (normal click, or Open in MonoCode browser from the link menu) opens the Browser side panel beside the chat instead of the full Browser view. With another view covering the chats, it still opens the full view.

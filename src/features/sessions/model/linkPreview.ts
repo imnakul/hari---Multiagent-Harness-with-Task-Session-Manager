@@ -152,20 +152,26 @@ export function fetchLinkPreviewMetadata(
 }
 
 export const RICH_PREVIEW_CACHE_LIMIT = 100;
-const THUMBNAIL_MAX_WIDTH = 480;
+/** Thumbnail width for the small cards; large cards ask for a sharper one (L-229). */
+export const THUMBNAIL_MAX_WIDTH = 480;
 const richCache = new Map<string, Promise<LinkPreviewMetadata>>();
 
 /**
  * A chat card's preview: page metadata plus its preview image, shrunk to a
- * JPEG thumbnail before it is kept. Held in memory for the most recent
- * {@link RICH_PREVIEW_CACHE_LIMIT} links only; nothing is written to disk.
+ * JPEG thumbnail at most `maxWidth` pixels wide before it is kept. Held in
+ * memory for the most recent {@link RICH_PREVIEW_CACHE_LIMIT} previews only;
+ * nothing is written to disk.
  */
-export function fetchRichLinkPreview(url: string): Promise<LinkPreviewMetadata> {
-  const cached = richCache.get(url);
+export function fetchRichLinkPreview(
+  url: string,
+  maxWidth = THUMBNAIL_MAX_WIDTH,
+): Promise<LinkPreviewMetadata> {
+  const key = `${maxWidth} ${url}`;
+  const cached = richCache.get(key);
   if (cached) {
     // Re-insert so the map's order stays least recently used first.
-    richCache.delete(url);
-    richCache.set(url, cached);
+    richCache.delete(key);
+    richCache.set(key, cached);
     return cached;
   }
   const pending = invoke<LinkPreviewMetadata>("fetch_link_preview", {
@@ -174,11 +180,11 @@ export function fetchRichLinkPreview(url: string): Promise<LinkPreviewMetadata> 
   }).then(async (metadata) => ({
     ...metadata,
     imageDataUrl: metadata.imageDataUrl
-      ? await thumbnail(metadata.imageDataUrl).catch(() => null)
+      ? await thumbnail(metadata.imageDataUrl, maxWidth).catch(() => null)
       : null,
   }));
-  richCache.set(url, pending);
-  pending.catch(() => richCache.delete(url));
+  richCache.set(key, pending);
+  pending.catch(() => richCache.delete(key));
   while (richCache.size > RICH_PREVIEW_CACHE_LIMIT) {
     const oldest = richCache.keys().next().value;
     if (oldest === undefined) break;
@@ -188,11 +194,11 @@ export function fetchRichLinkPreview(url: string): Promise<LinkPreviewMetadata> 
 }
 
 /** Redraws an image at card size so a 1 MB page image is kept as ~30 KB. */
-function thumbnail(source: string): Promise<string> {
+function thumbnail(source: string, maxWidth: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
-      const scale = Math.min(1, THUMBNAIL_MAX_WIDTH / image.naturalWidth);
+      const scale = Math.min(1, maxWidth / image.naturalWidth);
       const width = Math.max(1, Math.round(image.naturalWidth * scale));
       const height = Math.max(1, Math.round(image.naturalHeight * scale));
       const canvas = document.createElement("canvas");

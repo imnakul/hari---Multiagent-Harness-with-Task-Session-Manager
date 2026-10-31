@@ -2,7 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentMarkdown, isBareLink } from "./AgentMarkdown";
-import { saveLinkPreviewMode } from "../../settings/model/linkPreviewSettings";
+import {
+  saveLinkCardStyle,
+  saveLinkPreviewMode,
+} from "../../settings/model/linkPreviewSettings";
 
 // Node has no localStorage, so a saved mode is held in memory for these tests.
 const text = [
@@ -124,6 +127,21 @@ describe("AgentMarkdown link cards (L-217)", () => {
     expect(markup).toContain("GitHub:");
     // The copies under the line are left out of the tab order.
     expect(markup.match(/tabindex="-1"/g)).toHaveLength(2);
+  });
+
+  it("draws every card, under a line too, in the chosen card style (L-229)", () => {
+    saveLinkPreviewMode("always");
+    const styles = (markup: string) =>
+      [...markup.matchAll(/data-card-style="([^"]+)"/g)].map((m) => m[1]!);
+    const render = () =>
+      renderToStaticMarkup(createElement(AgentMarkdown, { text: lines, localMedia: true }));
+    expect(styles(render())).toEqual(["compact", "compact", "compact", "compact"]);
+    saveLinkCardStyle("large-side");
+    try {
+      expect(styles(render())).toEqual(["large-side", "large-side", "large-side", "large-side"]);
+    } finally {
+      saveLinkCardStyle("compact");
+    }
   });
 
   it("shows no cards in hover mode", () => {

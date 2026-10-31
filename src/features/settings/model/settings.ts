@@ -539,7 +539,8 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     id: "link-previews",
     section: "chat",
     label: "Link previews",
-    keywords: "url web page card image title description hover always off rich",
+    keywords:
+      "url web page card image title description hover always off rich style compact wide large",
   },
   {
     id: "terminal-links",

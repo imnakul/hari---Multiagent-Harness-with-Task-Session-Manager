@@ -11,8 +11,13 @@ import { Globe } from "../../../shared/ui/icons";
 import { Popover } from "../../../shared/ui/Popover";
 import { sniffImageMime } from "../../files/model/filePreview";
 import {
+  useLinkCardStyle,
+  type LinkCardStyle,
+} from "../../settings/model/linkPreviewSettings";
+import {
   fetchLinkPreviewMetadata,
   fetchRichLinkPreview,
+  THUMBNAIL_MAX_WIDTH,
   type LinkPreviewMetadata,
 } from "../model/linkPreview";
 
@@ -146,13 +151,17 @@ type LinkState =
   | { status: "ready"; metadata: LinkPreviewMetadata }
   | { status: "unavailable" };
 
-function useRichLinkPreview(url: string, enabled: boolean): LinkState {
+function useRichLinkPreview(
+  url: string,
+  enabled: boolean,
+  maxWidth = THUMBNAIL_MAX_WIDTH,
+): LinkState {
   const [state, setState] = useState<LinkState>({ status: "loading" });
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     setState({ status: "loading" });
-    fetchRichLinkPreview(url).then(
+    fetchRichLinkPreview(url, maxWidth).then(
       (metadata) => {
         if (!cancelled) setState({ status: "ready", metadata });
       },
@@ -163,7 +172,7 @@ function useRichLinkPreview(url: string, enabled: boolean): LinkState {
     return () => {
       cancelled = true;
     };
-  }, [url, enabled]);
+  }, [url, enabled, maxWidth]);
   return state;
 }
 
@@ -178,13 +187,17 @@ function hostOf(url: string): string {
 function SiteLine({
   url,
   metadata,
+  withHost = false,
 }: {
   url: string;
   metadata: LinkPreviewMetadata | null;
+  /** Also show the address's host after a site name that differs from it. */
+  withHost?: boolean;
 }) {
   const [iconFailed, setIconFailed] = useState(false);
   const icon = iconFailed ? null : metadata?.faviconDataUrl;
   const host = hostOf(url);
+  const site = metadata?.siteName?.trim();
   return (
     <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-content/50">
       {icon ? (
@@ -196,7 +209,12 @@ function SiteLine({
           onError={() => setIconFailed(true)}
         />
       ) : null}
-      <span className="truncate">{metadata?.siteName?.trim() || host}</span>
+      <span className="truncate">
+        {site || host}
+        {withHost && site && site.toLowerCase() !== host.toLowerCase() ? (
+          <span className="text-content/40"> · {host}</span>
+        ) : null}
+      </span>
     </span>
   );
 }
@@ -347,11 +365,50 @@ export function WebLinkChipLabel({
   );
 }
 
+/** Fork (L-229): each card style's size, image place and room for text. */
+const CARD_LOOKS: Record<
+  LinkCardStyle,
+  { card: string; text: string; image: string; title: string; description: string }
+> = {
+  compact: {
+    card: "h-24 w-[26rem]",
+    text: "px-3 py-2",
+    image: "h-full w-[7.5rem] rounded-r-[7px]",
+    title: "truncate text-[13px] leading-snug",
+    description: "line-clamp-2",
+  },
+  wide: {
+    card: "h-32 w-[40rem]",
+    text: "px-3.5 py-2",
+    image: "h-full w-[34%] rounded-r-[7px]",
+    title: "line-clamp-2 text-[13px] leading-snug",
+    description: "line-clamp-3",
+  },
+  large: {
+    card: "w-[30rem] flex-col",
+    text: "px-3.5 py-3",
+    image: "aspect-[1.91/1] w-full rounded-t-[7px]",
+    title: "line-clamp-2 text-[15px] leading-5",
+    description: "line-clamp-3",
+  },
+  "large-side": {
+    card: "h-40 w-[40rem]",
+    text: "px-4 py-3",
+    image: "h-full w-[45%] rounded-r-[7px]",
+    title: "line-clamp-2 text-[15px] leading-5",
+    description: "line-clamp-4",
+  },
+};
+
+/** Large cards show the image big, so they keep a sharper copy of it. */
+const LARGE_THUMBNAIL_WIDTH = 960;
+
 /**
  * Fork (L-217): with Link previews set to Always, a web link alone on its line
  * shows as a page card in place: site, title, description and image. It loads
  * once it nears the screen, keeps one size while loading so the reply does not
- * jump, and falls back to the chip when the page has no preview.
+ * jump, and falls back to the chip when the page has no preview. Its look is
+ * the Card style setting (L-229).
  */
 export function WebLinkCardLink({
   url,
@@ -364,8 +421,15 @@ export function WebLinkCardLink({
   /** False for a card under its line, whose chip is already in the text. */
   chipWhenUnavailable?: boolean;
 }) {
+  const style = useLinkCardStyle();
+  const look = CARD_LOOKS[style];
+  const large = style === "large" || style === "large-side";
   const [ref, near] = useNearViewport<HTMLSpanElement>();
-  const state = useRichLinkPreview(url, near);
+  const state = useRichLinkPreview(
+    url,
+    near,
+    large ? LARGE_THUMBNAIL_WIDTH : THUMBNAIL_MAX_WIDTH,
+  );
   if (state.status === "unavailable") {
     if (!chipWhenUnavailable) return null;
     return (
@@ -377,28 +441,40 @@ export function WebLinkCardLink({
   const metadata = state.status === "ready" ? state.metadata : null;
   const title = metadata?.title?.trim() || label || hostOf(url);
   const description = metadata?.description?.trim();
+  const image = metadata?.imageDataUrl ? (
+    <PreviewImage src={metadata.imageDataUrl} className={look.image} />
+  ) : style === "large" && state.status === "loading" ? (
+    // Most pages have an image: hold its place so the card grows less.
+    <span
+      className={`block shrink-0 animate-pulse bg-content/[0.07] motion-reduce:animate-none ${look.image}`}
+    />
+  ) : null;
   return (
     <span
       ref={ref}
       data-link-card={url}
-      className="my-1 flex h-[5.5rem] w-[26rem] max-w-full overflow-hidden rounded-lg border border-stroke bg-content/[0.03] text-content transition-colors duration-100 ease-out hover:bg-content/[0.06]"
+      data-card-style={style}
+      className={`my-1 flex max-w-full overflow-hidden rounded-lg border border-stroke bg-content/[0.03] text-content transition-colors duration-100 ease-out hover:bg-content/[0.06] ${look.card}`}
     >
-      <span className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-2">
-        <SiteLine url={url} metadata={metadata} />
+      {style === "large" ? image : null}
+      <span
+        className={`flex min-w-0 flex-1 flex-col justify-center gap-1 leading-4 [&>*]:shrink-0 ${look.text}`}
+      >
+        <SiteLine url={url} metadata={metadata} withHost={style !== "compact"} />
         {state.status === "loading" ? (
           <TextSkeleton />
         ) : (
           <>
-            <span className="truncate text-[13px] font-semibold leading-snug">{title}</span>
+            <span className={`font-semibold ${look.title}`}>{title}</span>
             {description ? (
-              <span className="line-clamp-2 text-xs leading-snug text-content/60">{description}</span>
+              <span className={`text-xs leading-snug text-content/60 ${look.description}`}>
+                {description}
+              </span>
             ) : null}
           </>
         )}
       </span>
-      {metadata?.imageDataUrl ? (
-        <PreviewImage src={metadata.imageDataUrl} className="h-full w-[7.5rem] rounded-r-[7px]" />
-      ) : null}
+      {style === "large" ? null : image}
     </span>
   );
 }

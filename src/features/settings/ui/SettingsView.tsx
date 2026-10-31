@@ -363,7 +363,9 @@ import {
 } from "../../providers/model/providerAccountIdentity";
 import { ProviderAccountSubtitle } from "../../providers/ui/ProviderAccountSubtitle";
 import {
+  saveLinkCardStyle,
   saveLinkPreviewMode,
+  useLinkCardStyle,
   useLinkPreviewMode,
 } from "../model/linkPreviewSettings";
 import {
@@ -1560,6 +1562,7 @@ function ChatPage() {
   const pacedReveal = usePacedReveal();
   const codeWrap = useCodeWrap();
   const linkPreviewMode = useLinkPreviewMode();
+  const linkCardStyle = useLinkCardStyle();
   const terminalLinkTarget = useTerminalLinkTarget();
   const [transcriptLayout, setTranscriptLayout] =
     useState<TranscriptLayout>(loadTranscriptLayout);
@@ -1755,10 +1758,29 @@ function ChatPage() {
             onChange={saveLinkPreviewMode}
           />
         </Row>
+        {/* Fork (L-229): cards show only in Always mode, so their style does too. */}
+        {linkPreviewMode === "always" ? (
+          <Row
+            label="Card style"
+            description="How a link's page card looks in a reply. Compact is small, with the image at the side. Wide uses more of the reply's width to show more of the title and description. Large shows a big image above the text; Large side shows it beside the text."
+          >
+            <Segmented
+              label="Card style"
+              value={linkCardStyle}
+              options={[
+                { value: "compact", label: "Compact" },
+                { value: "wide", label: "Wide" },
+                { value: "large", label: "Large" },
+                { value: "large-side", label: "Large side" },
+              ]}
+              onChange={saveLinkCardStyle}
+            />
+          </Row>
+        ) : null}
         <Row
           id="terminal-links"
           label="Web links"
-          description="Where web links you click open: in chats, notes, previews and terminals (such as a dev server's localhost address). MonoCode opens them in the Browser panel beside the chat when it is open, otherwise in the Browser tab. Right-click a link to pick the other one."
+          description="Where web links you click open: in chats, notes, previews and terminals (such as a dev server's localhost address). MonoCode opens them in the Browser panel beside the chat, or in the Browser tab when another view (such as Settings or the Whiteboard) covers the chats. Right-click a link to pick the other one."
         >
           <Segmented
             label="Web links"

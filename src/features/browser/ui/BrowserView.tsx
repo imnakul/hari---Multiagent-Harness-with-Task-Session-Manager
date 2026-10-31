@@ -894,7 +894,10 @@ export function BrowserView({
       ) : null}
       <div
         ref={frame}
-        className={`relative flex min-h-0 min-w-0 flex-1 justify-center bg-content/[0.03] ${tab.size?.height ? "items-center" : ""}`}
+        // The page is a native layer above this window, so in the side panel it
+        // starts a few pixels in: the panel's resize edge stays grabbable along
+        // its full height (L-228).
+        className={`relative flex min-h-0 min-w-0 flex-1 justify-center bg-content/[0.03] ${tab.size?.height ? "items-center" : ""} ${panel && !tab.size ? "pl-1.5" : ""}`}
         style={tab.size ? { padding: DEVICE_GAP } : undefined}
       >
         {/* A fixed size sits in a thin glass rim; the page inside is never cut (L-222). */}
@@ -922,7 +925,9 @@ export function BrowserView({
                   src={frozen}
                   alt=""
                   draggable={false}
-                  className="block size-full select-none"
+                  // A page size picked while paused: crop the old picture
+                  // rather than stretch it (L-228).
+                  className="block size-full select-none object-cover object-left-top"
                 />
               </button>
             ) : null}
