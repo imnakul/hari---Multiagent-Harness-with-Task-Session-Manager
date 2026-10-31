@@ -542,6 +542,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "url web page card image title description hover always off rich",
   },
   {
+    id: "terminal-links",
+    section: "chat",
+    label: "Terminal links",
+    keywords: "terminal url localhost open browser default monocode click",
+  },
+  {
     id: "follow-up",
     section: "chat",
     label: "Follow-up behavior",
@@ -2105,6 +2111,11 @@ export const KEYBINDINGS: KeybindingRow[] = [
   {
     command: "App: Toggle Session Panel",
     keys: `${MOD}${SHIFT}O`,
+    when: "Chat open",
+  },
+  {
+    command: "App: Toggle Browser Panel",
+    keys: `${MOD}${SHIFT}U`,
     when: "Chat open",
   },
   { command: "App: Toggle Mono", keys: `${MOD}I`, when: "Project with a mono" },

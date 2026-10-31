@@ -63,6 +63,7 @@ function EnabledProcessMonitor({
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<OwnedProcess[] | null>(null);
   const [app, setApp] = useState<AppProcess | null>(null);
+  const [browser, setBrowser] = useState<AppProcess | null>(null);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [stopping, setStopping] = useState(new Set<string>());
@@ -99,6 +100,7 @@ function EnabledProcessMonitor({
           previous.current = merged;
           setRows(merged);
           setApp(next.app);
+          setBrowser(next.browser ?? null);
           setError(undefined);
         }
       } catch (failure) {
@@ -191,7 +193,7 @@ function EnabledProcessMonitor({
       refresh.current();
     }
   };
-  const totals = app ? processTotals(app, rows ?? []) : null;
+  const totals = app ? processTotals(app, rows ?? [], browser) : null;
   const cpu = totals?.cpu == null ? "…" : processPercent(totals.cpu);
   const gpu = totals?.gpu == null ? "" : ` · GPU ${processPercent(totals.gpu)}`;
   const groups = new Map<string, OwnedProcess[]>();
@@ -285,7 +287,7 @@ function EnabledProcessMonitor({
                   <div className="min-w-0 flex-1">
                     <div className="truncate">MonoCode app</div>
                     <div className="text-content/50">
-                      App and web view · {app.processes} process
+                      App and web view, Whiteboard included · {app.processes} process
                       {app.processes === 1 ? "" : "es"}
                       {app.unreadable
                         ? ` · ${app.unreadable} not readable`
@@ -306,6 +308,41 @@ function EnabledProcessMonitor({
                     items={app.children}
                     appPid={app.pid}
                   />
+                ) : null}
+                {browser ? (
+                  <>
+                    <div className="flex items-center gap-2 py-2">
+                      <DisclosureButton
+                        label="Browser"
+                        expanded={expanded.has(`browser:${browser.pid}`)}
+                        onToggle={() => toggle(`browser:${browser.pid}`)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">Browser</div>
+                        <div className="text-content/50">
+                          Pages in the Browser tab and panel · {browser.processes} process
+                          {browser.processes === 1 ? "" : "es"}
+                          {browser.unreadable
+                            ? ` · ${browser.unreadable} not readable`
+                            : ""}
+                        </div>
+                      </div>
+                      <UsageCells
+                        cpu={browser.cpu}
+                        memory={browser.memory}
+                        gpu={browser.gpu}
+                        measuring={browser.memory != null}
+                      />
+                      <span aria-hidden className="size-6 shrink-0" />
+                    </div>
+                    {expanded.has(`browser:${browser.pid}`) ? (
+                      <ProcessList
+                        label="Browser"
+                        items={browser.children}
+                        appPid={app.pid}
+                      />
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             ) : null}

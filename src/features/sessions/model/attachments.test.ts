@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  attachmentPathText,
   attachmentsFromFiles,
   filesFromClipboard,
   loadAttachmentPreviewUrl,
   loadProjectImagePreviewUrl,
   mergeAttachments,
+  persistableAttachment,
+  promptBlocks,
   sniffImageMime,
 } from "./attachments";
 import type { Attachment } from "./session";
@@ -38,6 +41,25 @@ function attachment(
     ...partial,
   };
 }
+
+describe("text notes", () => {
+  const note = attachment({
+    id: "n1",
+    name: "Console: TypeError",
+    mimeType: "text/plain",
+    kind: "file",
+    text: ["Browser console error:", "TypeError: x"].join("\n"),
+  });
+
+  it("keeps the note text when saved and sends it as text, not a path", () => {
+    expect(persistableAttachment(note).text).toBe(note.text);
+    expect(attachmentPathText(note)).toBe(note.text);
+    expect(promptBlocks("fix it", [note]).at(-1)).toEqual({
+      type: "text",
+      text: note.text,
+    });
+  });
+});
 
 describe("mergeAttachments", () => {
   it("keeps previously attached images when adding more", () => {

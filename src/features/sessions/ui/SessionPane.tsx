@@ -12,6 +12,7 @@ import type { RemoteControlControls } from "../../provider-sessions/ui/RemoteCon
 import { editableSessionTodo } from "../../session-board/sessionTodos";
 import { composeSessionTodo } from "../../session-board/ui/SessionManagerCapture";
 import { GripVertical, PanelRight, X } from "../../../shared/ui/icons";
+import { BrowserPanelButton } from "../../browser/ui/BrowserPanelButton";
 import { useSessionSnapshot } from "../model/sessionStateStore";
 import {
   memo,
@@ -1136,6 +1137,8 @@ const LocalSessionPane = memo(function LocalSessionPane({
       }
       trailing={
         panelEnabled ? (
+          <>
+          <BrowserPanelButton />
           <button
             type="button"
             onClick={toggleSessionPanel}
@@ -1148,6 +1151,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
           >
             <PanelRight aria-hidden className="size-3.5" strokeWidth={1.75} />
           </button>
+          </>
         ) : undefined
       }
     />

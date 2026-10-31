@@ -233,6 +233,10 @@ import {
   type McpSettingsSnapshot,
 } from "../../settings/model/mcpSettingsCache";
 import type { LastTurnRecall } from "../model/editLastTurn";
+import {
+  ATTACH_TO_CHAT_EVENT,
+  type AttachToChatDetail,
+} from "../model/attachToChat";
 import { canSteerHarness } from "../../../integrations/harness/core/registry";
 import { IS_MAC } from "../../../platform/tauri/platform";
 import {
@@ -861,6 +865,23 @@ export function Composer({
     },
     [harness, syncHasValue],
   );
+  // Fork (L-207): Browser picks, screenshots and DevTools rows land in the
+  // focused chat's composer as chips; nothing is sent until the user sends.
+  const attachTargetRef = useRef({ focused, harness, addAttachments });
+  attachTargetRef.current = { focused, harness, addAttachments };
+  useEffect(() => {
+    const onAttach = (event: Event) => {
+      const detail = (event as CustomEvent<AttachToChatDetail>).detail;
+      if (!detail || detail.handled || !attachTargetRef.current.focused) return;
+      const box = ref.current;
+      if (!box?.isConnected || box.closest('[aria-hidden="true"], [inert]')) return;
+      if (!harnessSupportsAttachments(attachTargetRef.current.harness)) return;
+      detail.handled = true;
+      attachTargetRef.current.addAttachments(detail.attachments);
+    };
+    window.addEventListener(ATTACH_TO_CHAT_EVENT, onAttach);
+    return () => window.removeEventListener(ATTACH_TO_CHAT_EVENT, onAttach);
+  }, []);
   // Native listener registration crosses several IPC hops. Keep changing
   // composer callbacks and capabilities out of its subscription dependencies.
   const fileDropStateRef = useRef({

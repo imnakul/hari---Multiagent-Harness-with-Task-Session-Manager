@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Loader, X } from "../../../shared/ui/icons";
 import {
   attachmentPreviewSrc,
@@ -8,6 +8,7 @@ import {
 import type { Attachment } from "../model/session";
 import { FileTypeIcon } from "../../files/ui/FileTypeIcon";
 import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
+import { Modal } from "../../../shared/ui/Modal";
 import { useEffect } from "react";
 import { loadAttachmentPreviewUrl } from "../model/attachments";
 
@@ -44,6 +45,8 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
 
   const src = preview ?? loadedUrl ?? undefined;
   const image = attachment.kind === "image" && src;
+  // Fork (L-207): an inline note (Browser picks, a console row) opens as text.
+  const note = attachment.text != null;
 
   return (
     <>
@@ -51,7 +54,7 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
         className={`group relative flex min-w-0 items-center gap-1.5 rounded-md ${
           image ? "" : "bg-content/10 py-0.5 pl-1 pr-1"
         }`}
-        title={attachment.path ?? attachment.name}
+        title={note ? undefined : (attachment.path ?? attachment.name)}
       >
         {image && src ? (
           <button
@@ -76,10 +79,14 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
             />
           </button>
         ) : (
-          <>
+          <NoteButton
+            note={note}
+            label={attachment.name}
+            onOpen={() => setPreviewOpen(true)}
+          >
             <span className="grid size-5 shrink-0 place-items-center">
               <FileTypeIcon
-                name={attachment.name}
+                name={note ? "note.md" : attachment.name}
                 isDir={isAttachmentFolder(attachment)}
                 size={16}
               />
@@ -87,7 +94,7 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
             <span className="min-w-0 max-w-[140px] truncate text-[11px] leading-none text-content/80">
               {attachment.name}
             </span>
-          </>
+          </NoteButton>
         )}
         {onRemove ? (
           <button
@@ -115,7 +122,42 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
           onClose={() => setPreviewOpen(false)}
         />
       ) : null}
+      {note && previewOpen ? (
+        <Modal title={attachment.name} size="lg" onClose={() => setPreviewOpen(false)}>
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words px-5 pb-5 font-mono text-[12px] leading-relaxed text-content/85">
+            {attachment.text}
+          </pre>
+        </Modal>
+      ) : null}
     </>
+  );
+}
+
+function NoteButton({
+  note,
+  label,
+  onOpen,
+  children,
+}: {
+  note: boolean;
+  label: string;
+  onOpen: () => void;
+  children: ReactNode;
+}) {
+  if (!note) return <>{children}</>;
+  return (
+    <button
+      type="button"
+      title={`Preview ${label}`}
+      aria-label={`Preview ${label}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      className="flex min-w-0 items-center gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      {children}
+    </button>
   );
 }
 

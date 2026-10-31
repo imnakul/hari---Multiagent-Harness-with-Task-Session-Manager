@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-10-31 06:32 IST — Browser side panel, tabs and chat context (L-207)
+- Type: feature
+- What: Browser panel beside the chat (Ctrl+Shift+U, resizable), tabs with sleeping hidden tabs, own storage with password saving and autofill, zoom, width presets, Inspect, reload without cache, copy address, address suggestions, downloads notice; Pick + comment, Screenshot (page or area) and console/network rows add chips to the composer without sending; terminal links open in MonoCode's Browser (setting); process monitor Browser row.
+- Why: User asked to build the Browser phase directly; auto-reload, automation, agent control and Aside are out of scope.
+- Files: `src-tauri/Cargo.toml`, `src-tauri/src/browser_view.rs`, `browser_picker.js` (new), `browser_servers.rs` (new), `lib.rs`, `process_stats.rs`, `src/features/browser/` (model/browserTabs.ts, browserContext.ts (+test), ui/BrowserView.tsx, BrowserSidePanel.tsx, BrowserPanelButton.tsx, BrowserDevtools.tsx), `src/features/sessions/` (attachToChat.ts, attachments.ts, session.ts, AttachmentChip.tsx, Composer.tsx, SessionPane.tsx), `src/features/settings/` (terminalLinkSettings.ts (+test), settings.ts, appShortcuts.ts, SettingsView.tsx), `src/features/terminal/ui/TerminalView.tsx`, `src/app/App.tsx`, `src/app/shell/ProcessMonitor.tsx`, `processMonitorModel.ts`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed
+- Verified: tsc clean; vitest full suite 7946 tests pass (2 skipped; TerminalView link tests updated for the new MonoCode default and now cover both routes); cargo check clean. Rust tests not run (rustc crash). Desktop UI not checked by the agent.
 ## 2026-10-31 04:59 IST — Open a view from the + beside the tabs (L-206)
 - Type: feature
 - What: + beside the tabs still starts a new session; a small arrow beside it (or right-click on +) lists Browser, Whiteboard, Notes, Task Manager, Session Manager, Automations and Inbox. The Windows menu bar now lists Whiteboard and Browser.

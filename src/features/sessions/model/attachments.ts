@@ -152,6 +152,7 @@ export function persistableAttachment(file: Attachment): Attachment {
     kind: file.kind,
     size: file.size,
     ...(file.path ? { path: file.path } : {}),
+    ...(file.text != null ? { text: file.text } : {}),
   };
 }
 
@@ -487,6 +488,7 @@ export function attachmentPath(file: Attachment): string {
 
 /** Native harnesses without file blocks can ask their tools to read this path. */
 export function attachmentPathText(file: Attachment): string {
+  if (file.text != null) return file.text;
   if (isAttachmentFolder(file)) {
     return `Attached folder (list or read the files inside from this path): ${JSON.stringify(attachmentPath(file))}`;
   }
@@ -500,7 +502,7 @@ export function isAttachmentFolder(file: Attachment): boolean {
 function contentBlockFor(file: Attachment): PromptContentBlock {
   // No harness can open a folder, so it travels as a path for the agent's own
   // tools rather than a resource link nothing can read.
-  if (isAttachmentFolder(file)) {
+  if (isAttachmentFolder(file) || file.text != null) {
     return { type: "text", text: attachmentPathText(file) };
   }
   if (file.data && isVisionImage(file.mimeType)) {

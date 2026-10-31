@@ -43,7 +43,12 @@ export type AppProcess = {
   unreadable: number;
   children: ProcessDetail[];
 };
-export type ProcessMonitorStats = { app: AppProcess; owned: OwnedProcess[] };
+export type ProcessMonitorStats = {
+  app: AppProcess;
+  /** Fork (L-207): the Browser's pages, split off the app's tree. */
+  browser?: AppProcess | null;
+  owned: OwnedProcess[];
+};
 /**
  * Bottom-bar totals over the app and every live row. Each total sums the parts that
  * have a reading, so one unreadable chat cannot blank the chip; a total is `null`
@@ -52,6 +57,7 @@ export type ProcessMonitorStats = { app: AppProcess; owned: OwnedProcess[] };
 export function processTotals(
   app: AppProcess,
   rows: OwnedProcess[],
+  browser?: AppProcess | null,
 ): {
   cpu: number | null;
   memory: number | null;
@@ -59,7 +65,7 @@ export function processTotals(
   partial: boolean;
 } {
   const live = rows.filter((r) => r.status !== "exited");
-  const parts = [app, ...live];
+  const parts = browser ? [app, browser, ...live] : [app, ...live];
   const sum = (values: (number | null | undefined)[]): number | null => {
     const known = values.filter((v): v is number => v != null);
     return known.length ? known.reduce((n, v) => n + v, 0) : null;

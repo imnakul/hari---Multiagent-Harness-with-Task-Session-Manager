@@ -273,6 +273,11 @@ export type Attachment = {
   data?: string;
   /** Object URL for in-session thumbnails. Not persisted. */
   previewUrl?: string;
+  /**
+   * Fork (L-207): a short context note (Browser picks, a console row, a
+   * request) sent inline as text instead of a file on disk.
+   */
+  text?: string;
 };
 
 export type MonoSessionCompletion = {

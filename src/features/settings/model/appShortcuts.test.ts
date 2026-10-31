@@ -99,6 +99,12 @@ describe("resolveAppShortcut", () => {
     ).toBeNull();
   });
 
+  it("toggles the Browser panel on Ctrl+Shift+U", () => {
+    expect(
+      resolveAppShortcut(key({ key: "U", code: "KeyU", ctrlKey: true, shiftKey: true })),
+    ).toBe("App: Toggle Browser Panel");
+  });
+
   it("honours a disabled command", () => {
     saveKeybindingOverride("App: Search", { disabled: true });
     expect(resolveAppShortcut(key({ key: "k", metaKey: true }))).toBeNull();

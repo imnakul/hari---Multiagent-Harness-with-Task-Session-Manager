@@ -5,6 +5,7 @@ pub mod antigravity_acp;
 mod antigravity_cli;
 mod artifacts;
 mod automations;
+mod browser_servers;
 mod browser_view;
 mod azure_devops;
 mod background_work;
@@ -358,6 +359,7 @@ pub fn run() {
         .manage(pty::PtyHost::new())
         .manage(claude_interactive::InteractiveHost::default())
         .manage(process_stats::ProcessStats::default())
+        .manage(browser_view::BrowserTabs::default())
         .manage(webview_recovery::WebviewRecovery::default())
         .manage(remote::RemoteConnections::default())
         .manage(window_transfer::WindowTransferState::new())
@@ -406,7 +408,13 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             browser_view::browser_open,
-            browser_view::browser_navigate,
+            browser_view::browser_select,
+            browser_view::browser_zoom,
+            browser_view::browser_devtools,
+            browser_view::browser_screenshot,
+            browser_view::browser_pick,
+            browser_view::browser_response_body,
+            browser_view::browser_local_servers,
             browser_view::browser_set_bounds,
             browser_view::browser_set_visible,
             browser_view::browser_history,

@@ -366,6 +366,10 @@ import {
   useLinkPreviewMode,
 } from "../model/linkPreviewSettings";
 import {
+  saveTerminalLinkTarget,
+  useTerminalLinkTarget,
+} from "../model/terminalLinkSettings";
+import {
   saveComposerAutocorrect,
   saveContinueMode,
   savePacedReveal,
@@ -1555,6 +1559,7 @@ function ChatPage() {
   const pacedReveal = usePacedReveal();
   const codeWrap = useCodeWrap();
   const linkPreviewMode = useLinkPreviewMode();
+  const terminalLinkTarget = useTerminalLinkTarget();
   const [transcriptLayout, setTranscriptLayout] =
     useState<TranscriptLayout>(loadTranscriptLayout);
   const [transcriptAnchor, setTranscriptAnchor] =
@@ -1747,6 +1752,21 @@ function ChatPage() {
               { value: "always", label: "Always" },
             ]}
             onChange={saveLinkPreviewMode}
+          />
+        </Row>
+        <Row
+          id="terminal-links"
+          label="Terminal links"
+          description="Where web links you click in a terminal open, such as a dev server's localhost address. MonoCode opens them in the Browser panel beside the chat when it is open, otherwise in the Browser tab."
+        >
+          <Segmented
+            label="Terminal links"
+            value={terminalLinkTarget}
+            options={[
+              { value: "monocode", label: "MonoCode" },
+              { value: "default", label: "Default browser" },
+            ]}
+            onChange={saveTerminalLinkTarget}
           />
         </Row>
       </Group>

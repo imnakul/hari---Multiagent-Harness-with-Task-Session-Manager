@@ -14,6 +14,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(async () => {}),
 }));
+const browser = vi.hoisted(() => ({ openInMonoBrowser: vi.fn() }));
+vi.mock("../../browser/model/browserRequest", () => browser);
 
 const pty = vi.hoisted(() => ({
   PTY_SUPPORTED: true,
@@ -71,6 +73,7 @@ vi.mock("@xterm/xterm", () => ({
   },
 }));
 import { TerminalView } from "./TerminalView";
+import { saveTerminalLinkTarget } from "../../settings/model/terminalLinkSettings";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -87,6 +90,14 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  });
+  browser.openInMonoBrowser.mockClear();
+  vi.mocked(openUrl).mockClear();
 });
 
 function setup() {
@@ -95,7 +106,7 @@ function setup() {
   return { host, root: createRoot(host) };
 }
 
-it("detects plain HTTP(S) URLs and opens them through the addon callback", async () => {
+it("detects plain HTTP(S) URLs and opens them in MonoCode's Browser by default", async () => {
   const { host, root } = setup();
   startTerminal("plain-links");
   const { Terminal } =
@@ -138,12 +149,14 @@ it("detects plain HTTP(S) URLs and opens them through the addon callback", async
     for (const link of links!) {
       link.activate(new MouseEvent("click"), link.text);
     }
-    expect(vi.mocked(openUrl).mock.calls).toEqual(urls.map((url) => [url]));
-    vi.mocked(openUrl).mockClear();
+    expect(browser.openInMonoBrowser.mock.calls).toEqual(urls.map((url) => [url]));
+    expect(openUrl).not.toHaveBeenCalled();
+    browser.openInMonoBrowser.mockClear();
     // Exercise the callback's guard even if a provider dispatches another scheme.
     for (const uri of blocked) {
       links![0].activate(new MouseEvent("click"), uri);
     }
+    expect(browser.openInMonoBrowser).not.toHaveBeenCalled();
     expect(openUrl).not.toHaveBeenCalled();
   } finally {
     addon?.dispose();
@@ -155,7 +168,8 @@ it("detects plain HTTP(S) URLs and opens them through the addon callback", async
   }
 });
 
-it("opens only HTTP(S) URLs dispatched by the OSC 8 link handler", async () => {
+it("opens only HTTP(S) URLs dispatched by the OSC 8 link handler, in the default browser when set", async () => {
+  saveTerminalLinkTarget("default");
   const { host, root } = setup();
   startTerminal("osc-links");
   try {
@@ -188,6 +202,7 @@ it("opens only HTTP(S) URLs dispatched by the OSC 8 link handler", async () => {
       handler.activate(new MouseEvent("click"), uri, undefined);
     }
     expect(openUrl).not.toHaveBeenCalled();
+    expect(browser.openInMonoBrowser).not.toHaveBeenCalled();
   } finally {
     await act(async () => {
       root.unmount();

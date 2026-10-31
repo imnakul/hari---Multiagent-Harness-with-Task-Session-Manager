@@ -18,6 +18,8 @@ const APP_SHORTCUTS: [string, string, boolean][] = [
   ["App: Toggle Mono", "i", false],
   ["App: Toggle Focus", "e", true],
   ["App: Toggle Session Panel", "o", true],
+  // Fork (L-207): the Browser side panel beside the chat.
+  ["App: Toggle Browser Panel", "u", true],
   ["App: Go to File", "p", false],
   ["App: Command Palette", "p", true],
   ["View: Reload", "r", true],

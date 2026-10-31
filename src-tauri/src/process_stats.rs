@@ -82,6 +82,8 @@ pub struct AppUsage {
 pub struct ProcessMonitorStats {
     app: AppUsage,
     owned: Vec<ProcessRow>,
+    /// The Browser tabs' own WebView2 profile (L-207), split out of the app.
+    browser: Option<AppUsage>,
 }
 
 pub(crate) fn has_descendants(pid: u32) -> Result<bool, String> {
@@ -185,6 +187,7 @@ pub fn process_monitor_stats(
     harness: State<'_, crate::harness::HarnessHost>,
     pty: State<'_, crate::pty::PtyHost>,
     stats: State<'_, ProcessStats>,
+    browser: State<'_, crate::browser_view::BrowserTabs>,
 ) -> Result<ProcessMonitorStats, String> {
     let mut roots = harness.process_roots();
     roots.extend(pty.process_roots());
@@ -193,6 +196,10 @@ pub fn process_monitor_stats(
     // process, so chat/terminal subtrees never also count under the app.
     let mut pids: Vec<_> = roots.iter().map(|r| r.pid).collect();
     pids.push(app_pid);
+    // The Browser's WebView2 process is the app's child; as its own root it
+    // claims its renderers and GPU process, so they leave the app's total.
+    let browser_pid = browser.browser_pid().filter(|pid| *pid != app_pid);
+    pids.extend(browser_pid);
     let samples = process_metrics::owned_snapshot(&pids)?;
     let trees = process_metrics::tree(&pids, &samples);
     let gpu = stats.gpu.lock().unwrap_or_else(|e| e.into_inner()).sample();
@@ -231,9 +238,13 @@ pub fn process_monitor_stats(
             }
         })
         .collect();
+    let browser = browser_pid
+        .filter(|pid| samples.iter().any(|s| s.pid == *pid))
+        .map(|pid| app_usage(pid, &trees, &samples, &cpu, &gpu));
     Ok(ProcessMonitorStats {
         app: app_usage(app_pid, &trees, &samples, &cpu, &gpu),
         owned,
+        browser,
     })
 }
 

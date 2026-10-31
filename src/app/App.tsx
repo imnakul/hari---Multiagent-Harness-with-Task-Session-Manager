@@ -246,11 +246,15 @@ import {
   zoomOutUiScale,
 } from "../features/settings/model/uiScale";
 import { resolveZoomKeybinding } from "../features/settings/model/zoomKeybinding";
+import { subscribeOpenInBrowser } from "../features/browser/model/browserRequest";
 import {
-  nextBrowserRequest,
-  subscribeOpenInBrowser,
-  type BrowserRequest,
-} from "../features/browser/model/browserRequest";
+  browserStore,
+  requestPage,
+  setPanelOpen as setBrowserPanelOpen,
+  setPanelWidth as setBrowserPanelWidth,
+  subscribeBrowser,
+  togglePanel as toggleBrowserPanel,
+} from "../features/browser/model/browserTabs";
 import { resolveAppShortcut } from "../features/settings/model/appShortcuts";
 import { toggleSessionPanel } from "../features/sessions/model/sessionPanel";
 import { runUpdateFlow } from "./model/updater";
@@ -1116,6 +1120,14 @@ const BrowserView = lazySurface(
   },
   { suspense: false },
 );
+// Fork (L-207): the Browser beside the chat, loaded on first open.
+const BrowserSidePanel = lazySurface(
+  async () => {
+    const module = await import("../features/browser/ui/BrowserSidePanel");
+    return { default: module.BrowserSidePanel };
+  },
+  { suspense: false },
+);
 
 type LinkedWorkItemPanelState = {
   item: LinkedWorkItem;
@@ -1646,10 +1658,16 @@ function Workspace({
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
   const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
-  // Fork (L-203): the Browser tab and the page it was last asked to open.
+  // Fork (L-203): the Browser tab. Pages and tabs live in browserTabs (L-207).
   const [browserViewOpen, setBrowserViewOpen] = useState(false);
-  const [browserRequest, setBrowserRequest] = useState<BrowserRequest | null>(
-    null,
+  // Fork (L-207): the Browser side panel beside the chat, and its width.
+  const browserPanelOpen = useSyncExternalStore(
+    subscribeBrowser,
+    () => browserStore().panelOpen,
+  );
+  const browserPanelWidth = useSyncExternalStore(
+    subscribeBrowser,
+    () => browserStore().panelWidth,
   );
   const [openAppViews, setOpenAppViews] = useState<AppView[]>([]);
   // Monos open as title tabs in the inset layout, by Mono id.
@@ -2078,6 +2096,20 @@ function Workspace({
   whiteboardViewOpenRef.current = whiteboardViewOpen;
   const browserViewOpenRef = useRef(browserViewOpen);
   browserViewOpenRef.current = browserViewOpen;
+  // Fork (L-207): a view covers the chats, so the Browser side panel is
+  // hidden and links open in the full Browser view instead.
+  const anyAppViewOpen =
+    searchViewOpen ||
+    settingsOpen ||
+    inboxViewOpen ||
+    recordsViewOpen ||
+    automationsViewOpen ||
+    whiteboardViewOpen ||
+    browserViewOpen ||
+    Boolean(monoViewId);
+  const anyAppViewOpenRef = useRef(anyAppViewOpen);
+  anyAppViewOpenRef.current = anyAppViewOpen;
+  const browserPanelShown = browserPanelOpen && !anyAppViewOpen;
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
   const sessionNavigationIdsRef = useRef<readonly string[]>([]);
@@ -14950,8 +14982,11 @@ function Workspace({
 
   // Fork (L-203): the Browser tab, opened bare or with a page to load.
   const onOpenBrowser = useCallback((url?: string) => {
+    if (url) requestPage(url);
+    // Fork (L-207): with the side panel open beside a chat, a link opens
+    // there; the full Browser view is for when no chat is showing.
+    if (url && browserStore().panelOpen && !anyAppViewOpenRef.current) return;
     workspaceNavigation.cancel();
-    if (url) setBrowserRequest((current) => nextBrowserRequest(current, url));
     startTransition(() => {
       closeMonoView();
       rememberAppView("browser");
@@ -14968,6 +15003,17 @@ function Workspace({
 
   const onLeaveBrowser = useCallback(() => {
     setBrowserViewOpen(false);
+  }, []);
+
+  // Fork (L-207): from the full Browser view, the toggle moves the pages
+  // into the side panel beside the chat.
+  const onToggleBrowserPanel = useCallback(() => {
+    if (browserViewOpenRef.current) {
+      setBrowserViewOpen(false);
+      setBrowserPanelOpen(true);
+      return;
+    }
+    toggleBrowserPanel();
   }, []);
 
   useEffect(() => subscribeOpenInBrowser((url) => onOpenBrowser(url)), [onOpenBrowser]);
@@ -15610,6 +15656,7 @@ function Workspace({
     onNavigateProjectList,
     openSettings,
     onOpenApprovalSession,
+    onToggleBrowserPanel,
   });
   actions.current = {
     onNewFocused,
@@ -15645,6 +15692,7 @@ function Workspace({
     onNavigateProjectList,
     openSettings,
     onOpenApprovalSession,
+    onToggleBrowserPanel,
   };
 
   const debounce = useRef({ name: "", at: 0 });
@@ -15877,6 +15925,8 @@ function Workspace({
           run("toggle_focus", a.onToggleFocusMode);
         else if (shortcut === "App: Toggle Session Panel")
           run("toggle_session_panel", toggleSessionPanel);
+        else if (shortcut === "App: Toggle Browser Panel")
+          run("toggle_browser_panel", a.onToggleBrowserPanel);
         else if (shortcut === "App: Go to File")
           run("go_to_file", a.onGoToFile);
         else if (shortcut === "App: Command Palette")
@@ -17505,6 +17555,14 @@ function Workspace({
                               }
                             />
                           ))}
+                          {browserPanelOpen ? (
+                            <BrowserSidePanel
+                              visible={browserPanelShown}
+                              width={browserPanelWidth}
+                              onWidth={setBrowserPanelWidth}
+                              onClose={() => setBrowserPanelOpen(false)}
+                            />
+                          ) : null}
                         </main>
                       </div>
                       {monoCovers ? monoOverviewPanel : null}
@@ -17744,7 +17802,6 @@ function Workspace({
                     <AppViewSurface active={browserViewOpen}>
                       <BrowserView
                         active={browserViewOpen}
-                        request={browserRequest}
                         tabbed={insetLayout}
                         besideRail={
                           insetLayout || projectRailOpen || compactProjectRail

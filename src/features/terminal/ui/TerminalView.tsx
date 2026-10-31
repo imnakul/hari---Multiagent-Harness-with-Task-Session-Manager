@@ -1,6 +1,8 @@
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { openInMonoBrowser } from "../../browser/model/browserRequest";
+import { loadTerminalLinkTarget } from "../../settings/model/terminalLinkSettings";
 import {
   useEffect,
   useRef,
@@ -160,11 +162,16 @@ function oscColors() {
 }
 
 /**
- * Open an HTTP(S) terminal link in the default browser, ignoring other schemes
- * and opener failures.
+ * Open an HTTP(S) terminal link, ignoring other schemes and opener failures.
+ * Fork (L-207): in MonoCode's Browser unless the setting says the default
+ * browser.
  */
 function openTerminalLink(uri: string) {
   if (!/^https?:\/\//i.test(uri)) return;
+  if (loadTerminalLinkTarget() === "monocode") {
+    openInMonoBrowser(uri);
+    return;
+  }
   void openUrl(uri).catch(() => undefined);
 }
 

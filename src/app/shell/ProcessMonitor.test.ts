@@ -8,6 +8,7 @@ import { newSession } from "../../features/sessions/model/session";
 import {
   processIdleCandidate,
   processLabel,
+  processTotals,
   retainExitedProcesses,
   type AppProcess,
   type OwnedProcess,
@@ -230,7 +231,9 @@ it("shows the app row without Stop and adds it to the chip total", async () => {
   expect(chip.textContent).toBe("CPU 4.0% · 110 MiB");
   await act(async () => chip.click());
   expect(container.textContent).toContain("MonoCode app");
-  expect(container.textContent).toContain("App and web view · 4 processes");
+  expect(container.textContent).toContain(
+    "App and web view, Whiteboard included · 4 processes",
+  );
   const stops = container.querySelectorAll('button[aria-label^="Stop "]');
   // Only the chat row is stoppable.
   expect(stops).toHaveLength(1);
@@ -252,6 +255,35 @@ it("shows GPU per row and in the chip once every part has a reading", async () =
   await act(async () => chip.click());
   expect(container.textContent).toContain("GPU 3.3%");
   expect(container.textContent).toContain("GPU 0.0%");
+});
+it("shows the Browser's pages as their own row and adds them to the total", async () => {
+  const browser: AppProcess = {
+    pid: 20,
+    cpu: 2,
+    memory: 52428800,
+    gpu: null,
+    processes: 3,
+    unreadable: 0,
+    children: [],
+  };
+  mocks.invoke.mockResolvedValue({ ...stats([row]), browser });
+  saveProcessMonitor(true);
+  await act(async () =>
+    root.render(
+      createElement(ProcessMonitor, { sessions: [session], onStop: vi.fn() }),
+    ),
+  );
+  const chip = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Process monitor"]',
+  )!;
+  // 1.5% + 2% + 2.5% and 100 + 50 + 10 MiB.
+  expect(chip.textContent).toBe("CPU 6.0% · 160 MiB");
+  expect(processTotals(app, [row], browser).memory).toBe(167772160);
+  expect(processTotals(app, [row]).memory).toBe(115343360);
+  await act(async () => chip.click());
+  expect(container.textContent).toContain(
+    "Pages in the Browser tab and panel · 3 processes",
+  );
 });
 it("totals only readable parts when a chat cannot be read", async () => {
   mocks.invoke.mockResolvedValue(
