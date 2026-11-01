@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 00:00 IST — 0.16.0-local25 Windows rebuild (Zen four chats)
+- Type: chore
+- What: Same version, 0.16.0-local25, rebuilt with Zen's accent dividers, recent chats by project and up to four chats (1d8b294c). The earlier local25 installer is kept.
+- Why: User asked to keep the version and rebuild with these changes.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local25-zen-four-chats_x64.exe` (19,666,724 bytes, SHA-256 9FE9DFD3161DD9EACBEB729AD6811836A88229430E57D9BB8A8D9C58841720B7, unsigned)
+- Commit: records only, after 1d8b294c
+- Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
+
 ## 2026-11-01 23:54 IST — Zen: accent dividers, recent chats by project, up to four chats (L-230)
 - Type: feature
 - What: A soft accent line now separates Zen's chats (brighter on hover or drag), and the focused chat's header gets a faint accent tint. The chat dropdown lists the 12 most recent chats grouped by project, with a line between projects, a spinner on working chats and a dot on ones waiting for you; search covers every saved chat; no status groups. Zen holds up to four chats in two rows of one or two: drag a chat onto a chat's right half to open it beside, or its lower half to open it below; Split adds below, then beside. A second column widens the panel leftward to 720px, and it goes back after.
 - Why: User request (Discuss mode, decisions locked): hard to see where one chat ends, and the dropdown showed a long list grouped by status instead of the chats in use.
 - Files: `src/features/zen/model/zenPanes.ts` + test, `src/features/zen/model/zenRecent.ts` + test (new), `src/features/zen/model/zenChatDrag.ts` + test, `src/features/zen/model/zenWindow.ts`, `src/features/zen/ui/ZenView.tsx`, `src/features/zen/ui/ZenSplit.tsx`, `src/features/focus/ui/FocusSash.tsx`, `src/features/focus/ui/FocusPicker.tsx`, `src-tauri/src/zen_window.rs`, `src-tauri/src/lib.rs`, `src/app/App.tsx`, `docs/specs/zen-mode-plan.md`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 1d8b294c
 - Verified: tsc clean; full vitest 8037 passed (iconCatalog times out under load, passes alone); windowArgs (L-218) passes; rustfmt, cargo check, cargo test zen_window 9 passed. Desktop UI not checked by the agent.
 
 ## 2026-11-01 23:05 IST — 0.16.0-local25 Windows build
@@ -301,21 +309,21 @@
 - What: Search button in the Session overview tab row: a search box filters every tab, shows a match count on each tab label, highlights the words, opens matching Summary headings and moves to the first tab with matches. Expand all / Collapse all button on Summary. The label sparkle shows only while the label box is focused. Bookmark, Timeline and file clicks scroll the chat smoothly and pulse the target once the scroll stops (a selection bookmark pulses its quote); chat find scrolls smoothly; reduced motion jumps. Text bookmarked from a selection stays tinted with the accent colour in the chat.
 - Why: User asked for these after using local18; locked: filter tabs + counts, tint always on.
 - Files: [transcriptHighlights.ts](src/features/sessions/model/transcriptHighlights.ts) (+test), [sessionPanel.ts](src/features/sessions/model/sessionPanel.ts) (+test), [SessionPanel.tsx](src/features/sessions/ui/SessionPanel.tsx), [AgentTranscript.tsx](src/features/sessions/ui/AgentTranscript.tsx), [SessionPane.tsx](src/features/sessions/ui/SessionPane.tsx), [useBookmarkHighlights.ts](src/features/sessions/ui/useBookmarkHighlights.ts), [index.css](src/styles/index.css)
-- Commit: not committed yet
+- Commit: 1d8b294c
 - Verified: tsc ✅; transcriptHighlights.test.ts + sessionPanel.test.ts 38/38 ✅; full vitest 7848 passed, 2 skipped ✅; desktop check manual
 ## 2026-10-29 00:36 IST — Session overview Timeline tab (L-192)
 - Type: feature
 - What: A Timeline tab after Summary. The sparkle and Auto now update the Summary and then the Timeline (two runs, one after the other). AI logs points (decision, found, event, each with its icon), grouped by day (Today, Yesterday, then the date), newest first; each shows the time its message was sent, with the full date on hover. Click jumps to the message; points can be edited or deleted. Left off stays on Summary. Points saved by the L-191 Session panel come back.
 - Why: User asked for a timeline beside the Summary to see how the work went; locked in Discuss: AI points with date and time, a tab after Summary, newest first by day, written with the Summary.
 - Files: [sessionPanel.ts](src/features/sessions/model/sessionPanel.ts) (+test), [sessionMetadataHelper.ts](src/integrations/harness/core/sessionMetadataHelper.ts) (+test), [SessionMetadataAutoWriter.tsx](src/features/sessions/ui/SessionMetadataAutoWriter.tsx), [SessionPanel.tsx](src/features/sessions/ui/SessionPanel.tsx), [SessionPanelItems.tsx](src/features/sessions/ui/SessionPanelItems.tsx)
-- Commit: not committed yet
+- Commit: 1d8b294c
 - Verified: tsc ✅; sessionPanel.test.ts 17/17, sessionMetadataHelper.test.ts 5/5 ✅; full vitest 7839 passed, 2 skipped ✅; desktop check manual
 ## 2026-10-29 00:17 IST — Hover card Topics list (L-192)
 - Type: feature
 - What: The chat hover card shows the Summary headings under a "Topics" caption (matching Left off), each with a bullet; a heading's bracketed kind ("feature", "bug fix") becomes a faint tag after the name. The newest 5 are shown, then "+N more".
 - Why: User found the plain heading list hard to read on hover; picked caption + bullets + tag in a Suggest round.
 - Files: [SessionMetadataHoverCard.tsx](src/features/sessions/ui/SessionMetadataHoverCard.tsx), [sessionMetadataAi.ts](src/features/sessions/model/sessionMetadataAi.ts) (`splitHeadingTag`, +test)
-- Commit: not committed yet
+- Commit: 1d8b294c
 - Verified: tsc ✅; src/features/sessions vitest 1989 passed ✅; desktop check manual
 ## 2026-10-29 00:09 IST — 0.16.0-local18 Windows build
 - Type: chore
@@ -329,7 +337,7 @@
 - What: The Session panel becomes the Session overview with three tabs: Summary (the notes grouped by heading, collapsed, newest first, Left off on top, edited in Live Markdown), Bookmarks (reply button plus a new Bookmark item in the selected-text menu, with the quote) and Files changed. The header has the chat label as an input with its own AI sparkle, a per-chat Auto switch, a sparkle that adds to the Summary (and writes the label only when empty) and ✕. Timeline, Decisions, AI points, the Session metadata dialog and the idle cover are removed; menus say Open Session overview; the hover card shows label, Left off and headings. Coming back to a chat with a Summary after the set wait opens the overview. Settings group renamed Session overview, with a new Effort picker and Antigravity allowed as the Notes model (with a warning). The resize edge is a line that appears on hover. Both tables and saved data stay.
 - Why: User locked a simpler panel in Discuss: one summary instead of tagged points, the label and notes edited where they are read, and fewer surfaces.
 - Files: [sessionPanel.ts](src/features/sessions/model/sessionPanel.ts) (+test), [sessionMetadataAi.ts](src/features/sessions/model/sessionMetadataAi.ts) (+test), `sessionLastSeen.ts`, `sessionMetadata.ts`, [SessionPanel.tsx](src/features/sessions/ui/SessionPanel.tsx), [SessionPanelItems.tsx](src/features/sessions/ui/SessionPanelItems.tsx), `SessionMetadataAutoWriter.tsx`, `SessionPane.tsx`, `ChatPanel.tsx`, `AgentTranscript.tsx`, `TranscriptSelectionMenu.tsx`, `SessionMetadataHoverCard.tsx`, `useSessionMetadata.ts`, `Sidebar.tsx`, `TitleBar.tsx`, `App.tsx`, `ResizeHandle.tsx`, `SettingsView.tsx`, `settings.ts`, `registry.ts`, `sessionMetadataHelper.ts`, Claude and Codex adapters; deleted `SessionMetadataDialog.tsx`, `SessionIdleCover.tsx` (+test)
-- Commit: not committed yet
+- Commit: 1d8b294c
 - Verified: tsc ✅; sessionPanel.test.ts 11/11, sessionMetadataAi.test.ts 10/10, SettingsView.test.ts 52/52 ✅; full vitest 7831 passed, 2 skipped ✅; desktop check manual
 ## 2026-10-28 22:23 IST — 0.16.0-local17 Windows build
 - Type: chore
