@@ -106,6 +106,34 @@ pub fn placed_on_screen(bounds: ZenBounds, areas: &[ZenBounds], fallback: ZenBou
     }
 }
 
+/// `current` resized to `width` with its right edge kept, moved only as far
+/// as it takes to stay inside `area` (and no wider than it).
+pub fn with_width(current: ZenBounds, area: ZenBounds, width: u32) -> ZenBounds {
+    let width = width.min(area.width);
+    let right = current.x + current.width as i32;
+    let area_right = area.x + area.width as i32;
+    let x = (right - width as i32).clamp(area.x, area_right - width as i32);
+    ZenBounds {
+        x,
+        width,
+        ..current
+    }
+}
+
+/// True when the panel is still the width it was widened to (give or take
+/// rounding), so the user has not resized it since.
+pub fn still_width(current: u32, expect: u32) -> bool {
+    current.abs_diff(expect) <= 2
+}
+
+/// A widened panel's width before and after, in physical px.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZenWiden {
+    pub before: u32,
+    pub after: u32,
+}
+
 fn rect(position: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> ZenBounds {
     ZenBounds {
         x: position.x,
@@ -283,6 +311,55 @@ pub fn zen_window_pin(window: Window, on: bool) -> Result<(), String> {
     window.set_always_on_top(on).map_err(|e| e.to_string())
 }
 
+/// Widens the Zen panel to at least `min_width` (CSS px) for chats side by
+/// side, keeping its right edge. Returns the widths when it grew, so it can
+/// narrow back; none when it was wide enough.
+#[tauri::command]
+pub async fn zen_window_widen(
+    window: Window,
+    min_width: f64,
+    smooth: bool,
+) -> Result<Option<ZenWiden>, String> {
+    let start = outer_bounds(&window)?;
+    let (area, scale) = current_area(&window)?;
+    let wanted = (min_width * scale).round() as u32;
+    if start.width >= wanted {
+        return Ok(None);
+    }
+    let target = with_width(start, area, wanted);
+    if target.width <= start.width {
+        return Ok(None);
+    }
+    animate(&window, start, target, smooth).await?;
+    Ok(Some(ZenWiden {
+        before: start.width,
+        after: target.width,
+    }))
+}
+
+/// Narrows the panel back after `zen_window_widen`, keeping its right edge,
+/// unless the user resized it since. Returns whether it changed.
+#[tauri::command]
+pub async fn zen_window_narrow(
+    window: Window,
+    widen: ZenWiden,
+    smooth: bool,
+) -> Result<bool, String> {
+    let start = outer_bounds(&window)?;
+    if !still_width(start.width, widen.after) {
+        return Ok(false);
+    }
+    let (area, _) = current_area(&window)?;
+    animate(
+        &window,
+        start,
+        with_width(start, area, widen.before),
+        smooth,
+    )
+    .await?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,5 +448,37 @@ mod tests {
         );
         let kept = dock_bounds(SCREEN, 1.0);
         assert_eq!(placed_on_screen(kept, &[SCREEN], SCREEN), kept);
+    }
+
+    #[test]
+    fn widening_keeps_the_right_edge() {
+        let panel = dock_bounds(SCREEN, 1.0);
+        assert_eq!(
+            with_width(panel, SCREEN, 720),
+            ZenBounds {
+                x: 1200,
+                width: 720,
+                ..panel
+            }
+        );
+    }
+
+    #[test]
+    fn widening_stays_on_the_screen() {
+        let left = ZenBounds {
+            x: 100,
+            y: 0,
+            width: 480,
+            height: 1040,
+        };
+        assert_eq!(with_width(left, SCREEN, 720).x, 0);
+        assert_eq!(with_width(left, SCREEN, 4000).width, 1920);
+    }
+
+    #[test]
+    fn a_resized_panel_is_not_narrowed_back() {
+        assert!(still_width(720, 720));
+        assert!(still_width(721, 720));
+        assert!(!still_width(900, 720));
     }
 }

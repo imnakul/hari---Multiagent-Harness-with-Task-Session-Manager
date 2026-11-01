@@ -21,6 +21,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   PanelBottom,
+  PanelRight,
   Pin,
   PinOff,
   Plus,
@@ -29,8 +30,6 @@ import {
   Zap,
 } from "../../../shared/ui/icons";
 import {
-  focusChatInfo,
-  focusContinueItems,
   focusProjectItems,
   focusProjectsActiveFirst,
   FocusSearchList,
@@ -46,14 +45,34 @@ import {
   type ProjectMarks,
 } from "../../projects/ui/ProjectMark";
 import type { BoardCard } from "../../session-board/sessionBoard";
+import { boardModelLabel } from "../../session-board/ui/BoardSessionCard";
+import { isHarnessId, resolveModel } from "../../sessions/model/models";
 import {
   sessionDisplayTitle,
+  type HarnessId,
   type Session,
 } from "../../sessions/model/session";
 import { SharedHoverHighlight } from "../../sessions/ui/SharedHoverHighlight";
 import { SessionMetadataHover } from "../../sessions/ui/SessionMetadataHoverCard";
-import { startZenChatDrag, useZenChatDrag } from "../model/zenChatDrag";
-import { ZEN_MAX_PANES, type ZenTool } from "../model/zenPanes";
+import {
+  startZenChatDrag,
+  useZenChatDrag,
+  type ZenDropTarget,
+} from "../model/zenChatDrag";
+import {
+  ZEN_MAX_PANES,
+  zenCanPlace,
+  zenGridOfRows,
+  zenSplitPlace,
+  type ZenAt,
+  type ZenPlace,
+  type ZenTool,
+} from "../model/zenPanes";
+import {
+  ZEN_RECENT_LIMIT,
+  zenChatGroups,
+  type ZenChat,
+} from "../model/zenRecent";
 import { useZenMonos, type ZenMonoEntry } from "./ZenMonos";
 import { ZenSplit } from "./ZenSplit";
 
@@ -74,60 +93,98 @@ const ZEN_MONO_BUTTONS = 3;
 const MENU_ROW =
   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-content/80 transition-colors duration-100 hover:bg-content/5 hover:text-content focus-visible:bg-content/5 focus-visible:outline-none";
 
+/** The user's accent, as Focus's edges use it. */
+const ACCENT = "var(--user-accent-color,var(--color-accent))";
+
 function chatTitle(session: Session | undefined, card?: BoardCard): string {
   if (session)
     return sessionDisplayTitle(session.title, session.harness) || "New session";
   return card?.title || "Chat";
 }
 
-/** Running chats first (newest first), then Focus's Continue groups. */
-function chatItems(
-  runningIds: readonly string[],
+/** A model's display name, from a model id or a stored label. */
+function modelName(harness: HarnessId, stored: string): string {
+  if (!stored) return "";
+  const resolved = resolveModel(harness, stored);
+  return resolved.id === stored
+    ? resolved.name
+    : boardModelLabel(harness, stored);
+}
+
+type ZenChatItems = {
+  /** Every chat, grouped by project: what a search covers. */
+  all: FocusPickItem[];
+  /** The most recent chats, grouped by project: the list before a search. */
+  recent: FocusPickItem[];
+};
+
+/**
+ * A dropdown's chats (L-230), without the pane's own: projects by their
+ * newest chat, each newest first, "Other" last. A chat in another pane is
+ * marked so.
+ */
+function zenChatItems(
+  chats: readonly ZenChat[],
   byId: ReadonlyMap<string, Session>,
-  cards: ReadonlyMap<string, BoardCard>,
-  boardCards: readonly BoardCard[],
   marks: ProjectMarks,
   except: string | undefined,
-): FocusPickItem[] {
-  const running: FocusPickItem[] = runningIds.flatMap((id) => {
-    const session = byId.get(id);
-    if (!session || id === except) return [];
-    return [
-      {
-        id,
-        label: chatTitle(session),
-        detail: projectName(session.cwd),
-        icon: <ProjectIcon cwd={session.cwd} {...marks} />,
-        group: "Running",
-        project: { key: projectKey(session.cwd), cwd: session.cwd },
-        chat: focusChatInfo({
-          ...session,
-          updatedAt: cards.get(id)?.updatedAt,
-        }),
-      },
-    ];
-  });
-  const shown = new Set(runningIds);
-  if (except) shown.add(except);
-  return [
-    ...running,
-    ...focusContinueItems(
-      boardCards,
-      (id) => shown.has(id),
-      marks,
-      (id) => byId.get(id)?.providerAccountId,
-    ),
-  ];
+  shown: readonly string[],
+): ZenChatItems {
+  const listed = chats.filter((chat) => chat.id !== except);
+  const toItems = (list: readonly ZenChat[]): FocusPickItem[] =>
+    zenChatGroups(list).flatMap((group) => {
+      const groupIcon = group.cwd ? (
+        <ProjectIcon cwd={group.cwd} {...marks} />
+      ) : undefined;
+      return group.chats.map((chat): FocusPickItem => {
+        const session = byId.get(chat.id);
+        const harness =
+          session?.harness ?? (isHarnessId(chat.harness) ? chat.harness : null);
+        const title = session
+          ? chatTitle(session)
+          : (harness ? sessionDisplayTitle(chat.title, harness) : chat.title) ||
+            "Chat";
+        const model = harness
+          ? modelName(harness, session?.model ?? chat.model)
+          : chat.model;
+        return {
+          id: chat.id,
+          label: title,
+          detail: shown.includes(chat.id) ? "Other pane" : undefined,
+          icon: groupIcon,
+          group: group.cwd ? projectName(group.cwd) : "Other",
+          groupIcon,
+          project: group.cwd
+            ? { key: projectKey(group.cwd), cwd: group.cwd }
+            : undefined,
+          model: model || undefined,
+          chat: harness
+            ? {
+                harness,
+                modelLabel: model,
+                providerAccountId:
+                  session?.providerAccountId ?? chat.providerAccountId,
+                updatedAt: chat.updatedAt || undefined,
+                status: chat.status,
+              }
+            : undefined,
+        };
+      });
+    });
+  return {
+    all: toItems(listed),
+    recent: toItems(listed.slice(0, ZEN_RECENT_LIMIT)),
+  };
 }
 
 export type ZenViewProps = {
-  /** Zen's chats, top first (one or two). */
-  ids: readonly string[];
+  /** Zen's chats: up to two rows of one or two, top first. */
+  rows: readonly (readonly string[])[];
   sessions: readonly Session[];
   boardCards: readonly BoardCard[];
   recents: readonly RecentProject[];
-  /** Running chats Zen can show, newest first. */
-  runningIds: readonly string[];
+  /** Every chat the dropdowns can list, newest activity first. */
+  chats: readonly ZenChat[];
   focusedId?: string;
   tool: ZenTool;
   onToolChange: (tool: ZenTool) => void;
@@ -142,28 +199,33 @@ export type ZenViewProps = {
   /** A tool's slim view; Chat is Zen's own. */
   renderTool: (tool: Exclude<ZenTool, "chat">) => ReactNode;
   onFocusPane: (sessionId: string) => void;
-  /** Shows a chat in pane `slot` (0 top, 1 bottom; 1 adds the second pane). */
-  onShow: (slot: number, sessionId: string) => void;
-  /** A new chat in pane `slot`, in `cwd` or the pane's own project. */
-  onNewChat: (slot: number, cwd?: string) => void;
-  /** Takes a chat out of Zen (the other pane fills the panel). */
+  /** Shows a chat in a pane (reading order; past the last adds one) or next to a chat. */
+  onShow: (at: ZenAt, sessionId: string) => void;
+  /** A new chat there, in `cwd` or the nearby pane's project. */
+  onNewChat: (at: ZenAt, cwd?: string) => void;
+  /** Takes a chat out of Zen (the others fill its place). */
   onClosePane: (sessionId: string) => void;
+  /** Whether chats now show side by side (the panel widens for them). */
+  onColumnsChange?: (columns: boolean) => void;
   onExit: () => void;
   /** App's hidden mounts (project terminals) that must stay attached. */
   keepMounted?: ReactNode;
 };
 
+/** A cell of Zen's grid: a chat, or the spot the Split button opened. */
+type ZenCell = { id: string } | { pending: true };
+
 /**
  * Zen mode (fork, L-230): the window as a narrow panel beside other apps.
- * One chat, or two stacked; Tasks, Notes, Automations and Monos in slim
- * layouts from the top bar.
+ * Up to four chats, two rows of one or two; Tasks, Notes, Automations and
+ * Monos in slim layouts from the top bar.
  */
 export function ZenView({
-  ids,
+  rows,
   sessions,
   boardCards,
   recents,
-  runningIds,
+  chats,
   focusedId,
   tool,
   onToolChange,
@@ -178,6 +240,7 @@ export function ZenView({
   onShow,
   onNewChat,
   onClosePane,
+  onColumnsChange,
   onExit,
   keepMounted,
 }: ZenViewProps): ReactNode {
@@ -208,48 +271,96 @@ export function ZenView({
   useEffect(() => {
     if (monoGone) onToolChange("chat");
   }, [monoGone, onToolChange]);
-  // Split waits for the second chat to be picked; it ends once there is one.
-  const [splitPending, setSplitPending] = useState(false);
-  const pending = splitPending && ids.length === 1;
-  const split = ids.length >= ZEN_MAX_PANES || pending;
 
-  const toggleSplit = () => {
-    if (ids.length >= ZEN_MAX_PANES) onClosePane(ids[1]!);
-    else setSplitPending(!pending);
+  const grid = useMemo(() => zenGridOfRows(rows), [rows]);
+  const ids = useMemo(() => grid.columns.flat(), [grid]);
+  const fits = (target: string, where: ZenPlace, id?: string): boolean =>
+    zenCanPlace(grid, target, where, id);
+  // Split opens an empty spot next to a chat until one is picked for it.
+  const [splitAt, setSplitAt] = useState<{
+    target: string;
+    where: ZenPlace;
+  } | null>(null);
+  const pending =
+    splitAt && fits(splitAt.target, splitAt.where) ? splitAt : null;
+  /** Where Split would open a spot: next to the focused chat when it can. */
+  const splitTarget = useMemo(() => {
+    const order = [
+      ...(focusedId && ids.includes(focusedId) ? [focusedId] : []),
+      ...ids,
+    ];
+    for (const target of order) {
+      const where = zenSplitPlace(grid, target);
+      if (where) return { target, where };
+    }
+    return null;
+  }, [focusedId, grid, ids]);
+  const multi = ids.length > 1 || pending !== null;
+
+  const cellRows: ZenCell[][] = grid.columns.map((row) =>
+    row.map((id): ZenCell => ({ id })),
+  );
+  if (pending) {
+    const at = cellRows.findIndex((row) =>
+      row.some((cell) => "id" in cell && cell.id === pending.target),
+    );
+    if (pending.where === "beside") {
+      const row = cellRows[at]!;
+      const index = row.findIndex(
+        (cell) => "id" in cell && cell.id === pending.target,
+      );
+      row.splice(index + 1, 0, { pending: true });
+    } else {
+      cellRows.splice(at + 1, 0, [{ pending: true }]);
+    }
+  }
+  const columns = cellRows.some((row) => row.length > 1);
+  useEffect(() => {
+    onColumnsChange?.(columns);
+  }, [columns, onColumnsChange]);
+
+  /** A chat dragged from a dropdown onto a pane's right or lower half. */
+  const drop = (id: string, target: ZenDropTarget): void => {
+    setSplitAt(null);
+    onShow({ target: target.pane, where: target.where }, id);
   };
 
-  const pane = (id: string, slot: number) => {
+  const pane = (id: string): ReactNode => {
     const session = byId.get(id);
     const focused = id === focusedId;
+    const slot = ids.indexOf(id);
     return (
       <section
         key={id}
         data-zen-pane={id}
+        data-zen-drop-pane={id}
         aria-label={chatTitle(session, cards.get(id))}
         onPointerDownCapture={() => {
           if (!focused) onFocusPane(id);
         }}
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
       >
         <ZenPaneHeader
           id={id}
           session={session}
           card={cards.get(id)}
-          focused={focused && split}
+          focused={focused && multi}
           marks={marks}
-          items={chatItems(runningIds, byId, cards, boardCards, marks, id)}
+          chats={chats}
+          byId={byId}
+          shown={ids}
           projectItems={projectItems}
           onPick={(next) => {
-            // Already in the other pane: go there instead of showing it twice.
+            // Already in another pane: go there instead of showing it twice.
             if (next !== id && ids.includes(next)) onFocusPane(next);
             else onShow(slot, next);
           }}
           onNewChat={(cwd) => onNewChat(slot, cwd)}
-          onClose={split ? () => onClosePane(id) : undefined}
-          onDropBelow={dropBelow}
+          onClose={multi ? () => onClosePane(id) : undefined}
+          fits={fits}
+          onDrop={drop}
         />
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {slot === 1 ? <ZenDropBelow label="Show here" className="inset-0" /> : null}
           {session ? (
             renderPane(session)
           ) : (
@@ -263,21 +374,76 @@ export function ZenView({
             </div>
           )}
         </div>
+        <ZenDropHint pane={id} fits={fits} />
       </section>
     );
   };
 
-  /** A chat dragged from a dropdown onto the lower half: the second chat. */
-  const dropBelow = (next: string): void => {
-    setSplitPending(false);
-    onShow(1, next);
+  const pendingCell = (at: { target: string; where: ZenPlace }): ReactNode => (
+    <section
+      key="pending"
+      aria-label="New chat spot"
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
+    >
+      <div className="flex h-8 shrink-0 items-center gap-1 border-b border-stroke pr-1 pl-3 text-[12px] text-content/55">
+        <span className="min-w-0 flex-1 truncate">Another chat</span>
+        <button
+          type="button"
+          title="Cancel split"
+          aria-label="Cancel split"
+          onClick={() => setSplitAt(null)}
+          className="grid size-6 shrink-0 place-items-center rounded-md text-content/45 hover:bg-content/10 hover:text-content"
+        >
+          <X aria-hidden className="size-3.5" strokeWidth={1.75} />
+        </button>
+      </div>
+      <ZenChooser
+        chats={chats}
+        byId={byId}
+        marks={marks}
+        shown={ids}
+        onPick={(id) => {
+          setSplitAt(null);
+          // Already showing: go there instead of showing it twice.
+          if (ids.includes(id)) onFocusPane(id);
+          else onShow(at, id);
+        }}
+        onNewChat={() => {
+          setSplitAt(null);
+          onNewChat(at);
+        }}
+      />
+    </section>
+  );
+
+  const cell = (entry: ZenCell | undefined): ReactNode => {
+    if (!entry) return null;
+    if ("id" in entry) return pane(entry.id);
+    return pending ? pendingCell(pending) : null;
+  };
+  const row = (index: number): ReactNode => {
+    const cells = cellRows[index];
+    if (!cells) return null;
+    return (
+      <ZenSplit
+        name={index === 0 ? "chats-top" : "chats-bottom"}
+        label="Resize chats side by side"
+        beside
+        accent
+        top={cell(cells[0])}
+        bottom={cells[1] ? cell(cells[1]) : null}
+      />
+    );
   };
 
-  const chats =
+  const chatArea =
     ids.length === 0 ? (
       <ZenChooser
-        title="No running chats"
-        items={chatItems(runningIds, byId, cards, boardCards, marks, undefined)}
+        title="No chat open"
+        chats={chats}
+        byId={byId}
+        marks={marks}
+        shown={ids}
         onPick={(id) => onShow(0, id)}
         onNewChat={() => onNewChat(0)}
       />
@@ -285,40 +451,21 @@ export function ZenView({
       <ZenSplit
         name="chats"
         label="Resize chats"
-        top={pane(ids[0]!, 0)}
-        bottom={
-          ids[1] ? (
-            pane(ids[1], 1)
-          ) : pending ? (
-            <>
-              <div className="flex h-8 shrink-0 items-center gap-1 border-b border-stroke pl-3 pr-1.5 text-[12px] text-content/55">
-                <span className="min-w-0 flex-1 truncate">Second chat</span>
-                <button
-                  type="button"
-                  title="Cancel split"
-                  aria-label="Cancel split"
-                  onClick={() => setSplitPending(false)}
-                  className="grid size-6 shrink-0 place-items-center rounded-md text-content/45 hover:bg-content/10 hover:text-content"
-                >
-                  <X className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-              <ZenChooser
-                items={chatItems(runningIds, byId, cards, boardCards, marks, ids[0])}
-                onPick={(id) => {
-                  setSplitPending(false);
-                  onShow(1, id);
-                }}
-                onNewChat={() => {
-                  setSplitPending(false);
-                  onNewChat(1);
-                }}
-              />
-            </>
-          ) : null
-        }
+        accent
+        top={row(0)}
+        bottom={cellRows[1] ? row(1) : null}
       />
     );
+
+  const splitLabel =
+    pending !== null
+      ? "Cancel split"
+      : ids.length >= ZEN_MAX_PANES
+        ? "Zen shows four chats at most"
+        : splitTarget?.where === "beside"
+          ? "Add a chat beside"
+          : "Add a chat below";
+  const SplitIcon = splitTarget?.where === "beside" ? PanelRight : PanelBottom;
 
   return (
     <div data-zen-view className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -351,12 +498,12 @@ export function ZenView({
         <div className="min-w-2 flex-1" />
         {tool === "chat" ? (
           <IconButton
-            label={ids.length >= ZEN_MAX_PANES ? "Show one chat" : "Split into two chats"}
-            active={split}
-            disabled={ids.length === 0}
-            onClick={toggleSplit}
+            label={splitLabel}
+            active={pending !== null}
+            disabled={ids.length === 0 || (pending === null && !splitTarget)}
+            onClick={() => setSplitAt(pending ? null : splitTarget)}
           >
-            <PanelBottom className="size-3.5" strokeWidth={1.75} />
+            <SplitIcon className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
         <IconButton
@@ -375,16 +522,12 @@ export function ZenView({
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Chats stay mounted under a tool, so coming back finds them as left. */}
         <div
-          className={tool === "chat" ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}
+          className={
+            tool === "chat" ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"
+          }
           inert={tool !== "chat" || undefined}
         >
-          {chats}
-          {tool === "chat" && ids.length === 1 ? (
-            <ZenDropBelow
-              label="Open below"
-              className="inset-x-0 bottom-0 h-1/2"
-            />
-          ) : null}
+          {chatArea}
         </div>
         <ZenDragPreview />
         {/* A tool loading for the first time waits here, not by blanking
@@ -407,25 +550,33 @@ function ZenPaneHeader({
   card,
   focused,
   marks,
-  items,
+  chats,
+  byId,
+  shown,
   projectItems,
   onPick,
   onNewChat,
   onClose,
-  onDropBelow,
+  fits,
+  onDrop,
 }: {
   id: string;
   session: Session | undefined;
   card: BoardCard | undefined;
   focused: boolean;
   marks: ProjectMarks;
-  items: readonly FocusPickItem[];
+  chats: readonly ZenChat[];
+  byId: ReadonlyMap<string, Session>;
+  /** Every chat in Zen now. */
+  shown: readonly string[];
   projectItems: readonly FocusPickItem[];
   onPick: (sessionId: string) => void;
   onNewChat: (cwd?: string) => void;
   onClose?: () => void;
-  /** A chat dragged out of the dropdown, dropped on the lower half. */
-  onDropBelow: (sessionId: string) => void;
+  /** Whether a dragged chat fits next to a pane. */
+  fits: (target: string, where: ZenPlace, id?: string) => boolean;
+  /** A chat dragged out of the dropdown, dropped next to a pane. */
+  onDrop: (sessionId: string, target: ZenDropTarget) => void;
 }): ReactNode {
   const dragging = useZenChatDrag() !== null;
   const [view, setView] = useState<
@@ -435,24 +586,41 @@ function ZenPaneHeader({
   const anchor = useRef<HTMLButtonElement>(null);
   const title = chatTitle(session, card);
   const cwd = session?.cwd ?? card?.cwd;
-  const close = (restore: boolean) => {
+  const open = view !== null;
+  // Built only while the dropdown is open: the lists change as chats stream.
+  const items = useMemo(
+    () =>
+      open
+        ? zenChatItems(chats, byId, marks, id, shown)
+        : { all: [], recent: [] },
+    [open, chats, byId, marks, id, shown],
+  );
+  const close = (restore: boolean): void => {
     setView(null);
     if (restore) anchor.current?.focus();
   };
-  // Pressing a chat can drag it to the lower half; the dropdown steps aside.
+  // Pressing a chat can drag it beside or below a pane; the dropdown steps aside.
   const dragOut = (
     item: FocusPickItem,
     event: Parameters<typeof startZenChatDrag>[0],
   ): void =>
-    startZenChatDrag(event, item.id, item.label, (next) => {
-      close(false);
-      onDropBelow(next);
-    });
+    startZenChatDrag(
+      event,
+      item.id,
+      item.label,
+      (target, where) => fits(target, where, item.id),
+      (target) => {
+        close(false);
+        onDrop(item.id, target);
+      },
+    );
   return (
     <header
       data-zen-pane-header
       className={`flex h-8 shrink-0 select-none items-center gap-1.5 border-b border-stroke pr-1 pl-2 text-[12px] transition-colors duration-100 ${
-        focused ? "bg-content/5" : ""
+        focused
+          ? "bg-[color-mix(in_srgb,var(--user-accent-color,var(--color-accent))_8%,transparent)]"
+          : ""
       }`}
     >
       {cwd ? (
@@ -467,11 +635,13 @@ function ZenPaneHeader({
             ref={anchor}
             type="button"
             aria-haspopup="dialog"
-            aria-expanded={view !== null}
+            aria-expanded={open}
             title="Show another chat"
             onClick={() => (view ? close(false) : setView("chats"))}
             className={`flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 text-left transition-colors duration-100 hover:bg-content/8 ${
-              view ? "bg-content/8 text-content" : "text-content/80 hover:text-content"
+              view
+                ? "bg-content/8 text-content"
+                : "text-content/80 hover:text-content"
             }`}
           >
             <span className="min-w-0 flex-1 truncate">{title}</span>
@@ -537,10 +707,14 @@ function ZenPaneHeader({
           ) : view === "chats" ? (
             <FocusSearchList
               className="h-[340px]"
-              items={items}
+              items={items.all}
+              idleItems={items.recent}
+              groupDividers
               label="Chats"
-              placeholder="Search chats"
-              emptyLabel="No other chats"
+              placeholder="Search all chats"
+              emptyLabel={
+                items.all.length > 0 ? "No matching chats" : "No recent chats"
+              }
               onChatPointerDown={dragOut}
               onPick={(next) => {
                 close(false);
@@ -564,7 +738,11 @@ function ZenPaneHeader({
                     onClick={() => setView("continue-projects")}
                     className={SEARCH_ACTION}
                   >
-                    <MessageSquare aria-hidden className="size-3.5" strokeWidth={1.75} />
+                    <MessageSquare
+                      aria-hidden
+                      className="size-3.5"
+                      strokeWidth={1.75}
+                    />
                   </button>
                 </>
               }
@@ -572,7 +750,9 @@ function ZenPaneHeader({
           ) : (
             <>
               <ZenBackRow
-                label={view === "projects" ? "New chat in…" : "Continue a chat in…"}
+                label={
+                  view === "projects" ? "New chat in…" : "Continue a chat in…"
+                }
                 onBack={() => setView("chats")}
               />
               <FocusSearchList
@@ -581,7 +761,7 @@ function ZenPaneHeader({
                   projectItems,
                   [
                     ...(cwd ? [cwd] : []),
-                    ...items.flatMap((item) =>
+                    ...items.recent.flatMap((item) =>
                       item.project ? [item.project.cwd] : [],
                     ),
                   ],
@@ -608,26 +788,41 @@ function ZenPaneHeader({
   );
 }
 
-/** Where a chat dragged out of a dropdown can land (L-230). */
-function ZenDropBelow({
-  label,
-  className,
+/**
+ * Where a chat dragged out of a dropdown can land on this pane (L-230): a
+ * faint outline while it fits here, and the half under the pointer (right:
+ * beside, lower: below) filled in the accent.
+ */
+function ZenDropHint({
+  pane,
+  fits,
 }: {
-  label: string;
-  className: string;
+  pane: string;
+  fits: (target: string, where: ZenPlace, id?: string) => boolean;
 }): ReactNode {
   const drag = useZenChatDrag();
   if (!drag) return null;
+  if (!fits(pane, "beside", drag.id) && !fits(pane, "below", drag.id))
+    return null;
+  const where = drag.over?.pane === pane ? drag.over.where : null;
   return (
-    <div
-      data-zen-drop-below
-      className={`absolute z-20 m-1.5 grid place-items-center rounded-lg border border-dashed text-[12px] font-medium transition-colors duration-100 ${className} ${
-        drag.over
-          ? "border-accent bg-accent/20 text-content"
-          : "border-content/25 bg-surface/70 text-content/60"
-      }`}
-    >
-      {label}
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-20">
+      <div className="absolute inset-1 rounded-lg border border-dashed border-content/20" />
+      {where ? (
+        <div
+          className={`absolute grid place-items-center rounded-lg border border-dashed text-[12px] font-medium text-content ${
+            where === "beside"
+              ? "top-1 right-1 bottom-1 w-[calc(50%-4px)]"
+              : "right-1 bottom-1 left-1 h-[calc(50%-4px)]"
+          }`}
+          style={{
+            borderColor: ACCENT,
+            backgroundColor: `color-mix(in srgb, ${ACCENT} 18%, transparent)`,
+          }}
+        >
+          {where === "beside" ? "Open beside" : "Open below"}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -858,24 +1053,33 @@ function ZenMonoButtons({
   );
 }
 
-/** Picks a chat for an empty pane: New chat, or one from the list. */
+/** Picks a chat for an empty spot: New chat, or one from the recent list. */
 function ZenChooser({
   title,
-  items,
+  chats,
+  byId,
+  marks,
+  shown,
   onPick,
   onNewChat,
 }: {
   title?: string;
-  items: readonly FocusPickItem[];
+  chats: readonly ZenChat[];
+  byId: ReadonlyMap<string, Session>;
+  marks: ProjectMarks;
+  /** Every chat in Zen now. */
+  shown: readonly string[];
   onPick: (sessionId: string) => void;
   onNewChat: () => void;
 }): ReactNode {
+  const items = useMemo(
+    () => zenChatItems(chats, byId, marks, undefined, shown),
+    [chats, byId, marks, shown],
+  );
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col items-start gap-2 px-3 py-3">
-        {title ? (
-          <p className="text-[13px] text-content/55">{title}</p>
-        ) : null}
+        {title ? <p className="text-[13px] text-content/55">{title}</p> : null}
         <button
           type="button"
           onClick={onNewChat}
@@ -885,17 +1089,19 @@ function ZenChooser({
           New chat
         </button>
       </div>
-      {items.length > 0 ? (
-        <FocusSearchList
-          className="min-h-0 flex-1 border-t border-stroke"
-          items={items}
-          label="Chats"
-          placeholder="Search chats"
-          emptyLabel="No chats"
-          autoFocus={false}
-          onPick={onPick}
-        />
-      ) : null}
+      <FocusSearchList
+        className="min-h-0 flex-1 border-t border-stroke"
+        items={items.all}
+        idleItems={items.recent}
+        groupDividers
+        label="Chats"
+        placeholder="Search all chats"
+        emptyLabel={
+          items.all.length > 0 ? "No matching chats" : "No recent chats"
+        }
+        autoFocus={false}
+        onPick={onPick}
+      />
     </div>
   );
 }

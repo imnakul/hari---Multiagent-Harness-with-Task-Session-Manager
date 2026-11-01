@@ -20,6 +20,11 @@ type Props = {
   onCancel: () => void;
   /** Double-click: back to equal sizes. */
   onReset: () => void;
+  /**
+   * "accent": a soft accent line always shows along the whole edge, brighter
+   * and thicker on hover or drag (Zen's chats, L-230).
+   */
+  tone?: "accent";
 };
 
 /**
@@ -38,6 +43,7 @@ export function FocusSash({
   onCommit,
   onCancel,
   onReset,
+  tone,
 }: Props): ReactNode {
   const vertical = orientation === "vertical";
   return (
@@ -118,6 +124,16 @@ export function FocusSash({
         window.addEventListener("keydown", keydown, true);
       }}
     >
+      {tone === "accent" ? (
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute bg-[color-mix(in_srgb,var(--user-accent-color,var(--color-accent))_45%,transparent)] transition-[background-color,width,height] duration-100 group-hover:bg-[var(--user-accent-color,var(--color-accent))] group-focus-visible:bg-[var(--user-accent-color,var(--color-accent))] group-active:bg-[var(--user-accent-color,var(--color-accent))] motion-reduce:transition-none ${
+            vertical
+              ? "inset-y-0 left-1/2 w-px -translate-x-1/2 group-hover:w-0.5 group-active:w-0.5"
+              : "inset-x-0 top-1/2 h-px -translate-y-1/2 group-hover:h-0.5 group-active:h-0.5"
+          }`}
+        />
+      ) : (
       <span
         aria-hidden
         className={`pointer-events-none absolute rounded-full bg-content/0 transition-colors duration-100 group-hover:bg-content/25 group-focus-visible:bg-[var(--user-accent-color,var(--color-accent))] group-active:bg-[var(--user-accent-color,var(--color-accent))] ${
@@ -126,6 +142,7 @@ export function FocusSash({
             : "inset-x-3 top-1/2 h-0.5 -translate-y-1/2"
         }`}
       />
+      )}
     </div>
   );
 }

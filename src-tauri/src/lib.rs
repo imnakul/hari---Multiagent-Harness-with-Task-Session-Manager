@@ -785,6 +785,8 @@ pub fn run() {
             zen_window::zen_window_enter,
             zen_window::zen_window_exit,
             zen_window::zen_window_pin,
+            zen_window::zen_window_widen,
+            zen_window::zen_window_narrow,
             webview_recovery::take_webview_recovery,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             quick_composer::quick_composer_set_enabled,

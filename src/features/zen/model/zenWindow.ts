@@ -15,6 +15,10 @@ const BOUNDS_KEY = "monocode.zenBounds.v1";
 const PINNED_KEY = "monocode.zenPinned.v1";
 const SPLIT_KEY = "monocode.zenSplit.v1";
 const RESTORE_KEY = "monocode.zenRestore.v1:";
+const WIDEN_KEY = "monocode.zenWiden.v1:";
+
+/** A Zen panel widened for chats side by side: its width before and after (physical px). */
+export type ZenWiden = { before: number; after: number };
 
 function read(key: string): string | null {
   try {
@@ -87,8 +91,11 @@ export function saveZenPinned(on: boolean): void {
   write(PINNED_KEY, on ? "1" : "0");
 }
 
-/** Splits that keep their own size: two chats, or a tool's list and item. */
-export type ZenSplitName = "chats" | "tool";
+/**
+ * Splits that keep their own size: Zen's two rows, the chats side by side in
+ * each row, or a tool's list and item.
+ */
+export type ZenSplitName = "chats" | "chats-top" | "chats-bottom" | "tool";
 
 /** The top half's share of a Zen split. */
 export function loadZenSplit(name: ZenSplitName): number {
@@ -112,6 +119,49 @@ export function saveZenRestore(label: string, restore: ZenRestore | null): void 
   write(RESTORE_KEY + label, restore ? JSON.stringify(restore) : null);
 }
 
+export function parseZenWiden(raw: string | null): ZenWiden | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object") return null;
+    const { before, after } = value as Record<string, unknown>;
+    return Number.isInteger(before) &&
+      Number.isInteger(after) &&
+      (before as number) > 0 &&
+      (after as number) > (before as number)
+      ? { before: before as number, after: after as number }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The widening to undo, kept while the panel is wide (and across a restart). */
+export function loadZenWiden(label: string): ZenWiden | null {
+  return parseZenWiden(read(WIDEN_KEY + label));
+}
+
+export function saveZenWiden(label: string, widen: ZenWiden | null): void {
+  write(WIDEN_KEY + label, widen ? JSON.stringify(widen) : null);
+}
+
+/**
+ * The panel's bounds to remember on leaving Zen: a panel still at its
+ * widened width is remembered at its width before (right edge kept), so the
+ * next Zen opens narrow for one column.
+ */
+export function narrowedZenBounds(
+  bounds: ZenBounds,
+  widen: ZenWiden | null,
+): ZenBounds {
+  if (!widen || Math.abs(bounds.width - widen.after) > 2) return bounds;
+  return {
+    ...bounds,
+    x: bounds.x + bounds.width - widen.before,
+    width: widen.before,
+  };
+}
+
 export function zenWindowEnter(
   remembered: ZenBounds | null,
   smooth: boolean,
@@ -128,6 +178,22 @@ export function zenWindowExit(
 
 export function zenWindowPin(on: boolean): Promise<void> {
   return invoke<void>("zen_window_pin", { on });
+}
+
+/** Widens the panel to at least `minWidth` CSS px; null when it was wide enough. */
+export function zenWindowWiden(
+  minWidth: number,
+  smooth: boolean,
+): Promise<ZenWiden | null> {
+  return invoke<ZenWiden | null>("zen_window_widen", { minWidth, smooth });
+}
+
+/** Narrows a widened panel back, unless the user resized it since. */
+export function zenWindowNarrow(
+  widen: ZenWiden,
+  smooth: boolean,
+): Promise<boolean> {
+  return invoke<boolean>("zen_window_narrow", { widen, smooth });
 }
 
 export function prefersReducedMotion(): boolean {

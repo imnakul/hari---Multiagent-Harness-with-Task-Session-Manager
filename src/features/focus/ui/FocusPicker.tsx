@@ -11,7 +11,7 @@ import {
 } from "react";
 import { LAYER } from "../../../shared/lib/layers";
 import { projectKey, projectName } from "../../../shared/lib/paths";
-import { ChevronDown, Search } from "../../../shared/ui/icons";
+import { ChevronDown, Loader, Search } from "../../../shared/ui/icons";
 import {
   ExplorerMenu,
   type ExplorerMenuItem,
@@ -63,6 +63,8 @@ export type FocusPickItem = {
   chat?: FocusChatInfo;
   /** Listed below a divider, after the items without it (L-230). */
   lower?: boolean;
+  /** Shown before the group's heading, e.g. its project's icon (L-230). */
+  groupIcon?: ReactNode;
 };
 
 /** What a chat card shows besides its title (L-230). */
@@ -73,6 +75,8 @@ export type FocusChatInfo = {
   providerAccountId?: string;
   /** Last activity, shown as "5m" or "3d". */
   updatedAt?: number;
+  /** A spinner while a turn runs, a dot while it waits for the user (L-230). */
+  status?: "working" | "waiting";
 };
 
 /** A chat's card details from what a session or summary has. */
@@ -372,6 +376,8 @@ export function FocusSearchList({
   onPick,
   className = "",
   limit,
+  idleItems,
+  groupDividers = false,
   actions,
   onChatPointerDown,
 }: {
@@ -384,6 +390,13 @@ export function FocusSearchList({
   className?: string;
   /** Shows only the first this many until a search (long chat lists). */
   limit?: number;
+  /**
+   * Shown instead of `items` until a search, which covers every item
+   * (Zen's recent chats, L-230).
+   */
+  idleItems?: readonly FocusPickItem[];
+  /** A line between groups, above each heading but the first. */
+  groupDividers?: boolean;
   /** Buttons at the end of the search row, after a divider. */
   actions?: ReactNode;
   /** A press on a chat card, e.g. to start dragging it (Zen, L-230). */
@@ -415,7 +428,13 @@ export function FocusSearchList({
     const inProject = project
       ? items.filter((item) => item.project?.key === project)
       : items;
-    if (!needle) return limit ? inProject.slice(0, limit) : inProject;
+    if (!needle) {
+      if (idleItems)
+        return project
+          ? idleItems.filter((item) => item.project?.key === project)
+          : idleItems;
+      return limit ? inProject.slice(0, limit) : inProject;
+    }
     return inProject.filter((item) =>
       [
         item.label,
@@ -426,9 +445,9 @@ export function FocusSearchList({
         (item.chat && showLabels && metadata.get(item.id)?.label) || "",
       ].some((text) => text.toLowerCase().includes(needle)),
     );
-  }, [items, query, project, limit, metadata, showLabels]);
+  }, [items, idleItems, query, project, limit, metadata, showLabels]);
   const hiddenCount =
-    limit && !query.trim()
+    (limit || idleItems) && !query.trim()
       ? (project
           ? items.filter((item) => item.project?.key === project).length
           : items.length) - filtered.length
@@ -539,15 +558,20 @@ export function FocusSearchList({
               filtered[index - 1]?.lower !== true;
             return (
               <div key={item.id} role="presentation">
-                {divided ? (
+                {divided || (groupDividers && heading && index > 0) ? (
                   <div aria-hidden className="mx-2 my-1 h-px bg-stroke" />
                 ) : null}
                 {heading ? (
                   <div
                     role="presentation"
-                    className="px-2 pt-2 pb-1 text-[11px] font-medium text-content/40"
+                    className="flex min-w-0 items-center gap-1.5 px-2 pt-2 pb-1 text-[11px] font-medium text-content/40"
                   >
-                    {heading}
+                    {item.groupIcon ? (
+                      <span className="grid size-3.5 shrink-0 place-items-center opacity-80">
+                        {item.groupIcon}
+                      </span>
+                    ) : null}
+                    <span className="min-w-0 truncate">{heading}</span>
                   </div>
                 ) : null}
                 {item.chat ? (
@@ -696,6 +720,19 @@ function FocusChatOption({
           >
             {label ?? item.label}
           </span>
+          {chat.status === "working" ? (
+            <Loader
+              aria-label="Working"
+              className="size-3 shrink-0 text-content/50 motion-safe:animate-spin"
+            />
+          ) : chat.status === "waiting" ? (
+            <span
+              role="img"
+              aria-label="Waiting for you"
+              title="Waiting for you"
+              className="size-1.5 shrink-0 rounded-full bg-[var(--user-accent-color,var(--color-accent))]"
+            />
+          ) : null}
           {time ? (
             <span className="shrink-0 text-[11px] tabular-nums text-content/40">
               {time}

@@ -1,16 +1,21 @@
 import { useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import type { ZenPlace } from "./zenPanes";
 
-// Fork (L-230): a chat dragged from a Zen dropdown onto the panel's lower
-// half opens there, as the second chat. Pointer events, as for sidebar
-// session drags: Tauri takes the webview's native drag and drop on Windows.
+// Fork (L-230): a chat dragged from a Zen dropdown onto a chat's right half
+// opens beside it, onto its lower half in a new row below. Pointer events,
+// as for sidebar session drags: Tauri takes the webview's native drag and
+// drop on Windows.
+
+/** Where a dragged chat would land: next to chat `pane`. */
+export type ZenDropTarget = { pane: string; where: ZenPlace };
 
 export type ZenChatDrag = {
   id: string;
   label: string;
   x: number;
   y: number;
-  /** Over the lower-half drop area. */
-  over: boolean;
+  /** The spot under the pointer, if the chat fits there. */
+  over: ZenDropTarget | null;
 };
 
 let drag: ZenChatDrag | null = null;
@@ -38,21 +43,60 @@ export function useZenChatDrag(): ZenChatDrag | null {
 /** Pointer travel before a press on a chat becomes a drag. */
 export const ZEN_DRAG_THRESHOLD = 5;
 
-/** Whether the point is over the lower-half drop area (`data-zen-drop-below`). */
-export function zenDropBelowFromPoint(x: number, y: number): boolean {
-  return !!document.elementFromPoint(x, y)?.closest("[data-zen-drop-below]");
+/**
+ * Which half of a pane the point is in: the right half is beside, the
+ * lower half below. Where both fit (the lower right), the nearer edge wins.
+ */
+export function zenDropZone(
+  rect: { left: number; top: number; width: number; height: number },
+  x: number,
+  y: number,
+  beside: boolean,
+  below: boolean,
+): ZenPlace | null {
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const across = (x - rect.left) / rect.width;
+  const down = (y - rect.top) / rect.height;
+  const right = beside && across > 0.5;
+  const lower = below && down > 0.5;
+  if (right && lower) return across > down ? "beside" : "below";
+  if (right) return "beside";
+  if (lower) return "below";
+  return null;
+}
+
+/** The chat pane (`data-zen-drop-pane`) under the point, and the spot in it. */
+export function zenDropFromPoint(
+  x: number,
+  y: number,
+  fits: (pane: string, where: ZenPlace) => boolean,
+): ZenDropTarget | null {
+  const element = document
+    .elementFromPoint(x, y)
+    ?.closest<HTMLElement>("[data-zen-drop-pane]");
+  const pane = element?.dataset.zenDropPane;
+  if (!element || !pane) return null;
+  const where = zenDropZone(
+    element.getBoundingClientRect(),
+    x,
+    y,
+    fits(pane, "beside"),
+    fits(pane, "below"),
+  );
+  return where ? { pane, where } : null;
 }
 
 /**
  * Starts watching a press on a dropdown chat. A short press stays a click;
- * past the threshold it drags, and a release over the drop area calls
- * `onDrop`. Escape cancels.
+ * past the threshold it drags, and a release over a spot where `fits` says
+ * the chat can go calls `onDrop`. Escape cancels.
  */
 export function startZenChatDrag(
   event: ReactPointerEvent<HTMLElement>,
   id: string,
   label: string,
-  onDrop: (id: string) => void,
+  fits: (pane: string, where: ZenPlace) => boolean,
+  onDrop: (target: ZenDropTarget) => void,
 ): void {
   if (event.button !== 0) return;
   const handle = event.currentTarget;
@@ -72,13 +116,13 @@ export function startZenChatDrag(
         /* the press already ended */
       }
     }
-    // Hit-test after the dropdown hides, so the area under it is found.
+    // Hit-test after the dropdown hides, so the pane under it is found.
     set({
       id,
       label,
       x: ev.clientX,
       y: ev.clientY,
-      over: zenDropBelowFromPoint(ev.clientX, ev.clientY),
+      over: zenDropFromPoint(ev.clientX, ev.clientY, fits),
     });
   };
   const onUp = (ev: PointerEvent): void => finish(ev, true);
@@ -101,8 +145,9 @@ export function startZenChatDrag(
       /* already released */
     }
     if (!active) return;
-    // Hit-test while the drop area is still drawn.
-    const drop = commit && ev ? zenDropBelowFromPoint(ev.clientX, ev.clientY) : false;
+    // Hit-test while the drop hints are still drawn.
+    const target =
+      commit && ev ? zenDropFromPoint(ev.clientX, ev.clientY, fits) : null;
     set(null);
     // The release would also click the chat; a drag is not a pick.
     const skip = (click: MouseEvent): void => {
@@ -111,7 +156,7 @@ export function startZenChatDrag(
     };
     window.addEventListener("click", skip, { capture: true, once: true });
     window.setTimeout(() => window.removeEventListener("click", skip, true), 0);
-    if (drop) onDrop(id);
+    if (target) onDrop(target);
   }
 
   window.addEventListener("pointermove", onMove);

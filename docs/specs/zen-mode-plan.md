@@ -86,6 +86,26 @@ minimum width drops to 360 only in Zen; reuse Focus panes, sash, picker, Tasks L
 - Tools are new slim instances in Zen, not the workspace ones: they stay independent
   of the workspace's open views.
 
+## Follow-up: accent dividers, recent chats, four chats (Discuss, 2026-11-01)
+
+Locked: a 1px soft accent line between chats (2px, full accent on hover or drag), a
+faint accent tint on the focused chat's header with 2+ chats; the dropdown lists the
+12 most recent chats grouped by project (projects by newest chat, a heading with
+icon and a line between groups, no status groups, no project on the card's second
+line), search covers every saved chat; up to 4 chats as rows (at most 2 rows of 1–2,
+a lone chat spans its row); dragging a chat onto a chat's right half opens it beside,
+onto its lower half in a new row below; the panel widens leftward to 720px while a
+row has two chats and goes back after. Focus mode unchanged.
+
+- Grid: `zenPanes.ts` rows in `FocusGrid.columns` (`zenRows`, `zenPlace`,
+  `zenCanPlace`, `zenSplitPlace`, `zenPut`, `zenNormalize`); App's `setFocusGrid`
+  tidies with `zenNormalize` instead of flattening.
+- Chats: `zenRecent.ts` merges history, open sessions and board cards (hidden,
+  archived, workers, hidden runs and Monos dropped; working spinner, waiting dot).
+- Width: Rust `zen_window_widen` / `zen_window_narrow` keep the right edge; narrow
+  only when the width is unchanged; leaving or a restart saves the one-column width
+  (`narrowedZenBounds`, per-window widen record).
+
 ## Manual desktop checklist (not an agent task)
 
 - Enter from workspace, Focus and maximized: docks right, animation smooth or instant.
@@ -95,5 +115,9 @@ minimum width drops to 360 only in Zen; reuse Focus panes, sash, picker, Tasks L
 - Split into two chats, dropdown per pane, drag the divider.
 - Tasks/Notes/Automations/Monos: list, item opens below, close slides back.
 - Close the app during Zen, reopen: normal size.
+- Accent line between chats both ways; brighter on hover and while dragging.
+- Dropdown: 12 recent chats by project, headings and lines, search finds older ones.
+- Drag a chat onto a right half (beside) and a lower half (below); 4 chats max.
+- A second column widens the panel leftward; back to one column narrows it.
 
 ## Done

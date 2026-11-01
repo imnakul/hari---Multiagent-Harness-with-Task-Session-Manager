@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-01 23:54 IST — Zen: accent dividers, recent chats by project, up to four chats (L-230)
+- Type: feature
+- What: A soft accent line now separates Zen's chats (brighter on hover or drag), and the focused chat's header gets a faint accent tint. The chat dropdown lists the 12 most recent chats grouped by project, with a line between projects, a spinner on working chats and a dot on ones waiting for you; search covers every saved chat; no status groups. Zen holds up to four chats in two rows of one or two: drag a chat onto a chat's right half to open it beside, or its lower half to open it below; Split adds below, then beside. A second column widens the panel leftward to 720px, and it goes back after.
+- Why: User request (Discuss mode, decisions locked): hard to see where one chat ends, and the dropdown showed a long list grouped by status instead of the chats in use.
+- Files: `src/features/zen/model/zenPanes.ts` + test, `src/features/zen/model/zenRecent.ts` + test (new), `src/features/zen/model/zenChatDrag.ts` + test, `src/features/zen/model/zenWindow.ts`, `src/features/zen/ui/ZenView.tsx`, `src/features/zen/ui/ZenSplit.tsx`, `src/features/focus/ui/FocusSash.tsx`, `src/features/focus/ui/FocusPicker.tsx`, `src-tauri/src/zen_window.rs`, `src-tauri/src/lib.rs`, `src/app/App.tsx`, `docs/specs/zen-mode-plan.md`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed yet
+- Verified: tsc clean; full vitest 8037 passed (iconCatalog times out under load, passes alone); windowArgs (L-218) passes; rustfmt, cargo check, cargo test zen_window 9 passed. Desktop UI not checked by the agent.
+
 ## 2026-11-01 23:05 IST — 0.16.0-local25 Windows build
 - Type: chore
 - What: New Windows installer, version 0.16.0-local25: 0.16.0-local24 plus Zen mode (L-230): the window becomes a docked side panel with one or two chats, a slim top bar with Tasks, Notes, Automations and Mono buttons, chat cards and Continue in the pane dropdown, drag a chat to the second row, and the Notes/Automations width fix.

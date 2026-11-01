@@ -846,6 +846,7 @@ import { PaneTree } from "../features/workspace/ui/PaneTree";
 import { SessionPane } from "../features/sessions/ui/SessionPane";
 import { useSessionBoard } from "../features/session-board/useSessionBoard";
 import {
+  boardLane,
   boardRunId,
   forgetBoardSession,
   recordBoardOutcome,
@@ -871,23 +872,35 @@ import {
   EMPTY_ZEN_GRID,
   ZEN_FADE_IN_MS,
   ZEN_FADE_OUT_MS,
+  ZEN_WIDE_MIN_WIDTH,
   zenEntryGrid,
   zenGridOf,
   zenIds,
+  zenNormalize,
+  zenPut,
+  zenRows,
   zenShow,
+  type ZenAt,
   type ZenTool,
 } from "../features/zen/model/zenPanes";
+import { zenChatSources, zenChats } from "../features/zen/model/zenRecent";
 import {
   loadZenBounds,
   loadZenPinned,
   loadZenRestore,
+  loadZenWiden,
+  narrowedZenBounds,
   prefersReducedMotion,
   saveZenBounds,
   saveZenPinned,
   saveZenRestore,
+  saveZenWiden,
   zenWindowEnter,
   zenWindowExit,
+  zenWindowNarrow,
   zenWindowPin,
+  zenWindowWiden,
+  type ZenWiden,
 } from "../features/zen/model/zenWindow";
 import {
   loadFileOpeningBehavior,
@@ -1608,8 +1621,9 @@ function Workspace({
       setFocusModeGrid(next);
       return;
     }
+    // Zen keeps its rows; Focus's upkeep only swaps or drops chats in them.
     setZenGrid((grid) =>
-      zenGridOf(focusGridIds(typeof next === "function" ? next(grid) : next)),
+      zenNormalize(typeof next === "function" ? next(grid) : next),
     );
   }, []);
   const [focusPaneChoice, setFocusPaneChoice] = useState<string>();
@@ -6198,6 +6212,71 @@ function Workspace({
     const next = zenRunningIds[0];
     if (next) setZenGrid(zenGridOf([next]));
   }, [zenGrid, zenMode, zenRunningIds]);
+  /** Zen's rows, steady while the grid is (ZenView memoizes on them). */
+  const zenRowsShown = useMemo(() => zenRows(zenGrid), [zenGrid]);
+  /** Every chat Zen's dropdowns list, newest activity first. */
+  const zenChatList = useMemo(() => {
+    if (!zenMode) return [];
+    return zenChats(
+      zenChatSources({
+        history,
+        sessions,
+        cards: sessionBoard.cards.map((card) => ({
+          ...card,
+          waiting: boardLane(card) === "needs_attention",
+        })),
+        working: workingSessionIds,
+        listed: (open) => {
+          const session = sessions.find((each) => each.id === open.id);
+          return (
+            !!session &&
+            isFocusEligible(session) &&
+            session.blocks.some((block) => block.role === "user")
+          );
+        },
+        hiddenId: isMonoSession,
+      }),
+    );
+  }, [history, sessionBoard.cards, sessions, workingSessionIds, zenMode]);
+
+  // Chats side by side need room (L-230): the panel widens leftward to
+  // ZEN_WIDE_MIN_WIDTH, and goes back to its width with one column again
+  // unless it was resized meanwhile. One change at a time.
+  const [zenWide, setZenWide] = useState(false);
+  const zenWideRef = useRef(zenWide);
+  zenWideRef.current = zenWide;
+  const zenWidth = useRef<{ widen: ZenWiden | null; queue: Promise<void> }>({
+    widen: null,
+    queue: Promise.resolve(),
+  });
+  const syncZenWidth = useCallback((): Promise<void> => {
+    const state = zenWidth.current;
+    state.queue = state.queue.then(async () => {
+      if (!zenModeRef.current || zenBusy.current) return;
+      const smooth = !prefersReducedMotion();
+      const label = zenWindowLabel();
+      try {
+        if (zenWideRef.current && !state.widen) {
+          const widen = await zenWindowWiden(ZEN_WIDE_MIN_WIDTH, smooth);
+          if (widen) {
+            state.widen = widen;
+            saveZenWiden(label, widen);
+          }
+        } else if (!zenWideRef.current && state.widen) {
+          const widen = state.widen;
+          state.widen = null;
+          saveZenWiden(label, null);
+          await zenWindowNarrow(widen, smooth);
+        }
+      } catch (error) {
+        console.warn("Could not resize the Zen panel:", error);
+      }
+    });
+    return state.queue;
+  }, []);
+  useEffect(() => {
+    if (zenMode) void syncZenWidth();
+  }, [syncZenWidth, zenMode, zenWide]);
 
   // Fade-through around Zen's window change (L-230): the layout fades out,
   // the window resizes unseen, then the new layout fades and scales in.
@@ -6278,7 +6357,9 @@ function Workspace({
       zenBusy.current = false;
       if (faded) zenFadeIn();
     }
-  }, [sessionsRef, zenFadeIn, zenFadeOut]);
+    // Chats side by side from the start widen the panel now it is ready.
+    void syncZenWidth();
+  }, [sessionsRef, syncZenWidth, zenFadeIn, zenFadeOut]);
 
   const leaveZen = useCallback(async (toWorkspace: boolean) => {
     if (zenBusy.current || !zenModeRef.current) return;
@@ -6286,14 +6367,26 @@ function Workspace({
     const faded = await zenFadeOut();
     const label = zenWindowLabel();
     const restore = loadZenRestore(label);
+    // A widening still under way finishes first; the panel's saved size is
+    // its one-column width, so the next Zen opens narrow.
+    await zenWidth.current.queue;
+    const widen = zenWidth.current.widen;
+    zenWidth.current.widen = null;
     try {
       // The window grows back first, so the full layout never draws narrow.
       if (restore)
-        saveZenBounds(await zenWindowExit(restore, !prefersReducedMotion()));
+        saveZenBounds(
+          narrowedZenBounds(
+            await zenWindowExit(restore, !prefersReducedMotion()),
+            widen,
+          ),
+        );
     } catch (error) {
       console.warn("Could not restore the window after Zen mode:", error);
     }
     saveZenRestore(label, null);
+    saveZenWiden(label, null);
+    setZenWide(false);
     const shown = zenIds(focusGridRef.current);
     focusSeenIds.current.clear();
     setZenMode(false);
@@ -6330,10 +6423,12 @@ function Workspace({
     zenStartupRestoreDone = true;
     const label = zenWindowLabel();
     const restore = loadZenRestore(label);
+    const widen = loadZenWiden(label);
+    saveZenWiden(label, null);
     if (!restore) return;
     saveZenRestore(label, null);
     void zenWindowExit(restore, false)
-      .then(saveZenBounds)
+      .then((bounds) => saveZenBounds(narrowedZenBounds(bounds, widen)))
       .catch(() => undefined);
   }, []);
 
@@ -6346,12 +6441,12 @@ function Workspace({
     );
   }, []);
 
-  /** Shows a chat in Zen pane `slot` and focuses it. */
+  /** Shows a chat in a Zen pane, or next to one, and focuses it. */
   const onZenShow = useCallback(
-    async (slot: number, sessionId: string) => {
+    async (at: ZenAt, sessionId: string) => {
       const session = await ensureOpenSession(sessionId).catch(() => null);
       if (!session || !zenModeRef.current) return;
-      setZenGrid((grid) => zenShow(grid, slot, session.id));
+      setZenGrid((grid) => zenPut(grid, at, session.id));
       setZenTool("chat");
       setFocusPaneChoice(session.id);
       setProjectTerminalFocused(false);
@@ -6360,11 +6455,12 @@ function Workspace({
     },
     [ensureOpenSession],
   );
-  /** A new chat in Zen pane `slot`, in `cwd` or the pane's project. */
+  /** A new chat in a Zen pane or next to one, in `cwd` or that pane's project. */
   const onZenNewChat = useCallback(
-    (slot: number, cwd?: string) => {
+    (at: ZenAt, cwd?: string) => {
       const ids = zenIds(focusGridRef.current);
-      const paneId = ids[slot] ?? ids[0];
+      const paneId =
+        (typeof at === "number" ? ids[at] : at.target) ?? ids[0];
       const paneCwd = sessionsRef.current.find(
         (session) => session.id === paneId,
       )?.cwd;
@@ -6373,7 +6469,7 @@ function Workspace({
         sessionDefaults?.runtimeMode,
       );
       setSessions((prev) => [...prev, session]);
-      setZenGrid((grid) => zenShow(grid, slot, session.id));
+      setZenGrid((grid) => zenPut(grid, at, session.id));
       setFocusPaneChoice(session.id);
       setProjectTerminalFocused(false);
       setComposerFocused(true);
@@ -17570,11 +17666,11 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     : undefined;
   const zenView = zenMode ? (
     <ZenView
-      ids={zenIds(zenGrid)}
+      rows={zenRowsShown}
       sessions={sessions}
       boardCards={sessionBoard.cards}
       recents={recents}
-      runningIds={zenRunningIds}
+      chats={zenChatList}
       focusedId={focusPaneId}
       tool={zenTool}
       onToolChange={setZenTool}
@@ -17675,9 +17771,10 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         );
       }}
       onFocusPane={onFocusFocusPane}
-      onShow={(slot, sessionId) => void onZenShow(slot, sessionId)}
+      onShow={(at, sessionId) => void onZenShow(at, sessionId)}
       onNewChat={onZenNewChat}
       onClosePane={onCloseFocusPane}
+      onColumnsChange={setZenWide}
       onExit={onToggleZenMode}
       keepMounted={projectDockHosts}
     />
