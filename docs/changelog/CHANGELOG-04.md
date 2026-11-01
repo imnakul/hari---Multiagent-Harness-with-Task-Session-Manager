@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 00:44 IST — 0.16.0-local25 Windows rebuild (prompt recall)
+- Type: chore
+- What: Same version, 0.16.0-local25, rebuilt with Up-arrow recall of sent messages (68337e9f). Earlier local25 installers are kept.
+- Why: User asked to add this in the same version.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local25-prompt-recall_x64.exe` (19,651,580 bytes, SHA-256 0B09A36F26D8C8E5E29123C27872490399257DA8DBBA1DE72F9C201BB1F27FCE, unsigned)
+- Commit: records only, after 68337e9f
+- Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
+
 ## 2026-11-02 00:40 IST — Up recalls sent messages in the chat box (L-231)
 - Type: feat
 - What: In an empty chat box, Up shows this chat's previous messages one by one (newest first) and Down steps back to newer ones, then to an empty box. Editing the recalled text returns the arrow keys to normal.
 - Why: User asked for terminal-style prompt history in the composer.
 - Files: `src/features/sessions/model/promptRecall.ts` (+ test), `src/features/sessions/ui/Composer.tsx`, `src/features/sessions/ui/Composer.test.ts`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 68337e9f
 - Verified: tsc ✅; vitest full ✅ (8043 passed); desktop check manual
 
 ## 2026-11-02 00:00 IST — 0.16.0-local25 Windows rebuild (Zen four chats)
