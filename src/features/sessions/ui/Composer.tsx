@@ -234,6 +234,12 @@ import {
 } from "../../settings/model/mcpSettingsCache";
 import type { LastTurnRecall } from "../model/editLastTurn";
 import {
+  NO_RECALL,
+  sentPrompts,
+  stepPromptRecall,
+  type PromptRecall,
+} from "../model/promptRecall";
+import {
   ATTACH_TO_CHAT_EVENT,
   type AttachToChatDetail,
 } from "../model/attachToChat";
@@ -534,6 +540,8 @@ export function Composer({
   const slashRef = useRef<SlashToken | null>(null);
   const mentionRef = useRef<MentionToken | null>(null);
   const [draft, setDraft] = useState(initialDraft ?? "");
+  /** Up/Down history position in this chat's sent messages (L-231). */
+  const promptRecallRef = useRef<PromptRecall>(NO_RECALL);
   // React rewrites a textarea's text node whenever defaultValue changes, and
   // WebKit then resets the field, committing any IME composition. Parents
   // re-render with the latest draft (remote sessions on every poll), so keep
@@ -1972,6 +1980,27 @@ export function Composer({
           executeComposerAction(result.action, e.currentTarget.value);
           return;
         }
+        return;
+      }
+    }
+
+    if (
+      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+      !e.shiftKey &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey
+    ) {
+      const next = stepPromptRecall(
+        promptRecallRef.current,
+        e.key,
+        e.currentTarget.value,
+        sentPrompts(blocks),
+      );
+      if (next) {
+        e.preventDefault();
+        promptRecallRef.current = next;
+        applyInsertedText(next.text, next.text.length);
         return;
       }
     }

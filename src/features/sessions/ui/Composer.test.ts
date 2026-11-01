@@ -368,6 +368,46 @@ describe("Composer question focus", () => {
     expect(container.querySelector("textarea")?.value).toBe("Work in cloud");
   });
 
+  it("Up in an empty box recalls this chat's sent messages (L-231)", async () => {
+    await act(async () =>
+      root.render(
+        createElement(Composer, {
+          harness: "codex",
+          model: "gpt-5",
+          runtimeMode: "supervised",
+          executionCwd: "/repo",
+          hideProjectPicker: true,
+          hideBranchPicker: true,
+          blocks: [
+            { id: "1", role: "user", text: "older" },
+            { id: "2", role: "assistant", text: "reply" },
+            { id: "3", role: "user", text: "newer" },
+          ],
+          onFocus: vi.fn(),
+          onCwdChange: vi.fn(),
+          onModelChange: vi.fn(),
+          onRuntimeModeChange: vi.fn(),
+          onSubmit: vi.fn(),
+        }),
+      ),
+    );
+    const textarea = container.querySelector("textarea")!;
+    const press = (key: string) =>
+      act(async () =>
+        textarea.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+        ),
+      );
+    await press("ArrowUp");
+    expect(textarea.value).toBe("newer");
+    await press("ArrowUp");
+    expect(textarea.value).toBe("older");
+    await press("ArrowDown");
+    expect(textarea.value).toBe("newer");
+    await press("ArrowDown");
+    expect(textarea.value).toBe("");
+  });
+
   it("shows questions before forms and shows a form when no question is pending", async () => {
     const form: McpFormPrompt = {
       requestId: 2,

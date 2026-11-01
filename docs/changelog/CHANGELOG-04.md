@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 00:40 IST — Up recalls sent messages in the chat box (L-231)
+- Type: feat
+- What: In an empty chat box, Up shows this chat's previous messages one by one (newest first) and Down steps back to newer ones, then to an empty box. Editing the recalled text returns the arrow keys to normal.
+- Why: User asked for terminal-style prompt history in the composer.
+- Files: `src/features/sessions/model/promptRecall.ts` (+ test), `src/features/sessions/ui/Composer.tsx`, `src/features/sessions/ui/Composer.test.ts`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed yet
+- Verified: tsc ✅; vitest full ✅ (8043 passed); desktop check manual
+
 ## 2026-11-02 00:00 IST — 0.16.0-local25 Windows rebuild (Zen four chats)
 - Type: chore
 - What: Same version, 0.16.0-local25, rebuilt with Zen's accent dividers, recent chats by project and up to four chats (1d8b294c). The earlier local25 installer is kept.
