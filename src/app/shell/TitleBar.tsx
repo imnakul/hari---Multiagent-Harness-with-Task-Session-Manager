@@ -9,6 +9,7 @@ import {
   Code,
   DashboardSquare,
   Focus,
+  Target,
   Inbox,
   MessageMultiple,
   PanelLeft,
@@ -36,7 +37,7 @@ import {
   type ReactNode,
 } from "react";
 import { basename } from "../../platform/tauri/fs";
-import { FocusModeToggle } from "./focusModeToggle";
+import { FocusModeToggle, ZenModeToggle } from "./focusModeToggle";
 import { looksLikeProject } from "../../features/projects/model/recents";
 import type { HarnessId } from "../../features/sessions/model/session";
 import { CwdPicker } from "../../features/projects/ui/CwdPicker";
@@ -61,7 +62,7 @@ import {
   type MonoLook,
   type MonoState,
 } from "../../features/monos/model/mono";
-import { IS_MAC, IS_WIN, MOD, SHIFT } from "../../platform/tauri/platform";
+import { ALT, IS_MAC, IS_WIN, MOD, SHIFT } from "../../platform/tauri/platform";
 import { useTrafficLightsVisible } from "../../platform/tauri/useTrafficLightsVisible";
 import type { RecentProject } from "../../features/projects/model/recents";
 import {
@@ -680,11 +681,20 @@ export function DevModeIcon() {
 /** The Focus mode button, first in the header at the window's left edge. */
 export function FocusToggleButton() {
   const onToggle = useContext(FocusModeToggle);
+  const onZen = useContext(ZenModeToggle);
   if (!onToggle) return null;
   return (
-    <IconButton label={`Focus (${MOD}${SHIFT}E)`} onClick={onToggle}>
-      <Focus className="size-3.5" strokeWidth={1.75} />
-    </IconButton>
+    <>
+      <IconButton label={`Focus (${MOD}${SHIFT}E)`} onClick={onToggle}>
+        <Focus className="size-3.5" strokeWidth={1.75} />
+      </IconButton>
+      {/* Fork (L-230): Zen mode sits beside Focus wherever Focus shows. */}
+      {onZen ? (
+        <IconButton label={`Zen mode (${MOD}${ALT}Z)`} onClick={onZen}>
+          <Target className="size-3.5" strokeWidth={1.75} />
+        </IconButton>
+      ) : null}
+    </>
   );
 }
 

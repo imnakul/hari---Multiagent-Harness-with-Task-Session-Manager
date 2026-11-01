@@ -8,3 +8,11 @@ import { createContext } from "react";
 export const FocusModeToggle = createContext<(() => void) | undefined>(
   undefined,
 );
+
+/**
+ * Opens Zen mode (fork, L-230): the window narrows to a docked panel with one
+ * or two chats. Its button sits beside Focus; undefined hides it.
+ */
+export const ZenModeToggle = createContext<(() => void) | undefined>(
+  undefined,
+);

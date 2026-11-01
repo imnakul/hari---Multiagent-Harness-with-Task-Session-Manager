@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { pathKey, projectName } from "../../../shared/lib/paths";
-import { Search, X } from "../../../shared/ui/icons";
+import { Check, ListFilter, Search, X } from "../../../shared/ui/icons";
+import { Popover } from "../../../shared/ui/Popover";
 import {
   SearchableSelect,
   type SearchableSelectOption,
@@ -26,6 +27,125 @@ export function hasActiveFilters(filters: TaskFilters): boolean {
   );
 }
 
+const FILTER_ROW =
+  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-content/80 transition-colors duration-100 hover:bg-content/5 hover:text-content focus-visible:bg-content/5 focus-visible:outline-none";
+
+/** Zen's one Filter button (L-230): Status and Project as checklists. */
+function TaskFilterMenu({
+  statusOptions,
+  projectOptions,
+  statuses,
+  projects,
+  active,
+  onToggleStatus,
+  onToggleProject,
+  onClear,
+}: {
+  statusOptions: readonly SearchableSelectOption[];
+  projectOptions: readonly SearchableSelectOption[];
+  statuses: readonly string[];
+  projects: readonly string[];
+  active: boolean;
+  onToggleStatus: (value: string) => void;
+  onToggleProject: (value: string) => void;
+  onClear: () => void;
+}): ReactNode {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const count = statuses.length + projects.length;
+  const section = (
+    title: string,
+    options: readonly SearchableSelectOption[],
+    selected: readonly string[],
+    onToggle: (value: string) => void,
+  ) => (
+    <div role="group" aria-label={title} className="py-0.5">
+      <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium text-content/40">
+        {title}
+      </div>
+      {options.map((option) => {
+        const checked = selected.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={checked}
+            title={option.keywords}
+            onClick={() => onToggle(option.value)}
+            className={FILTER_ROW}
+          >
+            <span className="grid size-3.5 shrink-0 place-items-center">
+              {checked ? (
+                <Check aria-hidden className="size-3.5 text-accent" strokeWidth={2} />
+              ) : null}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{option.label}</span>
+            {option.count !== undefined ? (
+              <span className="shrink-0 text-[11px] tabular-nums text-content/40">
+                {option.count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Filter by status or project"
+        onClick={() => setOpen((value) => !value)}
+        className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors duration-150 ${
+          open || active
+            ? "bg-selection text-content"
+            : "text-content/60 hover:bg-content/10 hover:text-content"
+        }`}
+      >
+        <ListFilter aria-hidden className="size-3.5" strokeWidth={1.75} />
+        Filter
+        {count > 0 ? (
+          <span className="tabular-nums text-[11px] opacity-70">{count}</span>
+        ) : null}
+      </button>
+      {open ? (
+        <Popover
+          anchor={button}
+          side="bottom"
+          align="start"
+          width={240}
+          maxHeight={380}
+          onDismiss={(reason) => {
+            setOpen(false);
+            if (reason === "escape") button.current?.focus();
+          }}
+          role="menu"
+          aria-label="Filter tasks"
+          className="flex flex-col overflow-hidden"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-none p-1">
+            {section("Status", statusOptions, statuses, onToggleStatus)}
+            <div aria-hidden className="mx-2 my-1 h-px bg-stroke" />
+            {section("Project", projectOptions, projects, onToggleProject)}
+          </div>
+          {active ? (
+            <div className="shrink-0 border-t border-stroke p-1">
+              <button type="button" onClick={onClear} className={FILTER_ROW}>
+                <X aria-hidden className="size-3.5 shrink-0 text-content/55" strokeWidth={1.75} />
+                Clear filters
+              </button>
+            </div>
+          ) : null}
+        </Popover>
+      ) : null}
+    </>
+  );
+}
+
 export function TasksToolbar({
   filters,
   tasks,
@@ -35,7 +155,13 @@ export function TasksToolbar({
   center,
   boardBelow = false,
   trailing,
+  wrap = false,
 }: {
+  /**
+   * Zen's narrow panel (L-230): New task, Search and one Filter menu
+   * (Status, Project), with `center` on a row of its own below.
+   */
+  wrap?: boolean;
   filters: TaskFilters;
   tasks: readonly Task[];
   projects: readonly string[];
@@ -102,9 +228,9 @@ export function TasksToolbar({
     <>
       {/* px-3 matches the board's p-3 so the edges line up with its columns. */}
       <div
-        className={`flex h-10 shrink-0 gap-1.5 px-3 ${
-          boardBelow ? "items-end" : "items-center"
-        }`}
+        className={`flex shrink-0 gap-1.5 px-3 ${
+          wrap ? "min-h-10 flex-wrap py-1.5" : "h-10"
+        } ${boardBelow ? "items-end" : "items-center"}`}
       >
         {leading}
         {/* Collapsed to an icon button; grows into the input on click, focus or
@@ -148,6 +274,37 @@ export function TasksToolbar({
             }`}
           />
         </div>
+        {wrap ? (
+          <TaskFilterMenu
+            statusOptions={statusOptions.slice(1)}
+            projectOptions={projectOptions.slice(1)}
+            statuses={statuses}
+            projects={projectValues}
+            active={hasActiveFilters({ ...filters, query: undefined })}
+            onToggleStatus={(value) => {
+              const status = TASK_STATUSES.find((entry) => entry === value);
+              if (!status) return;
+              const next = toggle(statuses, status);
+              onChange({
+                ...filters,
+                statuses: TASK_STATUSES.filter((entry) => next.includes(entry)),
+              });
+            }}
+            onToggleProject={(value) => {
+              const next = toggle(projectValues, value);
+              onChange({
+                ...filters,
+                projectCwd: undefined,
+                projectCwds: next.length
+                  ? next.map((entry) => (entry === PERSONAL ? null : entry))
+                  : undefined,
+              });
+            }}
+            onClear={() => onChange({ query: filters.query })}
+          />
+        ) : null}
+        {wrap ? null : (
+        <>
         <SearchableSelect
           variant="pill"
           label="Status"
@@ -215,13 +372,24 @@ export function TasksToolbar({
             Reset
           </button>
         ) : null}
-        <div className="flex min-w-0 flex-1 justify-center px-2">
+        </>
+        )}
+        {wrap ? null : (
+          <div className="flex min-w-0 flex-1 justify-center px-2">
+            {center}
+          </div>
+        )}
+        {trailing ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {trailing}
+          </div>
+        ) : null}
+      </div>
+      {wrap && center ? (
+        <div className="relative flex shrink-0 justify-center px-3 pb-1.5">
           {center}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {trailing}
-        </div>
-      </div>
+      ) : null}
       {tags.length ? (
         <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-1.5 px-3 pb-1">
           {tags.map((tag) => (

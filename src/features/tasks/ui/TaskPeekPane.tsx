@@ -18,6 +18,7 @@ export function TaskPeekPane({
   task,
   shown = true,
   closing = false,
+  placement = "side",
   onClose,
   onOpenBeside,
   ...editor
@@ -27,6 +28,12 @@ export function TaskPeekPane({
   shown?: boolean;
   /** Animating out after close: keep it visible but not interactive. */
   closing?: boolean;
+  /**
+   * "below": Zen's slim layout (L-230) shows it as the bottom half, which
+   * slides and sizes itself; no resize edge, and no Open beside (the
+   * workspace is hidden in Zen).
+   */
+  placement?: "side" | "below";
   onClose: () => void;
   onOpenBeside: (task: Task) => void;
 }) {
@@ -38,36 +45,45 @@ export function TaskPeekPane({
     initial: loadPeekWidth(),
     onCommit: savePeekWidth,
   });
+  const below = placement === "below";
   return (
     <aside
-      ref={resize.setPaneRef}
+      ref={below ? undefined : resize.setPaneRef}
       aria-label="Task panel"
       aria-hidden={closing || undefined}
       inert={closing || undefined}
-      className={`relative flex h-full min-h-0 shrink-0 flex-col border-l border-stroke transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-transform motion-reduce:transition-none ${
-        shown ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
-      }`}
+      className={
+        below
+          ? "relative flex min-h-0 min-w-0 flex-1 flex-col"
+          : `relative flex h-full min-h-0 shrink-0 flex-col border-l border-stroke transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-transform motion-reduce:transition-none ${
+              shown ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
+            }`
+      }
     >
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize task panel"
-        className={`absolute inset-y-0 -left-px z-10 w-1.5 cursor-col-resize touch-none ${
-          resize.dragging ? "bg-content/15" : "hover:bg-content/10"
-        }`}
-        onPointerDown={resize.onPointerDown}
-        onDoubleClick={resize.onDoubleClick}
-      />
+      {below ? null : (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize task panel"
+          className={`absolute inset-y-0 -left-px z-10 w-1.5 cursor-col-resize touch-none ${
+            resize.dragging ? "bg-content/15" : "hover:bg-content/10"
+          }`}
+          onPointerDown={resize.onPointerDown}
+          onDoubleClick={resize.onDoubleClick}
+        />
+      )}
       <div className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-stroke px-2">
-        <button
-          type="button"
-          title="Open beside session"
-          aria-label="Open beside session"
-          onClick={() => onOpenBeside(task)}
-          className={iconButton}
-        >
-          <PanelRight className="size-3.5" strokeWidth={1.75} />
-        </button>
+        {below ? null : (
+          <button
+            type="button"
+            title="Open beside session"
+            aria-label="Open beside session"
+            onClick={() => onOpenBeside(task)}
+            className={iconButton}
+          >
+            <PanelRight className="size-3.5" strokeWidth={1.75} />
+          </button>
+        )}
         <button
           type="button"
           title="Close task panel"

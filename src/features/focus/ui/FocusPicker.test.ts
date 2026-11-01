@@ -2,6 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  focusChatInfo,
+  focusProjectsActiveFirst,
   FocusSearchList,
   focusPickProjects,
   focusProjectMenuItems,
@@ -34,7 +36,11 @@ const ITEMS: FocusPickItem[] = [
   },
 ];
 
-function render(items: readonly FocusPickItem[], showModel = false): string {
+function render(
+  items: readonly FocusPickItem[],
+  showModel = false,
+  limit?: number,
+): string {
   vi.stubGlobal("localStorage", {
     getItem: (key: string) =>
       key === "monocode.focusPickerShowModel.v1" && showModel ? "1" : null,
@@ -47,6 +53,7 @@ function render(items: readonly FocusPickItem[], showModel = false): string {
       placeholder: "Search chats",
       emptyLabel: "No chats",
       onPick: () => {},
+      limit,
     }),
   );
 }
@@ -130,5 +137,98 @@ describe("Continue picker filters (L-145)", () => {
   it("has no Model toggle when no chat has a model", () => {
     const html = render(ITEMS.map(({ model: _model, ...item }) => item));
     expect(html).not.toContain("Show each chat");
+  });
+});
+
+describe("Chat cards (L-230)", () => {
+  const chat = (id: string, label: string, minutesAgo: number): FocusPickItem => ({
+    id,
+    label,
+    detail: "alpha",
+    chat: {
+      harness: "claude",
+      modelLabel: "Opus 5.5",
+      updatedAt: Date.now() - minutesAgo * 60_000,
+    },
+  });
+
+  it("shows title, last activity, project and model on a two-line card", () => {
+    const html = render([chat("c1", "Fix the sidebar", 5)]);
+    expect(html).toContain(">Fix the sidebar<");
+    expect(html).toContain(">5m<");
+    expect(html).toContain(">alpha · Opus 5.5<");
+  });
+
+  it("offers no Model toggle when only chat cards have models", () => {
+    const html = render([{ ...chat("c1", "One", 1), model: "Opus 5.5" }]);
+    expect(html).not.toContain("Show each chat");
+  });
+
+  it("shows only the newest until a search, and says how many are left", () => {
+    const items = Array.from({ length: 5 }, (_, index) =>
+      chat(`c${index}`, `Chat ${index}`, index),
+    );
+    const html = render(items, false, 3);
+    expect(html).toContain(">Chat 2<");
+    expect(html).not.toContain(">Chat 3<");
+    expect(html).toContain("2 older chats: search to find");
+  });
+
+  it("reads a chat's model name from its harness and model id", () => {
+    const info = focusChatInfo({
+      harness: "claude",
+      model: "not-a-known-model",
+      providerAccountId: "work",
+      updatedAt: 42,
+    });
+    expect(info.harness).toBe("claude");
+    expect(info.providerAccountId).toBe("work");
+    expect(info.updatedAt).toBe(42);
+    expect(typeof info.modelLabel).toBe("string");
+  });
+});
+
+describe("Project picker order (L-230)", () => {
+  const marks = { logos: {}, colors: {}, icons: {} } as never;
+  const project = (path: string): FocusPickItem => ({ id: path, label: path });
+
+  it("lists projects with open chats first, the rest below a divider", () => {
+    const items = focusProjectsActiveFirst(
+      [project("C:/a"), project("C:/b"), project("C:/c")],
+      ["c:/c", "C:/c"],
+      marks,
+    );
+    expect(items.map((item) => [item.id, item.lower === true])).toEqual([
+      ["C:/c", false],
+      ["C:/a", true],
+      ["C:/b", true],
+    ]);
+  });
+
+  it("adds an open chat's project missing from recents, and no divider without one", () => {
+    expect(
+      focusProjectsActiveFirst([project("C:/a")], ["D:/new"], marks).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["D:/new", "C:/a"]);
+    expect(
+      focusProjectsActiveFirst([project("C:/a")], [], marks).some(
+        (item) => item.lower,
+      ),
+    ).toBe(false);
+  });
+
+  it("draws one divider before the lower projects", () => {
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {} });
+    const html = renderToStaticMarkup(
+      createElement(FocusSearchList, {
+        items: [project("C:/a"), { ...project("C:/b"), lower: true }, { ...project("C:/c"), lower: true }],
+        label: "Projects",
+        placeholder: "Search projects",
+        emptyLabel: "No projects",
+        onPick: () => {},
+      }),
+    );
+    expect(html.match(/my-1 h-px bg-stroke/g)?.length).toBe(1);
   });
 });

@@ -28,7 +28,16 @@ const APP_SHORTCUTS: [string, string, boolean][] = [
   ["App: Find in Files", "f", true],
 ];
 
-const APP_COMMANDS = new Set(APP_SHORTCUTS.map(([command]) => command));
+/**
+ * Fork (L-230): Mod+Alt chords, matched by physical key since Alt (Option)
+ * changes the typed character on macOS.
+ */
+const ALT_SHORTCUTS: [string, string][] = [["App: Zen Mode", "KeyZ"]];
+
+const APP_COMMANDS = new Set([
+  ...APP_SHORTCUTS.map(([command]) => command),
+  ...ALT_SHORTCUTS.map(([command]) => command),
+]);
 
 /**
  * Which app command a key press should run, or null. Ignores the event during
@@ -43,7 +52,14 @@ export function resolveAppShortcut(event: AppShortcutEvent): string | null {
   if (custom && APP_COMMANDS.has(custom))
     return keybindingPressed(custom, event, false) ? custom : null;
   if (!event.metaKey && !event.ctrlKey) return null;
-  if (event.altKey) return null;
+  if (event.altKey) {
+    if (event.shiftKey) return null;
+    for (const [command, code] of ALT_SHORTCUTS) {
+      if (event.code !== code) continue;
+      return keybindingPressed(command, event, true) ? command : null;
+    }
+    return null;
+  }
   const key = event.key.toLowerCase();
   for (const [command, expected, shift] of APP_SHORTCUTS) {
     if (key !== expected || event.shiftKey !== shift) continue;

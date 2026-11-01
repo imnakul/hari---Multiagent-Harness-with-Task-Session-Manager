@@ -124,12 +124,13 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type SetStateAction,
 } from "react";
 import { useStableValue } from "../shared/hooks/useStableValue";
 import { useDragResize } from "../shared/hooks/useDragResize";
 import { beginLayoutTransition } from "../shared/lib/layoutTransition";
 import { noteProjectStep, Sidebar } from "./shell/Sidebar";
-import { FocusModeToggle } from "./shell/focusModeToggle";
+import { FocusModeToggle, ZenModeToggle } from "./shell/focusModeToggle";
 import { ApprovalToasts } from "../features/sessions/ui/ApprovalToasts";
 import { HarnessUpdateNotice } from "../features/providers/ui/HarnessUpdateNotice";
 import { NewLayoutNotice } from "./shell/NewLayoutNotice";
@@ -860,9 +861,34 @@ import {
   saveFocusGrid,
   swapInFocusGrid,
   visibleFocusGrid,
+  type FocusGrid,
 } from "../features/focus/model/focusGrid";
 import { focusAfterClose } from "../features/focus/model/focusGroups";
 import { FocusView } from "../features/focus/ui/FocusView";
+import { ZenMonoChat } from "../features/zen/ui/ZenMonos";
+import { ZenView } from "../features/zen/ui/ZenView";
+import {
+  EMPTY_ZEN_GRID,
+  ZEN_FADE_IN_MS,
+  ZEN_FADE_OUT_MS,
+  zenEntryGrid,
+  zenGridOf,
+  zenIds,
+  zenShow,
+  type ZenTool,
+} from "../features/zen/model/zenPanes";
+import {
+  loadZenBounds,
+  loadZenPinned,
+  loadZenRestore,
+  prefersReducedMotion,
+  saveZenBounds,
+  saveZenPinned,
+  saveZenRestore,
+  zenWindowEnter,
+  zenWindowExit,
+  zenWindowPin,
+} from "../features/zen/model/zenWindow";
 import {
   loadFileOpeningBehavior,
   loadSessionOpeningBehavior,
@@ -1263,6 +1289,18 @@ function isFocusEligible(session: Session): boolean {
   );
 }
 
+/** Set once this page has restored a window that closed while in Zen. */
+let zenStartupRestoreDone = false;
+
+/** This window's label, which keys Zen's saved full-size bounds (L-230). */
+function zenWindowLabel(): string {
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return "main";
+  }
+}
+
 function openSessionIds(tabs: WorkspaceTab[]): Set<string> {
   const ids = new Set<string>();
   for (const tab of tabs) {
@@ -1543,8 +1581,37 @@ function Workspace({
   const [focusMode, setFocusMode] = useState(false);
   const focusModeRef = useRef(focusMode);
   focusModeRef.current = focusMode;
-  const [focusGrid, setFocusGrid] = useState(loadFocusGrid);
-  useEffect(() => saveFocusGrid(focusGrid), [focusGrid]);
+  const [focusModeGrid, setFocusModeGrid] = useState(loadFocusGrid);
+  useEffect(() => saveFocusGrid(focusModeGrid), [focusModeGrid]);
+  // Zen mode (fork, L-230): Focus mode as a narrow panel beside other apps.
+  // It has its own grid (one column of one or two chats), so Focus's layout
+  // is untouched, and Focus's upkeep runs on it through `setFocusGrid`.
+  const [zenMode, setZenMode] = useState(false);
+  const zenModeRef = useRef(zenMode);
+  zenModeRef.current = zenMode;
+  const [zenGrid, setZenGrid] = useState<FocusGrid>(EMPTY_ZEN_GRID);
+  const [zenTool, setZenTool] = useState<ZenTool>("chat");
+  const [zenPinned, setZenPinned] = useState(loadZenPinned);
+  const zenPinnedRef = useRef(zenPinned);
+  zenPinnedRef.current = zenPinned;
+  const [zenMonoId, setZenMonoId] = useState<string | null>(null);
+  const [zenMonoSessionId, setZenMonoSessionId] = useState<string | null>(
+    null,
+  );
+  /** True while the window is changing size, so presses don't overlap. */
+  const zenBusy = useRef(false);
+  /** Whether Zen was entered from Focus, which leaving it returns to. */
+  const zenWasFocus = useRef(false);
+  const focusGrid = zenMode ? zenGrid : focusModeGrid;
+  const setFocusGrid = useCallback((next: SetStateAction<FocusGrid>) => {
+    if (!zenModeRef.current) {
+      setFocusModeGrid(next);
+      return;
+    }
+    setZenGrid((grid) =>
+      zenGridOf(focusGridIds(typeof next === "function" ? next(grid) : next)),
+    );
+  }, []);
   const [focusPaneChoice, setFocusPaneChoice] = useState<string>();
   // The chosen pane while it is still in the grid, else the first chat.
   const focusPaneId =
@@ -5635,7 +5702,8 @@ function Workspace({
   useEffect(() => {
     const previous = focusPrevWorkingIds.current;
     focusPrevWorkingIds.current = workingSessionIds;
-    if (!focusMode) return;
+    // Zen keeps the chats it shows; a starting chat waits in its dropdown.
+    if (!focusMode || zenMode) return;
     // Only chats that start working join: closing a running pane keeps it closed.
     const started = sessionsRef.current.filter(
       (session) =>
@@ -5647,7 +5715,7 @@ function Workspace({
     setFocusGrid((grid) =>
       started.reduce((next, session) => addToFocusGrid(next, session.id), grid),
     );
-  }, [focusMode, sessionsRef, workingSessionIds]);
+  }, [focusMode, sessionsRef, workingSessionIds, zenMode]);
   useEffect(() => {
     if (!focusMode) return;
     const present = new Set(sessions.map((session) => session.id));
@@ -5673,7 +5741,13 @@ function Workspace({
     }
   }, [ensureOpenSession, focusGrid, focusMode, sessions]);
 
+  /** Leaves Zen; set below. Leaving Focus while in Zen leaves Zen too. */
+  const zenLeaveRef = useRef<(toWorkspace: boolean) => void>(() => undefined);
   const onToggleFocusMode = useCallback(() => {
+    if (zenModeRef.current) {
+      zenLeaveRef.current(true);
+      return;
+    }
     if (focusModeRef.current) {
       focusSeenIds.current.clear();
       const entryCwd = focusEntryCwd.current;
@@ -5742,17 +5816,25 @@ function Workspace({
    * with the focused pane, which moves to "+N more".
    */
   const placeInFocus = useCallback((sessionId: string) => {
-    setFocusGrid((grid) => {
-      const next = addToFocusGrid(grid, sessionId);
-      const shown = visibleFocusGrid(next, focusColumnCapRef.current);
-      if (!shown.hidden.includes(sessionId)) return next;
-      const visibleIds = shown.columns.flat();
-      const target =
-        focusPaneIdRef.current && visibleIds.includes(focusPaneIdRef.current)
-          ? focusPaneIdRef.current
-          : visibleIds[0];
-      return target ? swapInFocusGrid(next, sessionId, target) : next;
-    });
+    if (zenModeRef.current) {
+      // Zen shows it in the focused pane (L-230).
+      setZenGrid((grid) => {
+        const at = zenIds(grid).indexOf(focusPaneIdRef.current ?? "");
+        return zenShow(grid, Math.max(0, at), sessionId);
+      });
+    } else {
+      setFocusGrid((grid) => {
+        const next = addToFocusGrid(grid, sessionId);
+        const shown = visibleFocusGrid(next, focusColumnCapRef.current);
+        if (!shown.hidden.includes(sessionId)) return next;
+        const visibleIds = shown.columns.flat();
+        const target =
+          focusPaneIdRef.current && visibleIds.includes(focusPaneIdRef.current)
+            ? focusPaneIdRef.current
+            : visibleIds[0];
+        return target ? swapInFocusGrid(next, sessionId, target) : next;
+      });
+    }
     setFocusPaneChoice(sessionId);
     setProjectTerminalFocused(false);
     setComposerFocused(true);
@@ -6092,6 +6174,233 @@ function Workspace({
       setComposerFocusToken((token) => token + 1);
     },
     [ensureOpenSession, workspaceNavigation.cancel],
+  );
+
+  // Zen mode (fork, L-230): enter, leave, and what its panel can show.
+  /** Running chats Zen can show, newest first. */
+  const zenRunningIds = useMemo(
+    () =>
+      zenMode
+        ? sessions
+            .filter(
+              (session) =>
+                workingSessionIds.has(session.id) && isFocusEligible(session),
+            )
+            .map((session) => session.id)
+            .reverse()
+        : [],
+    [sessions, workingSessionIds, zenMode],
+  );
+  // A panel left with no chat (it was closed or deleted) shows the next
+  // running one; with none running it shows New chat.
+  useEffect(() => {
+    if (!zenMode || zenIds(zenGrid).length > 0) return;
+    const next = zenRunningIds[0];
+    if (next) setZenGrid(zenGridOf([next]));
+  }, [zenGrid, zenMode, zenRunningIds]);
+
+  // Fade-through around Zen's window change (L-230): the layout fades out,
+  // the window resizes unseen, then the new layout fades and scales in.
+  const [zenFade, setZenFade] = useState<"out" | "in" | null>(null);
+  const zenFadeTimer = useRef<number | null>(null);
+  const zenFadeOut = useCallback(async (): Promise<boolean> => {
+    if (prefersReducedMotion()) return false;
+    if (zenFadeTimer.current != null) window.clearTimeout(zenFadeTimer.current);
+    zenFadeTimer.current = null;
+    setZenFade("out");
+    await new Promise((resolve) => window.setTimeout(resolve, ZEN_FADE_OUT_MS));
+    return true;
+  }, []);
+  const zenFadeIn = useCallback(() => {
+    setZenFade("in");
+    zenFadeTimer.current = window.setTimeout(() => {
+      zenFadeTimer.current = null;
+      setZenFade(null);
+    }, ZEN_FADE_IN_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (zenFadeTimer.current != null) window.clearTimeout(zenFadeTimer.current);
+    },
+    [],
+  );
+
+  const enterZen = useCallback(async () => {
+    zenBusy.current = true;
+    const faded = await zenFadeOut();
+    const wasFocus = focusModeRef.current;
+    const currentId = wasFocus
+      ? focusPaneIdRef.current
+      : activeSessionIdRef.current;
+    const current = sessionsRef.current.find(
+      (session) => session.id === currentId,
+    );
+    const running = sessionsRef.current
+      .filter(
+        (session) => isSessionWorking(session) && isFocusEligible(session),
+      )
+      .map((session) => session.id)
+      .reverse();
+    zenWasFocus.current = wasFocus;
+    if (!wasFocus) focusEntryCwd.current = projectCwdRef.current;
+    setZenGrid(
+      zenEntryGrid(
+        current && isFocusEligible(current) ? current.id : undefined,
+        running,
+      ),
+    );
+    setZenTool("chat");
+    setZenMonoId(null);
+    setZenMonoSessionId(null);
+    setProjectTerminalFocused(false);
+    setComposerFocused(true);
+    setComposerFocusToken((token) => token + 1);
+    setZenMode(true);
+    setFocusMode(true);
+    const label = zenWindowLabel();
+    try {
+      const restore = await zenWindowEnter(
+        loadZenBounds(),
+        !prefersReducedMotion(),
+      );
+      saveZenRestore(label, restore);
+      if (zenPinnedRef.current)
+        await zenWindowPin(true).catch(() => undefined);
+    } catch (error) {
+      // The window did not change, so the full layout comes back.
+      console.warn("Could not enter Zen mode:", error);
+      setZenMode(false);
+      if (!wasFocus) {
+        focusEntryCwd.current = null;
+        setFocusMode(false);
+      }
+    } finally {
+      zenBusy.current = false;
+      if (faded) zenFadeIn();
+    }
+  }, [sessionsRef, zenFadeIn, zenFadeOut]);
+
+  const leaveZen = useCallback(async (toWorkspace: boolean) => {
+    if (zenBusy.current || !zenModeRef.current) return;
+    zenBusy.current = true;
+    const faded = await zenFadeOut();
+    const label = zenWindowLabel();
+    const restore = loadZenRestore(label);
+    try {
+      // The window grows back first, so the full layout never draws narrow.
+      if (restore)
+        saveZenBounds(await zenWindowExit(restore, !prefersReducedMotion()));
+    } catch (error) {
+      console.warn("Could not restore the window after Zen mode:", error);
+    }
+    saveZenRestore(label, null);
+    const shown = zenIds(focusGridRef.current);
+    focusSeenIds.current.clear();
+    setZenMode(false);
+    setZenMonoId(null);
+    setZenMonoSessionId(null);
+    if (zenWasFocus.current && !toWorkspace) {
+      // Back in Focus, Zen's chats are among its panes.
+      setFocusModeGrid((grid) =>
+        shown.reduce((next, id) => addToFocusGrid(next, id), grid),
+      );
+    } else {
+      const entryCwd = focusEntryCwd.current;
+      focusEntryCwd.current = null;
+      if (entryCwd != null) setProjectCwd(entryCwd);
+      setFocusMode(false);
+    }
+    setComposerFocusToken((token) => token + 1);
+    zenBusy.current = false;
+    if (faded) zenFadeIn();
+  }, [zenFadeIn, zenFadeOut]);
+  zenLeaveRef.current = (toWorkspace) => void leaveZen(toWorkspace);
+
+  const onToggleZenMode = useCallback(() => {
+    if (zenBusy.current) return;
+    if (zenModeRef.current) void leaveZen(false);
+    else void enterZen();
+  }, [enterZen, leaveZen]);
+
+  // A window closed while in Zen opens at its full size again. Once per page
+  // load: React re-runs mount effects when the app reappears after a lazy
+  // view suspends it (in development), which would undo a live Zen panel.
+  useEffect(() => {
+    if (zenStartupRestoreDone) return;
+    zenStartupRestoreDone = true;
+    const label = zenWindowLabel();
+    const restore = loadZenRestore(label);
+    if (!restore) return;
+    saveZenRestore(label, null);
+    void zenWindowExit(restore, false)
+      .then(saveZenBounds)
+      .catch(() => undefined);
+  }, []);
+
+  const onToggleZenPin = useCallback(() => {
+    const next = !zenPinnedRef.current;
+    setZenPinned(next);
+    saveZenPinned(next);
+    void zenWindowPin(next).catch((error: unknown) =>
+      console.warn("Could not change keep on top:", error),
+    );
+  }, []);
+
+  /** Shows a chat in Zen pane `slot` and focuses it. */
+  const onZenShow = useCallback(
+    async (slot: number, sessionId: string) => {
+      const session = await ensureOpenSession(sessionId).catch(() => null);
+      if (!session || !zenModeRef.current) return;
+      setZenGrid((grid) => zenShow(grid, slot, session.id));
+      setZenTool("chat");
+      setFocusPaneChoice(session.id);
+      setProjectTerminalFocused(false);
+      setComposerFocused(true);
+      setComposerFocusToken((token) => token + 1);
+    },
+    [ensureOpenSession],
+  );
+  /** A new chat in Zen pane `slot`, in `cwd` or the pane's project. */
+  const onZenNewChat = useCallback(
+    (slot: number, cwd?: string) => {
+      const ids = zenIds(focusGridRef.current);
+      const paneId = ids[slot] ?? ids[0];
+      const paneCwd = sessionsRef.current.find(
+        (session) => session.id === paneId,
+      )?.cwd;
+      const session = newWorkspaceSession(
+        cwd ?? paneCwd ?? sidebarCwd,
+        sessionDefaults?.runtimeMode,
+      );
+      setSessions((prev) => [...prev, session]);
+      setZenGrid((grid) => zenShow(grid, slot, session.id));
+      setFocusPaneChoice(session.id);
+      setProjectTerminalFocused(false);
+      setComposerFocused(true);
+      setComposerFocusToken((token) => token + 1);
+    },
+    [sessionDefaults?.runtimeMode, sessionsRef, setSessions, sidebarCwd],
+  );
+
+  const zenMonoRequest = useRef(0);
+  const onZenOpenMono = useCallback(
+    async (monoId: string) => {
+      const request = ++zenMonoRequest.current;
+      setZenMonoId(monoId);
+      setZenMonoSessionId(null);
+      const session = await ensureMonoSession(monoId, {
+        home: homeDir,
+        load: ensureOpenSession,
+        create: (path) => newDefaultSession(path),
+        add: (created) => {
+          sessionsRef.current = [...sessionsRef.current, created];
+          setSessions(sessionsRef.current);
+        },
+      }).catch(() => null);
+      if (session && request === zenMonoRequest.current)
+        setZenMonoSessionId(session.id);
+    },
+    [ensureOpenSession],
   );
 
   // A Mono open when the app last closed opens again; a moved window keeps
@@ -15735,6 +16044,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     onToggleSessionSidebar: onToggleSessionSidebarShortcut,
     onToggleMono,
     onToggleFocusMode,
+    onToggleZenMode,
     onFocusNewChat,
     onCloseFocusPane,
     onGoToFile,
@@ -15771,6 +16081,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     onToggleSessionSidebar: onToggleSessionSidebarShortcut,
     onToggleMono,
     onToggleFocusMode,
+    onToggleZenMode,
     onFocusNewChat,
     onCloseFocusPane,
     onGoToFile,
@@ -16019,6 +16330,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
           run("toggle_mono", a.onToggleMono);
         else if (shortcut === "App: Toggle Focus")
           run("toggle_focus", a.onToggleFocusMode);
+        else if (shortcut === "App: Zen Mode")
+          run("toggle_zen", a.onToggleZenMode);
         else if (shortcut === "App: Toggle Session Panel")
           run("toggle_session_panel", toggleSessionPanel);
         else if (shortcut === "App: Toggle Browser Panel")
@@ -16971,6 +17284,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
 
   const sessionSidebar = (
     <Sidebar
+      // Zen's panel has no room for it (L-230).
+      peekDisabled={zenMode}
       remoteControlSessionIds={remoteControlDesired}
       mode={mode}
       onModeChange={onModeChange}
@@ -17194,8 +17509,9 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     );
   });
 
-  const focusView = focusMode ? (
+  const focusView = focusMode && !zenMode ? (
     <FocusView
+      onZen={onToggleZenMode}
       grid={focusGrid}
       sessions={sessions}
       boardCards={sessionBoard.cards}
@@ -17248,14 +17564,135 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     />
   ) : null;
 
+  const zenBackToChat = (): void => setZenTool("chat");
+  const zenMonoSession = zenMonoSessionId
+    ? sessions.find((session) => session.id === zenMonoSessionId)
+    : undefined;
+  const zenView = zenMode ? (
+    <ZenView
+      ids={zenIds(zenGrid)}
+      sessions={sessions}
+      boardCards={sessionBoard.cards}
+      recents={recents}
+      runningIds={zenRunningIds}
+      focusedId={focusPaneId}
+      tool={zenTool}
+      onToolChange={setZenTool}
+      monoId={zenMonoId}
+      showMonos={monosEnabled}
+      onOpenMono={(monoId) => {
+        setZenTool("monos");
+        // Coming back to the open Mono keeps its chat as it was.
+        if (monoId !== zenMonoId) void onZenOpenMono(monoId);
+      }}
+      pinned={zenPinned}
+      onTogglePin={onToggleZenPin}
+      renderPane={(session) => (
+        <SessionPane
+          {...sessionPaneProps}
+          session={session}
+          onFocus={onFocusFocusPane}
+          onClose={onCloseFocusPane}
+          onOpenDiff={onFocusOpenDiff}
+          visible={zenTool === "chat"}
+          focused={
+            zenTool === "chat" &&
+            session.id === focusPaneId &&
+            !projectTerminalFocused
+          }
+          inSplit={false}
+          addToChatTarget={false}
+          composerFocused={
+            zenTool === "chat" &&
+            session.id === focusPaneId &&
+            composerFocused &&
+            !projectTerminalFocused
+          }
+          composerFocusToken={composerFocusToken}
+        />
+      )}
+      renderTool={(tool) => {
+        if (tool === "tasks")
+          return (
+            <TasksView
+              slim
+              cwd={projectCwd}
+              recents={recents}
+              onClose={zenBackToChat}
+              onOpenSource={(sessionId) => onZenShow(0, sessionId)}
+              onOpenBeside={() => undefined}
+            />
+          );
+        if (tool === "notes")
+          return (
+            <NotesView
+              slim
+              tabbed
+              active
+              cwd={projectCwd}
+              scopeProject={appViewScope}
+              recents={recents}
+              onClose={zenBackToChat}
+            />
+          );
+        if (tool === "automations")
+          return (
+            <AutomationsView
+              slim
+              tabbed
+              cwd={projectCwd}
+              scopeProject={appViewScope}
+              recents={recents}
+              onClose={zenBackToChat}
+              onLaunch={(automation, run) =>
+                launchAutomation(automation, run, false)
+              }
+              onOpenSession={(sessionId) => onZenShow(0, sessionId)}
+            />
+          );
+        return (
+          <ZenMonoChat
+            name={(zenMonoId && findMono(zenMonoId)?.name) || "Mono"}
+            chat={
+              zenMonoSession ? (
+                <SessionPane
+                  {...sessionPaneProps}
+                  session={zenMonoSession}
+                  visible
+                  focused={!projectTerminalFocused}
+                  inSplit={false}
+                  addToChatTarget={false}
+                  composerFocused={composerFocused && !projectTerminalFocused}
+                  composerFocusToken={composerFocusToken}
+                  onOpenMonoSession={(sessionId) =>
+                    void onZenShow(0, sessionId)
+                  }
+                  monoComposerUsage
+                />
+              ) : null
+            }
+          />
+        );
+      }}
+      onFocusPane={onFocusFocusPane}
+      onShow={(slot, sessionId) => void onZenShow(slot, sessionId)}
+      onNewChat={onZenNewChat}
+      onClosePane={onCloseFocusPane}
+      onExit={onToggleZenMode}
+      keepMounted={projectDockHosts}
+    />
+  ) : null;
+
   return (
     <SessionStateContext.Provider value={sessionState}>
     <FocusModeToggle.Provider
       value={settingsOpen ? onFocusFromSettings : onToggleFocusMode}
     >
+    <ZenModeToggle.Provider value={onToggleZenMode}>
     <OrchestrationActions.Provider value={orchestrationActions}>
       <OrchestrationWorkers.Provider value={orchestrationWorkers}>
         <div
+          data-zen-fade={zenFade ?? undefined}
           className={`app-shell workspace-background flex h-full flex-col text-content ${
             insetLayout
               ? "inset-shell inset-outer"
@@ -17767,7 +18204,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                     <AppViewSurface active={notesViewOpen}>
                       <NotesView
                         tabbed={insetLayout}
-                        active={notesViewOpen}
+                        active={notesViewOpen && !zenMode}
                         besideRail={
                           insetLayout || projectRailOpen || compactProjectRail
                         }
@@ -17782,6 +18219,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                   ) : null}
               {recordsViewOpen && recordKind === "tasks" ? (
                 <TasksView
+                  active={!zenMode}
                   besideRail={insetLayout || projectRailOpen || compactProjectRail}
                   compactRail={!insetLayout && compactRailActive}
                   cwd={projectCwd}
@@ -18003,6 +18441,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
             </div>
           </div>
           {focusView}
+          {zenView}
 
           {filePickerOpen ? (
             <FilePicker
@@ -18092,6 +18531,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         <TranscriptPoolOutlet pool={transcriptPool} />
       </OrchestrationWorkers.Provider>
     </OrchestrationActions.Provider>
+    </ZenModeToggle.Provider>
     </FocusModeToggle.Provider>
     </SessionStateContext.Provider>
   );

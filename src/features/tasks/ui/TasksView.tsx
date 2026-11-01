@@ -79,6 +79,7 @@ import { TaskTable } from "./TaskTable";
 import { hasActiveFilters, TasksToolbar } from "./TasksToolbar";
 import { ResultCount } from "../../../shared/ui/ResultCount";
 import { TasksViewSwitch } from "./TasksViewSwitch";
+import { ZenSplit } from "../../zen/ui/ZenSplit";
 import {
   SearchableSelect,
   type SearchableSelectOption,
@@ -98,6 +99,7 @@ const GROUP_OPTIONS: Record<TaskViewId, SearchableSelectOption[]> = {
     label: TASK_GROUP_LABELS[value],
   })),
 };
+
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -134,7 +136,16 @@ export function TasksView({
   onOpenSource,
   onOpenBeside,
   onWorkOn,
+  slim = false,
+  active = true,
 }: {
+  /** False while hidden under Zen mode, so Escape there is not this view's. */
+  active?: boolean;
+  /**
+   * Zen mode's narrow panel (L-230): no header or week strip, List and Table
+   * only, the toolbar wraps, and a task opens in the bottom half.
+   */
+  slim?: boolean;
   besideRail?: boolean;
   compactRail?: boolean;
   cwd?: string;
@@ -153,7 +164,9 @@ export function TasksView({
   const [creating, setCreating] = useState(false);
   const [filters, setFilters] = useState<TaskFilters>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<TaskViewId>(loadTaskView);
+  const [savedView, setView] = useState<TaskViewId>(loadTaskView);
+  // Zen's slim layout (L-230) is the list, grouped by status, only.
+  const view: TaskViewId = slim ? "list" : savedView;
   const [table, setTable] = useState<TaskTableState>(loadTableState);
   const [board, setBoard] = useState<TaskBoardState>(loadBoardState);
   const [grouping, setGrouping] = useState<TaskGrouping>(loadGrouping);
@@ -166,8 +179,9 @@ export function TasksView({
     loadFlag(FOCUS_KEY) ? localDay() : null,
   );
   const [recenterSignal, setRecenterSignal] = useState(0);
-  const [showArchived, setShowArchived] = useState(() =>
-    loadFlag(SHOW_ARCHIVED_KEY),
+  // Zen has no Archived toggle, so it never starts with archived shown.
+  const [showArchived, setShowArchived] = useState(
+    () => !slim && loadFlag(SHOW_ARCHIVED_KEY),
   );
   const [burst, setBurst] = useState<BurstTarget | null>(null);
   const [newTaskId, setNewTaskId] = useState<string | null>(null);
@@ -304,6 +318,7 @@ export function TasksView({
   }, []);
 
   useEffect(() => {
+    if (!active) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       // Menus and pickers dismiss themselves; don't close the view under them.
@@ -315,7 +330,7 @@ export function TasksView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [closePeek]);
+  }, [active, closePeek]);
 
   const projects = useMemo(() => {
     const paths = [
@@ -561,7 +576,7 @@ export function TasksView({
     ) : view === "list" ? (
       <TaskList
         tasks={visible}
-        groupBy={grouping.list}
+        groupBy={slim ? "status" : grouping.list}
         collapsed={listCollapsed}
         selectedId={selected?.id ?? null}
         marks={marks}
@@ -610,6 +625,33 @@ export function TasksView({
       />
     );
 
+  const focusPill = (
+    <button
+      ref={focusButton}
+      type="button"
+      data-shared-hover-item
+      aria-pressed={focusSelected}
+      aria-label={`Focus: ${focusCount} of ${activeTasks.length} tasks are in today's focus`}
+      title="Show only today's focus: tasks created today or pinned to today"
+      onClick={toggleFocus}
+      className={`relative z-[2] inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors duration-150 ${
+        focusSelected
+          ? "bg-amber-400/15 text-amber-200 hover:bg-amber-400/25"
+          : "text-content/60 hover:text-content"
+      }`}
+    >
+      <Target
+        aria-hidden
+        className="size-3.5"
+        strokeWidth={1.75}
+      />
+      Focus
+      <span className="tabular-nums text-[11px] opacity-70">
+        {focusCount}/{activeTasks.length}
+      </span>
+    </button>
+  );
+
   return (
     <div
       ref={root}
@@ -618,6 +660,7 @@ export function TasksView({
       data-app-tasks
       className="flex min-h-0 min-w-0 flex-1 flex-col text-content"
     >
+      {slim ? null : (
       <div
         className="flex h-10 shrink-0 select-none items-center border-b border-stroke"
         data-tauri-drag-region="deep"
@@ -644,7 +687,9 @@ export function TasksView({
         </div>
         {IS_MAC ? null : <WindowControls />}
       </div>
+      )}
       <TasksToolbar
+        wrap={slim}
         boardBelow={view === "board" && !(filters.tags?.length ?? 0)}
         filters={filters}
         tasks={tasks}
@@ -662,41 +707,21 @@ export function TasksView({
           />
         }
         center={
+          slim ? (
+            focusPill
+          ) : (
           <TaskWeekStrip
             tasks={tasks}
             today={today}
             selectedDay={selectedDay}
             onSelect={selectDay}
             recenterSignal={recenterSignal}
-            center={
-              <button
-                ref={focusButton}
-                type="button"
-                data-shared-hover-item
-                aria-pressed={focusSelected}
-                aria-label={`Focus: ${focusCount} of ${activeTasks.length} tasks are in today's focus`}
-                title="Show only today's focus: tasks created today or pinned to today"
-                onClick={toggleFocus}
-                className={`relative z-[2] inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors duration-150 ${
-                  focusSelected
-                    ? "bg-amber-400/15 text-amber-200 hover:bg-amber-400/25"
-                    : "text-content/60 hover:text-content"
-                }`}
-              >
-                <Target
-                  aria-hidden
-                  className="size-3.5"
-                  strokeWidth={1.75}
-                />
-                Focus
-                <span className="tabular-nums text-[11px] opacity-70">
-                  {focusCount}/{activeTasks.length}
-                </span>
-              </button>
-            }
+            center={focusPill}
           />
+          )
         }
         trailing={
+          slim ? undefined : (
           <>
             <button
               type="button"
@@ -723,6 +748,7 @@ export function TasksView({
             />
             <TasksViewSwitch view={view} onChange={saveView} />
           </>
+          )
         }
       />
       {taskMenu ? (
@@ -786,6 +812,29 @@ export function TasksView({
           {actionError}
         </p>
       ) : null}
+      {slim ? (
+        <ZenSplit
+          name="tool"
+          label="Resize task panel"
+          top={<div className="flex min-h-0 min-w-0 flex-1 flex-col">{body}</div>}
+          bottom={
+            selected ? (
+              <TaskPeekPane
+                task={selected}
+                placement="below"
+                recents={recents}
+                cwd={cwd}
+                onClose={closePeek}
+                onDelete={remove}
+                onOpenSource={onOpenSource}
+                onOpenBeside={onOpenBeside}
+                onCreateAnother={create}
+                autoFocusTitle={selected.id === newTaskId}
+              />
+            ) : null
+          }
+        />
+      ) : (
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{body}</div>
         {peek.mounted && peekTask ? (
@@ -804,6 +853,7 @@ export function TasksView({
           />
         ) : null}
       </div>
+      )}
     </div>
   );
 }

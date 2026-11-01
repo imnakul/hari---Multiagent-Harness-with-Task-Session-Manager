@@ -2112,6 +2112,7 @@ export const KEYBINDINGS: KeybindingRow[] = [
   },
   { command: "App: Switch Model", keys: `${MOD}.`, when: "Always" },
   { command: "App: Toggle Focus", keys: `${MOD}${SHIFT}E`, when: "Always" },
+  { command: "App: Zen Mode", keys: `${MOD}${ALT}Z`, when: "Always" },
   {
     command: "App: Toggle Session Panel",
     keys: `${MOD}${SHIFT}O`,

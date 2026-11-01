@@ -466,6 +466,8 @@ type Props = {
    * the settings navigation.
    */
   inset?: boolean;
+  /** Fork (L-230): Zen mode keeps the collapsed sidebar from peeking out. */
+  peekDisabled?: boolean;
   /**
    * Inset layout: Explorer, Changes and Graph render into this panel beside the
    * card, and the sidebar keeps to the sessions.
@@ -598,6 +600,7 @@ function SidebarComponent({
   compactProjectRail = true,
   titleBarAbove = false,
   inset = false,
+  peekDisabled = false,
   rightPanel,
   unseenFinishedIds: unseenFinishedIdsProp,
   inboxUnseen = false,
@@ -1218,7 +1221,7 @@ function SidebarComponent({
   const drawerAnimation = useRef<Animation | null>(null);
   // The inset layout peeks a collapsed sidebar out over the workspace while
   // the pointer rests on the window's left edge or the sidebar toggle.
-  const peekMode = inset && !open && sidebarAvailable;
+  const peekMode = inset && !open && sidebarAvailable && !peekDisabled;
   const [peekOpen, setPeekOpen] = useState(false);
   const peekOpenRef = useRef(false);
   peekOpenRef.current = peekOpen;

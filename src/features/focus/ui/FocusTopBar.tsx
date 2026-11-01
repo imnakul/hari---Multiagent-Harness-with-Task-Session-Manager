@@ -4,12 +4,24 @@ import { Popover } from "../../../shared/ui/Popover";
 import {
   ArrowDownCircle,
   ChevronDown,
+  ChevronLeft,
   MessageMultiple,
   Plus,
 } from "../../../shared/ui/icons";
-import { FocusSearchList, type FocusPickItem } from "./FocusPicker";
+import { projectName } from "../../../shared/lib/paths";
+import { useProjectMarks } from "../../projects/ui/ProjectMark";
+import {
+  FocusSearchList,
+  ProjectChatList,
+  type FocusPickItem,
+} from "./FocusPicker";
 
-type NewView = "menu" | "start" | "continue";
+type NewView =
+  | "menu"
+  | "start"
+  | "continue"
+  | "continue-projects"
+  | "continue-in";
 
 export type FocusNewActions = {
   projectItems: readonly FocusPickItem[];
@@ -73,6 +85,9 @@ export function FocusNewButton({
   ...actions
 }: FocusNewActions & { onNewChat: () => void }): ReactNode {
   const [view, setView] = useState<NewView | null>(null);
+  // The project whose saved chats "Continue a chat in another project" lists.
+  const [continueCwd, setContinueCwd] = useState<string | null>(null);
+  const marks = useProjectMarks();
   const root = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const arrow = useRef<HTMLButtonElement>(null);
@@ -189,21 +204,94 @@ export function FocusNewButton({
                 actions.onStartNew(cwd);
               }}
             />
+          ) : view === "continue-projects" ? (
+            <>
+              <BackRow label="Continue a chat in…" onBack={() => setView("continue")} />
+              <FocusSearchList
+                className="h-[300px]"
+                items={actions.projectItems}
+                label="Projects"
+                placeholder="Search projects"
+                emptyLabel="No projects"
+                onPick={(cwd) => {
+                  setContinueCwd(cwd);
+                  setView("continue-in");
+                }}
+              />
+            </>
+          ) : view === "continue-in" && continueCwd ? (
+            <>
+              <BackRow
+                label={`Chats in ${projectName(continueCwd)}`}
+                onBack={() => setView("continue-projects")}
+              />
+              <ProjectChatList
+                className="h-[300px]"
+                cwd={continueCwd}
+                marks={marks}
+                onPick={(id) => {
+                  close(false);
+                  actions.onContinue(id);
+                }}
+              />
+            </>
           ) : (
-            <FocusSearchList
-              className="h-[320px]"
-              items={actions.continueItems}
-              label="Chats"
-              placeholder="Search chats"
-              emptyLabel="No chats to continue"
-              onPick={(id) => {
-                close(false);
-                actions.onContinue(id);
-              }}
-            />
+            <>
+              <FocusSearchList
+                className="h-[300px]"
+                items={actions.continueItems}
+                label="Chats"
+                placeholder="Search chats"
+                emptyLabel="No chats to continue"
+                onPick={(id) => {
+                  close(false);
+                  actions.onContinue(id);
+                }}
+              />
+              <div className="shrink-0 border-t border-stroke p-1">
+                <button
+                  type="button"
+                  onClick={() => setView("continue-projects")}
+                  className={`${MENU_ROW} text-[12px] text-content/80 hover:text-content`}
+                >
+                  <MessageMultiple
+                    aria-hidden
+                    className="size-3.5 shrink-0 text-content/55"
+                    strokeWidth={1.75}
+                  />
+                  Continue a chat in another project…
+                </button>
+              </div>
+            </>
           )}
         </Popover>
       ) : null}
+    </div>
+  );
+}
+
+/** A back row above a list opened from the New menu. */
+function BackRow({
+  label,
+  onBack,
+}: {
+  label: string;
+  onBack: () => void;
+}): ReactNode {
+  return (
+    <div className="flex h-8 shrink-0 items-center gap-1 border-b border-stroke px-1">
+      <button
+        type="button"
+        aria-label="Back"
+        title="Back"
+        onClick={onBack}
+        className="grid size-6 shrink-0 place-items-center rounded-md text-content/55 hover:bg-content/8 hover:text-content"
+      >
+        <ChevronLeft aria-hidden className="size-3.5" strokeWidth={1.75} />
+      </button>
+      <span className="min-w-0 truncate text-[12px] font-medium text-content/70">
+        {label}
+      </span>
     </div>
   );
 }

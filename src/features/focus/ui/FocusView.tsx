@@ -10,7 +10,7 @@ import {
 } from "react";
 import { IconButton } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
-import { IS_MAC, MOD, SHIFT } from "../../../platform/tauri/platform";
+import { ALT, IS_MAC, MOD, SHIFT } from "../../../platform/tauri/platform";
 import { useTrafficLightsVisible } from "../../../platform/tauri/useTrafficLightsVisible";
 import { setGrabbing, suppressTextSelection } from "../../../shared/lib/drag";
 import { projectName } from "../../../shared/lib/paths";
@@ -22,6 +22,7 @@ import {
   Globe,
   GripVertical,
   Settings,
+  Target,
   X,
   Whiteboard,
   Zap,
@@ -80,6 +81,7 @@ import {
 } from "../model/focusPaneTag";
 import { FocusTabRow, type FocusTab } from "./FocusGroupTabs";
 import {
+  focusChatInfo,
   focusContinueItems,
   focusProjectItems,
   FocusSearchList,
@@ -136,6 +138,8 @@ type Props = {
   /** How many columns the window has room for, as it resizes. */
   onColumnCapChange: (cap: number) => void;
   onExit: () => void;
+  /** Fork (L-230): turns Focus into Zen mode's narrow panel. */
+  onZen?: () => void;
   onNewChat: () => void;
   onStartNew: (cwd: string) => void;
   /** Adds a chat (Continue, "+N more"), trading places with the focused pane if it would not show. */
@@ -247,6 +251,7 @@ export function FocusView({
   onClosePanes,
   onColumnCapChange,
   onExit,
+  onZen,
   onNewChat,
   onStartNew,
   onOpenChat,
@@ -374,18 +379,30 @@ export function FocusView({
     [recents, marks],
   );
   const continueItems = useMemo(
-    () => focusContinueItems(boardCards, (id) => focusGridHas(grid, id), marks),
-    [boardCards, grid, marks],
+    () =>
+      focusContinueItems(
+        boardCards,
+        (id) => focusGridHas(grid, id),
+        marks,
+        (id) => byId.get(id)?.providerAccountId,
+      ),
+    [boardCards, grid, marks, byId],
   );
   const hiddenItems: FocusPickItem[] = shown.hidden.map((id) => {
     const session = byId.get(id);
     const cwd = session?.cwd ?? cards.get(id)?.cwd;
     return {
       id,
-      label: labelOf(id) ?? paneTitle(session, cards.get(id)),
+      // Chat cards put the label in themselves.
+      label: session
+        ? paneTitle(session, cards.get(id))
+        : (labelOf(id) ?? paneTitle(session, cards.get(id))),
       detail: cwd ? projectName(cwd) : undefined,
       icon: cwd ? <ProjectIcon cwd={cwd} {...marks} /> : undefined,
       group: "Not shown",
+      chat: session
+        ? focusChatInfo({ ...session, updatedAt: cards.get(id)?.updatedAt })
+        : undefined,
     };
   });
   /** Focuses a chat of the shown project, trading it in if it is off screen. */
@@ -835,6 +852,11 @@ export function FocusView({
           >
             <Focus className="size-3.5" strokeWidth={1.75} />
           </IconButton>
+          {onZen ? (
+            <IconButton label={`Zen mode (${MOD}${ALT}Z)`} onClick={onZen}>
+              <Target className="size-3.5" strokeWidth={1.75} />
+            </IconButton>
+          ) : null}
           {onOpenTasks ? (
             <IconButton label="Task Manager" onClick={onOpenTasks}>
               <CheckCircle className="size-3.5" strokeWidth={1.75} />

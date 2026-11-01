@@ -3838,6 +3838,29 @@ html.theme-light .mono-pill {
  * agent wrote to introduce it, on a rail, folding back to that line when the
  * agent moves on.
  */
+/* Fork (L-230): Zen mode's fade-through. The layout fades out while the
+   window resizes, then the new one fades and scales in (ZEN_FADE_*_MS). */
+.app-shell[data-zen-fade="out"] > * {
+  opacity: 0;
+  transition: opacity 100ms ease-out;
+}
+.app-shell[data-zen-fade="in"] > * {
+  animation: zen-fade-in 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes zen-fade-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell[data-zen-fade] > * {
+    opacity: 1;
+    transition: none;
+    animation: none;
+  }
+}
+
 .zen-phase-body {
   display: grid;
   grid-template-rows: 1fr;

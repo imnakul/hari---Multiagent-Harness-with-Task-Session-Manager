@@ -86,6 +86,7 @@ mod window_transfer;
 mod windows;
 mod worktree_lifecycle;
 mod worktrees;
+mod zen_window;
 
 // Phase 1 seam: spawn / kill harness children per MonoCode thread.
 // Adapters own the protocol; this host only supervises processes.
@@ -781,6 +782,9 @@ pub fn run() {
             window::quit_decision,
             window::quit_ready,
             window::set_window_glass_enabled,
+            zen_window::zen_window_enter,
+            zen_window::zen_window_exit,
+            zen_window::zen_window_pin,
             webview_recovery::take_webview_recovery,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             quick_composer::quick_composer_set_enabled,

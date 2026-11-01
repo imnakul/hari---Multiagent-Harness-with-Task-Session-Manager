@@ -68,6 +68,8 @@ import { type NoteProjectChoice } from "../notes";
 
 import { MarkdownEditorPanel } from "../../sessions/ui/MarkdownEditorPanel";
 import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
+import { ZenItemBar } from "../../zen/ui/ZenItemBar";
+import { ZenSplit } from "../../zen/ui/ZenSplit";
 
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 420;
@@ -108,6 +110,11 @@ type Props = {
   /** Lists only this project and project-less notes when set. */
   scopeProject?: string;
   recents?: RecentProject[];
+  /**
+   * Zen's narrow panel (L-230): the list fills the panel, nothing opens on
+   * its own, and a picked note opens in the bottom half.
+   */
+  slim?: boolean;
   onClose: () => void;
   onToggleSidebar?: () => void;
 };
@@ -120,6 +127,7 @@ export function NotesView({
   cwd,
   scopeProject,
   recents = [],
+  slim = false,
   onClose,
   onToggleSidebar,
 }: Props) {
@@ -140,6 +148,7 @@ export function NotesView({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (slim) return null;
     const cached = peekNotes();
     return (
       cached?.find((note) => note.id === rememberedNoteId)?.id ??
@@ -160,6 +169,11 @@ export function NotesView({
       setNotes(next);
       setError(null);
       setSelectedId((current) => {
+        if (slim) {
+          return current && next.some((note) => note.id === current)
+            ? current
+            : null;
+        }
         const preferred = current ?? rememberedNoteId;
         if (preferred && next.some((note) => note.id === preferred)) {
           return preferred;
@@ -171,7 +185,7 @@ export function NotesView({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [slim]);
 
   useEffect(() => {
     void refresh();
@@ -179,9 +193,12 @@ export function NotesView({
     return () => window.removeEventListener(NOTES_CHANGED_EVENT, refresh);
   }, [refresh]);
 
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   useEffect(() => {
+    if (slim) return;
     rememberedNoteId = selectedId;
-  }, [selectedId]);
+  }, [selectedId, slim]);
 
   useEffect(() => {
     if (!active) return;
@@ -191,11 +208,13 @@ export function NotesView({
       if (menuRef.current) return;
       event.preventDefault();
       event.stopPropagation();
-      onCloseRef.current();
+      // Zen closes the open note first, then the tool.
+      if (slim && selectedIdRef.current) setSelectedId(null);
+      else onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active]);
+  }, [active, slim]);
 
   const scoped = useMemo(
     () =>
@@ -300,7 +319,7 @@ export function NotesView({
       setNotes(next);
       setSelectedId((current) => {
         if (current !== id) return current;
-        return next[0]?.id ?? null;
+        return slim ? null : (next[0]?.id ?? null);
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -314,8 +333,12 @@ export function NotesView({
 
   const list = (
     <div
-      ref={resize.setPaneRef}
-      className="relative flex h-full min-h-0 shrink-0 flex-col border-r border-stroke"
+      ref={slim ? undefined : resize.setPaneRef}
+      className={
+        slim
+          ? "relative flex min-h-0 min-w-0 flex-1 flex-col"
+          : "relative flex h-full min-h-0 shrink-0 flex-col border-r border-stroke"
+      }
     >
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-stroke px-2">
         <div className="relative flex h-7 min-w-0 flex-1 items-center">
@@ -410,18 +433,61 @@ export function NotesView({
           </ul>
         )}
       </div>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize notes list"
-        className={`absolute inset-y-0 -right-px z-10 w-1.5 cursor-col-resize touch-none ${
-          resize.dragging ? "bg-content/15" : "hover:bg-content/10"
-        }`}
-        onPointerDown={resize.onPointerDown}
-        onDoubleClick={resize.onDoubleClick}
-      />
+      {slim ? null : (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize notes list"
+          className={`absolute inset-y-0 -right-px z-10 w-1.5 cursor-col-resize touch-none ${
+            resize.dragging ? "bg-content/15" : "hover:bg-content/10"
+          }`}
+          onPointerDown={resize.onPointerDown}
+          onDoubleClick={resize.onDoubleClick}
+        />
+      )}
     </div>
   );
+
+  if (slim) {
+    return (
+      <div
+        role="region"
+        aria-label="Notes"
+        data-app-notes
+        className="flex min-h-0 min-w-0 flex-1 flex-col text-content"
+      >
+        <ZenSplit
+          name="tool"
+          label="Resize note"
+          top={list}
+          bottom={
+            selected ? (
+              <>
+                <ZenItemBar
+                  label={
+                    <>
+                      <File className="size-3.5 shrink-0" strokeWidth={1.75} />
+                      <span className="truncate">Note</span>
+                    </>
+                  }
+                  onClose={() => setSelectedId(null)}
+                />
+                <NoteDetail
+                  note={selected}
+                  compact
+                  recents={recents}
+                  activeCwd={cwd}
+                  onSaved={onSaved}
+                  onDelete={onDelete}
+                  onAddToChat={onAddToChat}
+                />
+              </>
+            ) : null
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -542,6 +608,7 @@ function NoteCard({
 
 function NoteDetail({
   note,
+  compact = false,
   recents = [],
   activeCwd,
   onSaved,
@@ -549,6 +616,8 @@ function NoteDetail({
   onAddToChat,
 }: {
   note: Note | null;
+  /** Less padding, for Zen's narrow panel. */
+  compact?: boolean;
   recents?: RecentProject[];
   activeCwd?: string;
   onSaved: (note: Note) => void;
@@ -566,6 +635,7 @@ function NoteDetail({
   return (
     <NoteEditor
       key={note.id}
+      compact={compact}
       note={note}
       recents={recents}
       activeCwd={activeCwd}
@@ -578,6 +648,7 @@ function NoteDetail({
 
 function NoteEditor({
   note,
+  compact = false,
   recents = [],
   activeCwd,
   onSaved,
@@ -585,6 +656,7 @@ function NoteEditor({
   onAddToChat,
 }: {
   note: Note;
+  compact?: boolean;
   recents?: RecentProject[];
   activeCwd?: string;
   onSaved: (note: Note) => void;
@@ -766,9 +838,17 @@ function NoteEditor({
       ref={lockOverscroll}
       className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-none"
     >
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-8 py-8">
+      <div
+        className={`mx-auto flex w-full max-w-5xl flex-col ${
+          compact ? "gap-4 px-4 py-4" : "gap-5 px-8 py-8"
+        }`}
+      >
         <header className="flex flex-col gap-3">
-          <div className="flex min-w-0 items-center gap-2 text-[12px] text-content/50">
+          <div
+            className={`flex min-w-0 items-center gap-2 text-[12px] text-content/50 ${
+              compact ? "flex-wrap" : ""
+            }`}
+          >
             <File className="size-3.5 shrink-0" strokeWidth={1.75} />
             <span>Note</span>
             {note.slug ? (

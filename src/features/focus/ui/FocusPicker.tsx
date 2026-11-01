@@ -5,7 +5,9 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { LAYER } from "../../../shared/lib/layers";
 import { projectKey, projectName } from "../../../shared/lib/paths";
@@ -14,8 +16,27 @@ import {
   ExplorerMenu,
   type ExplorerMenuItem,
 } from "../../files/ui/ExplorerMenu";
-import { isHarnessId } from "../../sessions/model/models";
-import { sessionDisplayTitle } from "../../sessions/model/session";
+import { isHarnessId, resolveModel } from "../../sessions/model/models";
+import {
+  sessionDisplayTitle,
+  type HarnessId,
+} from "../../sessions/model/session";
+import {
+  listSessionsByProject,
+  type SessionSummary,
+} from "../../sessions/data/sessionStore";
+import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
+import { formatRelative } from "../../sessions/ui/SessionCard";
+import { useSessionMetadataHoverCard } from "../../sessions/ui/SessionMetadataHoverCard";
+import {
+  useSessionAccountLabel,
+  withAccountLabel,
+} from "../../sessions/ui/useCompactModelLabels";
+import {
+  useSessionLabel,
+  useSessionMetadataMap,
+  useShowSessionLabels,
+} from "../../sessions/ui/useSessionMetadata";
 import type { RecentProject } from "../../projects/model/recents";
 import { ProjectIcon, type ProjectMarks } from "../../projects/ui/ProjectMark";
 import {
@@ -38,7 +59,36 @@ export type FocusPickItem = {
   project?: { key: string; cwd: string };
   /** The chat's model, shown when the list's "Model" toggle is on (L-145). */
   model?: string;
+  /** A chat: shown as a two-line card with its model's icon (L-230). */
+  chat?: FocusChatInfo;
+  /** Listed below a divider, after the items without it (L-230). */
+  lower?: boolean;
 };
+
+/** What a chat card shows besides its title (L-230). */
+export type FocusChatInfo = {
+  harness: HarnessId;
+  /** The model's display name. */
+  modelLabel: string;
+  providerAccountId?: string;
+  /** Last activity, shown as "5m" or "3d". */
+  updatedAt?: number;
+};
+
+/** A chat's card details from what a session or summary has. */
+export function focusChatInfo(session: {
+  harness: HarnessId;
+  model: string;
+  providerAccountId?: string;
+  updatedAt?: number;
+}): FocusChatInfo {
+  return {
+    harness: session.harness,
+    modelLabel: resolveModel(session.harness, session.model).name,
+    providerAccountId: session.providerAccountId,
+    updatedAt: session.updatedAt,
+  };
+}
 
 const SHOW_MODEL_KEY = "monocode.focusPickerShowModel.v1";
 
@@ -87,12 +137,39 @@ export function focusProjectItems(
   recents: readonly RecentProject[],
   marks: ProjectMarks,
 ): FocusPickItem[] {
-  return recents.map((recent) => ({
-    id: recent.path,
-    label: projectName(recent.path),
-    detail: recent.path,
-    icon: <ProjectIcon cwd={recent.path} {...marks} />,
-  }));
+  return recents.map((recent) => projectPickItem(recent.path, marks));
+}
+
+function projectPickItem(path: string, marks: ProjectMarks): FocusPickItem {
+  return {
+    id: path,
+    label: projectName(path),
+    detail: path,
+    icon: <ProjectIcon cwd={path} {...marks} />,
+  };
+}
+
+/**
+ * Projects with an open chat first (in `projects` order, then any missing
+ * ones), the rest below a divider (L-230).
+ */
+export function focusProjectsActiveFirst(
+  projects: readonly FocusPickItem[],
+  activeCwds: readonly string[],
+  marks: ProjectMarks,
+): FocusPickItem[] {
+  const active = new Set(activeCwds.map(projectKey));
+  const top = projects.filter((item) => active.has(projectKey(item.id)));
+  const seen = new Set(top.map((item) => projectKey(item.id)));
+  for (const cwd of activeCwds) {
+    const key = projectKey(cwd);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    top.push(projectPickItem(cwd, marks));
+  }
+  const rest = projects.filter((item) => !active.has(projectKey(item.id)));
+  if (top.length === 0) return rest;
+  return [...top, ...rest.map((item) => ({ ...item, lower: true }))];
 }
 
 /**
@@ -103,6 +180,8 @@ export function focusContinueItems(
   cards: readonly BoardCard[],
   inGrid: (sessionId: string) => boolean,
   marks: ProjectMarks,
+  /** The chat's account, which board cards do not carry. */
+  accountOf?: (sessionId: string) => string | undefined,
 ): FocusPickItem[] {
   const newest = new Map<string, BoardCard>();
   for (const card of cards) {
@@ -117,6 +196,7 @@ export function focusContinueItems(
       .filter((card) => boardLane(card) === lane)
       .map((card) => {
         const harness = isHarnessId(card.harness) ? card.harness : null;
+        const model = card.model ? boardModelLabel(harness, card.model) : "";
         return {
           id: card.sessionId,
           label: harness
@@ -126,7 +206,15 @@ export function focusContinueItems(
           icon: <ProjectIcon cwd={card.cwd} {...marks} />,
           group: BOARD_LANES[lane],
           project: { key: projectKey(card.cwd), cwd: card.cwd },
-          model: card.model ? boardModelLabel(harness, card.model) : undefined,
+          model: model || undefined,
+          chat: harness
+            ? {
+                harness,
+                modelLabel: model,
+                providerAccountId: accountOf?.(card.sessionId),
+                updatedAt: card.updatedAt,
+              }
+            : undefined,
         };
       }),
   );
@@ -283,6 +371,9 @@ export function FocusSearchList({
   autoFocus = true,
   onPick,
   className = "",
+  limit,
+  actions,
+  onChatPointerDown,
 }: {
   items: readonly FocusPickItem[];
   label: string;
@@ -291,12 +382,24 @@ export function FocusSearchList({
   autoFocus?: boolean;
   onPick: (id: string) => void;
   className?: string;
+  /** Shows only the first this many until a search (long chat lists). */
+  limit?: number;
+  /** Buttons at the end of the search row, after a divider. */
+  actions?: ReactNode;
+  /** A press on a chat card, e.g. to start dragging it (Zen, L-230). */
+  onChatPointerDown?: (
+    item: FocusPickItem,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => void;
 }): ReactNode {
+  const metadata = useSessionMetadataMap();
+  const showLabels = useShowSessionLabels();
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [showModel, setShowModel] = useState(loadShowModel);
   const projects = useMemo(() => focusPickProjects(items), [items]);
-  const hasModels = items.some((item) => item.model);
+  // Chat cards always show their model, so the toggle is for plain rows.
+  const hasModels = items.some((item) => item.model && !item.chat);
   // A project that left the list (its last chat was picked) clears the filter.
   const project =
     projectFilter && projects.some((entry) => entry.key === projectFilter)
@@ -312,13 +415,24 @@ export function FocusSearchList({
     const inProject = project
       ? items.filter((item) => item.project?.key === project)
       : items;
-    if (!needle) return inProject;
+    if (!needle) return limit ? inProject.slice(0, limit) : inProject;
     return inProject.filter((item) =>
-      [item.label, item.detail ?? "", item.group ?? "", item.model ?? ""].some(
-        (text) => text.toLowerCase().includes(needle),
-      ),
+      [
+        item.label,
+        item.detail ?? "",
+        item.group ?? "",
+        item.model ?? "",
+        item.chat?.modelLabel ?? "",
+        (item.chat && showLabels && metadata.get(item.id)?.label) || "",
+      ].some((text) => text.toLowerCase().includes(needle)),
     );
-  }, [items, query, project]);
+  }, [items, query, project, limit, metadata, showLabels]);
+  const hiddenCount =
+    limit && !query.trim()
+      ? (project
+          ? items.filter((item) => item.project?.key === project).length
+          : items.length) - filtered.length
+      : 0;
   const activeIndex = Math.min(active, Math.max(0, filtered.length - 1));
 
   useEffect(() => {
@@ -397,6 +511,14 @@ export function FocusSearchList({
             Model
           </button>
         ) : null}
+        {actions ? (
+          <>
+            <span aria-hidden className="h-4 w-px shrink-0 bg-stroke" />
+            <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
+              {actions}
+            </div>
+          </>
+        ) : null}
       </label>
       <div
         id={listId}
@@ -411,8 +533,15 @@ export function FocusSearchList({
               item.group && item.group !== filtered[index - 1]?.group
                 ? item.group
                 : null;
+            const divided =
+              item.lower === true &&
+              index > 0 &&
+              filtered[index - 1]?.lower !== true;
             return (
               <div key={item.id} role="presentation">
+                {divided ? (
+                  <div aria-hidden className="mx-2 my-1 h-px bg-stroke" />
+                ) : null}
                 {heading ? (
                   <div
                     role="presentation"
@@ -421,6 +550,22 @@ export function FocusSearchList({
                     {heading}
                   </div>
                 ) : null}
+                {item.chat ? (
+                  <FocusChatOption
+                    item={item}
+                    chat={item.chat}
+                    optionId={`${listId}-${index}`}
+                    highlighted={highlighted}
+                    optionRef={highlighted ? activeOption : undefined}
+                    onHover={() => setActive(index)}
+                    onPick={() => onPick(item.id)}
+                    onPress={
+                      onChatPointerDown
+                        ? (event) => onChatPointerDown(item, event)
+                        : undefined
+                    }
+                  />
+                ) : (
                 <button
                   ref={highlighted ? activeOption : undefined}
                   id={`${listId}-${index}`}
@@ -458,6 +603,7 @@ export function FocusSearchList({
                     </span>
                   ) : null}
                 </button>
+                )}
               </div>
             );
           })
@@ -466,7 +612,184 @@ export function FocusSearchList({
             {emptyLabel}
           </p>
         )}
+        {hiddenCount > 0 ? (
+          <p className="px-2 pt-1.5 pb-2 text-center text-[11px] text-content/40">
+            {hiddenCount} older {hiddenCount === 1 ? "chat" : "chats"}: search to find
+          </p>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * A chat as a two-line card (L-230): model icon, its label or title and the
+ * time of its last activity, then project, model and account (with 2+). A
+ * hover shows the chat's Session overview card, as the sidebar does.
+ */
+function FocusChatOption({
+  item,
+  chat,
+  optionId,
+  highlighted,
+  optionRef,
+  onHover,
+  onPick,
+  onPress,
+}: {
+  item: FocusPickItem;
+  chat: FocusChatInfo;
+  optionId: string;
+  highlighted: boolean;
+  optionRef?: Ref<HTMLButtonElement>;
+  onHover: () => void;
+  onPick: () => void;
+  onPress?: (event: ReactPointerEvent<HTMLElement>) => void;
+}): ReactNode {
+  const label = useSessionLabel(item.id);
+  const account = useSessionAccountLabel({
+    harness: chat.harness,
+    providerAccountId: chat.providerAccountId,
+  });
+  const hover = useSessionMetadataHoverCard({
+    sessionId: item.id,
+    title: item.label,
+    side: "right",
+  });
+  const model = withAccountLabel(chat.modelLabel || null, account);
+  const time = chat.updatedAt ? formatRelative(chat.updatedAt, Date.now()) : "";
+  const details = [item.detail, model].filter(Boolean).join(" · ");
+  return (
+    <>
+      <button
+        ref={optionRef}
+        id={optionId}
+        type="button"
+        role="option"
+        tabIndex={-1}
+        aria-selected={highlighted}
+        aria-describedby={hover.anchorProps["aria-describedby"]}
+        title={hover.active ? undefined : label ?? item.label}
+        onMouseDown={(event) => event.preventDefault()}
+        onPointerDown={(event) => {
+          hover.anchorProps.onPointerDown();
+          onPress?.(event);
+        }}
+        onPointerEnter={(event) => {
+          hover.anchorProps.onPointerEnter(event);
+          onHover();
+        }}
+        onPointerLeave={hover.anchorProps.onPointerLeave}
+        onClick={onPick}
+        className={`flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left transition-colors duration-100 ${
+          highlighted
+            ? "bg-selection text-content"
+            : "text-content/80 hover:bg-content/5 hover:text-content"
+        }`}
+      >
+        <span className="flex w-full min-w-0 items-center gap-2">
+          <HarnessIcon harness={chat.harness} className="size-3.5 shrink-0" />
+          <span
+            className={`min-w-0 flex-1 truncate text-[13px] font-medium leading-snug ${
+              label ? "session-label-text" : ""
+            }`}
+          >
+            {label ?? item.label}
+          </span>
+          {time ? (
+            <span className="shrink-0 text-[11px] tabular-nums text-content/40">
+              {time}
+            </span>
+          ) : null}
+        </span>
+        {details ? (
+          <span className="block w-full min-w-0 truncate pl-5.5 text-[11px] leading-tight text-content/45">
+            {details}
+          </span>
+        ) : null}
+      </button>
+      {hover.card}
+    </>
+  );
+}
+
+/**
+ * Every chat saved in one project (L-230), newest first, as chat cards:
+ * the newest 50 until a search. Archived chats and `exclude` stay out.
+ */
+export function ProjectChatList({
+  cwd,
+  exclude,
+  marks,
+  onPick,
+  className = "",
+  onChatPointerDown,
+}: {
+  cwd: string;
+  exclude?: ReadonlySet<string>;
+  marks: ProjectMarks;
+  onPick: (sessionId: string) => void;
+  className?: string;
+  onChatPointerDown?: (
+    item: FocusPickItem,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => void;
+}): ReactNode {
+  const [state, setState] = useState<{
+    cwd: string;
+    rows: SessionSummary[] | null;
+    failed: boolean;
+  }>({ cwd, rows: null, failed: false });
+  useEffect(() => {
+    let live = true;
+    listSessionsByProject(cwd)
+      .then((rows) => {
+        if (!live) return;
+        const kept = rows
+          .filter((row) => !row.archived && !row.sidebarHidden)
+          .sort((a, b) => b.updatedAt - a.updatedAt);
+        setState({ cwd, rows: kept, failed: false });
+      })
+      .catch(() => {
+        if (live) setState({ cwd, rows: [], failed: true });
+      });
+    return () => {
+      live = false;
+    };
+  }, [cwd]);
+  const rows = state.cwd === cwd ? state.rows : null;
+  const visible = useMemo(
+    () =>
+      rows
+        ?.filter((row) => !exclude?.has(row.id))
+        .map(
+          (row): FocusPickItem => ({
+            id: row.id,
+            label: sessionDisplayTitle(row.title, row.harness) || "New session",
+            detail: projectName(row.cwd),
+            icon: <ProjectIcon cwd={row.cwd} {...marks} />,
+            chat: focusChatInfo(row),
+          }),
+        ) ?? null,
+    [rows, exclude, marks],
+  );
+  if (!visible)
+    return (
+      <div aria-busy="true" aria-label="Loading chats" className={`flex flex-col gap-2 p-3 ${className}`}>
+        <div className="h-3 w-2/3 animate-pulse rounded bg-content/8" />
+        <div className="h-3 w-1/2 animate-pulse rounded bg-content/8" />
+      </div>
+    );
+  return (
+    <FocusSearchList
+      className={className}
+      items={visible}
+      onChatPointerDown={onChatPointerDown}
+      label={`Chats in ${projectName(cwd)}`}
+      placeholder={`Search chats in ${projectName(cwd)}`}
+      emptyLabel={state.failed ? "Couldn't load this project's chats" : "No chats yet"}
+      limit={50}
+      onPick={onPick}
+    />
   );
 }

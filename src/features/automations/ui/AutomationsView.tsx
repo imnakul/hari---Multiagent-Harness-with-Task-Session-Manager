@@ -54,6 +54,8 @@ import { SkillPromptField } from "../../skills/ui/SkillPromptField";
 import { OverlayNav } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
 import { useDragResize } from "../../../shared/hooks/useDragResize";
+import { ZenItemBar } from "../../zen/ui/ZenItemBar";
+import { ZenSplit } from "../../zen/ui/ZenSplit";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import { useTabGroupLogos } from "../../projects/hooks/useTabGroupLogos";
 import {
@@ -130,6 +132,11 @@ type Props = {
   /** Lists only automations that run in this project, plus project-less ones. */
   scopeProject?: string;
   recents: RecentProject[];
+  /**
+   * Zen's narrow panel (L-230): the list fills the panel, nothing opens on
+   * its own, and a picked automation (or New) opens in the bottom half.
+   */
+  slim?: boolean;
   onClose: () => void;
   onToggleSidebar?: () => void;
   onLaunch: (
@@ -158,6 +165,7 @@ export function AutomationsView({
   cwd,
   scopeProject,
   recents,
+  slim = false,
   onClose,
   onToggleSidebar,
   onLaunch,
@@ -195,6 +203,7 @@ export function AutomationsView({
         cwd={cwd}
         scopeProject={scopeProject}
         recents={recents}
+        slim={slim}
         onLaunch={onLaunch}
         onOpenSession={onOpenSession}
       />
@@ -206,24 +215,25 @@ function AutomationsContent({
   cwd,
   scopeProject,
   recents,
+  slim = false,
   onLaunch,
   onOpenSession,
 }: Pick<
   Props,
-  "cwd" | "scopeProject" | "recents" | "onLaunch" | "onOpenSession"
+  "cwd" | "scopeProject" | "recents" | "slim" | "onLaunch" | "onOpenSession"
 >) {
   const [automations, setAutomations] = useState<Automation[]>(
     () => peekAutomations() ?? [],
   );
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(
-    rememberedAutomationId,
+    slim ? null : rememberedAutomationId,
   );
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(() => peekAutomations() === null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<AutomationDraft | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(true);
+  const [pickerOpen, setPickerOpen] = useState(!slim);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
   const logos = useTabGroupLogos();
@@ -237,6 +247,11 @@ function AutomationsContent({
       const next = await listAutomations();
       setAutomations(next);
       setSelectedId((current) => {
+        if (slim) {
+          return current && next.some((entry) => entry.id === current)
+            ? current
+            : null;
+        }
         const preferred = current ?? rememberedAutomationId;
         return preferred && next.some((entry) => entry.id === preferred)
           ? preferred
@@ -248,7 +263,7 @@ function AutomationsContent({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [slim]);
 
   useEffect(() => {
     void refresh();
@@ -272,8 +287,9 @@ function AutomationsContent({
       : selectedId;
 
   useEffect(() => {
+    if (slim) return;
     rememberedAutomationId = selectedId;
-  }, [selectedId]);
+  }, [selectedId, slim]);
 
   useEffect(() => {
     if (!shownId) {
@@ -407,11 +423,14 @@ function AutomationsContent({
     },
   });
 
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 text-content">
+  const listPane = (
       <aside
-        ref={resize.setPaneRef}
-        className="relative flex shrink-0 flex-col border-r border-stroke"
+        ref={slim ? undefined : resize.setPaneRef}
+        className={
+          slim
+            ? "relative flex min-h-0 min-w-0 flex-1 flex-col"
+            : "relative flex shrink-0 flex-col border-r border-stroke"
+        }
       >
         <div className="flex h-9 shrink-0 items-center gap-1 border-b border-stroke px-2">
           <label className="relative flex h-7 min-w-0 flex-1 items-center">
@@ -477,18 +496,22 @@ function AutomationsContent({
             </p>
           )}
         </div>
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize automations list"
-          className={`absolute inset-y-0 -right-px z-10 w-1.5 cursor-col-resize touch-none ${
-            resize.dragging ? "bg-content/15" : "hover:bg-content/10"
-          }`}
-          onPointerDown={resize.onPointerDown}
-          onDoubleClick={resize.onDoubleClick}
-        />
+        {slim ? null : (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize automations list"
+            className={`absolute inset-y-0 -right-px z-10 w-1.5 cursor-col-resize touch-none ${
+              resize.dragging ? "bg-content/15" : "hover:bg-content/10"
+            }`}
+            onPointerDown={resize.onPointerDown}
+            onDoubleClick={resize.onDoubleClick}
+          />
+        )}
       </aside>
+  );
 
+  const mainPane = (
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {error ? (
           <div className="m-4 flex shrink-0 items-start gap-2 rounded-lg border border-red-400/20 bg-red-400/8 px-3 py-2 text-[12px] text-red-300">
@@ -539,6 +562,49 @@ function AutomationsContent({
           <AutomationPicker onBlank={beginBlank} onPick={beginFromTemplate} />
         )}
       </main>
+  );
+
+  if (slim) {
+    const closeItem = () => {
+      setPickerOpen(false);
+      setDraft(null);
+      setSelectedId(null);
+    };
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col text-content">
+        <ZenSplit
+          name="tool"
+          label="Resize automation"
+          top={listPane}
+          bottom={
+            pickerOpen || editorDraft ? (
+              <>
+                <ZenItemBar
+                  label={
+                    <>
+                      <Zap className="size-3.5 shrink-0" strokeWidth={1.75} />
+                      <span className="truncate">
+                        {pickerOpen || !editorDraft?.id
+                          ? "New automation"
+                          : "Automation"}
+                      </span>
+                    </>
+                  }
+                  onClose={closeItem}
+                />
+                {mainPane}
+              </>
+            ) : null
+          }
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 text-content">
+      {listPane}
+      {mainPane}
     </div>
   );
 }

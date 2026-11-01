@@ -105,6 +105,20 @@ describe("resolveAppShortcut", () => {
     ).toBe("App: Toggle Browser Panel");
   });
 
+  it("toggles Zen mode on Mod+Alt+Z by physical key", () => {
+    expect(
+      resolveAppShortcut(key({ key: "Ω", code: "KeyZ", metaKey: true, altKey: true })),
+    ).toBe("App: Zen Mode");
+    expect(
+      resolveAppShortcut(key({ key: "z", code: "KeyZ", ctrlKey: true, altKey: true })),
+    ).toBe("App: Zen Mode");
+    expect(
+      resolveAppShortcut(
+        key({ key: "Z", code: "KeyZ", ctrlKey: true, altKey: true, shiftKey: true }),
+      ),
+    ).toBeNull();
+  });
+
   it("honours a disabled command", () => {
     saveKeybindingOverride("App: Search", { disabled: true });
     expect(resolveAppShortcut(key({ key: "k", metaKey: true }))).toBeNull();
