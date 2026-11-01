@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-01 23:05 IST — 0.16.0-local25 Windows build
+- Type: chore
+- What: New Windows installer, version 0.16.0-local25: 0.16.0-local24 plus Zen mode (L-230): the window becomes a docked side panel with one or two chats, a slim top bar with Tasks, Notes, Automations and Mono buttons, chat cards and Continue in the pane dropdown, drag a chat to the second row, and the Notes/Automations width fix.
+- Why: User asked to commit the Zen work and build a version to install and start using.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local25-zen-mode_x64.exe` (19,615,134 bytes, SHA-256 2CF881D086B695AE149ED5D06BAB33BC60425EAFA64329CA1F13216D1B6782C2, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Commit: built on top of 2708f169 (L-230) with only the version bump, committed right after
+- Verified: build ✅ (npm run build:windows); tsc ✅, full vitest 8018 passed (iconCatalog times out under load, passes alone), cargo check ✅, cargo test zen_window 6 passed; desktop check manual
+
 ## 2026-11-01 22:24 IST — Zen: drag a chat to the second row; fix Notes and Automations widening the panel (L-230)
 - Type: feature + fix
 - What: A chat in Zen's chat dropdown or Continue list can be dragged onto the panel's lower half; it opens there as the second chat (dashed drop area while dragging, a label follows the pointer, Escape cancels, a click still picks). Fix: opening Notes or Automations for the first time in Zen no longer grows the window to full width and locks its minimum width.
 - Why: User request (drag to the bottom pane) and bug report. Cause: those two views load lazily and briefly hide the whole app; when it re-appeared, React (development build) re-ran App's startup step that restores a window closed while in Zen, which undid the Zen size and set the normal 800px minimum.
 - Files: `src/features/zen/model/zenChatDrag.ts` + test, `src/features/zen/ui/ZenView.tsx`, `src/features/focus/ui/FocusPicker.tsx`, `src/app/App.tsx`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 2708f169
 - Verified: tsc clean; 4 new drag tests; full vitest 8018 passed (iconCatalog times out under load, passes alone); zen, focus and windowArgs (L-218) tests pass. Desktop UI not checked by the agent.
 
 ## 2026-11-01 21:36 IST — Zen chat dropdown: New chat and Continue buttons in the search row, open projects first (L-230)
@@ -12,7 +20,7 @@
 - What: Zen's chat dropdown drops its four footer rows. The search row ends with a divider, a New chat (+) button and a Continue button; each opens the project list, with a back row. Projects that have a chat open in Zen or in the dropdown are listed first, the rest below a divider. Continue then shows that project's chats.
 - Why: User request: a cleaner dropdown, and the projects you're working in at the top.
 - Files: `src/features/focus/ui/FocusPicker.tsx` + test, `src/features/zen/ui/ZenView.tsx`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 2708f169
 - Verified: tsc clean; focus and zen tests 97 passed, including 3 new project order tests. Desktop UI not checked by the agent.
 
 ## 2026-11-01 21:19 IST — Zen mode: chat cards, Continue a chat, Mono buttons, sliding tabs, slim Tasks, fade-through (L-230)
@@ -20,7 +28,7 @@
 - What: Chats in Zen's pane dropdown and in Focus's Continue and "+N more" lists are now two-line cards: the model's icon, the chat's label or title, its last activity, then project, model and account (when a provider has two or more), with the Session overview card on hover. Zen's dropdown adds "Continue a chat in <project>" and "…in another project…" (every saved chat there, newest first, newest 50 until a search); Focus's Continue list adds the other-project option. Zen's top bar: Chat, Tasks, Notes and Automations as one tab group with a sliding selected fill, then a divider and up to three Mono buttons (rest under More), each opening that Mono's chat across the panel. Zen's Tasks: New task, Search and one Filter menu (Status, Project), the list grouped by status, and today's Focus button centred below. Entering and leaving Zen fade through (instant with Reduce motion). Picking a chat already in the other pane goes to that pane; a deleted Mono returns to Chat.
 - Why: User request: recognise chats at a glance, continue any saved chat, and a calmer Zen top bar and Tasks layout ("go with your picks and directly build, no need to write specs").
 - Files: `src/features/focus/ui/FocusPicker.tsx` + test, `src/features/focus/ui/FocusTopBar.tsx`, `src/features/focus/ui/FocusView.tsx`, `src/features/zen/ui/ZenView.tsx`, `src/features/zen/ui/ZenMonos.tsx`, `src/features/zen/model/zenPanes.ts`, `src/features/tasks/ui/TasksView.tsx`, `src/features/tasks/ui/TasksToolbar.tsx`, `src/app/App.tsx`, `src/styles/index.css`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 2708f169
 - Verified: tsc clean; vitest 8011 passed (one iconCatalog timeout under load, passes alone); 4 new chat card tests; zen and windowArgs (L-218) tests pass. Desktop UI not checked by the agent.
 
 ## 2026-11-01 14:38 IST — Zen mode: the window becomes a side panel with one or two chats (L-230)
@@ -28,7 +36,7 @@
 - What: A target button beside Focus (title bar and Focus's top bar) or Ctrl+Alt+Z narrows the window into a panel docked to the right edge, about a quarter wide and full height, with a quick glide (instant with Reduce motion). Exit glides back to the exact size, place and maximized state, and to Focus if Zen started there. One chat, or two stacked with a draggable divider, each with its own chat dropdown; a slim top bar with Exit, Chat, Tasks, Notes, Automations, Monos, Split and Pin (keep on top, remembered). Tools use a slim layout where an item opens in a bottom half that slides up. Zen's size and place are remembered per window.
 - Why: User request: keep a chat at hand while a browser, Figma or a meeting takes most of the screen.
 - Files: `src-tauri/src/zen_window.rs` (new), `src-tauri/src/lib.rs`, `src-tauri/Cargo.toml`, `src/features/zen/` (new: `model/zenPanes.ts` + test, `model/zenWindow.ts`, `ui/ZenView.tsx`, `ui/ZenSplit.tsx`, `ui/ZenItemBar.tsx`, `ui/ZenMonos.tsx`), `src/app/App.tsx`, `src/app/shell/TitleBar.tsx`, `src/app/shell/Sidebar.tsx`, `src/app/shell/focusModeToggle.ts`, `src/features/focus/ui/FocusView.tsx`, `src/features/tasks/ui/TasksView.tsx`, `TasksViewSwitch.tsx`, `TasksToolbar.tsx`, `TaskPeekPane.tsx`, `src/features/notes/ui/NotesView.tsx`, `src/features/automations/ui/AutomationsView.tsx`, `src/features/settings/model/appShortcuts.ts` + test, `settings.ts`; spec `docs/specs/zen-mode-plan.md`
-- Commit: not committed yet
+- Commit: 2708f169
 - Verified: tsc clean; vitest 8007 passed (one iconCatalog timeout under load, passes alone); zen, shortcut and windowArgs (L-218) tests pass; rustfmt --check on zen_window.rs and its 6 Rust tests pass; clippy -D warnings fails only on older files (harness.rs, claude_interactive.rs, mobile_router.rs). Desktop UI not checked by the agent.
 
 ## 2026-10-31 19:32 IST — 0.16.0-local24 Windows build
