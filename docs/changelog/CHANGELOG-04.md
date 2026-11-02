@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 11:16 IST — 0.16.0-local25 Windows rebuild (overview closed)
+- Type: chore
+- What: Same version, 0.16.0-local25, rebuilt with the Session overview closed until you open it (5b8a0545). Earlier local25 installers are kept.
+- Why: User asked to build it on the installed version.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local25-overview-closed_x64.exe` (19,668,792 bytes, SHA-256 8E40B1757B7D29CC344705EC19480B5374E4C364018BD94B40AB8CE94BEB7EE0, unsigned)
+- Commit: records only, after 5b8a0545
+- Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
+
 ## 2026-11-02 10:40 IST — Session overview closed until you open it (L-232)
 - Type: feat
 - What: The Session overview panel starts closed each time the app opens (its open state is no longer saved; width and tab still are). "Open Session overview when you come back" now defaults to Off.
 - Why: User wants the panel to open only when they open it.
 - Files: `src/features/sessions/model/sessionPanel.ts` (+ test), `src/features/settings/model/settings.ts`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 5b8a0545
 - Verified: tsc ✅; vitest full ✅ (8044 passed); desktop check manual
 
 ## 2026-11-02 10:20 IST — 0.16.0-local25 Windows rebuild (Zen chat list)
