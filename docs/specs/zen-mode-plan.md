@@ -106,6 +106,13 @@ row has two chats and goes back after. Focus mode unchanged.
   only when the width is unchanged; leaving or a restart saves the one-column width
   (`narrowedZenBounds`, per-window widen record).
 
+## Follow-up: chat list by time, no automation chats (Suggest, 2026-11-02)
+
+User's approach, built as asked: the dropdown lists chats newest first by default, with
+project and model on the second line; a folder-tree icon button groups them by project
+(remembered, shared by every dropdown). Chats started by automations are left out
+(`automationId` on history and open sessions, `automation` on board cards).
+
 ## Manual desktop checklist (not an agent task)
 
 - Enter from workspace, Focus and maximized: docks right, animation smooth or instant.
@@ -119,5 +126,6 @@ row has two chats and goes back after. Focus mode unchanged.
 - Dropdown: 12 recent chats by project, headings and lines, search finds older ones.
 - Drag a chat onto a right half (beside) and a lower half (below); 4 chats max.
 - A second column widens the panel leftward; back to one column narrows it.
+- Dropdown: newest first with project · model on line two; folder-tree button groups by project and is remembered; no automation chats.
 
 ## Done

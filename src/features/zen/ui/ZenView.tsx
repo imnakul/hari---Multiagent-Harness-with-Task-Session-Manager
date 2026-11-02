@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { IconButton } from "../../../app/shell/TitleBar";
@@ -18,6 +19,7 @@ import {
   ChevronDown,
   ChevronLeft,
   File,
+  FolderTree,
   MessageSquare,
   MoreHorizontal,
   PanelBottom,
@@ -73,6 +75,11 @@ import {
   zenChatGroups,
   type ZenChat,
 } from "../model/zenRecent";
+import {
+  loadZenChatsByProject,
+  saveZenChatsByProject,
+  subscribeZenChatsByProject,
+} from "../model/zenWindow";
 import { useZenMonos, type ZenMonoEntry } from "./ZenMonos";
 import { ZenSplit } from "./ZenSplit";
 
@@ -112,16 +119,43 @@ function modelName(harness: HarnessId, stored: string): string {
 }
 
 type ZenChatItems = {
-  /** Every chat, grouped by project: what a search covers. */
+  /** Every chat: what a search covers. */
   all: FocusPickItem[];
-  /** The most recent chats, grouped by project: the list before a search. */
+  /** The most recent chats: the list before a search. */
   recent: FocusPickItem[];
 };
 
+/** Whether Zen's chat dropdowns group chats by project, shared and remembered. */
+function useZenChatsByProject(): boolean {
+  return useSyncExternalStore(
+    subscribeZenChatsByProject,
+    loadZenChatsByProject,
+  );
+}
+
+/** The dropdown's icon button that turns project groups on or off. */
+function ZenGroupToggle(): ReactNode {
+  const byProject = useZenChatsByProject();
+  const label = byProject ? "List chats by time" : "Group chats by project";
+  return (
+    <button
+      type="button"
+      aria-label="Group chats by project"
+      aria-pressed={byProject}
+      title={label}
+      onClick={() => saveZenChatsByProject(!byProject)}
+      className={`${SEARCH_ACTION} ${byProject ? "bg-content/8 text-content" : ""}`}
+    >
+      <FolderTree aria-hidden className="size-3.5" strokeWidth={1.75} />
+    </button>
+  );
+}
+
 /**
- * A dropdown's chats (L-230), without the pane's own: projects by their
- * newest chat, each newest first, "Other" last. A chat in another pane is
- * marked so.
+ * A dropdown's chats (L-230), without the pane's own, newest first. By
+ * project: projects by their newest chat under headings, "Other" last;
+ * else one list with the project on each card's second line. A chat in
+ * another pane is marked so.
  */
 function zenChatItems(
   chats: readonly ZenChat[],
@@ -129,6 +163,7 @@ function zenChatItems(
   marks: ProjectMarks,
   except: string | undefined,
   shown: readonly string[],
+  byProject: boolean,
 ): ZenChatItems {
   const listed = chats.filter((chat) => chat.id !== except);
   const toItems = (list: readonly ZenChat[]): FocusPickItem[] =>
@@ -150,10 +185,23 @@ function zenChatItems(
         return {
           id: chat.id,
           label: title,
-          detail: shown.includes(chat.id) ? "Other pane" : undefined,
+          detail: byProject
+            ? shown.includes(chat.id)
+              ? "Other pane"
+              : undefined
+            : [
+                shown.includes(chat.id) ? "Other pane" : "",
+                group.cwd ? projectName(group.cwd) : "",
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined,
           icon: groupIcon,
-          group: group.cwd ? projectName(group.cwd) : "Other",
-          groupIcon,
+          group: byProject
+            ? group.cwd
+              ? projectName(group.cwd)
+              : "Other"
+            : undefined,
+          groupIcon: byProject ? groupIcon : undefined,
           project: group.cwd
             ? { key: projectKey(group.cwd), cwd: group.cwd }
             : undefined,
@@ -171,9 +219,15 @@ function zenChatItems(
         };
       });
     });
+  const inOrder = (list: readonly ZenChat[]): FocusPickItem[] => {
+    const items = toItems(list);
+    if (byProject) return items;
+    const at = new Map(list.map((chat, index) => [chat.id, index]));
+    return items.sort((a, b) => at.get(a.id)! - at.get(b.id)!);
+  };
   return {
-    all: toItems(listed),
-    recent: toItems(listed.slice(0, ZEN_RECENT_LIMIT)),
+    all: inOrder(listed),
+    recent: inOrder(listed.slice(0, ZEN_RECENT_LIMIT)),
   };
 }
 
@@ -587,13 +641,14 @@ function ZenPaneHeader({
   const title = chatTitle(session, card);
   const cwd = session?.cwd ?? card?.cwd;
   const open = view !== null;
+  const byProject = useZenChatsByProject();
   // Built only while the dropdown is open: the lists change as chats stream.
   const items = useMemo(
     () =>
       open
-        ? zenChatItems(chats, byId, marks, id, shown)
+        ? zenChatItems(chats, byId, marks, id, shown, byProject)
         : { all: [], recent: [] },
-    [open, chats, byId, marks, id, shown],
+    [open, chats, byId, marks, id, shown, byProject],
   );
   const close = (restore: boolean): void => {
     setView(null);
@@ -709,7 +764,7 @@ function ZenPaneHeader({
               className="h-[340px]"
               items={items.all}
               idleItems={items.recent}
-              groupDividers
+              groupDividers={byProject}
               label="Chats"
               placeholder="Search all chats"
               emptyLabel={
@@ -722,6 +777,7 @@ function ZenPaneHeader({
               }}
               actions={
                 <>
+                  <ZenGroupToggle />
                   <button
                     type="button"
                     aria-label="New chat in a project"
@@ -1072,9 +1128,10 @@ function ZenChooser({
   onPick: (sessionId: string) => void;
   onNewChat: () => void;
 }): ReactNode {
+  const byProject = useZenChatsByProject();
   const items = useMemo(
-    () => zenChatItems(chats, byId, marks, undefined, shown),
-    [chats, byId, marks, shown],
+    () => zenChatItems(chats, byId, marks, undefined, shown, byProject),
+    [chats, byId, marks, shown, byProject],
   );
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1093,12 +1150,13 @@ function ZenChooser({
         className="min-h-0 flex-1 border-t border-stroke"
         items={items.all}
         idleItems={items.recent}
-        groupDividers
+        groupDividers={byProject}
         label="Chats"
         placeholder="Search all chats"
         emptyLabel={
           items.all.length > 0 ? "No matching chats" : "No recent chats"
         }
+        actions={<ZenGroupToggle />}
         autoFocus={false}
         onPick={onPick}
       />

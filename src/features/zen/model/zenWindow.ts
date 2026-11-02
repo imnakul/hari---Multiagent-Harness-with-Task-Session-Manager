@@ -16,6 +16,7 @@ const PINNED_KEY = "monocode.zenPinned.v1";
 const SPLIT_KEY = "monocode.zenSplit.v1";
 const RESTORE_KEY = "monocode.zenRestore.v1:";
 const WIDEN_KEY = "monocode.zenWiden.v1:";
+const BY_PROJECT_KEY = "monocode.zenChatsByProject.v1";
 
 /** A Zen panel widened for chats side by side: its width before and after (physical px). */
 export type ZenWiden = { before: number; after: number };
@@ -202,4 +203,21 @@ export function prefersReducedMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Zen's chat dropdowns group chats by project (L-230); off lists them by time. */
+const byProjectListeners = new Set<() => void>();
+
+export function loadZenChatsByProject(): boolean {
+  return read(BY_PROJECT_KEY) === "1";
+}
+
+export function saveZenChatsByProject(on: boolean): void {
+  write(BY_PROJECT_KEY, on ? "1" : null);
+  for (const listener of byProjectListeners) listener();
+}
+
+export function subscribeZenChatsByProject(listener: () => void): () => void {
+  byProjectListeners.add(listener);
+  return () => byProjectListeners.delete(listener);
 }

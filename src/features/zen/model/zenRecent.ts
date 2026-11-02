@@ -19,7 +19,7 @@ export type ZenChatSource = {
   model: string;
   updatedAt: number;
   providerAccountId?: string;
-  /** Not a chat to list: hidden, archived, a worker or a habit's run. */
+  /** Not a chat to list: hidden, archived, a worker, an automation's or a habit's run. */
   hidden?: boolean;
   status?: ZenChatStatus;
 };
@@ -104,6 +104,8 @@ type SavedChat = {
   sidebarHidden?: boolean;
   orchestrationLeadId?: string;
   archived?: boolean;
+  /** Started by an automation: never listed. */
+  automationId?: string;
 };
 
 type OpenChat = {
@@ -113,6 +115,7 @@ type OpenChat = {
   harness: string;
   model: string;
   providerAccountId?: string;
+  automationId?: string;
 };
 
 type ChatCard = {
@@ -126,6 +129,8 @@ type ChatCard = {
   updatedAt: number;
   /** True when the run waits for the user (Needs attention). */
   waiting: boolean;
+  /** The chat was started by an automation. */
+  automation?: boolean;
 };
 
 /**
@@ -164,6 +169,7 @@ export function zenChatSources({
         !!entry.sidebarHidden ||
         !!entry.orchestrationLeadId ||
         !!entry.archived ||
+        !!entry.automationId ||
         hiddenId(entry.id),
     });
   }
@@ -177,7 +183,8 @@ export function zenChatSources({
       // Open sessions carry no time; history and cards date them.
       updatedAt: 0,
       providerAccountId: session.providerAccountId,
-      hidden: !listed(session) || hiddenId(session.id),
+      hidden:
+        !listed(session) || !!session.automationId || hiddenId(session.id),
       status: working.has(session.id) ? "working" : undefined,
     });
   }
@@ -196,7 +203,7 @@ export function zenChatSources({
       harness: card.harness,
       model: card.model,
       updatedAt: card.updatedAt,
-      hidden: hiddenId(card.sessionId) || undefined,
+      hidden: card.automation || hiddenId(card.sessionId) || undefined,
       status: card.waiting ? "waiting" : undefined,
     });
   }

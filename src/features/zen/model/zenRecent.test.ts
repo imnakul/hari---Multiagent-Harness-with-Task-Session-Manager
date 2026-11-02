@@ -59,7 +59,7 @@ describe("Zen's recent chats (L-230)", () => {
     expect(groups[2]!.chats.map((each) => each.id)).toEqual(["x", "y"]);
   });
 
-  it("hides workers, hidden and archived chats, Monos and hidden runs", () => {
+  it("hides workers, hidden and archived chats, automations, Monos and hidden runs", () => {
     const saved = (id: string, extra: object = {}) => ({
       ...chat(id, "/p", 10),
       ...extra,
@@ -71,11 +71,13 @@ describe("Zen's recent chats (L-230)", () => {
           saved("hidden", { sidebarHidden: true }),
           saved("worker", { orchestrationLeadId: "lead" }),
           saved("archived", { archived: true }),
+          saved("auto", { automationId: "a1" }),
           saved("mono"),
         ],
         sessions: [
           { ...chat("open", "/p", 0) },
           { ...chat("blank", "/p", 0) },
+          { ...chat("auto-open", "/p", 0), automationId: "a1" },
         ],
         cards: [
           {
@@ -90,6 +92,13 @@ describe("Zen's recent chats (L-230)", () => {
             sessionId: "ask",
             runId: "r2",
             waiting: true,
+          },
+          {
+            ...chat("auto-card", "/p", 40),
+            sessionId: "auto-card",
+            runId: "r3",
+            waiting: true,
+            automation: true,
           },
         ],
         working: new Set(["open"]),
