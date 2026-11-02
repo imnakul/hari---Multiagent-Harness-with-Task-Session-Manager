@@ -11,7 +11,12 @@ import {
 import type { RemoteControlControls } from "../../provider-sessions/ui/RemoteControlButton";
 import { editableSessionTodo } from "../../session-board/sessionTodos";
 import { composeSessionTodo } from "../../session-board/ui/SessionManagerCapture";
-import { GripVertical, PanelRight, X } from "../../../shared/ui/icons";
+import {
+  GripVertical,
+  PanelRight,
+  Terminal,
+  X,
+} from "../../../shared/ui/icons";
 import { BrowserPanelButton } from "../../browser/ui/BrowserPanelButton";
 import { useSessionSnapshot } from "../model/sessionStateStore";
 import {
@@ -24,6 +29,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { Composer } from "./Composer";
 import type { Worktree } from "../../source-control/model/worktrees";
@@ -50,7 +56,9 @@ import {
   type UserQuestionReply,
 } from "../../../integrations/harness";
 import {
+  isLocalProject,
   looksLikeProject,
+  sameProjectPath,
   type RecentProject,
 } from "../../projects/model/recents";
 import {
@@ -209,6 +217,13 @@ export type SessionPaneProps = {
   openMonoSessionId?: string;
   /** Shows plan usage by a Mono's composer; off where a footer shows it. */
   monoComposerUsage?: boolean;
+  /**
+   * Fork (L-233): the composer's Terminal button shows or hides the project
+   * terminal of this chat's project.
+   */
+  onToggleChatTerminal?: (sessionId: string) => void;
+  /** The project whose terminal is showing, if any. */
+  terminalOpenProject?: string;
   recents: RecentProject[];
   hideProjectPicker?: boolean;
   onFocus: (sessionId: string) => void;
@@ -450,6 +465,8 @@ const LocalSessionPane = memo(function LocalSessionPane({
   monoLaunchedSessions,
   openMonoSessionId,
   monoComposerUsage = true,
+  onToggleChatTerminal,
+  terminalOpenProject,
   onOpenPlan,
   onBuildPlan,
   onSecondOpinion,
@@ -1138,6 +1155,15 @@ const LocalSessionPane = memo(function LocalSessionPane({
       trailing={
         panelEnabled ? (
           <>
+          {onToggleChatTerminal && isLocalProject(session.cwd) ? (
+            <ChatTerminalButton
+              open={
+                !!terminalOpenProject &&
+                sameProjectPath(terminalOpenProject, session.cwd)
+              }
+              onToggle={() => onToggleChatTerminal(session.id)}
+            />
+          ) : null}
           <BrowserPanelButton />
           <button
             type="button"
@@ -1767,4 +1793,29 @@ function monoUsageProviders(harness: HarnessId): RateLimitProvider[] {
     harness === "devin"
     ? [harness]
     : [];
+}
+
+/** Fork (L-233): shows or hides the chat's project terminal from the composer. */
+function ChatTerminalButton({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}): ReactNode {
+  const label = `${open ? "Hide" : "Show"} terminal`;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={open}
+      aria-label="Terminal"
+      title={label}
+      className={`flex size-6 items-center justify-center rounded-md transition-colors duration-100 hover:bg-content/5 hover:text-content ${
+        open ? "text-accent" : "text-content/50"
+      }`}
+    >
+      <Terminal aria-hidden className="size-3.5" strokeWidth={1.75} />
+    </button>
+  );
 }

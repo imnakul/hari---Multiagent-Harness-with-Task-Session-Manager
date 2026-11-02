@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type Ref,
 } from "react";
 import { IconButton } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
@@ -262,8 +263,14 @@ export type ZenViewProps = {
   /** Whether chats now show side by side (the panel widens for them). */
   onColumnsChange?: (columns: boolean) => void;
   onExit: () => void;
-  /** App's hidden mounts (project terminals) that must stay attached. */
-  keepMounted?: ReactNode;
+  /**
+   * The project terminals (L-233). They sit below or beside the chats in a
+   * grid App lays out through `dockGridRef`, as in Focus (L-136).
+   */
+  dock?: ReactNode;
+  dockGridRef?: Ref<HTMLDivElement>;
+  /** The usage bar along the bottom (L-233). */
+  footer?: ReactNode;
 };
 
 /** A cell of Zen's grid: a chat, or the spot the Split button opened. */
@@ -296,7 +303,9 @@ export function ZenView({
   onClosePane,
   onColumnsChange,
   onExit,
-  keepMounted,
+  dock,
+  dockGridRef,
+  footer,
 }: ZenViewProps): ReactNode {
   const marks = useProjectMarks();
   const trafficLightsVisible = useTrafficLightsVisible();
@@ -581,7 +590,17 @@ export function ZenView({
           }
           inert={tool !== "chat" || undefined}
         >
-          {chatArea}
+          {/* The terminals stay in this grid under a tool, so they keep
+              running and come back as left. */}
+          <div ref={dockGridRef} className="grid min-h-0 min-w-0 flex-1">
+            {dock}
+            <div
+              className="flex min-h-0 min-w-0 flex-col"
+              style={{ gridArea: "main" }}
+            >
+              {chatArea}
+            </div>
+          </div>
         </div>
         <ZenDragPreview />
         {/* A tool loading for the first time waits here, not by blanking
@@ -592,7 +611,7 @@ export function ZenView({
           </Suspense>
         )}
       </div>
-      {keepMounted ? <div className="hidden">{keepMounted}</div> : null}
+      {footer}
     </div>
   );
 }

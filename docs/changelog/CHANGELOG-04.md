@@ -1,9 +1,17 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 12:03 IST — Terminal button by the chat box, usage bar and terminal in Zen (L-233)
+- Type: feat
+- What: The chat box's button row has a Terminal button beside Browser and Session overview; it shows or hides the chat's project terminal (a first one opens in the chat's folder). Zen mode now shows the usage bar along the bottom and the project terminal under or beside its chats, as Focus does.
+- Why: User asked for the usage bar and a terminal button in Zen, and a terminal button by the composer.
+- Files: `src/features/sessions/ui/SessionPane.tsx` (+ `SessionPaneTerminal.test.ts`), `src/app/App.tsx`, `src/features/zen/ui/ZenView.tsx`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed yet
+- Verified: tsc ✅; vitest full ✅ (8045 passed; iconCatalog timed out under load, passes alone); desktop check manual
+
 ## 2026-11-02 11:16 IST — 0.16.0-local25 Windows rebuild (overview closed)
 - Type: chore
 - What: Same version, 0.16.0-local25, rebuilt with the Session overview closed until you open it (5b8a0545). Earlier local25 installers are kept.
 - Why: User asked to build it on the installed version.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local25-overview-closed_x64.exe` (19,668,792 bytes, SHA-256 8E40B1757B7D29CC344705EC19480B5374E4C364018BD94B40AB8CE94BEB7EE0, unsigned)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local25-overview-closed_x64.exe` (19,668,792 bytes, SHA-256 8E40B1757B7D29CC344705EC19480B5374E4C364018BD94B40AB8CE94BEB7EE0, unsigned)
 - Commit: records only, after 5b8a0545
 - Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
 
@@ -19,7 +27,7 @@
 - Type: chore
 - What: Same version, 0.16.0-local25, rebuilt with Zen's chat list by time, the group-by-project toggle and no automation chats (8cde6d02). Earlier local25 installers are kept.
 - Why: User asked to build it on the installed version.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local25-zen-chat-list_x64.exe` (19,650,449 bytes, SHA-256 0E04A2761CDF462E6630D074D77089168675932BB16993C60E5888182F5AA0E0, unsigned)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local25-zen-chat-list_x64.exe` (19,650,449 bytes, SHA-256 0E04A2761CDF462E6630D074D77089168675932BB16993C60E5888182F5AA0E0, unsigned)
 - Commit: records only, after 8cde6d02
 - Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
 
@@ -35,7 +43,7 @@
 - Type: chore
 - What: Same version, 0.16.0-local25, rebuilt with Up-arrow recall of sent messages (68337e9f). Earlier local25 installers are kept.
 - Why: User asked to add this in the same version.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local25-prompt-recall_x64.exe` (19,651,580 bytes, SHA-256 0B09A36F26D8C8E5E29123C27872490399257DA8DBBA1DE72F9C201BB1F27FCE, unsigned)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local25-prompt-recall_x64.exe` (19,651,580 bytes, SHA-256 0B09A36F26D8C8E5E29123C27872490399257DA8DBBA1DE72F9C201BB1F27FCE, unsigned)
 - Commit: records only, after 68337e9f
 - Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
 
@@ -178,7 +186,7 @@
 - Type: chore
 - What: New Windows installer, version 0.16.0-local22: 0.16.0-local21 plus the Browser page freezing under overlays (L-214), MonoCode right-click menu in the Browser (L-215), custom size presets (L-216), Always-mode link cards (L-217), chats and reminders working with a Browser page open (L-218), sliding Browser and Session overview panels (L-219) and the one Web links setting (L-220).
 - Why: User asked to commit and build a new version.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local22-web-links-panel-slides-chat-fix_x64.exe` (19,563,581 bytes, SHA-256 E617843C6B5135E619A946DE4CC8733D94999C5A178E97453F5FD951073BBE9C, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local22-web-links-panel-slides-chat-fix_x64.exe` (19,563,581 bytes, SHA-256 E617843C6B5135E619A946DE4CC8733D94999C5A178E97453F5FD951073BBE9C, unsigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from 799749c2 + version bump (committed as the release commit)
 - Verified: build ✅ (npm run build:windows); tests as listed in the L-214 to L-220 entries; desktop check manual
 
@@ -544,7 +552,7 @@
 - Type: chore
 - What: New Windows installer, version 0.16.0-local11: 0.16.0-local10 plus L-180 (type `#` in the composer to insert a whole task) and L-181 (session metadata: a label and notes per chat, shown in your accent colour, with label and hover toggles in Settings → General).
 - Why: User asked to commit, push and build with these changes.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local11-task-picker-session-metadata_x64.exe` (15,138,045 bytes, SHA-256 C4DB7A92B20FDE3D77748BB34EDB46B9B97BBC280D4BA88DF454B03E129E9902, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local11-task-picker-session-metadata_x64.exe` (15,138,045 bytes, SHA-256 C4DB7A92B20FDE3D77748BB34EDB46B9B97BBC280D4BA88DF454B03E129E9902, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from 37542d2a
 - Verified: build ✅ (npm run build:windows); tsc, vitest and cargo test as recorded in the two entries below (same code, plus the accent-colour fix: tsc ✅, affected vitest 2,316 ✅); desktop check manual
 ## 2026-10-22 19:30 IST — Session metadata: a label and notes for any chat (L-181)
@@ -565,7 +573,7 @@
 - Type: chore
 - What: New Windows installer, version 0.16.0-local10: 0.16.0-local9 plus upstream round 17 (phone app fixes, chats stream to the phone as they are written), L-179 (background git reads capped, clicked git actions skip the queue) and L-178 (saves flush to disk less often; watch it, see the L-178 entry).
 - Why: User asked to commit, push and build after round 17, L-178 and L-179.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local10-upstream-r17-git-cap-sqlite-normal_x64.exe` (15,135,196 bytes, SHA-256 1CD82E0EE35731F5F5EA5E955AF56727C27CD1D35D1D006BB707E17B2930DEBE, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local10-upstream-r17-git-cap-sqlite-normal_x64.exe` (15,135,196 bytes, SHA-256 1CD82E0EE35731F5F5EA5E955AF56727C27CD1D35D1D006BB707E17B2930DEBE, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from 8c23f7d6
 - Verified: build ✅ (npm run build:windows); tsc, vitest and cargo test as recorded in the three entries below (same code); desktop and phone checks manual
 ## 2026-10-22 17:39 IST — Background git reads capped; clicked git actions skip the queue (L-179)
@@ -702,7 +710,7 @@
 - Type: chore
 - What: The 0.16.0-local6 installer was rebuilt at the same version and file name, now with close buttons on Focus project and chat tabs (L-158) and drag to reorder those tabs (L-159). Run it over the current install; it replaces the earlier local6 file.
 - Why: User asked to commit, push and rebuild under the same installer name.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,913,304 bytes, SHA-256 47FC78DC70DC5500B62535D1590DD31009F2E80213C63255F1B5649C9813B5EB, NotSigned)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,913,304 bytes, SHA-256 47FC78DC70DC5500B62535D1590DD31009F2E80213C63255F1B5649C9813B5EB, NotSigned)
 - Commit: built from 168bf7b5
 - Verified: build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-21 16:11 IST — Drag to reorder Focus project and chat tabs (L-159)
@@ -723,7 +731,7 @@
 - Type: chore
 - What: The 0.16.0-local6 installer was rebuilt at the same version and file name, now with smooth Focus pane resizing (L-156) and the hover sidebar tint that follows Sidebar opacity (L-157). Run it over the current install; it replaces the earlier local6 file.
 - Why: User asked to commit, push and build, keeping the build name.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,924,108 bytes, SHA-256 AD91FB2E063DC83B77D0E4876DCAA5D368C1C3C908292F819EB7DF7F83DE3C99, NotSigned; replaces the 13:49 file)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,924,108 bytes, SHA-256 AD91FB2E063DC83B77D0E4876DCAA5D368C1C3C908292F819EB7DF7F83DE3C99, NotSigned; replaces the 13:49 file)
 - Commit: built from 5d0a4334
 - Verified: tsc ✅ tests ✅ (focus + app: 534 passed) build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-21 14:24 IST — Hover sidebar tint follows Sidebar opacity (L-157)
@@ -744,7 +752,7 @@
 - Type: chore
 - What: New Windows installer, version 0.16.0-local6: 0.16.0-local5 plus L-143 to L-155. Focus panes resize by dragging and are rounded cards whose focus ring glides between them. The Continue picker has project chips and a Model toggle. Project tabs show status dots. In the new layout, Focus always uses the hover sidebar, and you can drag a session from the sidebar into Focus. The hover sidebar is frosted without a live blur. Settings is in the sidebar views list instead of the project menu. Working cards have a dismiss button.
 - Why: User asked to commit, push and build a new version.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,922,893 bytes, SHA-256 ACCED1BB6628DE895F9CD7E915BFFDA141CAE8396E4DFE6239957F1B845CB93B, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local6-focus-resize-drag-frosted-sidebar_x64.exe` (14,922,893 bytes, SHA-256 ACCED1BB6628DE895F9CD7E915BFFDA141CAE8396E4DFE6239957F1B845CB93B, NotSigned); version bump in package.json, package-lock.json, Cargo.toml, Cargo.lock, src-tauri/tauri.conf.json.
 - Commit: built from bb22fe20
 - Verified: tsc ✅ tests ✅ (full suite: 7,638 passed, 2 skipped) build ✅ (npm run build:windows); desktop check manual
 ## 2026-10-21 13:31 IST — No Settings in the project tab menu (L-155)

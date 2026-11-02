@@ -4131,6 +4131,27 @@ function Workspace({
     projectCwd,
   ]);
 
+  /**
+   * Fork (L-233): the composer's Terminal button. Clicking it focuses the
+   * chat first, so the project terminal is already this chat's project; a
+   * first terminal opens in the chat's own folder.
+   */
+  const onToggleChatTerminal = useCallback(
+    (sessionId: string) => {
+      const session = sessionsRef.current.find(
+        (entry) => entry.id === sessionId,
+      );
+      if (!session || !isLocalProject(projectCwdRef.current)) return;
+      if (findProjectTerminal(projectTerminalsRef.current, projectCwdRef.current)) {
+        onToggleProjectTerminal();
+        return;
+      }
+      leaveCoveringMono();
+      openProjectTerminal(sessionWorkCwd(session));
+    },
+    [leaveCoveringMono, onToggleProjectTerminal, openProjectTerminal],
+  );
+
   const onHideProjectTerminal = useCallback(() => {
     setProjectTerminals((prev) =>
       mapProjectTerminal(prev, projectCwdRef.current, (dock) =>
@@ -16700,6 +16721,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     insetLayout,
     projectCwd,
     focusMode,
+    // Zen has its own grid for the dock (L-233).
+    zenMode,
     // In Focus the dock follows the focused pane into its body.
     focusMode ? focusPaneId : null,
   ]);
@@ -16795,6 +16818,9 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   });
 
   const sessionPaneProps = {
+    onToggleChatTerminal,
+    terminalOpenProject:
+      !monoCovers && currentProjectDock?.open ? projectCwd : undefined,
     workspaceSwitchingSessionId: workspaceNavigation.pending
       ? active?.id
       : undefined,
@@ -17776,7 +17802,9 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onClosePane={onCloseFocusPane}
       onColumnsChange={setZenWide}
       onExit={onToggleZenMode}
-      keepMounted={projectDockHosts}
+      dock={projectDockHosts}
+      dockGridRef={dockGridRef}
+      footer={usageFooter}
     />
   ) : null;
 
