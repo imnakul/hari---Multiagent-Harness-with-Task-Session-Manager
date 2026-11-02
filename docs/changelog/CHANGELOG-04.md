@@ -1,10 +1,18 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 10:20 IST — 0.16.0-local25 Windows rebuild (Zen chat list)
+- Type: chore
+- What: Same version, 0.16.0-local25, rebuilt with Zen's chat list by time, the group-by-project toggle and no automation chats (8cde6d02). Earlier local25 installers are kept.
+- Why: User asked to build it on the installed version.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local25-zen-chat-list_x64.exe` (19,650,449 bytes, SHA-256 0E04A2761CDF462E6630D074D77089168675932BB16993C60E5888182F5AA0E0, unsigned)
+- Commit: records only, after 8cde6d02
+- Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
+
 ## 2026-11-02 01:05 IST — Zen chat list by time, no automation chats (L-230)
 - Type: feat
 - What: Zen's chat dropdowns list the 12 most recent chats newest first, with project and model on the second line; a folder-tree icon button switches to the grouped-by-project list and is remembered. Chats started by automations are no longer listed.
 - Why: User wants a plain recent list by default and no automation sessions in it.
 - Files: `src/features/zen/model/zenRecent.ts` (+ test), `src/features/zen/model/zenWindow.ts`, `src/features/zen/ui/ZenView.tsx`, `docs/LOCAL-FEATURES.md`, `docs/specs/zen-mode-plan.md`
-- Commit: not committed yet
+- Commit: 8cde6d02
 - Verified: tsc ✅; vitest full ✅ (8041 passed; useQuickAttachments and iconCatalog timed out under load, pass alone); desktop check manual
 
 ## 2026-11-02 00:44 IST — 0.16.0-local25 Windows rebuild (prompt recall)
