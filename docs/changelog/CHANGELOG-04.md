@@ -4,7 +4,7 @@
 - What: The chat box's button row has a Terminal button beside Browser and Session overview; it shows or hides the chat's project terminal (a first one opens in the chat's folder). Zen mode now shows the usage bar along the bottom and the project terminal under or beside its chats, as Focus does.
 - Why: User asked for the usage bar and a terminal button in Zen, and a terminal button by the composer.
 - Files: `src/features/sessions/ui/SessionPane.tsx` (+ `SessionPaneTerminal.test.ts`), `src/app/App.tsx`, `src/features/zen/ui/ZenView.tsx`, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: 6baee630
 - Verified: tsc ✅; vitest full ✅ (8045 passed; iconCatalog timed out under load, passes alone); desktop check manual
 
 ## 2026-11-02 11:16 IST — 0.16.0-local25 Windows rebuild (overview closed)
