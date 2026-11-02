@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 12:09 IST — 0.16.0-local25 Windows rebuild (Zen terminal)
+- Type: chore
+- What: Same version, 0.16.0-local25, rebuilt with the Terminal button by the chat box and Zen's usage bar and terminal (6baee630). Earlier local25 installers are kept.
+- Why: User asked to build it on the installed version.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local25-zen-terminal_x64.exe` (19,645,543 bytes, SHA-256 8B88AB68067559CF77BD74360735AB0266728A61C29B56ED470FFBBE487647D0, unsigned)
+- Commit: records only, after 6baee630
+- Verified: build ✅ (npm run build:windows); gates as in the entry below; desktop check manual
+
 ## 2026-11-02 12:03 IST — Terminal button by the chat box, usage bar and terminal in Zen (L-233)
 - Type: feat
 - What: The chat box's button row has a Terminal button beside Browser and Session overview; it shows or hides the chat's project terminal (a first one opens in the chat's folder). Zen mode now shows the usage bar along the bottom and the project terminal under or beside its chats, as Focus does.
