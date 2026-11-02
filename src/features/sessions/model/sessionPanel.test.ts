@@ -284,6 +284,26 @@ describe("view settings", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("starts closed: being open is not saved, width and tab are (L-232)", () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => void stored.set(key, value),
+    });
+    try {
+      saveSessionPanelView({ open: true, width: 420, tab: "timeline" });
+      const saved = JSON.parse(stored.get("monocode.sessionPanel")!);
+      expect(saved).toEqual({ width: 420, tab: "timeline" });
+      saveSessionPanelView({ open: false });
+      expect(loadSessionPanelView()).toEqual({ open: false, width: 420, tab: "timeline" });
+      // An open flag saved by an older build is ignored.
+      stored.set("monocode.sessionPanel", JSON.stringify({ open: true, width: 300, tab: "files" }));
+      expect(loadSessionPanelView().open).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("panelTextMatches (L-192)", () => {

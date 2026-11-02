@@ -618,7 +618,14 @@ export function parseSessionPanelView(raw: unknown): SessionPanelView {
   };
 }
 
-let viewCache: { raw: string | null; value: SessionPanelView } | null = null;
+/**
+ * Whether the overview is open in this window. Kept in memory, not saved
+ * (fork, L-232): the panel starts closed each time the app opens and only
+ * opens when you open it. Width and tab are still remembered.
+ */
+let openNow = false;
+
+let viewCache: { raw: string | null; open: boolean; value: SessionPanelView } | null = null;
 
 export function loadSessionPanelView(): SessionPanelView {
   let raw: string | null = null;
@@ -627,21 +634,23 @@ export function loadSessionPanelView(): SessionPanelView {
   } catch {
     raw = null;
   }
-  if (viewCache && viewCache.raw === raw) return viewCache.value;
+  if (viewCache && viewCache.raw === raw && viewCache.open === openNow) return viewCache.value;
   let value = DEFAULT_VIEW;
   try {
     value = raw == null ? DEFAULT_VIEW : parseSessionPanelView(JSON.parse(raw));
   } catch {
     value = DEFAULT_VIEW;
   }
-  viewCache = { raw, value };
+  value = { ...value, open: openNow };
+  viewCache = { raw, open: openNow, value };
   return value;
 }
 
 export function saveSessionPanelView(patch: Partial<SessionPanelView>): void {
-  const next = { ...loadSessionPanelView(), ...patch };
+  const { open, ...saved } = { ...loadSessionPanelView(), ...patch };
+  openNow = open;
   try {
-    localStorage.setItem(VIEW_KEY, JSON.stringify(next));
+    localStorage.setItem(VIEW_KEY, JSON.stringify(saved));
   } catch {
     // private mode / quota
   }

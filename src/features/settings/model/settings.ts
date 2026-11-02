@@ -1954,7 +1954,8 @@ export type SessionOverviewReturnChoice = (typeof SESSION_OVERVIEW_RETURN_CHOICE
 const sessionOverviewReturnSetting = storedChoice<SessionOverviewReturnChoice>(
   "monocode.sessionOverviewReturn",
   SESSION_OVERVIEW_RETURN_CHOICES,
-  "5",
+  // Off by default (fork, L-232): the overview opens only when you open it.
+  "off",
   "monocode:session-overview-return-change",
 );
 export const loadSessionOverviewReturn = sessionOverviewReturnSetting.load;

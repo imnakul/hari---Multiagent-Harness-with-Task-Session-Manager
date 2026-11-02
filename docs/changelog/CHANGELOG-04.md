@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-02 10:40 IST — Session overview closed until you open it (L-232)
+- Type: feat
+- What: The Session overview panel starts closed each time the app opens (its open state is no longer saved; width and tab still are). "Open Session overview when you come back" now defaults to Off.
+- Why: User wants the panel to open only when they open it.
+- Files: `src/features/sessions/model/sessionPanel.ts` (+ test), `src/features/settings/model/settings.ts`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed yet
+- Verified: tsc ✅; vitest full ✅ (8044 passed); desktop check manual
+
 ## 2026-11-02 10:20 IST — 0.16.0-local25 Windows rebuild (Zen chat list)
 - Type: chore
 - What: Same version, 0.16.0-local25, rebuilt with Zen's chat list by time, the group-by-project toggle and no automation chats (8cde6d02). Earlier local25 installers are kept.
