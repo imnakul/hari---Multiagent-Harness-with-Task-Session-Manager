@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-07 21:59 IST — Hari release 0.16.0-local29 (Android fixes)
+- Type: chore
+- What: Published `hari-v0.16.0-local29` (run 42390211393, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160029), `latest.json`, `hari-android.json`. Desktop code is unchanged from local28; only the version moved.
+- Why: User asked for a fix release first (Android look, send jump, Settings, pickers, update spinner).
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local29-android-fixes_x64.exe` (19,600,560 bytes, SHA-256 C0808DE213D0964B2E346FD6F7D34D3BC65BE289D0DA3C7D38B088B7A462DF14, updater-signed, not code-signed); `E:DevelopingInstallable versionsHari_0.16.0-local29-android-fixes_android.apk` (69,905,956 bytes, SHA-256 FE3E518774BDBF0C1005716CC0DFCA07FA392DB51076BE2E6EB86D8872EB2A80)
+- Commit: 79b8afe8 (version), 6738bdab (fix)
+- Verified: CI ✅ (desktop 5m42s, APK 14m09s); `hari-android.json` served from releases/latest with 0.16.0-local29 ✅; update and phone checks manual
+
 ## 2026-11-07 21:42 IST — Android fixes in Hari: solid bars, no jump after sending, Settings, pickers, update spinner (L-235)
 - Type: fix
 - What: On Android the top bar, message box and buttons are solid panels with a soft shadow instead of blur, which drew dark grey bars in light mode or let text show through. Sending or stopping from the phone no longer swaps the chat to the whole conversation and back (it jumped to old messages or went blank). Settings and New Mono from the side menu close the menu first, so they open full screen. Photo Library and Files start once the Add menu has closed; started while it closed, they took 10–20 s. Check for updates shows a spinner (at least 0.7 s), then a tick when up to date. The message box keeps the phone font's own line height on Android, so the first line isn't cut.
