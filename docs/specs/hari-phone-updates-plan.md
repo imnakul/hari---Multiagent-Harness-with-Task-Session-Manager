@@ -146,6 +146,7 @@ In `mobileModels`, Claude models (local projects only) get a setting `claudeExec
 - Upstream's `updaterConfig.test.ts` expected the old releases link; updated to the fork's.
 - `expo-intent-launcher` has no config plugin, so it isn't listed under `plugins`.
 - First CI run: Gradle ran out of class memory (`OutOfMemoryError: Metaspace` in `expo-updates:kspReleaseKotlin`) with Expo's default `-XX:MaxMetaspaceSize=512m` and hung for 30 min. Cancelled; the workflow now raises Gradle to 6 GB / 2 GB Metaspace after prebuild, builds arm64 only, and stops the APK job after 45 min. Tag `hari-v0.16.0-local27` moved to the fix commit (no release had been published).
+- Second CI run: Gradle stopped with `Process 'command 'node'' finished with non-zero exit value 1`. The generated `gradle.properties` has no final line break, so the appended `kotlin.daemon.jvmargs` line joined `expo.inlineModules.watchedDirectories=[]`. Fixed by writing a line break first; tag moved again.
 
 ## Learnings
 

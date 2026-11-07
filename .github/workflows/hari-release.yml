@@ -133,7 +133,9 @@ jobs:
           # Expo's default 512 MB of class memory (Metaspace) ran out in the
           # first run and left Gradle hanging; the runner has 16 GB.
           sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g/' android/gradle.properties
-          echo "kotlin.daemon.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g" >> android/gradle.properties
+          # The generated file has no final line break, so start on a new line.
+          { echo; echo "kotlin.daemon.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g"; } >> android/gradle.properties
+          tail -3 android/gradle.properties
           grep jvmargs android/gradle.properties
       # Keeps Gradle's downloads and build parts between runs.
       - uses: gradle/actions/setup-gradle@v4
