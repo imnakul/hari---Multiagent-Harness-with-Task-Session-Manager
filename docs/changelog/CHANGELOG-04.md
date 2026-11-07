@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-07 17:26 IST — Hari release 0.16.0-local28 (stuck-busy fix, Stop Claude)
+- Type: chore
+- What: Published `hari-v0.16.0-local28` (run 42369157014, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160028), `latest.json`, `hari-android.json`. The first release that installed copies of local27 can update to. The GitHub repo was renamed to `imnakul/hari---Multiagent-Harness-with-Task-Session-Manager`; the `nakul-fork` remote now uses that URL (the update links already did).
+- Why: User asked to ship the Interactive Claude fix now; it is also the first auto-update test.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local28-stuck-busy-fix_x64.exe` (19,591,720 bytes, SHA-256 4D1768AB0456BCEA02E9DCF63ECF5AD42B917721A9C18DE798FDD804B5DD5DEE, updater-signed, not code-signed); `E:DevelopingInstallable versionsHari_0.16.0-local28-stop-claude_android.apk` (69,905,696 bytes, SHA-256 BBAAD1C3E76DFC1AA1A52D4CF0C156A1CD822BDBE9882DDB4232B4A4C412B178)
+- Commit: 52bc99e0 (version), 65c412bb (fix)
+- Verified: CI ✅ (desktop 9m46s, APK 13m36s); `hari-android.json` served from releases/latest with 0.16.0-local28 ✅; update from local27 on the phone and desktop manual
+
 ## 2026-11-07 16:40 IST — Interactive Claude no longer stays "busy" after a late approval answer; Stop Claude on the phone (L-235)
 - Type: fix
 - What: Answering an approval card after Claude's turn had already ended set the chat to busy, with no end-of-turn signal to follow. After that, every send (phone or desktop) failed with "Claude has not reached an idle conversation state", and Return to chat refused. Now only an answer Claude is still waiting on marks it as working, and when the main turn ends, its leftover approval cards close. On the phone, that error (any error that points to Open native terminal) shows a Stop Claude button. It asks to confirm, then stops Claude on the computer; the next message starts it again in the same conversation.
