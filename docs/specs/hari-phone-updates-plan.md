@@ -130,6 +130,7 @@ In `mobileModels`, Claude models (local projects only) get a setting `claudeExec
 - [x] Gates: root tsc and vitest, phone tsc and vitest
 - [x] Records: LOCAL-FEATURES L-235, changelog
 - [ ] First release `hari-v0.16.0-local27`, assets copied to Installable versions
+- [x] APK CI builds arm64 only (`ANDROID_ABIS=arm64-v8a`, `-PreactNativeArchitectures`) with Gradle cache: the first run took 36+ min for four chip types; both phones (Poco X8 Pro, Moto G54) are arm64. Ships with the first release.
 
 ## Manual checks (Nakul)
 
@@ -144,6 +145,7 @@ In `mobileModels`, Claude models (local projects only) get a setting `claudeExec
 - `npx expo install` on Windows dropped the `libc` markers from `mobile/package-lock.json`, which Linux CI needs to skip the wrong native packages. Rebuilt the lock from the previous one plus the new package only.
 - Upstream's `updaterConfig.test.ts` expected the old releases link; updated to the fork's.
 - `expo-intent-launcher` has no config plugin, so it isn't listed under `plugins`.
+- First CI run: Gradle ran out of class memory (`OutOfMemoryError: Metaspace` in `expo-updates:kspReleaseKotlin`) with Expo's default `-XX:MaxMetaspaceSize=512m` and hung for 30 min. Cancelled; the workflow now raises Gradle to 6 GB / 2 GB Metaspace after prebuild, builds arm64 only, and stops the APK job after 45 min. Tag `hari-v0.16.0-local27` moved to the fix commit (no release had been published).
 
 ## Learnings
 

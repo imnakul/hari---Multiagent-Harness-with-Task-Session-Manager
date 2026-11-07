@@ -94,6 +94,9 @@ jobs:
     name: Hari APK
     needs: version
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_ABIS: arm64-v8a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -107,7 +110,9 @@ jobs:
           java-version: 17
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          # Hari ships for 64-bit ARM phones only (Poco X8 Pro, Moto G54):
+          # a faster build and a smaller APK than all four chip types.
+          targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
           key: hari-android
@@ -123,7 +128,15 @@ jobs:
         working-directory: mobile
         env:
           CI: "1"
-        run: npx expo prebuild --platform android --no-install
+        run: |
+          npx expo prebuild --platform android --no-install
+          # Expo's default 512 MB of class memory (Metaspace) ran out in the
+          # first run and left Gradle hanging; the runner has 16 GB.
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g/' android/gradle.properties
+          echo "kotlin.daemon.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g" >> android/gradle.properties
+          grep jvmargs android/gradle.properties
+      # Keeps Gradle's downloads and build parts between runs.
+      - uses: gradle/actions/setup-gradle@v4
       - name: Build signed APK
         working-directory: mobile/android
         env:
@@ -138,7 +151,7 @@ jobs:
           fi
           export HARI_KEYSTORE_PATH="$RUNNER_TEMP/hari-release.keystore"
           echo "$HARI_KEYSTORE_BASE64" | base64 -d > "$HARI_KEYSTORE_PATH"
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease -PreactNativeArchitectures="$ANDROID_ABIS"
           rm -f "$HARI_KEYSTORE_PATH"
       - name: Stage APK
         run: |

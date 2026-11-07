@@ -121,12 +121,14 @@ if (platform === "ios") {
   const windows = process.platform === "win32";
   const host = process.platform === "darwin" ? "darwin-x86_64" : windows ? "windows-x86_64" : "linux-x86_64";
   const bin = join(ndkRoot, "toolchains/llvm/prebuilt", host, "bin");
+  // Fork (L-235): ANDROID_ABIS=arm64-v8a builds only the chips listed (Hari CI).
+  const abis = process.env.ANDROID_ABIS?.split(",").filter(Boolean);
   for (const [target, abi, clang] of [
     ["aarch64-linux-android", "arm64-v8a", "aarch64-linux-android"],
     ["armv7-linux-androideabi", "armeabi-v7a", "armv7a-linux-androideabi"],
     ["x86_64-linux-android", "x86_64", "x86_64-linux-android"],
     ["i686-linux-android", "x86", "i686-linux-android"],
-  ]) {
+  ].filter(([, abi]) => !abis?.length || abis.includes(abi))) {
     const linker = join(bin, `${clang}24-clang${windows ? ".cmd" : ""}`);
     build(target, {
       [`CARGO_TARGET_${target.toUpperCase().replaceAll("-", "_")}_LINKER`]:
