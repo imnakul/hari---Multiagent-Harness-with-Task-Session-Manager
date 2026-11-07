@@ -19,6 +19,8 @@ import {
 import { useOpenSessionAfterStarting } from "@/features/settings/newSessions";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
+import { HariUpdateRows } from "@/features/updates/HariUpdateCard";
+import { updatesSupported } from "@/features/updates/useHariUpdate";
 import { projectForRoute } from "@/features/workspace/routing";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { Icon, type IconName } from "@/ui/Icon";
@@ -231,6 +233,15 @@ export default function SettingsScreen() {
           onPress={() => void connection.refresh()}
         />
       </View>
+
+      {updatesSupported ? (
+        <>
+          <Text style={styles.heading}>Updates</Text>
+          <View style={styles.card}>
+            <HariUpdateRows divider={<View style={styles.divider} />} />
+          </View>
+        </>
+      ) : null}
 
       <View style={[styles.card, styles.lastCard]}>
         <SettingsRow

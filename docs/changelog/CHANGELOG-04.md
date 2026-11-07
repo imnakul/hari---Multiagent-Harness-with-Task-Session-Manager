@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-07 14:58 IST — Hari phone app with automatic updates (L-235)
+- Type: feat
+- What: The phone app is now Hari, with the peacock-feather icon on frosted glass. A new GitHub Actions workflow builds the signed desktop installer and the signed Hari APK when a `hari-v<version>` tag is pushed (or on a manual run) and publishes them as the latest release. The desktop's updater and Hari (on launch and in Settings → Updates) install from it. The Android chat header now blurs what scrolls under it, and the phone's model sheet offers Claude's Mode (Structured / Interactive). Version 0.16.0-local27.
+- Why: User wanted updates without reinstalling by hand, the Hari name and icon, a readable header, and Interactive mode on the phone.
+- Files: `.github/workflows/hari-release.yml`, `mobile/app.config.js`, `mobile/plugins/with-hari-signing.js`, `mobile/scripts/hari-icons.mjs`, `mobile/assets/images/hari-*.png`, `mobile/src/features/updates/**`, `mobile/src/app/_layout.tsx`, `mobile/src/app/settings/index.tsx`, `mobile/src/ui/GradualBlur.tsx`, `mobile/src/features/sessions/SessionScreen.tsx`, `mobile/package.json` (+ lock: expo-intent-launcher), `src/features/mobile/model/mobileWorkspace.ts`, `src-tauri/tauri.hari.conf.json`, `src/app/model/updater.ts`, `package.json` (`build:windows`), version files, `docs/specs/hari-phone-updates-plan.md`, `docs/LOCAL-FEATURES.md`
+- Commit: not committed yet
+- Verified: tsc ✅; vitest ✅ (8060 passed after updating the releases link in `updaterConfig.test.ts`); phone tsc ✅ and vitest ✅ (187; `watchFrames` doesn't load on Windows, as before); `expo prebuild` ✅ (app name Hari, versionCode 160027, install permission, Hari signing); CI release and phone and desktop checks pending
+
 ## 2026-11-07 14:12 IST — 0.16.0-local26 Windows build and Android phone app (phone companion)
 - Type: chore
 - What: New version 0.16.0-local26 with the phone companion (a8654160), and a standalone Android APK of the phone app (release build, signed with the Android debug key, package com.hardbeat920.monocodemobile, version 1.0.0). Built on Windows: `npm run native:android` with ANDROID_NDK_HOME at NDK 27.1, `npx expo prebuild --platform android`, then `gradlew assembleRelease` in `mobile/android` (git-ignored).

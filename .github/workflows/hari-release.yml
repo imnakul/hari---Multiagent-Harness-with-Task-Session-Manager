@@ -1,0 +1,210 @@
+# Fork (Hari, L-235): builds and publishes the desktop installer and the Hari
+# phone APK. Runs only when asked: push a tag hari-v<version> (the version in
+# package.json), or run it by hand from the Actions tab.
+# The desktop's updater and the phone read the files of the latest release.
+name: Hari release
+
+on:
+  push:
+    tags: ["hari-v*"]
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: What changed (shown in the update prompts)
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hari-release
+  cancel-in-progress: false
+
+env:
+  REPO_URL: https://github.com/${{ github.repository }}
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="hari-v$version"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+            echo "Tag ${GITHUB_REF_NAME} doesn't match package.json version $version (expected $tag)" >&2
+            exit 1
+          fi
+          # Build numbers on the phone come from the version (app.config.js).
+          node -e "require('./mobile/app.config.js').versionCode('$version')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Desktop installer
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: hari-windows
+      - run: npm ci
+      - name: Write release config
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.hari.conf.json -Raw | ConvertFrom-Json
+          $config.bundle.createUpdaterArtifacts = $true
+          $config | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\tauri.release.conf.json"
+      - name: Build installer
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $env:RUSTUP_TOOLCHAIN = "stable-x86_64-pc-windows-msvc"
+          npx tauri build --bundles nsis --config "$env:RUNNER_TEMP\tauri.release.conf.json"
+      - name: Stage installer
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem "target/release/bundle/nsis" -Filter "*-setup.exe")
+          $signatures = @(Get-ChildItem "target/release/bundle/nsis" -Filter "*-setup.exe.sig")
+          if ($installers.Count -ne 1 -or $signatures.Count -ne 1) {
+            throw "Expected exactly one NSIS installer and one updater signature"
+          }
+          New-Item -ItemType Directory -Force release-artifacts | Out-Null
+          Copy-Item $installers[0].FullName, $signatures[0].FullName release-artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: release-artifacts/
+          if-no-files-found: error
+
+  android:
+    name: Hari APK
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: hari-android
+      - name: Install phone dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: Build the phone's native link library
+        working-directory: mobile
+        run: |
+          export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          npm run native:android
+      - name: Generate the Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+        run: npx expo prebuild --platform android --no-install
+      - name: Build signed APK
+        working-directory: mobile/android
+        env:
+          HARI_KEYSTORE_BASE64: ${{ secrets.HARI_KEYSTORE_BASE64 }}
+          HARI_KEYSTORE_PASSWORD: ${{ secrets.HARI_KEYSTORE_PASSWORD }}
+          HARI_KEY_ALIAS: ${{ secrets.HARI_KEY_ALIAS }}
+          HARI_KEY_PASSWORD: ${{ secrets.HARI_KEY_PASSWORD }}
+        run: |
+          if [ -z "$HARI_KEYSTORE_BASE64" ]; then
+            echo "HARI_KEYSTORE_BASE64 is missing; a debug-signed APK can't update installed Hari" >&2
+            exit 1
+          fi
+          export HARI_KEYSTORE_PATH="$RUNNER_TEMP/hari-release.keystore"
+          echo "$HARI_KEYSTORE_BASE64" | base64 -d > "$HARI_KEYSTORE_PATH"
+          ./gradlew assembleRelease --no-daemon
+          rm -f "$HARI_KEYSTORE_PATH"
+      - name: Stage APK
+        run: |
+          mkdir -p release-artifacts
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk \
+            "release-artifacts/Hari_${{ needs.version.outputs.version }}_android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: release-artifacts/
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [version, windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Write update manifests
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          node - <<'EOF'
+          const fs = require("fs");
+          const { versionCode } = require("./mobile/app.config.js");
+          const { VERSION, TAG, NOTES, REPO_URL } = process.env;
+          const files = fs.readdirSync("artifacts");
+          const exe = files.find((name) => name.endsWith("-setup.exe"));
+          const apk = files.find((name) => name.endsWith(".apk"));
+          if (!exe || !apk) throw new Error(`Missing release files: ${files.join(", ")}`);
+          const download = (name) => `${REPO_URL}/releases/download/${TAG}/${encodeURIComponent(name)}`;
+          const notes = NOTES?.trim() || `Hari ${VERSION}`;
+          const windows = {
+            signature: fs.readFileSync(`artifacts/${exe}.sig`, "utf8").trim(),
+            url: download(exe),
+          };
+          fs.writeFileSync("artifacts/latest.json", JSON.stringify({
+            version: VERSION,
+            notes,
+            pub_date: new Date().toISOString(),
+            platforms: { "windows-x86_64": windows, "windows-x86_64-nsis": windows },
+          }, null, 2));
+          fs.writeFileSync("artifacts/hari-android.json", JSON.stringify({
+            version: VERSION,
+            versionCode: versionCode(VERSION),
+            apk: download(apk),
+            notes,
+          }, null, 2));
+          EOF
+          ls -la artifacts
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+          else
+            gh release create "$TAG" artifacts/* --target "$GITHUB_SHA" \
+              --title "Hari $VERSION" --notes "${NOTES:-Hari $VERSION}" --latest
+          fi

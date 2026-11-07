@@ -16,6 +16,7 @@ import {
 import { WorkspaceGate } from "@/features/connection/WorkspaceGate";
 
 import { SessionNotifications } from "@/features/notifications/SessionNotifications";
+import { HariUpdatePrompt } from "@/features/updates/HariUpdatePrompt";
 import { SessionActivity } from "@/features/sessions/SessionActivity";
 import { SessionFrame } from "@/features/sessions/SessionScreen";
 import { WorkspaceDrawer } from "@/features/workspace/WorkspaceDrawer";
@@ -176,6 +177,7 @@ function LinkedWorkspace() {
   return (
     <WorkspaceProvider key={connection.pairing?.desktop.deviceId}>
       <SessionNotifications />
+      <HariUpdatePrompt />
       <SessionActivity />
       <WorkspaceLayout sidebar={!monoOnly}>
         <ScenePagerHost drawer={monoOnly ? undefined : <WorkspaceDrawer />}>

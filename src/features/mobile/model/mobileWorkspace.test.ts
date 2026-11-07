@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mobileQuestionReply } from "./mobileWorkspace";
+import { CLAUDE_EXECUTION_SETTING, mobileModelSettings, mobileQuestionReply } from "./mobileWorkspace";
 
 const prompt = {
   requestId: 1,
@@ -54,5 +54,29 @@ describe("mobile question replies", () => {
     ).toBeUndefined();
     expect(mobileQuestionReply({ kind: "maybe" }, prompt)).toBeUndefined();
     expect(mobileQuestionReply(null, prompt)).toBeUndefined();
+  });
+});
+
+describe("phone model settings (fork L-235)", () => {
+  const effort = {
+    id: "effort",
+    label: "Effort",
+    kind: "select" as const,
+    value: "high",
+    options: [{ value: "high", label: "High" }],
+  };
+
+  it("offers Claude's Structured / Interactive mode on local projects", () => {
+    expect(mobileModelSettings("claude", [effort], false)).toEqual([effort, CLAUDE_EXECUTION_SETTING]);
+    expect(CLAUDE_EXECUTION_SETTING.options.map((option) => option.value)).toEqual([
+      "structured",
+      "interactive",
+    ]);
+  });
+
+  it("leaves other providers and remote projects as they are", () => {
+    expect(mobileModelSettings("codex", [effort], false)).toEqual([effort]);
+    expect(mobileModelSettings("claude", [effort], true)).toEqual([effort]);
+    expect(mobileModelSettings("claude", undefined, true)).toEqual([]);
   });
 });

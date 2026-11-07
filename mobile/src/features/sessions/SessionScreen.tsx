@@ -600,6 +600,7 @@ export function SessionFrame({
                 edge="top"
                 height={frameBottom + TOP_FADE}
                 color={colors.background}
+                blurTarget={androidBlur && blurTargetReady ? blurTarget : undefined}
               />
             )}
             {/* Under a native header the line has no push of its own:

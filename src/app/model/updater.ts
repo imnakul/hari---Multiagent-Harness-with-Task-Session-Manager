@@ -25,7 +25,9 @@ export type UpdaterSnapshot = {
 
 let pendingUpdate: Update | null = null;
 
-const RELEASES_URL = "https://github.com/hardbeat920/monocode/releases/latest";
+// Fork (Hari, L-235): this fork publishes its own releases.
+const RELEASES_URL =
+  "https://github.com/imnakul/hari---Multiagent-Harness-with-Task-Session-Manager/releases/latest";
 
 /**
  * Linux `.deb` and `.rpm` installs belong to apt/dnf. The release feed only

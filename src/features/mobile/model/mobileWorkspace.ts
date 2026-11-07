@@ -65,7 +65,9 @@ import {
   mergeModelSettings,
   modelsFor,
   resolveModel,
+  type ModelSetting,
 } from "../../sessions/model/models";
+import { remoteProjectFor } from "../../connections/model/remoteProjects";
 import { isHarnessAvailable } from "../../../integrations/harness/core/availability";
 import { mobileTranscript } from "./mobileTranscript";
 import {
@@ -87,6 +89,33 @@ import {
 } from "../../workspace/model/tabGroups";
 
 export const mobileProjectId = (path: string) => encodeURIComponent(path);
+
+/**
+ * Fork (Hari, L-235): Claude's Structured / Interactive choice, which the
+ * desktop shows as its own buttons in the model picker, offered to the phone
+ * as one more model setting. Interactive runs Claude Code in the desktop's
+ * terminal. Not for remote projects, where the desktop doesn't offer it.
+ */
+export const CLAUDE_EXECUTION_SETTING: ModelSetting = {
+  id: "claudeExecution",
+  label: "Mode",
+  kind: "select",
+  value: "structured",
+  options: [
+    { value: "structured", label: "Structured" },
+    { value: "interactive", label: "Interactive" },
+  ],
+  description: "Interactive runs Claude Code in the desktop's terminal.",
+};
+
+export function mobileModelSettings(
+  harness: HarnessId,
+  settings: readonly ModelSetting[] | undefined,
+  remote: boolean,
+): ModelSetting[] {
+  const own = [...(settings ?? [])];
+  return harness === "claude" && !remote ? [...own, CLAUDE_EXECUTION_SETTING] : own;
+}
 
 /**
  * A session the phone starts in `cwd`, as a new desktop tab would start it:
@@ -349,6 +378,7 @@ export async function mobileModels(
     current = mobileNewSession(path, runtimeMode);
   }
   const model = resolveModel(current.harness, current.model);
+  const remote = !!remoteProjectFor(current.cwd);
   return {
     harnesses: harnesses.map((id) => ({ id, label: HARNESS_TITLE[id] })),
     models: harnesses.flatMap((harness) =>
@@ -357,7 +387,7 @@ export async function mobileModels(
         harness: entry.harness,
         name: entry.name,
         provider: entry.provider?.name,
-        settings: entry.settings ?? [],
+        settings: mobileModelSettings(entry.harness, entry.settings, remote),
       })),
     ),
     runtimeModes: RUNTIME_MODES.map((id) => ({
