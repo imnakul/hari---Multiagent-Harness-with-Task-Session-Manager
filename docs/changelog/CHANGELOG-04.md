@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-07 14:12 IST — 0.16.0-local26 Windows build and Android phone app (phone companion)
+- Type: chore
+- What: New version 0.16.0-local26 with the phone companion (a8654160), and a standalone Android APK of the phone app (release build, signed with the Android debug key, package com.hardbeat920.monocodemobile, version 1.0.0). Built on Windows: `npm run native:android` with ANDROID_NDK_HOME at NDK 27.1, `npx expo prebuild --platform android`, then `gradlew assembleRelease` in `mobile/android` (git-ignored).
+- Why: User asked for an installable build to start using the phone companion.
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local26-phone-companion_x64.exe` (19,647,661 bytes, SHA-256 DE6A59E86709AF40AF19FE11AFD10437FE56325274FAF33832FF200EC5B32CE0, unsigned); `E:\Developing\Installable versions\MonoCodeMobile_1.0.0-local26-phone-companion_android.apk` (161,149,801 bytes, SHA-256 E929534EC5BEEF978A0DABFF800BEE267744B37448A3D76D45A97246DB6B34F2)
+- Commit: records only, after a8654160
+- Verified: build ✅ (npm run build:windows; gradle assembleRelease); apksigner verify ✅; gates as in the entry below; desktop and phone checks manual
+
 ## 2026-11-07 13:58 IST — Phone companion app from upstream (L-234)
 - Type: feat
 - What: Took upstream's phone app (`mobile/`) and its link library (`crates/mobile-link`) from origin/main 1de99e7b, plus the desktop side our app can serve: answer an agent's questions from the phone, Continue a usage-limited chat from the phone, and cards for Mono-started chats. Selective intake, not a merge. The phone app's native-library script now also runs on Windows. Version 0.16.0-local26.
