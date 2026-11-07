@@ -4,7 +4,7 @@
 - What: Took upstream's phone app (`mobile/`) and its link library (`crates/mobile-link`) from origin/main 1de99e7b, plus the desktop side our app can serve: answer an agent's questions from the phone, Continue a usage-limited chat from the phone, and cards for Mono-started chats. Selective intake, not a merge. The phone app's native-library script now also runs on Windows. Version 0.16.0-local26.
 - Why: User wants to start using the phone companion with this desktop build.
 - Files: `mobile/**`, `crates/mobile-link/**`, `Cargo.lock`, `src-tauri/src/mobile_access.rs`, `src/app/App.tsx`, `src/features/mobile/**`, `src/features/monos/model/monoSpawnedSessions.ts`, `src/features/sessions/model/usageLimit.ts`, `src/features/sessions/ui/AgentTranscript.tsx`, `src/features/sessions/ui/UsageLimitNotice.tsx`, version files, `docs/LOCAL-FEATURES.md`
-- Commit: not committed yet
+- Commit: a8654160
 - Verified: tsc ✅; vitest ✅ (8057 passed; `iconCatalog` timed out under load, passes alone); cargo check ✅; mobile-link tests ✅ (32); phone app tsc ✅ and vitest ✅ (182; `tests/mobile/watchFrames.test.ts` outside `mobile/` does not load on Windows); desktop and phone checks manual
 
 ## 2026-11-02 12:09 IST — 0.16.0-local25 Windows rebuild (Zen terminal)
