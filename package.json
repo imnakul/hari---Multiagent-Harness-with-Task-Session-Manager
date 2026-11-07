@@ -1,7 +1,7 @@
 {
   "name": "monocode-desktop",
   "private": true,
-  "version": "0.16.0-local25",
+  "version": "0.16.0-local26",
   "type": "module",
   "scripts": {
     "dev": "vite",

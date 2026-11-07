@@ -21,6 +21,7 @@ import {
   parseQuickLaunch,
 } from "../features/quick-composer/model/quickComposer";
 import { SessionTodoComposer } from "../features/session-board/ui/SessionTodoComposer";
+import { recoverMobileUsage } from "../features/mobile/model/mobileUsageLimit";
 import { sessionConversationPage } from "../features/agent-app/model/sessionConversation";
 import { useMobileWorkspace } from "../features/mobile/hooks/useMobileWorkspace";
 import { hasMobileAttachments, mobileAttachments } from "../features/mobile/model/mobileAttachments";
@@ -30,6 +31,7 @@ import {
   mobileChoice,
   mobileNewSession,
   mobileProjectId,
+  mobileQuestionReply,
 } from "../features/mobile/model/mobileWorkspace";
 import { readMonoConversation } from "../features/monos/model/monoConversation";
 import {
@@ -2015,6 +2017,8 @@ function Workspace({
   const linkedWorkItemActivityFetches = useRef(new Map<string, number>());
   const queueDispatchingRef = useRef(new Set<string>());
   const [queueDispatchVersion, setQueueDispatchVersion] = useState(0);
+  const mobileUsageActions = useRef<{ resume: (id: string) => Promise<boolean>; automatic: (id: string, enabled: boolean) => void } | null>(null);
+  const mobileUsagePending = useRef(new Set<string>());
   const usageResumingRef = useRef(new Set<string>());
   const usageResetLookups = useRef(new WeakSet<UsageLimit>());
   const tabsRef = useRef(tabs);
@@ -11645,6 +11649,18 @@ function Workspace({
       const sessionId = monoSession?.id ?? conversationId;
       const session = monoSession ?? await ensureOpenSessionRef.current(sessionId);
       if (!session) throw new Error("Session is no longer available");
+      if (method === "session.resumeUsage" || method === "session.resumeUsageAtReset") {
+        await recoverMobileUsage({
+          session: sessionsRef.current.find((current) => current.id === session.id),
+          token: params.token,
+          automatic: method === "session.resumeUsageAtReset",
+          enabled: params.enabled,
+          pending: mobileUsagePending.current,
+          resume: mobileUsageActions.current!.resume,
+          setAutomatic: mobileUsageActions.current!.automatic,
+        });
+        return { sessionId: session.id };
+      }
       if (method === "session.cancel") {
         await onStop(session.id);
         return { sessionId: session.id };
@@ -11661,6 +11677,26 @@ function Workspace({
         }
         if (choice.runtimeMode) onRuntimeModeChange(session.id, choice.runtimeMode);
         return { sessionId: session.id };
+      }
+      if (method === "session.answerQuestion" || method === "session.keepQuestionOpen") {
+        // As the composer's question card; only the question still waiting,
+        // read as it is now since opening the session may have taken a while.
+        const live = sessionsRef.current.find((current) => current.id === session.id);
+        if (!live || live.worktreeRemoved) throw new Error("Session is no longer available");
+        const question = live.pendingQuestion;
+        if (!question || question.requestId !== params.requestId)
+          throw new Error("This question was already answered");
+        if (method === "session.keepQuestionOpen") {
+          onQuestionInteraction(live.id, question.requestId);
+          return { sessionId: live.id };
+        }
+        // A remote session answers through its open tab; without one it would be dropped.
+        if (remoteProjectFor(live.cwd) && !remoteSessionActions(live.id))
+          throw new Error("Open this session on the desktop to answer it");
+        const reply = mobileQuestionReply(params.reply, question);
+        if (!reply) throw new Error("Choose an answer or skip the question");
+        onQuestionReply(live.id, question.requestId, reply);
+        return { sessionId: live.id };
       }
       if (method !== "conversation.send") throw new Error("Unsupported mobile command");
       if (
@@ -12257,7 +12293,7 @@ function Workspace({
 
   const onUsageLimitResumeAtReset = useCallback(
     (sessionId: string, enabled: boolean) => {
-      setSessions((prev) =>
+      updateSessionState(sessionsRef, setSessions, (prev) =>
         prev.map((session) =>
           session.id === sessionId && session.usageLimit
             ? {
@@ -12272,17 +12308,16 @@ function Workspace({
   );
 
   const onUsageLimitResume = useCallback(
-    (sessionId: string) => {
+    async (sessionId: string): Promise<boolean> => {
       const session = clearStaleExternalTurn(sessionId);
-      if (!session?.usageLimit || session.busy) return;
+      if (!session?.usageLimit || session.busy) return false;
       if (isMonoSession(sessionId)) {
-        setSessions((prev) =>
-          prev.map((entry) =>
-            entry.id === sessionId ? resumeMonoUsageLimit(entry) : entry,
-          ),
+        updateSessionState(sessionsRef, setSessions, (prev) =>
+          prev.map((entry) => entry.id === sessionId ? resumeMonoUsageLimit(entry) : entry),
         );
-        return;
+        return true;
       }
+      const limit = session.usageLimit;
       if (session.queuedMessages?.length) {
         const nextSessions = sessionsRef.current.map((entry) =>
           entry.id === sessionId ? prepareUsageLimitContinue(entry) : entry,
@@ -12292,10 +12327,18 @@ function Workspace({
       } else {
         onUsageLimitDismiss(sessionId);
       }
-      onSubmit(sessionId, CONTINUE_PROMPT);
+      if (onSubmit(sessionId, CONTINUE_PROMPT)) return true;
+      // Upstream (phone Continue): a refused continuation keeps a manual
+      // retry notice instead of clearing the limit.
+      updateSessionState(sessionsRef, setSessions, (prev) => prev.map((entry) =>
+        entry.id === sessionId && !entry.busy && !entry.usageLimit
+          ? { ...entry, usageLimit: { ...limit, resumeAtReset: false } } : entry));
+      return false;
     },
     [onSubmit, onUsageLimitDismiss, clearStaleExternalTurn],
   );
+
+  mobileUsageActions.current = { resume: onUsageLimitResume, automatic: onUsageLimitResumeAtReset };
 
   const usageLimitSwitching = useRef(new Set<string>());
   const onUsageLimitAccountChange = useCallback(
