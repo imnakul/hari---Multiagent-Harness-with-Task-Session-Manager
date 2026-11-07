@@ -52,7 +52,7 @@ vi.mock("react-native-svg", () => ({
   Circle: () => null,
   Path: () => null,
 }));
-vi.mock("react-native", () => ({
+vi.mock("react-native", async () => ({
   StyleSheet: { create: (styles: unknown) => styles },
   Platform: {
     get OS() {
@@ -102,8 +102,7 @@ vi.mock("react-native", () => ({
       {children}
     </button>
   ),
-  Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) =>
-    visible ? <section role="dialog">{children}</section> : null,
+  Modal: (await import("./modalMock")).DialogModal,
   ScrollView: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TextInput: ({
     value,

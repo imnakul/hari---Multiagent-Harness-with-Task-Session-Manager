@@ -1,5 +1,9 @@
 // Fork (Hari, L-235): the Settings card for checking and installing updates.
+import { ActivityIndicator } from "react-native";
+
 import { SettingsRow } from "@/features/settings/SettingsUI";
+import { Icon } from "@/ui/Icon";
+import { useColors } from "@/ui/theme";
 
 import {
   checkForHariUpdate,
@@ -13,6 +17,7 @@ import {
 /** The rows of the Updates card; nothing outside Android builds of Hari. */
 export function HariUpdateRows({ divider }: { divider: React.ReactNode }) {
   const update = useHariUpdate();
+  const colors = useColors();
   if (!updatesSupported || !installed) return null;
   const status =
     update.status === "checking"
@@ -35,6 +40,13 @@ export function HariUpdateRows({ divider }: { divider: React.ReactNode }) {
         label="Check for updates"
         value={status ?? installed.version}
         showChevron={false}
+        accessory={
+          update.status === "checking" ? (
+            <ActivityIndicator size="small" color={colors.muted} />
+          ) : update.status === "current" ? (
+            <Icon name="check" size={16} color={colors.additions} />
+          ) : undefined
+        }
         onPress={() => void checkForHariUpdate()}
       />
       {release ? (

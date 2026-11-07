@@ -35,8 +35,11 @@ vi.mock("react-native", () => ({
       return runtime.os;
     },
   },
-  StyleSheet: { hairlineWidth: 1 },
+  StyleSheet: { hairlineWidth: 1, absoluteFill: {} },
   Pressable: () => null,
+  View: ({ children, style }: { children?: ReactNode; style?: unknown }) => (
+    <div data-solid={JSON.stringify(style)}>{children}</div>
+  ),
 }));
 vi.mock("react-native-reanimated", () => ({
   default: {
@@ -49,8 +52,8 @@ vi.mock("react-native-reanimated", () => ({
 vi.mock("@/ui/theme", () => ({
   useScheme: () => "dark",
   withAlpha: (color: string, alpha: number) => `${color}:${alpha}`,
-  themedStyles: (fn: (colors: { surface: string }) => object) => () =>
-    fn({ surface: "surface" }),
+  themedStyles: (fn: (colors: Record<string, string>) => object) => () =>
+    fn({ surface: "surface", listCard: "card", stroke: "stroke" }),
 }));
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
@@ -61,36 +64,27 @@ beforeEach(() => {
   root = createRoot(document.createElement("div"));
 });
 afterEach(() => act(() => root.unmount()));
-it("enables Android blur against an explicit target and lightens the surface overlay", () => {
-  const target = createRef<View>();
+beforeEach(() => {
+  runtime.blur = {};
+});
+it("draws a solid card on Android rather than blurring, target or not (L-235)", () => {
+  const container = document.createElement("div");
+  act(() => root.unmount());
+  root = createRoot(container);
   act(() =>
     root.render(
-      <GlassBlurTarget value={target}>
+      <GlassBlurTarget value={createRef<View>()}>
         <LiquidView>
           <span>Input</span>
         </LiquidView>
       </GlassBlurTarget>,
     ),
   );
-  expect(runtime.blur.blurTarget).toBe(target);
-  expect(runtime.blur.blurMethod).toBe("dimezisBlurViewSdk31Plus");
-  expect(runtime.blur.intensity).toBe(30);
-  expect(runtime.blur.style).toContainEqual({
-    backgroundColor: "surface:0.45",
-  });
+  expect(runtime.blur).toEqual({});
+  expect(container.innerHTML).toContain("card");
+  expect(container.textContent).toContain("Input");
 });
-it("preserves the untargeted fallback and iOS blur settings", () => {
-  act(() =>
-    root.render(
-      <LiquidView>
-        <span>Input</span>
-      </LiquidView>,
-    ),
-  );
-  expect(runtime.blur.blurMethod).toBeUndefined();
-  expect(runtime.blur.style).not.toContainEqual({
-    backgroundColor: "surface:0.45",
-  });
+it("keeps the blurred fallback on iOS", () => {
   runtime.os = "ios";
   act(() =>
     root.render(
@@ -101,6 +95,7 @@ it("preserves the untargeted fallback and iOS blur settings", () => {
       </GlassBlurTarget>,
     ),
   );
+  expect(runtime.blur.intensity).toBe(30);
   expect(runtime.blur.blurMethod).toBeUndefined();
   expect(runtime.blur.blurTarget).toBeUndefined();
 });

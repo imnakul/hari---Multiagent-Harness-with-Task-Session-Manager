@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-07 21:42 IST — Android fixes in Hari: solid bars, no jump after sending, Settings, pickers, update spinner (L-235)
+- Type: fix
+- What: On Android the top bar, message box and buttons are solid panels with a soft shadow instead of blur, which drew dark grey bars in light mode or let text show through. Sending or stopping from the phone no longer swaps the chat to the whole conversation and back (it jumped to old messages or went blank). Settings and New Mono from the side menu close the menu first, so they open full screen. Photo Library and Files start once the Add menu has closed; started while it closed, they took 10–20 s. Check for updates shows a spinner (at least 0.7 s), then a tick when up to date. The message box keeps the phone font's own line height on Android, so the first line isn't cut.
+- Why: User report with screenshots after updating to local28.
+- Files: `mobile/src/ui/GradualBlur.tsx`, `mobile/src/ui/LiquidView.tsx`, `mobile/src/features/sessions/SessionScreen.tsx`, `mobile/src/ui/ChoiceMenu.tsx`, `mobile/src/features/workspace/WorkspaceDrawer.tsx`, `mobile/src/features/workspace/WorkspaceProvider.tsx`, `mobile/src/features/updates/useHariUpdate.ts`, `HariUpdateCard.tsx`, `mobile/src/features/sessions/Composer.tsx`, tests (`LiquidView`, `SessionScreen`, `WorkspaceProvider`, `modalMock.tsx` and three menu test mocks)
+- Verified: phone tsc ✅, lint 0 errors ✅, vitest 190/190 (32/33 files; `tests/mobile/watchFrames.test.ts` doesn't load from `mobile/`, as before); look and timing on the phone manual
+
 ## 2026-11-07 17:26 IST — Hari release 0.16.0-local28 (stuck-busy fix, Stop Claude)
 - Type: chore
 - What: Published `hari-v0.16.0-local28` (run 42369157014, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160028), `latest.json`, `hari-android.json`. The first release that installed copies of local27 can update to. The GitHub repo was renamed to `imnakul/hari---Multiagent-Harness-with-Task-Session-Manager`; the `nakul-fork` remote now uses that URL (the update links already did).

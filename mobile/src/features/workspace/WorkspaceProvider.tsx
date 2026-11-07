@@ -270,6 +270,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // than carrying on from them.
   const cachedOnly = useRef(new Set<string>());
   const desktop = connection.pairing?.desktop.fingerprint;
+  // Fork (L-235): conversations whose watch is streaming. A read brings the
+  // whole conversation while the watch keeps only its latest turns, so a read
+  // after a send must not replace them: the list swapped hundreds of turns in
+  // and out, jumped to old messages and sometimes showed blank.
+  const streaming = useRef(new Set<string>());
   const read = useCallback(async (id: string) => {
     const paired = current.current.pairing;
     try {
@@ -278,20 +283,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         { conversationId: id },
       );
       if (current.current.pairing !== paired) return;
-      cachedOnly.current.delete(id);
       const received = result.turns ?? turnsFromMessages(result.messages);
-      setMessages((previous) => ({ ...previous, [id]: result.messages }));
-      setTurns((previous) => ({
-        ...previous,
-        [id]: keepUnchanged(previous[id], received),
-      }));
-      setPending((previous) => withoutConfirmedPending(previous, id, received));
+      const watched = streaming.current.has(id);
+      if (!watched) {
+        cachedOnly.current.delete(id);
+        setMessages((previous) => ({ ...previous, [id]: result.messages }));
+        setTurns((previous) => ({
+          ...previous,
+          [id]: keepUnchanged(previous[id], received),
+        }));
+        // The watch counts a send's message against its own turns.
+        setPending((previous) => withoutConfirmedPending(previous, id, received));
+      }
       if (countUserItems(received) > 0) starting.current.delete(id);
       setBusy((previous) => withValue(previous, id, result.busy));
       showQuestion(id, result.question);
       showUsageLimit(id, result.usageLimit);
       // A read carries the whole conversation.
-      setWindowOlder((previous) => withValue(previous, id, false));
+      if (!watched) setWindowOlder((previous) => withValue(previous, id, false));
       setErrors((previous) => withoutKey(previous, id));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
@@ -305,6 +314,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!watching || !desktop || hasNativeTranscript) return;
     const id = watching;
+    const live = streaming.current;
     let disposed = false;
     let watchId: number | null = null;
     const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -380,6 +390,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             ...(from ? { from } : {}),
           });
           if (disposed) break;
+          live.add(id);
           if (__DEV__) console.log(`[mobile] ${id}: watch open after ${Date.now() - opened}ms`);
           // The first frame brings every turn; keep the ones that did not change.
           known = turnsRef.current[id] ?? [];
@@ -389,10 +400,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             if (frames.length && !apply(frames)) break;
           }
         } catch {
+          live.delete(id);
           if (disposed) break;
           await read(id);
           await pause((starting.current.get(id) ?? 0) > Date.now() ? 200 : 1000);
         }
+        live.delete(id);
         if (watchId !== null) void closeWatch(watchId);
         watchId = null;
       }
@@ -408,6 +421,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     return () => {
       disposed = true;
+      live.delete(id);
       subscription.remove();
       save();
       if (watchId !== null) void closeWatch(watchId);
@@ -503,6 +517,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       throw reason;
     }
     if (hasNativeTranscript) return; // The native watch retires the local echo.
+    // So does a streaming watch, as the message reaches its turns (L-235).
+    if (streaming.current.has(conversationId)) return;
     await read(conversationId);
     // The read has the message; the watch may have brought it already.
     setPending((previous) =>

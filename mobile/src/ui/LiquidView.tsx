@@ -15,7 +15,7 @@ import {
   Pressable,
   Platform,
   StyleSheet,
-  type View,
+  View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -200,6 +200,15 @@ export function LiquidView({
     >
       {children}
     </GlassView>
+  ) : Platform.OS === "android" ? (
+    // Fork (Hari, L-235): a solid card on Android, not blurred glass. The blur
+    // came out dark grey in light mode, or see-through over text.
+    <View style={[surface, styles.solid, { borderRadius }]}>
+      {tintColor ? (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
+      ) : null}
+      {children}
+    </View>
   ) : (
     <LinearGradient
       colors={BORDER_GRADIENT}
@@ -267,5 +276,11 @@ const useStyles = themedStyles((colors) => ({
   },
   androidBlur: {
     backgroundColor: withAlpha(colors.surface, 0.45),
+  },
+  solid: {
+    backgroundColor: colors.listCard,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.stroke,
+    elevation: 3,
   },
 }));

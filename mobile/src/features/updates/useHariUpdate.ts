@@ -64,8 +64,12 @@ export async function checkForHariUpdate(quiet = false): Promise<HariRelease | u
     if (!launchCheckDue(Number.isFinite(last) ? last : undefined, Date.now())) return;
   }
   set({ status: "checking" });
+  // A check from Settings shows its spinner for a moment, even when GitHub
+  // answers at once, so the tap visibly did something (L-235).
+  const shown = quiet ? undefined : new Promise((done) => setTimeout(done, 700));
   try {
     const response = await fetch(manifestUrl(installed.repo), { cache: "no-store" });
+    await shown;
     if (response.status === 404) {
       set({ status: "current" });
       return;
@@ -76,6 +80,7 @@ export async function checkForHariUpdate(quiet = false): Promise<HariRelease | u
     set(release ? { status: "available", release } : { status: "current" });
     return release;
   } catch (error) {
+    await shown;
     set(
       quiet
         ? { status: "idle" }

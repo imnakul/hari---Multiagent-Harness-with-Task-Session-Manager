@@ -489,7 +489,9 @@ export function SessionFrame({
   // The outer frame contains the native navigator and its header surfaces.
   // Recording that whole tree can include a blur sampling its own RenderNode.
   // Only the per-screen frame may record content for its sibling surfaces.
-  const androidBlur = Platform.OS === "android" && native;
+  // Fork (Hari, L-235): Android now draws solid surfaces, so nothing records
+  // content to blur. Left switchable in case blur comes back.
+  const androidBlur: boolean = false;
   const blurTarget = useRef<View>(null);
   const [blurTargetReady, setBlurTargetReady] = useState(false);
   const onBlurTargetLayout = useCallback(() => {

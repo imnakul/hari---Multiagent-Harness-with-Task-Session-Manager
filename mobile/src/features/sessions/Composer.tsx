@@ -737,7 +737,9 @@ const useStyles = themedStyles((colors) => ({
     paddingBottom: 8,
     color: colors.content,
     fontSize: 17,
-    lineHeight: 22,
+    // Fork (Hari, L-235): Android cut the top off the first line when a phone
+    // font (Xiaomi's system font, say) is taller than this; it keeps its own.
+    lineHeight: Platform.OS === "android" ? undefined : 22,
     textAlignVertical: "top",
   },
   measure: {

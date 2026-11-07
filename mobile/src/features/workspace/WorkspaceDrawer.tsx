@@ -134,14 +134,17 @@ export function WorkspaceDrawer() {
     );
   };
   // Settings rises over the open drawer, which is still there once it's shut.
-  const openSettings = () => {
-    if (!isModalRoute(pathname)) router.push("/settings");
+  // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,
+  // squeezed beside the drawer, so the drawer shuts first.
+  const openModal = (path: "/settings" | "/mono-new") => {
+    if (isModalRoute(pathname)) return;
+    if (Platform.OS === "android") drawer.closeThen(() => router.push(path));
+    else router.push(path);
   };
+  const openSettings = () => openModal("/settings");
   // A new Mono from its own sheet, which rises over the open drawer as
   // settings does; once made, the drawer shuts onto its chat.
-  const createMono = () => {
-    if (!isModalRoute(pathname)) router.push("/mono-new");
-  };
+  const createMono = () => openModal("/mono-new");
   const openCreated = useRef(openMono);
   useEffect(() => {
     openCreated.current = openMono;

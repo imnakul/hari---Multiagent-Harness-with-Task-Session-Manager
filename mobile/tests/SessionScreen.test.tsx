@@ -121,14 +121,9 @@ vi.mock("expo-router", () => ({
 vi.stubGlobal("__DEV__", false);
 
 describe("persistent session frame", () => {
-  it("samples Android page content without including the composer in its blur target", () => {
+  it("records no Android page content to blur, as its surfaces are solid (L-235)", () => {
     layout.OS = "android";
-    let target: unknown;
-    let pageTarget: unknown;
-    function Page() {
-      pageTarget = use(GlassBlurTarget);
-      return <span>Transcript</span>;
-    }
+    let target: unknown = "unset";
     function Composer() {
       target = use(GlassBlurTarget);
       return <span data-composer>Composer</span>;
@@ -141,21 +136,14 @@ describe("persistent session frame", () => {
           <SessionFrame nativeHeaderHeight={80}>
             <SessionScreen composer={<Composer />}>
               <span data-header>Header declarations</span>
-              <SessionContent><Page /></SessionContent>
+              <SessionContent><span>Transcript</span></SessionContent>
             </SessionScreen>
           </SessionFrame>
         </SessionFrame>,
       ));
-      const background = container.querySelector("[data-blur-target]")!;
-      // The navigator's outer frame must not become a second recording target.
-      expect(container.querySelectorAll("[data-blur-target]")).toHaveLength(1);
+      expect(container.querySelectorAll("[data-blur-target]")).toHaveLength(0);
+      expect(container.textContent).toContain("Transcript");
       expect(target).toBeUndefined();
-      act(() => layout.onTargetLayout!());
-      expect(background.textContent).toContain("Transcript");
-      expect(background.querySelector("[data-composer]")).toBeNull();
-      expect(background.querySelector("[data-header]")).toBeNull();
-      expect((target as { current: unknown }).current).toBe(background);
-      expect(pageTarget).toBeUndefined();
     } finally {
       act(() => root.unmount());
       layout.OS = "ios";

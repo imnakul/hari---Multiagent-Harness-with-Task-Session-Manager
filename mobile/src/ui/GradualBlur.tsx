@@ -22,7 +22,6 @@ export const GradualBlur = memo(function GradualBlur({
   // screens miss frames at 120Hz (Instruments: 51–65 passes a frame).
   steps = 3,
   intensity = 8,
-  blurTarget,
 }: {
   edge: "top" | "bottom";
   height: number;
@@ -31,9 +30,8 @@ export const GradualBlur = memo(function GradualBlur({
   steps?: number;
   intensity?: number;
   /**
-   * Fork (Hari, L-235): the content to blur, on Android. Android's BlurView
-   * only blurs a target it is given (as LiquidView's glass does); without one
-   * it draws a see-through tint, which left titles unreadable over messages.
+   * Unused on Android, which draws a solid band (L-235); kept so callers
+   * don't change.
    */
   blurTarget?: RefObject<View | null>;
 }) {
@@ -41,31 +39,27 @@ export const GradualBlur = memo(function GradualBlur({
   const tint = withAlpha(color, 0.5);
   const scheme = useScheme();
 
-  if (Platform.OS === "android" && blurTarget) {
-    // One real blur over the edge's frame, then a tint that fades out, so the
-    // blur's own edge disappears into it. Masking a real blur doesn't draw on
-    // Android, so this replaces the masked layers.
+  if (Platform.OS === "android") {
+    // Fork (Hari, L-235): a solid band that fades out, not a blur. Android's
+    // blur copied a target with no background of its own, so light mode drew
+    // dark grey bars; without a target it was see-through. Solid is reliable
+    // and cheaper to draw while scrolling.
     const fade = Math.min(36, height / 2);
-    const veil = withAlpha(color, 0.6);
     return (
       <View
         pointerEvents="none"
         style={[styles.container, { height }, fromTop ? styles.top : styles.bottom]}
       >
-        <BlurView
-          blurTarget={blurTarget}
-          blurMethod="dimezisBlurViewSdk31Plus"
-          intensity={24}
-          tint={scheme}
+        <View
           style={[
-            styles.androidBlur,
+            styles.androidBand,
             fromTop ? { top: 0, bottom: fade } : { bottom: 0, top: fade },
-            { backgroundColor: veil },
+            { backgroundColor: color },
           ]}
         />
         <LinearGradient
-          colors={fromTop ? [veil, "transparent"] : ["transparent", veil]}
-          style={[styles.androidBlur, fromTop ? { bottom: 0, height: fade } : { top: 0, height: fade }]}
+          colors={fromTop ? [color, withAlpha(color, 0)] : [withAlpha(color, 0), color]}
+          style={[styles.androidBand, fromTop ? { bottom: 0, height: fade } : { top: 0, height: fade }]}
         />
       </View>
     );
@@ -120,7 +114,7 @@ const styles = StyleSheet.create({
   bottom: {
     bottom: 0,
   },
-  androidBlur: {
+  androidBand: {
     position: "absolute",
     left: 0,
     right: 0,

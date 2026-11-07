@@ -16,7 +16,8 @@ const runtime = vi.hoisted(() => ({
   photos: vi.fn(async () => []),
   files: vi.fn(async () => []),
 }));
-vi.mock("react-native", () => {
+vi.mock("react-native", async () => {
+  const { MockModal } = await import("./modalMock");
   const View = ({
     children,
     style,
@@ -48,13 +49,7 @@ vi.mock("react-native", () => {
     Image: () => null,
     Alert: { alert: vi.fn() },
     StyleSheet: { absoluteFill: {} },
-    Modal: ({
-      visible,
-      children,
-    }: {
-      visible: boolean;
-      children?: ReactNode;
-    }) => (visible ? <section>{children}</section> : null),
+    Modal: MockModal,
     Pressable: ({
       children,
       onPress,

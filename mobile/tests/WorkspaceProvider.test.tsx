@@ -235,6 +235,32 @@ describe("starting mobile sessions", () => {
     expect(conversation.error).toBe("Update Monocode on both devices");
   });
 
+  it("keeps a streaming watch's turns when sending, rather than the whole conversation (L-235)", async () => {
+    const user = (id: string, text: string): Turn => ({ id, items: [{ type: "user", id, text }] });
+    const history = Array.from({ length: 40 }, (_, index) => user(`old-${index}`, `Old ${index}`));
+    const latest = user("latest", "Latest");
+    link.command.mockImplementation(async (method: string) => method === "conversation.read"
+      ? { messages: [], turns: [...history, latest, user("sent", "Next")], busy: true }
+      : {});
+    await act(async () => { render("existing"); });
+    await frame([{ order: [latest.id], turns: [latest], busy: false }]);
+
+    await act(async () => { await workspace.sendMessage("existing", "Next"); });
+    expect(link.command).not.toHaveBeenCalledWith("conversation.read", expect.anything());
+    // The message shows at once, after the watch's turns only.
+    expect(conversation.turns.map((turn) => turn.items[0])).toMatchObject([
+      { text: "Latest" }, { text: "Next" },
+    ]);
+
+    await frame([{ order: [latest.id, "sent"], turns: [user("sent", "Next")], busy: true }]);
+    expect(conversation.turns.map((turn) => turn.id)).toEqual(["latest", "sent"]);
+
+    // Stopping refreshes the state, never the watch's turns.
+    await act(async () => { await workspace.stop("existing"); });
+    expect(conversation.turns.map((turn) => turn.id)).toEqual(["latest", "sent"]);
+    expect(conversation.busy).toBe(true);
+  });
+
   it("shows a conversation's cached turns at once and keeps the latest for next time", async () => {
     const cached: Turn = { id: "old", items: [{ type: "user", id: "old", text: "Before" }] };
     link.storage.set("monocode.mobile.desktop.turns.existing", JSON.stringify([cached]));

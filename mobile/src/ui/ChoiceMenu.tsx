@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Modal,
   Pressable,
@@ -47,6 +47,17 @@ export function ChoiceMenu({
   style?: StyleProp<ViewStyle>;
 }) {
   const [open, setOpen] = useState(false);
+  // Fork (Hari, L-235): a chosen action waits for the menu to finish closing.
+  // Started while it closed, a picker took 10–20 s to open on Android.
+  const chosen = useRef<(() => void) | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const runChosen = () => {
+    clearTimeout(timer.current);
+    const action = chosen.current;
+    chosen.current = null;
+    action?.();
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const groups = sections.filter((group) => group.length > 0);
@@ -67,6 +78,7 @@ export function ChoiceMenu({
         animationType="fade"
         statusBarTranslucent
         onRequestClose={() => setOpen(false)}
+        onDismiss={runChosen}
       >
         <View style={styles.overlay}>
           <Pressable
@@ -97,8 +109,10 @@ export function ChoiceMenu({
                       <MenuRow
                         action={action}
                         onPress={() => {
+                          chosen.current = action.onPress;
                           setOpen(false);
-                          action.onPress();
+                          // In case the close is never reported.
+                          timer.current = setTimeout(runChosen, 400);
                         }}
                       />
                     </View>

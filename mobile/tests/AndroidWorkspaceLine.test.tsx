@@ -7,9 +7,8 @@ import {
 } from "@/features/workspace/WorkspaceMenu.android";
 import type { ChangedFile } from "@/features/workspace/types";
 
-vi.mock("react-native", () => ({
-  Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) =>
-    visible ? <section>{children}</section> : null,
+vi.mock("react-native", async () => ({
+  Modal: (await import("./modalMock")).MockModal,
   ScrollView: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Pressable: ({
     children,
