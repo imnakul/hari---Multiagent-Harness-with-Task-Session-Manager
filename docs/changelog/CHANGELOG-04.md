@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-07 16:40 IST — Interactive Claude no longer stays "busy" after a late approval answer; Stop Claude on the phone (L-235)
+- Type: fix
+- What: Answering an approval card after Claude's turn had already ended set the chat to busy, with no end-of-turn signal to follow. After that, every send (phone or desktop) failed with "Claude has not reached an idle conversation state", and Return to chat refused. Now only an answer Claude is still waiting on marks it as working, and when the main turn ends, its leftover approval cards close. On the phone, that error (any error that points to Open native terminal) shows a Stop Claude button. It asks to confirm, then stops Claude on the computer; the next message starts it again in the same conversation.
+- Why: User report: a chat continued from Hari was stuck on both devices. Claude's debug log showed a late approval answer arriving after Stop.
+- Files: `src-tauri/src/claude_interactive.rs` (`root_requests`, `release_stale_requests`, `record_reply`), `mobile/src/features/sessions/sessionError.ts`, `SessionErrorSheet.tsx`, `Transcript.tsx`, `NativeTranscript.tsx`, `mobile/src/features/workspace/ProjectScreen.tsx`, `mobile/tests/sessionError.test.ts`
+- Verified: cargo test claude_interactive 15/15 ✅; phone tsc ✅, lint 0 errors ✅, vitest 32/33 files (`tests/mobile/watchFrames.test.ts` doesn't load from `mobile/` before this change either); desktop Claude provider tests 341 ✅; desktop and phone checks manual
+
 ## 2026-11-07 16:11 IST — First Hari release 0.16.0-local27 from GitHub Actions
 - Type: chore
 - What: The Hari release workflow published `hari-v0.16.0-local27` (run 42363584267) as the repo's latest release: desktop installer with its updater signature, the Hari APK (arm64 only, signed with the Hari key: CN=Hari, O=imnakul), `latest.json` and `hari-android.json` (versionCode 160027). Two earlier runs of the same tag were cancelled: Gradle ran out of Metaspace, then an appended Gradle setting joined the file's last line; both fixed before this run.

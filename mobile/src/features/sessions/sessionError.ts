@@ -17,10 +17,23 @@ export function sessionErrorContent(text: string) {
     return {
       title: "Account unavailable",
       message: "The account used for this conversation has been removed.",
+      recoveryTitle: "Switch accounts",
       recovery: "Tap the model in the composer, open Account, and choose another account to start a new conversation.",
+      stopClaude: false,
     };
   }
-  return { title: "Couldn’t continue", message: text, recovery: undefined };
+  // Fork (L-235): Interactive Claude refused the message. The desktop's way out
+  // (its native terminal) isn't on the phone; Stop Claude is.
+  if (/\bOpen native terminal\b/i.test(text)) {
+    return {
+      title: "Claude is busy on your computer",
+      message: "Your message wasn’t sent. Claude on your computer hasn’t gone back to an empty prompt.",
+      recoveryTitle: "Stop Claude",
+      recovery: "Stops Claude on your computer; your next message starts it again in the same conversation. Anything it’s doing right now is cancelled.",
+      stopClaude: true,
+    };
+  }
+  return { title: "Couldn’t continue", message: text, recoveryTitle: undefined, recovery: undefined, stopClaude: false };
 }
 
 // The latest error of each open session, as its transcript last reported it,

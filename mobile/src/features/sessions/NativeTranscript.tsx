@@ -280,6 +280,7 @@ export function NativeTranscript({
       {error ? (
         <SessionErrorSheet
           message={error.text}
+          conversationId={conversationId}
           isPresented={errorPresented && focused}
           onDismiss={() => setErrorPresented(false)}
         />

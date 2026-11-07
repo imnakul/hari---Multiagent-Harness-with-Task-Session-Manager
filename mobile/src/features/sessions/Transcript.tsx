@@ -81,8 +81,11 @@ export function Transcript({
   loadOlder,
   pushed = false,
   busy = false,
+  conversationId,
 }: {
   turns: Turn[];
+  /** The desktop session, for actions such as the error sheet's Stop Claude. */
+  conversationId?: string;
   /** Whether the session is working; one that is opens anchored. */
   busy?: boolean;
   /** On a screen pushed over another: wait for the push to start. */
@@ -348,6 +351,7 @@ export function Transcript({
       {selectedError ? (
         <SessionErrorSheet
           message={selectedError.text}
+          conversationId={conversationId}
           isPresented={errorPresented && focused}
           onDismiss={() => setErrorPresented(false)}
         />

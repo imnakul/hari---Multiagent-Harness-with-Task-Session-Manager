@@ -42,6 +42,9 @@ struct LiveState {
     background_coverage: bool,
     untracked_work: bool,
     paste: Option<PendingPaste>,
+    /// Fork (L-235): approval cards the main conversation is waiting on. When its
+    /// turn ends, Claude no longer waits on them.
+    root_requests: HashSet<u64>,
 }
 
 /// A paste written by `claude_interactive_send` that has no Enter yet. The GUI
@@ -66,6 +69,9 @@ impl Live {
         let sequence = state.sequence;
         if is_interaction(&value) {
             state.replies.insert(sequence, None);
+            if value["agent_id"].is_null() {
+                state.root_requests.insert(sequence);
+            }
         }
         value["bridgeId"] = json!(sequence);
         state.events.push_back((sequence, value));
@@ -489,6 +495,11 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
             if let Some(phase) = root_hook_phase(&state.phase, event) {
                 state.phase = phase.into();
             }
+            if matches!(event, "Stop" | "StopFailure" | "SessionEnd")
+                && release_stale_requests(&mut state)
+            {
+                live.changed.notify_all();
+            }
             if let Some(path) = value["transcript_path"]
                 .as_str()
                 .and_then(|p| safe_transcript(&live.root, &live.native_id, Path::new(p)))
@@ -510,11 +521,13 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
         let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             if let Some(Some(reply)) = state.replies.remove(&id) {
+                state.root_requests.remove(&id);
                 break reply;
             }
             state.replies.entry(id).or_insert(None);
             if !live.running.load(Ordering::Acquire) || Instant::now() >= deadline {
                 state.replies.remove(&id);
+                state.root_requests.remove(&id);
                 break permission_reply("deny", None);
             }
             let (next, _) = live
@@ -543,6 +556,20 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
 /// Phase after a root (non-subagent) hook. A Stop-like hook during a composer
 /// send belongs to an earlier turn: the new prompt has no Enter yet, so it
 /// cannot have stopped, and marking the session ready would abort the paste.
+/// Fork (L-235): the main turn ended, so Claude no longer waits on its approval
+/// cards (it can move on without them). Answer them with no decision so their
+/// cards close and a late click changes nothing. Returns whether any were open.
+fn release_stale_requests(state: &mut LiveState) -> bool {
+    let mut released = false;
+    for id in std::mem::take(&mut state.root_requests) {
+        if let Some(reply @ None) = state.replies.get_mut(&id) {
+            *reply = Some(json!({}));
+            released = true;
+        }
+    }
+    released
+}
+
 fn root_hook_phase(current: &str, event: &str) -> Option<&'static str> {
     match event {
         "SessionStart" | "Stop" | "StopFailure" | "PostCompact" if current == "sending" => None,
@@ -1163,6 +1190,20 @@ pub fn claude_interactive_reply(
     }
     let live = host.get(&session_id)?;
     let mut state = live.state.lock().unwrap_or_else(|e| e.into_inner());
+    record_reply(
+        &mut state,
+        request_id,
+        if behavior == "terminal" {
+            json!({})
+        } else {
+            permission_reply(&behavior, updated_input)
+        },
+    )?;
+    live.changed.notify_all();
+    Ok(())
+}
+
+fn record_reply(state: &mut LiveState, request_id: u64, value: Value) -> Result<(), String> {
     let reply = state
         .replies
         .get_mut(&request_id)
@@ -1170,13 +1211,13 @@ pub fn claude_interactive_reply(
     if reply.is_some() {
         return Err("This approval already has a reply".into());
     }
-    *reply = Some(if behavior == "terminal" {
-        json!({})
-    } else {
-        permission_reply(&behavior, updated_input)
-    });
-    state.phase = "busy".into();
-    live.changed.notify_all();
+    *reply = Some(value);
+    // Fork (L-235): only an answer Claude is still waiting on resumes its work.
+    // A late answer to a card from a finished turn would leave the chat "busy"
+    // with no Stop to follow, refusing every send.
+    if state.phase == "permission" {
+        state.phase = "busy".into();
+    }
     Ok(())
 }
 
@@ -1328,6 +1369,31 @@ mod tests {
         // A large record still being written is left for the next poll.
         let (lines, consumed, more) = read_records(&big.as_bytes()[..]).unwrap();
         assert_eq!((lines.len(), consumed, more), (0, 0, false));
+    }
+
+    #[test]
+    fn a_finished_turn_closes_its_approval_cards_and_late_answers_keep_it_idle() {
+        // Claude asked, moved on without the answer, and ended its turn (L-235).
+        let mut state = LiveState {
+            phase: "permission".into(),
+            ..Default::default()
+        };
+        state.replies.insert(7, None);
+        state.root_requests.insert(7);
+        state.replies.insert(8, None); // a background agent's card stays open
+        state.phase = root_hook_phase(&state.phase, "Stop").unwrap().into();
+        assert!(release_stale_requests(&mut state));
+        assert_eq!(state.replies[&7], Some(json!({})));
+        assert_eq!(state.replies[&8], None);
+        assert!(record_reply(&mut state, 7, json!({})).is_err(), "card closed");
+        record_reply(&mut state, 8, permission_reply("allow", None)).unwrap();
+        assert_eq!(state.phase, "ready", "a late answer must not mark Claude busy");
+        assert!(!release_stale_requests(&mut state), "nothing left to close");
+
+        state.replies.insert(9, None);
+        state.phase = "permission".into();
+        record_reply(&mut state, 9, permission_reply("allow", None)).unwrap();
+        assert_eq!(state.phase, "busy", "an awaited answer resumes the work");
     }
 
     #[test]
