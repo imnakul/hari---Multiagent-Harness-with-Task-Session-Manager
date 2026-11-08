@@ -73,7 +73,7 @@ export function WorkspaceDrawer() {
   const colors = useColors();
   const styles = useStyles();
   const { projects, monos: roster } = useWorkspace();
-  const { pairing } = useConnection();
+  const { pairing, catalog } = useConnection();
   const tools = useMonoTools();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -136,7 +136,7 @@ export function WorkspaceDrawer() {
   // Settings rises over the open drawer, which is still there once it's shut.
   // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,
   // squeezed beside the drawer, so the drawer shuts first.
-  const openModal = (path: "/settings" | "/mono-new") => {
+  const openModal = (path: "/settings" | "/mono-new" | "/tasks" | "/notes") => {
     if (isModalRoute(pathname)) return;
     if (Platform.OS === "android") drawer.closeThen(() => router.push(path));
     else router.push(path);
@@ -174,6 +174,13 @@ export function WorkspaceDrawer() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* Fork (Hari, L-236): the desktop's Tasks and Notes, over the lists. */}
+          {catalog.phoneTools && !needle ? (
+            <View style={[styles.list, styles.toolList]}>
+              <ToolRow icon="tasks" label="Tasks" onPress={() => openModal("/tasks")} />
+              <ToolRow icon="note" label="Notes" onPress={() => openModal("/notes")} />
+            </View>
+          ) : null}
           {listedMonos.length ? (
             <View style={styles.list}>
               <Text style={styles.sectionLabel}>Monos</Text>
@@ -473,7 +480,42 @@ const ProjectRow = memo(function ProjectRow({
   );
 });
 
+/** A row that opens one of the desktop's tools in its own sheet. */
+function ToolRow({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.toolRow, pressed && styles.rowActive]}
+    >
+      <View style={styles.projectIcon}>
+        <Icon name={icon} size={22} color={colors.content} />
+      </View>
+      <Text style={[styles.rowLabel, styles.rowText]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const useStyles = themedStyles((colors) => ({
+  toolList: {
+    marginBottom: 18,
+  },
+  toolRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ROW_GAP,
+    minHeight: 48,
+    paddingLeft: ROW_INSET,
+    paddingRight: ROW_INSET + 12,
+    paddingVertical: 8,
+    borderRadius: radii.card - 6,
+    borderCurve: "continuous",
+  },
   container: {
     flex: 1,
     backgroundColor: colors.drawer,

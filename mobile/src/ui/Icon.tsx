@@ -7,6 +7,10 @@ import BotIcon from "@hugeicons/core-free-icons/BotIcon";
 import BubbleChatIcon from "@hugeicons/core-free-icons/BubbleChatIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CircleIcon from "@hugeicons/core-free-icons/CircleIcon";
+import CheckmarkCircle02Icon from "@hugeicons/core-free-icons/CheckmarkCircle02Icon";
+import NoteAddIcon from "@hugeicons/core-free-icons/NoteAddIcon";
+import TaskAdd01Icon from "@hugeicons/core-free-icons/TaskAdd01Icon";
+import TaskDone01Icon from "@hugeicons/core-free-icons/TaskDone01Icon";
 import ChartBreakoutSquareIcon from "@hugeicons/core-free-icons/ChartBreakoutSquareIcon";
 import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import ComputerRemoveIcon from "@hugeicons/core-free-icons/ComputerRemoveIcon";
@@ -109,6 +113,11 @@ const icons = {
   people: UserGroupIcon,
   layers: Layers01Icon,
   circle: CircleIcon,
+  // Fork (Hari, L-236): Tasks and Notes.
+  circleDone: CheckmarkCircle02Icon,
+  tasks: TaskDone01Icon,
+  taskAdd: TaskAdd01Icon,
+  noteAdd: NoteAddIcon,
 };
 
 export type IconName = keyof typeof icons;

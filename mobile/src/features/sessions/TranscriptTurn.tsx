@@ -18,6 +18,8 @@ import { withAlpha, themedStyles, useColors } from "@/ui/theme";
 
 import { LaunchedSessions } from "./LaunchedSessionCard";
 import { DocumentCard, MonoChoices } from "./MonoCards";
+import { ReplyLinkCards, ReplyToolButtons } from "@/features/tools/ReplyTools";
+
 import { Markdown } from "./Markdown";
 import { ProviderLogo } from "./ProviderLogo";
 import { sessionErrorContent, type SessionErrorNotice } from "./sessionError";
@@ -171,6 +173,8 @@ function TurnFooter({ turn }: { turn: Turn }) {
       ) : null}
       <View style={styles.footerActions}>
         {turn.copyText ? <CopyButton text={turn.copyText} /> : null}
+        {/* Fork (Hari, L-236): the reply to the desktop's Notes or Tasks. */}
+        {turn.copyText ? <ReplyToolButtons text={turn.copyText} /> : null}
         {metrics ? (
           <Pressable
             onPress={() => {
@@ -237,7 +241,11 @@ export const TranscriptOpened = createContext(false);
 function Reply({ text, streaming }: { text: string; streaming: boolean }) {
   const opened = use(TranscriptOpened);
   const [animate] = useState(opened);
-  return <Markdown text={text} streaming={streaming} animate={animate} />;
+  return (
+    <ReplyLinkCards streaming={streaming}>
+      <Markdown text={text} streaming={streaming} animate={animate} />
+    </ReplyLinkCards>
+  );
 }
 
 function DaySeparator({ at }: { at: number }) {

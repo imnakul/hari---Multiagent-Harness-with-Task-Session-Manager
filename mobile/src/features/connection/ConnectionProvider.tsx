@@ -30,6 +30,7 @@ import {
   type Identity,
 } from "./nativeLink";
 import { normalizeSelection, type MobileSelection } from "./selection";
+import type { LinkPreviewSettings } from "@/features/tools/tools";
 
 export type Catalog = {
   projects: Project[];
@@ -44,6 +45,10 @@ export type Catalog = {
   push?: boolean;
   /** The desktop reads and saves a Mono's soul and memory for the phone. */
   monoFiles?: boolean;
+  /** Fork (Hari, L-236): the desktop answers Tasks, Notes and link previews. */
+  phoneTools?: boolean;
+  /** Its Link previews setting and card style, which the phone follows. */
+  linkPreviews?: LinkPreviewSettings;
 };
 const EMPTY: Catalog = { projects: [], monos: [], sessions: [] };
 const PAIRING = "monocode.mobile.pairing";

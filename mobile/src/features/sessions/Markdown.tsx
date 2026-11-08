@@ -10,6 +10,7 @@ import {
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FileTypeIcon } from "@/features/files/FileTypeIcon";
+import { BlockLinkCards } from "@/features/tools/LinkCard";
 import { withAlpha, themedStyles, useColors } from "@/ui/theme";
 
 import {
@@ -115,9 +116,13 @@ const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBloc
   switch (block.type) {
     case "paragraph":
       return (
-        <Text style={[styles.text, muted && styles.mutedText]} selectable>
-          <Inlines nodes={block.inline} fade={fade} />
-        </Text>
+        <>
+          <Text style={[styles.text, muted && styles.mutedText]} selectable>
+            <Inlines nodes={block.inline} fade={fade} />
+          </Text>
+          {/* Fork (Hari, L-236): its web links as page cards, in a finished reply. */}
+          <BlockLinkCards block={block} />
+        </>
       );
     case "heading":
       return (

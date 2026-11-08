@@ -40,6 +40,7 @@ mod mcp;
 mod menu;
 mod mobile_access;
 mod mobile_router;
+mod mobile_tools;
 mod mono;
 #[cfg(target_os = "macos")]
 mod mono_chat;

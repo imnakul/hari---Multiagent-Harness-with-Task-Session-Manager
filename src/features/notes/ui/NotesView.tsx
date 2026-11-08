@@ -28,12 +28,14 @@ import { WindowControls } from "../../../app/shell/WindowControls";
 import { useDragResize } from "../../../shared/hooks/useDragResize";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import { formatRelativeTime } from "../../inbox/model/githubTasks";
+import { listen } from "@tauri-apps/api/event";
 import {
   createNote,
   deleteNote,
   loadNotes,
   MAX_NOTE_TAGS,
   NOTES_CHANGED_EVENT,
+  NOTES_CHANGED_TAURI_EVENT,
   normalizeNoteTags,
   notePreview,
   noteProjectChoices,
@@ -190,7 +192,12 @@ export function NotesView({
   useEffect(() => {
     void refresh();
     window.addEventListener(NOTES_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(NOTES_CHANGED_EVENT, refresh);
+    // Fork (Hari, L-236): a note saved from the phone.
+    const fromPhone = listen(NOTES_CHANGED_TAURI_EVENT, () => void refresh());
+    return () => {
+      window.removeEventListener(NOTES_CHANGED_EVENT, refresh);
+      void fromPhone.then((stop) => stop()).catch(() => {});
+    };
   }, [refresh]);
 
   const selectedIdRef = useRef(selectedId);

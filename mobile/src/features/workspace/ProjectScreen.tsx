@@ -74,6 +74,7 @@ import { androidBackHeader } from "@/ui/AndroidHeader";
 import { GlassBlurTarget, LiquidView } from "@/ui/LiquidView";
 import { useDrawerActions, useDrawerSwipe } from "@/ui/ScenePager";
 import { Timed } from "@/ui/Timed";
+import { ReplyToolsProvider } from "@/features/tools/ReplyTools";
 import { useColors } from "@/ui/theme";
 import { usePushedIn, usePushStarted } from "@/ui/usePushedIn";
 
@@ -465,6 +466,8 @@ export function ProjectScreen({
           <SessionTranscript
             sessionId={sessionId}
             projectId={project.id}
+            projectPath={project.path}
+            sessionTitle={session?.title}
             worktreePath={worktreePath}
             busy={conversation.busy}
             failed={!!conversation.error}
@@ -548,12 +551,17 @@ function ProjectEmptySession({
 function SessionTranscript({
   sessionId,
   projectId,
+  projectPath,
+  sessionTitle,
   worktreePath,
   busy,
   failed,
 }: {
   sessionId: string;
   projectId: string;
+  /** Fork (Hari, L-236): kept on a note or task saved from a reply. */
+  projectPath: string;
+  sessionTitle?: string;
   /** The working copy the session's files are read from. */
   worktreePath?: string;
   busy: boolean;
@@ -579,6 +587,7 @@ function SessionTranscript({
   // view is the one iOS finds to blur under the native header.
   return (
     <FileOpener value={openFile}>
+      <ReplyToolsProvider sessionId={sessionId} cwd={projectPath} title={sessionTitle}>
       {hasNativeTranscript ? <NativeTranscript key={sessionId} conversationId={sessionId} pushed /> : <Transcript
         key={sessionId}
         conversationId={sessionId}
@@ -591,6 +600,7 @@ function SessionTranscript({
       {!hasNativeTranscript && turns.length === 0 && !failed ? (
         <TranscriptLoading key={`loading:${sessionId}`} />
       ) : null}
+      </ReplyToolsProvider>
     </FileOpener>
   );
 }

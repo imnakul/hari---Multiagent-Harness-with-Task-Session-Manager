@@ -58,6 +58,8 @@ export function noteCardMeta(card: NoteComposerCard): NoteCardMeta {
 
 export const ADD_NOTE_TO_CHAT_EVENT = "monocode:add-note-to-chat";
 export const NOTES_CHANGED_EVENT = "monocode:notes-changed";
+/** Fork (Hari, L-236): the desktop service saved a note from the phone. */
+export const NOTES_CHANGED_TAURI_EVENT = "monocode://notes-changed";
 
 const MAX_TITLE = 200;
 export const MAX_NOTE_TAGS = 20;

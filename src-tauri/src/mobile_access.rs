@@ -694,7 +694,9 @@ async fn handle(
     if !params.is_object() {
         return Err("Invalid mobile parameters".into());
     }
-    let receiver = {
+    // Fork (Hari, L-236): the phone's tasks, notes and link cards come back out
+    // of the lock and are answered by the desktop service itself.
+    let receiver = 'locked: {
         let mut inner = host
             .inner
             .lock()
@@ -725,11 +727,25 @@ async fn handle(
             let mut catalog = merged_catalog(app, &mut inner);
             catalog["sessions"] = json!(recent_sessions(&catalog["sessions"]));
             catalog["addresses"] = json!(addresses(&inner));
+            // Fork (Hari, L-236): the phone shows Tasks and Notes, and link
+            // cards as the desktop window's settings say.
+            catalog["phoneTools"] = json!(true);
+            if let Some(links) = inner
+                .catalogs
+                .values()
+                .map(|catalog| &catalog["linkPreviews"])
+                .find(|links| links.is_object())
+            {
+                catalog["linkPreviews"] = links.clone();
+            }
             return Ok(catalog);
         }
         if method == "sessions.list" {
             let catalog = merged_catalog(app, &mut inner);
             return Ok(session_page(&catalog["sessions"], &params));
+        }
+        if crate::mobile_tools::handles(method) {
+            break 'locked Err(std::mem::take(&mut params));
         }
         if ![
             "conversation.read",
@@ -816,7 +832,11 @@ async fn handle(
             inner.pending.remove(&id);
             return Err("Desktop window is unavailable".into());
         }
-        (id, receive)
+        Ok((id, receive))
+    };
+    let receiver = match receiver {
+        Ok(receiver) => receiver,
+        Err(params) => return crate::mobile_tools::handle(app, method, params).await,
     };
     let response = tokio::time::timeout(Duration::from_secs(25), receiver.1).await;
     host.inner.lock().unwrap().pending.remove(&receiver.0);

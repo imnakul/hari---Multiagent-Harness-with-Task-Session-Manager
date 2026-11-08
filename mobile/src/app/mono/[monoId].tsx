@@ -39,6 +39,7 @@ import { useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { Transcript } from "@/features/sessions/Transcript";
 import { NativeTranscript } from "@/features/sessions/NativeTranscript";
 import type { TranscriptAgent } from "@/features/sessions/TranscriptTurn";
+import { ReplyToolsProvider } from "@/features/tools/ReplyTools";
 import {
   monoConversationId,
   useConversation,
@@ -350,7 +351,10 @@ function MonoTranscript({
 }) {
   const { turns, hasOlder, loadOlder } = useConversationTurns(conversationId);
   return turns.length > 0 ? (
-    <Transcript turns={turns} agent={agent} hasOlder={hasOlder} loadOlder={loadOlder} />
+    // Fork (Hari, L-236): replies can go to the desktop's Notes and Tasks.
+    <ReplyToolsProvider>
+      <Transcript turns={turns} agent={agent} hasOlder={hasOlder} loadOlder={loadOlder} />
+    </ReplyToolsProvider>
   ) : (
     <EmptySession mono={agent} />
   );

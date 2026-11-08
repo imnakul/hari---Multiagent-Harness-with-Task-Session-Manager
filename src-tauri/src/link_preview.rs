@@ -44,7 +44,10 @@ pub async fn fetch_link_preview(
         .map_err(|error| error.to_string())?
 }
 
-fn fetch_link_preview_sync(raw: &str, include_image: bool) -> Result<LinkPreviewMetadata, String> {
+pub(crate) fn fetch_link_preview_sync(
+    raw: &str,
+    include_image: bool,
+) -> Result<LinkPreviewMetadata, String> {
     let url = parse_public_url(raw)?;
     let page = fetch_resource(url, "text/html,application/xhtml+xml;q=0.9", MAX_PAGE_BYTES)?;
     if !is_html(&page.content_type) {

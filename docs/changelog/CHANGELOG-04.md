@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-08 14:25 IST — Hari: the desktop's Tasks and Notes, Add to notes / Add task, link cards (L-236)
+- Type: feature
+- What: The phone's side menu has Tasks (grouped by project; tick to complete; tap for status; quick add with project and tags) and Notes (search, read, edit with autosave, new note). A note changed on the computer after the phone opened it isn't overwritten: a banner offers Reload or Keep mine. A finished reply has Add to notes and Add task. Web links in finished replies show the desktop's link cards when Link previews is Always, in its Card style. The desktop service answers these requests itself (`mobile_tools.rs`) off the shared lock and tells desktop windows to refresh; Notes now refreshes on `monocode://notes-changed`.
+- Why: User asked for Tasks, Notes, reply buttons and link previews on the phone (decisions 1A 2A 3A, "Do at once").
+- Files: `src-tauri/src/{mobile_tools.rs (new),mobile_access.rs,link_preview.rs,lib.rs}`; `src/features/mobile/model/mobileWorkspace.ts`; `src/features/notes/{notes.ts,ui/NotesView.tsx}`; `mobile/src/features/tools/**` (new); `mobile/src/app/{tasks,notes}/**` (new), `app/_layout.tsx`; `mobile/src/features/workspace/{WorkspaceDrawer,ProjectScreen}.tsx`; `mobile/src/app/mono/[monoId].tsx`; `mobile/src/features/sessions/{Markdown,TranscriptTurn}.tsx`; `mobile/src/features/connection/ConnectionProvider.tsx`; `mobile/src/ui/{Icon,SceneFade}.tsx`; tests `mobile/tests/tools.test.ts` (new). Spec `docs/specs/hari-tasks-notes-links-plan.md`.
+- Verified: mobile tsc ✅, eslint 0 errors, mobile vitest 208/208 (watchFrames fails to load, as before), root tsc ✅, root vitest ✅ (1 load flake passes alone), cargo check ✅, Rust tests 3/3, rustfmt on touched files ✅; phone and desktop checks manual
+
 ## 2026-11-08 14:19 IST — Hari release 0.16.0-local30 (pickers, drafts)
 - Type: chore
 - What: Published `hari-v0.16.0-local30` (run 42463237902, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160030), `latest.json`, `hari-android.json`. Desktop code is unchanged from local29; only the version moved.

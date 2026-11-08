@@ -1,6 +1,10 @@
 import { mobileUsageLimit } from "../../sessions/model/usageLimit";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  loadLinkCardStyle,
+  loadLinkPreviewMode,
+} from "../../settings/model/linkPreviewSettings";
+import {
   gitCommit,
   gitDiffFiles,
   gitDiffIndex,
@@ -239,6 +243,8 @@ export async function mobileCatalog(
     projects,
     monos,
     sessions: [...sessions.values()].sort((a, b) => b.updatedAt - a.updatedAt),
+    // Fork (Hari, L-236): the phone draws link cards as this window's settings say.
+    linkPreviews: { mode: loadLinkPreviewMode(), cardStyle: loadLinkCardStyle() },
   };
 }
 /** The worktree a session works in, so the phone shows its changes and files
