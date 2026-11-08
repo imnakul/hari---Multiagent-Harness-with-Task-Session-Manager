@@ -3,7 +3,7 @@ import { Button, Host, HStack, Menu, Spacer } from "@expo/ui/swift-ui";
 import { useNavigation } from "expo-router";
 import { accessibilityLabel, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -27,8 +27,12 @@ import {
   merge,
   pickFiles,
   pickPhotos,
+  sendProblem,
+  settle,
   type Attachment,
+  type Picked,
 } from "./attachments";
+import { readDraft, writeDraft } from "./drafts";
 import { DictationBar } from "./DictationBar";
 import { canDictate, insertDictation } from "./dictation";
 import { TypingPostureFocus } from "./TypingPostureFocus";
@@ -92,7 +96,10 @@ export function Composer({
   compact = false,
   reply,
   onClearReply,
+  draftKey,
 }: {
+  /** Fork (Hari, L-235): the chat whose unsent message this keeps, across leaving and coming back. */
+  draftKey?: string;
   /** Only the visible route may focus its composer in response to folding. */
   active?: boolean;
   /** Where this runs: the project, or the mono. */
@@ -129,14 +136,19 @@ export function Composer({
   // person can keep writing. An error waits until it's back.
   const blocked = !offline && !!notice;
   const input = useRef<TextInput>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => readDraft(draftKey).text);
   const [sending, setSending] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>(() => readDraft(draftKey).attachments);
+  // Kept per chat as it changes; photos still being prepared aren't kept.
+  useEffect(() => {
+    writeDraft(draftKey, { text, attachments: attachments.filter((item) => !item.preparing) });
+  }, [draftKey, text, attachments]);
+  const preparing = attachments.some((item) => item.preparing);
   const [inputHeight, setInputHeight] = useState(INPUT_MIN);
   const [dictating, setDictating] = useState(false);
   // Where dictated words go: the cursor, or the selection they replace.
   const selection = useRef({ start: 0, end: 0 });
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !sending;
+  const canSend = (text.trim().length > 0 || attachments.length > 0) && !sending && !preparing;
   // A draft, in words or files, keeps the card open.
   const hasText = text.length > 0 || attachments.length > 0;
   // A compact draft past the pill's one line, measured at the pill's width so
@@ -259,7 +271,7 @@ export function Composer({
     });
   };
 
-  const attach = async (pick: (room: number) => Promise<Attachment[]>) => {
+  const attach = async (pick: (room: number) => Promise<Picked[]>) => {
     const room = MAX_ATTACHMENTS - attachments.length;
     if (room <= 0) {
       Alert.alert("Attachment limit", `A message can carry up to ${MAX_ATTACHMENTS} files.`);
@@ -268,10 +280,23 @@ export function Composer({
     try {
       const picked = await pick(room);
       if (!picked.length) return;
-      // Merged here, not in an updater, so its size error lands in the catch.
-      setAttachments(merge(attachments, picked));
+      // Fork (Hari, L-235): shown at once, a spinner on each until it's read
+      // or scaled down, rather than nothing until all of them are.
+      setAttachments((current) => merge(current, picked.map((item) => item.placeholder)));
       // Ready to say what they're for.
       input.current?.focus();
+      for (const { placeholder, ready } of picked) {
+        ready.then(
+          (done) => setAttachments((current) => settle(current, done)),
+          (reason: unknown) => {
+            setAttachments((current) => current.filter((item) => item.id !== placeholder.id));
+            Alert.alert(
+              "Could not attach",
+              reason instanceof Error ? reason.message : String(reason),
+            );
+          },
+        );
+      }
     } catch (reason) {
       Alert.alert("Could not attach", reason instanceof Error ? reason.message : String(reason));
     }
@@ -283,6 +308,11 @@ export function Composer({
   const send = async () => {
     // The draft stays put until the desktop can take it.
     if (!canSend || blocked || offline) return;
+    const problem = sendProblem(attachments);
+    if (problem) {
+      Alert.alert("Message not sent", problem);
+      return;
+    }
     const message = text.trim();
     const files = attachments;
     setSending(true);
@@ -562,10 +592,21 @@ function AttachmentChip({
   return (
     <View style={image ? styles.thumb : styles.fileChip}>
       {image ? (
-        <Image source={{ uri: attachment.uri }} style={styles.thumbImage} resizeMode="cover" />
+        <>
+          <Image source={{ uri: attachment.uri }} style={styles.thumbImage} resizeMode="cover" />
+          {attachment.preparing ? (
+            <View style={styles.thumbBusy}>
+              <ActivityIndicator size="small" color="#ffffff" />
+            </View>
+          ) : null}
+        </>
       ) : (
         <>
-          <FileTypeIcon name={attachment.name} isDir={false} size={20} />
+          {attachment.preparing ? (
+            <ActivityIndicator size="small" color={colors.muted} />
+          ) : (
+            <FileTypeIcon name={attachment.name} isDir={false} size={20} />
+          )}
           <Text style={styles.fileName} numberOfLines={1}>
             {attachment.name}
           </Text>
@@ -702,6 +743,17 @@ const useStyles = themedStyles((colors) => ({
     height: THUMB,
     borderRadius: 10,
     backgroundColor: colors.fill,
+  },
+  thumbBusy: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
   },
   fileChip: {
     flexDirection: "row",

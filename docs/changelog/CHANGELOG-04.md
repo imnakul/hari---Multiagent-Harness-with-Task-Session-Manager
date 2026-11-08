@@ -1,9 +1,16 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-08 13:59 IST — Hari: pickers open at once, drafts kept, Hari logo, thin side-menu edge (L-235)
+- Type: fix
+- What: Photo Library and Files open at once, and picked photos show at once with a spinner while they're scaled or read. The cause: the phone's link to the desktop (`MonocodeLink.execute`) ran on Expo's single shared `AsyncFunctionQueue` thread and blocked it up to 10 s per watch wait, so every other module call (pickers, `file.base64`, image scaling) queued behind it. It now runs as a coroutine on `Dispatchers.IO`; the Rust side already locks its shared state. An unsent message is kept per chat (session, new chat per project, Mono) when you go to Settings or another chat; its words are saved and survive a restart, attachments last while the app runs. The Hari feather, one colour in the text colour, replaces the MonoCode mark everywhere the app shows it. A hairline replaces the side menu's 18 px edge shadow.
+- Why: User report on local29: pickers still 10–20 s, photos slow to appear after picking, typed message lost after visiting Settings, MonoCode logo in the side menu, heavy shadow on its right edge. Decisions 1A 2A 3A.
+- Files: `mobile/modules/monocode-link/android/src/main/java/expo/modules/monocodelink/MonocodeLinkModule.kt`; `mobile/src/features/sessions/{attachments,drafts}.ts`, `Composer.tsx`; `mobile/src/features/workspace/ProjectScreen.tsx`, `mobile/src/app/mono/[monoId].tsx` (`draftKey`); `mobile/src/ui/brand.ts`, `mobile/assets/images/hari-mark.png`, `hari-mark-inverse.png`; `mobile/src/ui/ScenePager.tsx`; tests `mobile/tests/drafts.test.ts` (new), `Composer.test.tsx`. Also fixed the backslashes in the local29 release entry's file paths.
+- Verified: tsc ✅, eslint 0 errors, vitest 196/196 (33/34 files; `tests/mobile/watchFrames.test.ts` fails to load, as before), `gradlew :monocode-link:compileReleaseKotlin` ✅; phone checks manual
+
 ## 2026-11-07 21:59 IST — Hari release 0.16.0-local29 (Android fixes)
 - Type: chore
 - What: Published `hari-v0.16.0-local29` (run 42390211393, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160029), `latest.json`, `hari-android.json`. Desktop code is unchanged from local28; only the version moved.
 - Why: User asked for a fix release first (Android look, send jump, Settings, pickers, update spinner).
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local29-android-fixes_x64.exe` (19,600,560 bytes, SHA-256 C0808DE213D0964B2E346FD6F7D34D3BC65BE289D0DA3C7D38B088B7A462DF14, updater-signed, not code-signed); `E:DevelopingInstallable versionsHari_0.16.0-local29-android-fixes_android.apk` (69,905,956 bytes, SHA-256 FE3E518774BDBF0C1005716CC0DFCA07FA392DB51076BE2E6EB86D8872EB2A80)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local29-android-fixes_x64.exe` (19,600,560 bytes, SHA-256 C0808DE213D0964B2E346FD6F7D34D3BC65BE289D0DA3C7D38B088B7A462DF14, updater-signed, not code-signed); `E:\Developing\Installable versions\Hari_0.16.0-local29-android-fixes_android.apk` (69,905,956 bytes, SHA-256 FE3E518774BDBF0C1005716CC0DFCA07FA392DB51076BE2E6EB86D8872EB2A80)
 - Commit: 79b8afe8 (version), 6738bdab (fix)
 - Verified: CI ✅ (desktop 5m42s, APK 14m09s); `hari-android.json` served from releases/latest with 0.16.0-local29 ✅; update and phone checks manual
 
@@ -18,7 +25,7 @@
 - Type: chore
 - What: Published `hari-v0.16.0-local28` (run 42369157014, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160028), `latest.json`, `hari-android.json`. The first release that installed copies of local27 can update to. The GitHub repo was renamed to `imnakul/hari---Multiagent-Harness-with-Task-Session-Manager`; the `nakul-fork` remote now uses that URL (the update links already did).
 - Why: User asked to ship the Interactive Claude fix now; it is also the first auto-update test.
-- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local28-stuck-busy-fix_x64.exe` (19,591,720 bytes, SHA-256 4D1768AB0456BCEA02E9DCF63ECF5AD42B917721A9C18DE798FDD804B5DD5DEE, updater-signed, not code-signed); `E:DevelopingInstallable versionsHari_0.16.0-local28-stop-claude_android.apk` (69,905,696 bytes, SHA-256 BBAAD1C3E76DFC1AA1A52D4CF0C156A1CD822BDBE9882DDB4232B4A4C412B178)
+- Files: `E:\Developing\Installable versions\MonoCode_0.16.0-local28-stuck-busy-fix_x64.exe` (19,591,720 bytes, SHA-256 4D1768AB0456BCEA02E9DCF63ECF5AD42B917721A9C18DE798FDD804B5DD5DEE, updater-signed, not code-signed); `E:\Developing\Installable versions\Hari_0.16.0-local28-stop-claude_android.apk` (69,905,696 bytes, SHA-256 BBAAD1C3E76DFC1AA1A52D4CF0C156A1CD822BDBE9882DDB4232B4A4C412B178)
 - Commit: 52bc99e0 (version), 65c412bb (fix)
 - Verified: CI ✅ (desktop 9m46s, APK 13m36s); `hari-android.json` served from releases/latest with 0.16.0-local28 ✅; update from local27 on the phone and desktop manual
 

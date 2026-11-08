@@ -365,6 +365,7 @@ export function ProjectScreen({
           ) : null}
           <Composer
             key={sessionId ?? project.id}
+            draftKey={sessionId ? `session:${sessionId}` : `new:${project.id}`}
             active={focused && (sessionId != null || pages.view === "chat")}
             notice={sessionNotice}
             context={project.name}

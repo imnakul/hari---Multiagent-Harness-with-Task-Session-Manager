@@ -1,4 +1,6 @@
-/** The Monocode mark (white on transparent), from the desktop app's public/monocode.png. */
-export const MONOCODE_MARK = require("../../assets/images/monocode-mark.png");
+// Fork (Hari, L-235): the Hari feather in place of the Monocode mark, everywhere
+// the app shows its logo (side menu, connect screen, empty chat, background).
+/** The app's mark (white on transparent), drawn in the text colour. */
+export const MONOCODE_MARK = require("../../assets/images/hari-mark.png");
 /** The mark's inverse: white wherever the mark is clear, for an inner shadow in it. */
-export const MONOCODE_MARK_INVERSE = require("../../assets/images/monocode-mark-inverse.png");
+export const MONOCODE_MARK_INVERSE = require("../../assets/images/hari-mark-inverse.png");

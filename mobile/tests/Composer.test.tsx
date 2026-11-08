@@ -191,7 +191,13 @@ vi.mock("@/features/sessions/attachments", () => ({
   pickPhotos: runtime.photos,
   pickFiles: runtime.files,
   merge: vi.fn(),
+  settle: vi.fn(),
+  sendProblem: () => null,
   isImage: () => false,
+}));
+vi.mock("@/features/sessions/drafts", () => ({
+  readDraft: () => ({ text: "", attachments: [] }),
+  writeDraft: vi.fn(),
 }));
 vi.mock("@/ui/Icon", () => ({ Icon: () => null }));
 vi.mock("@/ui/LiquidView", () => ({ LiquidView: () => null }));

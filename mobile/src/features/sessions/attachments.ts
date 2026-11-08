@@ -12,7 +12,12 @@ export type Attachment = {
   uri: string;
   /** The file's bytes, as the desktop takes them. */
   data: string;
+  /** Fork (Hari, L-235): shown while its bytes are still being read or scaled; not sendable yet. */
+  preparing?: boolean;
 };
+
+/** A pick shown at once, and its finished attachment, under the same id. */
+export type Picked = { placeholder: Attachment; ready: Promise<Attachment> };
 
 /** What the desktop is sent for each: it stages them as its own composer does. */
 export type WireAttachment = Pick<Attachment, "name" | "mimeType" | "data">;
@@ -51,7 +56,7 @@ export const toWire = (attachments: Attachment[]): WireAttachment[] =>
   attachments.map(({ name, mimeType, data }) => ({ name, mimeType, data }));
 
 /** Photos from the library, scaled down and re-encoded where they need it. */
-export async function pickPhotos(room: number): Promise<Attachment[]> {
+export async function pickPhotos(room: number): Promise<Picked[]> {
   const result = await launchImageLibraryAsync({
     mediaTypes: ["images"],
     allowsMultipleSelection: true,
@@ -59,38 +64,67 @@ export async function pickPhotos(room: number): Promise<Attachment[]> {
     quality: 1,
   });
   if (result.canceled) return [];
-  return Promise.all(result.assets.slice(0, room).map(fromPhoto));
+  return result.assets.slice(0, room).map((asset) => {
+    const id = makeId();
+    const mimeType = asset.mimeType ?? mimeFor(asset.fileName ?? "", null);
+    return {
+      placeholder: {
+        id,
+        name: asset.fileName ?? "photo",
+        mimeType: mimeType.startsWith("image/") ? mimeType : "image/jpeg",
+        size: asset.fileSize ?? 0,
+        uri: asset.uri,
+        data: "",
+        preparing: true,
+      },
+      ready: fromPhoto(asset, id),
+    };
+  });
 }
 
 /** Any files, from Files and its providers. */
-export async function pickFiles(room: number): Promise<Attachment[]> {
+export async function pickFiles(room: number): Promise<Picked[]> {
   const picked = await File.pickFileAsync({ multipleFiles: true });
   if (picked.canceled) return [];
   const files = picked.result.slice(0, room);
   const tooLarge = files.find((file) => file.size > MAX_FILE_BYTES);
   if (tooLarge) throw new Error(`${tooLarge.name} is over the 10 MB limit.`);
-  return Promise.all(
-    files.map(async (file) => ({
+  return files.map((file) => {
+    const placeholder: Attachment = {
       id: makeId(),
       name: file.name,
       mimeType: mimeFor(file.name, file.type),
       size: file.size,
       uri: file.uri,
-      data: await file.base64(),
-    })),
-  );
+      data: "",
+      preparing: true,
+    };
+    return {
+      placeholder,
+      ready: file.base64().then((data) => ({ ...placeholder, data, preparing: undefined })),
+    };
+  });
 }
 
-/** Adds picks to what's held, refusing any that would take the message over the link's limit. */
+/** Adds picks to what's held, up to the limit. */
 export function merge(existing: Attachment[], added: Attachment[]): Attachment[] {
-  const next = [...existing, ...added].slice(0, MAX_ATTACHMENTS);
-  const total = next.reduce((sum, attachment) => sum + attachment.data.length, 0);
-  if (total > MAX_TOTAL_BASE64)
-    throw new Error("These attachments are too large to send together. Remove some and try again.");
-  return next;
+  return [...existing, ...added].slice(0, MAX_ATTACHMENTS);
 }
 
-async function fromPhoto(asset: ImagePickerAsset): Promise<Attachment> {
+/** Puts a finished attachment in its placeholder's place; gone if it was removed meanwhile. */
+export function settle(held: Attachment[], ready: Attachment): Attachment[] {
+  return held.map((attachment) => (attachment.id === ready.id ? ready : attachment));
+}
+
+/** Why the message can't go as it is, if it can't: over the link's limit. */
+export function sendProblem(attachments: Attachment[]): string | null {
+  const total = attachments.reduce((sum, attachment) => sum + attachment.data.length, 0);
+  return total > MAX_TOTAL_BASE64
+    ? "These attachments are too large to send together. Remove some and try again."
+    : null;
+}
+
+async function fromPhoto(asset: ImagePickerAsset, id: string): Promise<Attachment> {
   const mimeType = asset.mimeType ?? mimeFor(asset.fileName ?? "", null);
   const small =
     SENT_AS_IS.has(mimeType) &&
@@ -99,7 +133,7 @@ async function fromPhoto(asset: ImagePickerAsset): Promise<Attachment> {
   if (small) {
     const file = new File(asset.uri);
     return {
-      id: makeId(),
+      id,
       name: asset.fileName ?? `photo.${mimeType.split("/")[1]}`,
       mimeType,
       size: file.size,
@@ -119,7 +153,7 @@ async function fromPhoto(asset: ImagePickerAsset): Promise<Attachment> {
   });
   const base = (asset.fileName ?? "photo").replace(/\.[^.]+$/, "");
   return {
-    id: makeId(),
+    id,
     name: `${base}.jpg`,
     mimeType: "image/jpeg",
     size: Math.floor(((saved.base64 ?? "").length * 3) / 4),

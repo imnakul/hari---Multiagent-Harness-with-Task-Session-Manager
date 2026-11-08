@@ -31,7 +31,6 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { useContentWidth } from "./ContentPane";
 
-import { LinearGradient } from "expo-linear-gradient";
 
 import { useColors, useScheme } from "./theme";
 
@@ -58,11 +57,6 @@ const SWITCH_FRAMES = 2;
 /** The scene's dimming with the drawer fully open, as that drawer's overlay:
  *  in dark mode only, as a light scene dimmed with black reads as going dark. */
 const OVERLAY_OPACITY = { dark: 0.5, light: 0 } as const;
-/** The shadow the scene casts on the drawer as it moves aside: a soft band
- *  along its left edge, drawn once and moved with the scene, as a live
- *  shadow on a full-screen view is redrawn each frame and hitches. None in
- *  dark mode, where it reads as a smudge rather than depth. */
-const EDGE_SHADOW = { width: 18, dark: "transparent", light: "rgba(0,0,0,0.10)" } as const;
 /** What the current drag moves. */
 const NONE = 0;
 const PAGES = 1;
@@ -538,14 +532,12 @@ export function ScenePagerHost({
                 style={[styles.scene, { backgroundColor: colors.background }, sceneStyle]}
               >
                 {drawer ? (
-                  <Animated.View pointerEvents="none" style={[styles.edge, edgeStyle]}>
-                    <LinearGradient
-                      colors={["transparent", EDGE_SHADOW[scheme]]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  </Animated.View>
+                  // Fork (Hari, L-235): a thin line along the scene's left edge as it
+                  // moves aside, in place of a soft shadow that read as a smudge.
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[styles.edge, { backgroundColor: colors.stroke }, edgeStyle]}
+                  />
                 ) : null}
                 {children}
                 <Animated.View
@@ -586,8 +578,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     bottom: 0,
-    left: -EDGE_SHADOW.width,
-    width: EDGE_SHADOW.width,
+    left: -StyleSheet.hairlineWidth,
+    width: StyleSheet.hairlineWidth,
   },
   overlay: {
     ...StyleSheet.absoluteFill,
