@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-08 14:19 IST — Hari release 0.16.0-local30 (pickers, drafts)
+- Type: chore
+- What: Published `hari-v0.16.0-local30` (run 42463237902, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160030), `latest.json`, `hari-android.json`. Desktop code is unchanged from local29; only the version moved.
+- Why: Ships the 13:59 fixes (pickers at once, drafts kept, Hari logo, thin side-menu edge) to the phone.
+- Files: `E:DevelopingInstallable versionsMonoCode_0.16.0-local30-pickers-drafts_x64.exe` (19,596,604 bytes, SHA-256 68A1ABA81B4A2ADCB63DCA60D36ECC702F28354EDE9C62462E086C79350A76E9, updater-signed, not code-signed); `E:DevelopingInstallable versionsHari_0.16.0-local30-pickers-drafts_android.apk` (70,061,516 bytes, SHA-256 DA9DF6D4153A54474385D2CE7B05ED0C8D1839A6A53B93CAD6C3821BBC4CA1FB)
+- Commit: b6954b53 (version), c4763105 (fix)
+- Verified: CI ✅ (desktop 8m05s, APK 16m49s); `hari-android.json` served from releases/latest with 0.16.0-local30 ✅; update and phone checks manual
+
 ## 2026-11-08 13:59 IST — Hari: pickers open at once, drafts kept, Hari logo, thin side-menu edge (L-235)
 - Type: fix
 - What: Photo Library and Files open at once, and picked photos show at once with a spinner while they're scaled or read. The cause: the phone's link to the desktop (`MonocodeLink.execute`) ran on Expo's single shared `AsyncFunctionQueue` thread and blocked it up to 10 s per watch wait, so every other module call (pickers, `file.base64`, image scaling) queued behind it. It now runs as a coroutine on `Dispatchers.IO`; the Rust side already locks its shared state. An unsent message is kept per chat (session, new chat per project, Mono) when you go to Settings or another chat; its words are saved and survive a restart, attachments last while the app runs. The Hari feather, one colour in the text colour, replaces the MonoCode mark everywhere the app shows it. A hairline replaces the side menu's 18 px edge shadow.
