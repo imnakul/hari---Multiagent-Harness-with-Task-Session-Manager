@@ -73,7 +73,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $env:RUSTUP_TOOLCHAIN = "stable-x86_64-pc-windows-msvc"
-          npx tauri build --bundles nsis --config "$env:RUNNER_TEMP\tauri.release.conf.json"
+          # The bundler downloads NSIS; a busy server (504) failed a run, so
+          # try up to three times. Later tries reuse the compiled app.
+          for ($try = 1; $try -le 3; $try++) {
+            npx tauri build --bundles nsis --config "$env:RUNNER_TEMP\tauri.release.conf.json"
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($try -eq 3) { exit 1 }
+            Write-Host "Installer build failed (try $try of 3); trying again in 30 s"
+            Start-Sleep -Seconds 30
+          }
       - name: Stage installer
         shell: pwsh
         run: |
@@ -135,8 +143,17 @@ jobs:
           sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g/' android/gradle.properties
           # The generated file has no final line break, so start on a new line.
           { echo; echo "kotlin.daemon.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g"; } >> android/gradle.properties
-          tail -3 android/gradle.properties
+          # Gradle's servers timed out four times in one release (local31):
+          # wait 2 minutes for a download instead of 10 seconds.
+          sed -i 's/^networkTimeout=.*/networkTimeout=120000/' android/gradle/wrapper/gradle-wrapper.properties
+          grep -q '^networkTimeout=' android/gradle/wrapper/gradle-wrapper.properties || echo 'networkTimeout=120000' >> android/gradle/wrapper/gradle-wrapper.properties
+          {
+            echo "systemProp.org.gradle.internal.http.connectionTimeout=120000"
+            echo "systemProp.org.gradle.internal.http.socketTimeout=120000"
+          } >> android/gradle.properties
+          tail -5 android/gradle.properties
           grep jvmargs android/gradle.properties
+          grep networkTimeout android/gradle/wrapper/gradle-wrapper.properties
       # Keeps Gradle's downloads and build parts between runs.
       - uses: gradle/actions/setup-gradle@v4
       - name: Build signed APK
@@ -153,7 +170,14 @@ jobs:
           fi
           export HARI_KEYSTORE_PATH="$RUNNER_TEMP/hari-release.keystore"
           echo "$HARI_KEYSTORE_BASE64" | base64 -d > "$HARI_KEYSTORE_PATH"
-          ./gradlew assembleRelease -PreactNativeArchitectures="$ANDROID_ABIS"
+          # Up to three tries, as a download can still fail; later tries reuse
+          # what the earlier ones built.
+          for try in 1 2 3; do
+            ./gradlew assembleRelease -PreactNativeArchitectures="$ANDROID_ABIS" && break
+            if [ "$try" = 3 ]; then rm -f "$HARI_KEYSTORE_PATH"; exit 1; fi
+            echo "APK build failed (try $try of 3); trying again in 30 s"
+            sleep 30
+          done
           rm -f "$HARI_KEYSTORE_PATH"
       - name: Stage APK
         run: |

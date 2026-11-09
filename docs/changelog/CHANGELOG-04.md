@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-09 10:52 IST — Hari: New / Sessions switch at the bottom; patient release builds (L-237)
+- Type: feature
+- What: On a project the New / Sessions switch moved from the header to the bottom centre. It sits above the composer on New, slides onto the search bar on Sessions as the page swipes, and lifts with the keyboard; the sessions list and the live sessions over the composer leave room for it. The release workflow waits 2 minutes for Gradle downloads instead of 10 s and tries the APK and desktop installer builds up to three times.
+- Why: User asked for the switch at bottom centre; release local31 failed four times on Gradle download timeouts and once on a 504 (run 42465082032).
+- Files: `mobile/src/features/sessions/{SessionScreen,SessionsPage}.tsx`, `mobile/src/features/workspace/ProjectScreen.tsx`, `.github/workflows/hari-release.yml`.
+- Verified: mobile tsc ✅, eslint 0 errors, mobile vitest 208/208 (watchFrames fails to load, as before), workflow YAML parses ✅; phone check manual
+
 ## 2026-11-08 14:25 IST — Hari: the desktop's Tasks and Notes, Add to notes / Add task, link cards (L-236)
 - Type: feature
 - What: The phone's side menu has Tasks (grouped by project; tick to complete; tap for status; quick add with project and tags) and Notes (search, read, edit with autosave, new note). A note changed on the computer after the phone opened it isn't overwritten: a banner offers Reload or Keep mine. A finished reply has Add to notes and Add task. Web links in finished replies show the desktop's link cards when Link previews is Always, in its Card style. The desktop service answers these requests itself (`mobile_tools.rs`) off the shared lock and tells desktop windows to refresh; Notes now refreshes on `monocode://notes-changed`.

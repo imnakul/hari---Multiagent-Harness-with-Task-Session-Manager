@@ -74,6 +74,7 @@ import { androidBackHeader } from "@/ui/AndroidHeader";
 import { GlassBlurTarget, LiquidView } from "@/ui/LiquidView";
 import { useDrawerActions, useDrawerSwipe } from "@/ui/ScenePager";
 import { Timed } from "@/ui/Timed";
+import { SEARCH_BAR } from "@/features/files/FileSearchBar";
 import { ReplyToolsProvider } from "@/features/tools/ReplyTools";
 import { useColors } from "@/ui/theme";
 import { usePushedIn, usePushStarted } from "@/ui/usePushedIn";
@@ -145,6 +146,9 @@ export function ProjectScreen({
   // Only a new session has pages; a session is the chat alone.
   const pages = useProjectPages(project.id, !sessionId);
   // Between pages, mid-swipe or springing to one.
+  // Fork (Hari, L-237): how much of the new-session page, and its composer, is
+  // in view; the bottom switch rides on the composer and drops as it leaves.
+  const chatShare = useDerivedValue(() => 1 - Math.min(1, Math.max(0, pages.progress.get())));
   const swiping = useDerivedValue(() => {
     const at = pages.progress.get();
     return Math.abs(at - Math.round(at)) > 0.001;
@@ -324,6 +328,10 @@ export function ProjectScreen({
 
   return (
     <SessionScreen
+      // Fork (Hari, L-237): New / Sessions at the bottom centre, not in the header.
+      footer={sessionId ? undefined : <ProjectSwitch pages={pages} />}
+      footerRaise={chatShare}
+      footerFloor={SEARCH_BAR}
       // Where a new session will work, under the tabs and in view across its
       // pages; a session's composer shows where it does.
       below={
@@ -429,7 +437,7 @@ export function ProjectScreen({
                 }
               : { headerTitle: "", headerBackVisible: !sheet }
             : {
-                headerTitle: () => <ProjectSwitch pages={pages} />,
+                headerTitle: "",
                 ...(Platform.OS === "android"
                   ? {
                       headerTitleAlign: "center" as const,
