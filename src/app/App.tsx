@@ -23,6 +23,7 @@ import {
 import { SessionTodoComposer } from "../features/session-board/ui/SessionTodoComposer";
 import { recoverMobileUsage } from "../features/mobile/model/mobileUsageLimit";
 import { checkMobileQueueAction } from "../features/mobile/model/mobileQueue";
+import { checkMobileApproval } from "../features/mobile/model/mobileApproval";
 import { sessionConversationPage } from "../features/agent-app/model/sessionConversation";
 import { useMobileWorkspace } from "../features/mobile/hooks/useMobileWorkspace";
 import { hasMobileAttachments, mobileAttachments } from "../features/mobile/model/mobileAttachments";
@@ -2019,6 +2020,8 @@ function Workspace({
   const queueDispatchingRef = useRef(new Set<string>());
   const [queueDispatchVersion, setQueueDispatchVersion] = useState(0);
   const mobileUsageActions = useRef<{ resume: (id: string) => Promise<boolean>; automatic: (id: string, enabled: boolean) => void } | null>(null);
+  // Fork (Hari, L-239): the approval toast's Approve and Deny, for the phone's Live Update.
+  const mobileApprove = useRef<((sessionId: string, requestId: number, decision: ApprovalDecision) => void) | null>(null);
   // Fork (Hari, L-238): the queue's buttons, for the phone's queue strip.
   const mobileQueueActions = useRef<{
     remove: (sessionId: string, messageId: string) => void;
@@ -11673,6 +11676,14 @@ function Workspace({
         await onStop(session.id);
         return { sessionId: session.id };
       }
+      if (method === "session.approve") {
+        // Fork (Hari, L-239): Approve or Deny on the phone's Live Update, as the
+        // approval toast's buttons; only a request still waiting.
+        const live = sessionsRef.current.find((current) => current.id === session.id);
+        const { requestId, decision } = checkMobileApproval(live, params);
+        mobileApprove.current!(session.id, requestId, decision);
+        return { sessionId: session.id };
+      }
       if (
         method === "session.queueDelete" ||
         method === "session.queueEdit" ||
@@ -13867,6 +13878,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     },
     [],
   );
+  mobileApprove.current = onApproval;
 
   const onQuestionReply = useCallback(
     (sessionId: string, requestId: number, reply: UserQuestionReply) => {

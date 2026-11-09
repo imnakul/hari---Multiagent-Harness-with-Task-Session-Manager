@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-09 15:40 IST — Hari: running sessions as an Android Live Update (L-239)
+- Type: feature
+- What: With Settings → Live Updates → Show running sessions on (off by default), running sessions the user started show as an Android 16 Live Update: status-bar chip (time running, "N busy", "Approve" or "Reply"), HyperOS Super Island, shade and lock screen. Buttons: Stop and Open, or Approve, Deny and Open with the card naming what is asked; each asks for unlock. One card for all (default) or one per session. A foreground service ticks every 15 s so the card stays current with the phone locked; contact lost shows "Reconnecting…", then after 2 minutes the cards close with a "Lost connection" alert. Older Android shows a pinned notification. New desktop command `session.approve`; the session list names the waiting approval.
+- Why: User asked to watch and control running sessions from the Super Island on the Poco X8 Pro (locked: all user sessions, combined or each in Settings, Stop/Open and Approve/Deny/Open).
+- Files: `src/features/mobile/model/{mobileApproval.ts (new),mobileApproval.test.ts (new),mobileWorkspace.ts}`, `src/app/App.tsx`, `src-tauri/src/mobile_access.rs`, `mobile/modules/hari-live/**` (new), `mobile/src/features/liveUpdates/{liveCards.ts,nativeLive.ts,LiveUpdates.tsx}` (new), `mobile/src/features/settings/liveUpdates.ts` (new), `mobile/src/app/{_layout.tsx,settings/index.tsx}`, `mobile/src/features/workspace/types.ts`, `mobile/tests/liveCards.test.ts` (new), spec `docs/specs/hari-live-updates-plan.md`.
+- Verified: mobile tsc ✅, eslint 0 errors, mobile vitest 224/224 (watchFrames fails to load, as before), root tsc ✅, root mobile-model vitest 52/52, cargo check ✅, rustfmt on mobile_access.rs ✅, local Gradle `:hari-live:compileReleaseKotlin` ✅; phone check manual (spec § Phone check)
+
 ## 2026-11-09 13:16 IST — Hari release 0.16.0-local32 (message queue, blank chat, Tasks and Notes)
 - Type: chore
 - What: Published `hari-v0.16.0-local32` (run 42570432131, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160032), `latest.json`, `hari-android.json`. Carries L-236, L-237 and L-238 (local31 never published). The first APK attempt failed three times on a Gradle download 504; re-running the failed jobs passed.

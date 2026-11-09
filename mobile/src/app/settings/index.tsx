@@ -1,3 +1,4 @@
+import * as Notifications from "expo-notifications";
 import { router, useLocalSearchParams, useNavigationContainerRef } from "expo-router";
 import { Fragment, useState } from "react";
 import { Alert, Linking, StyleSheet, Switch, Text, View } from "react-native";
@@ -17,6 +18,14 @@ import {
   type NotificationCategory,
 } from "@/features/settings/notifications";
 import { useOpenSessionAfterStarting } from "@/features/settings/newSessions";
+import { useLivePreferences } from "@/features/settings/liveUpdates";
+import {
+  liveAvailable,
+  livePromotable,
+  openBatterySettings,
+  openPromotedSettings,
+  usePromotedAllowed,
+} from "@/features/liveUpdates/nativeLive";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
 import { HariUpdateRows } from "@/features/updates/HariUpdateCard";
@@ -138,6 +147,8 @@ export default function SettingsScreen() {
         </Text>
       ) : null}
 
+      {liveAvailable ? <LiveUpdateSettings /> : null}
+
       <Text style={styles.heading}>Preferences</Text>
       <View style={styles.card}>
         <SettingsRow
@@ -257,6 +268,80 @@ export default function SettingsScreen() {
         <Text style={styles.error}>{connection.error}</Text>
       ) : null}
     </SettingsPage>
+  );
+}
+
+/**
+ * Fork (Hari, L-239): running sessions in the status bar, the Super Island
+ * and on the lock screen. Off until turned on.
+ */
+function LiveUpdateSettings() {
+  const colors = useColors();
+  const styles = useStyles();
+  const [{ enabled, mode }, setLive] = useLivePreferences();
+  const allowed = usePromotedAllowed();
+  const each = mode === "each";
+  // The cards are notifications: ask for them as the switch turns on.
+  const turn = (on: boolean) => {
+    setLive({ enabled: on });
+    if (on) void Notifications.requestPermissionsAsync().catch(() => {});
+  };
+  return (
+    <>
+      <Text style={styles.heading}>Live Updates</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon="automation"
+          label="Show running sessions"
+          onPress={() => turn(!enabled)}
+          accessory={
+            <Switch
+              accessibilityLabel="Show running sessions as a Live Update"
+              value={enabled}
+              onValueChange={turn}
+              trackColor={{ true: colors.accent }}
+            />
+          }
+        />
+        {enabled ? (
+          <>
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="layers"
+              label="One card per session"
+              onPress={() => setLive({ mode: each ? "combined" : "each" })}
+              accessory={
+                <Switch
+                  accessibilityLabel="One card per session"
+                  value={each}
+                  onValueChange={(on) => setLive({ mode: on ? "each" : "combined" })}
+                  trackColor={{ true: colors.accent }}
+                />
+              }
+            />
+          </>
+        ) : null}
+      </View>
+      <Text style={styles.note}>
+        {livePromotable
+          ? "Your sessions in the status bar, the island and on the lock screen while they run. Stop, Approve and Deny ask you to unlock first."
+          : "Your sessions as a pinned notification while they run. Stop, Approve and Deny ask you to unlock first."}
+        {enabled && !each ? " Several sessions share one card; turn on One card per session for a Stop button on each." : ""}
+      </Text>
+      {enabled && livePromotable && !allowed ? (
+        <Text style={styles.note} onPress={() => void openPromotedSettings()}>
+          Live Updates are off for Hari in Android settings.{" "}
+          <Text style={{ color: colors.accent }}>Turn on</Text>
+        </Text>
+      ) : null}
+      {enabled ? (
+        <Text style={styles.note} onPress={() => void openBatterySettings()}>
+          To keep them current with the phone locked, set Battery to No
+          restrictions and turn on Autostart.{" "}
+          <Text style={{ color: colors.accent }}>Open app settings</Text>
+        </Text>
+      ) : null}
+    </>
   );
 }
 

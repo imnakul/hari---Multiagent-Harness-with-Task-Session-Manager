@@ -135,6 +135,8 @@ export type SessionSummary = {
   busy?: boolean;
   /** What it waits on the user for; absent from an older desktop. */
   waiting?: "approval" | "question";
+  /** The approval it waits on, e.g. "Run npm test" (Hari, L-239); absent from an older desktop. */
+  approval?: { requestId: number; label: string };
 };
 
 // The desktop's UserQuestionPrompt (src/features/sessions/model/userQuestion.ts):

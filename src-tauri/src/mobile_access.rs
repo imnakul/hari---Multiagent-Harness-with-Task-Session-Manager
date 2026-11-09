@@ -768,6 +768,8 @@ async fn handle(
             "session.resumeUsage",
             "session.resumeUsageAtReset",
             "session.cancel",
+            // Fork (Hari, L-239): Approve and Deny on the Live Update.
+            "session.approve",
             // Fork (Hari, L-238): the queue strip above the phone's composer.
             "session.queueDelete",
             "session.queueEdit",

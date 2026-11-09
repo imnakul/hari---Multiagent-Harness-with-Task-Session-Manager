@@ -1,5 +1,6 @@
 import { mobileUsageLimit } from "../../sessions/model/usageLimit";
 import { mobileQueue } from "./mobileQueue";
+import { mobileWaiting } from "./mobileApproval";
 import { invoke } from "@tauri-apps/api/core";
 import {
   loadLinkCardStyle,
@@ -56,7 +57,6 @@ import {
   RUNTIME_MODES,
   RUNTIME_MODE_HINT,
   RUNTIME_MODE_LABEL,
-  hasPendingApproval,
   newDefaultSession,
   sessionDisplayTitle,
   type HarnessId,
@@ -200,12 +200,9 @@ export async function mobileCatalog(
           [...session.blocks].reverse().find((block) => block.startedAt)
             ?.startedAt ?? 0,
         busy: !!session.busy,
-        // What it waits on the user for, so the phone can notify of it.
-        ...(hasPendingApproval(session.blocks)
-          ? { waiting: "approval" as const }
-          : session.pendingQuestion
-            ? { waiting: "question" as const }
-            : {}),
+        // What it waits on the user for, so the phone can notify of it; an
+        // approval also names what it asks, for the Live Update (L-239).
+        ...mobileWaiting(session),
         live: true,
       });
   }
