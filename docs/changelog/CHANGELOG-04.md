@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-09 10:54 IST — Hari: New / Sessions switch back in the header (L-237 revert)
+- Type: revert
+- What: Put the project's New / Sessions switch back at the top centre; the bottom-centre version from 10:52 is undone. Release run 42567014456 (local32, which had it) was cancelled before publishing. The patient release builds stay.
+- Why: User: swiping already works and the switch is fine at the top.
+- Files: `mobile/src/features/sessions/{SessionScreen,SessionsPage}.tsx`, `mobile/src/features/workspace/ProjectScreen.tsx` (back to 3f2f78fd).
+- Verified: mobile tsc ✅, mobile vitest 208/208; the three files match local31
+
 ## 2026-11-09 10:52 IST — Hari: New / Sessions switch at the bottom; patient release builds (L-237)
 - Type: feature
 - What: On a project the New / Sessions switch moved from the header to the bottom centre. It sits above the composer on New, slides onto the search bar on Sessions as the page swipes, and lifts with the keyboard; the sessions list and the live sessions over the composer leave room for it. The release workflow waits 2 minutes for Gradle downloads instead of 10 s and tries the APK and desktop installer builds up to three times.

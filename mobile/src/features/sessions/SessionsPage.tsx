@@ -52,10 +52,9 @@ export function SessionsPage({
   const colors = useColors();
   const styles = useStyles();
   const { sessions, edited, rememberSession } = useWorkspace();
-  const { pageTop, dockBottom, footerSpace } = useSessionLayout();
+  const { pageTop, dockBottom } = useSessionLayout();
   // Room for the search bar where the composer rests, and the blur under it.
-  // Fork (Hari, L-237): and the project's New / Sessions switch on the search bar.
-  const bottom = dockBottom + SEARCH_BAR + 16 + footerSpace;
+  const bottom = dockBottom + SEARCH_BAR + 16;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SessionFilter>(NO_FILTER);
   const needle = query.trim().toLowerCase();

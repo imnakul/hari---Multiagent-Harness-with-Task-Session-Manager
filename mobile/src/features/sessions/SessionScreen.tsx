@@ -69,8 +69,6 @@ const KEYBOARD_GAP = 8;
 /** How far past the header and composer the blur keeps fading. Content rests
  *  clear of it (see `top` and `bottom`), so it only dims once scrolled underneath. */
 const FADE = 16;
-/** Space between the bottom switch and the composer or content under it. */
-const FOOTER_GAP = 8;
 /** The header's fade reaches further, so content softens well before it goes under. */
 const TOP_FADE = 36;
 /** How far the blur reaches up a page without the composer. */
@@ -99,8 +97,6 @@ type SessionLayout = {
   bareBottom: number;
   /** Where the composer rests above the screen's bottom edge, for a page's own bottom bar. */
   dockBottom: number;
-  /** Fork (Hari, L-237): the height the bottom switch (`footer`) takes, with its gap; 0 without one. */
-  footerSpace: number;
   /** How much less than the keyboard height the composer travels; KeyboardChatScrollView `offset`. */
   keyboardOffset: number;
   /** Extra height while the composer grows past one line; KeyboardChatScrollView `extraContentPadding`. */
@@ -118,7 +114,6 @@ const SessionLayoutContext = createContext<SessionLayout>({
   bottom: 0,
   bareBottom: 0,
   dockBottom: 0,
-  footerSpace: 0,
   keyboardOffset: 0,
   extraContentPadding: undefined,
   composerGrowth: 0,
@@ -181,7 +176,6 @@ export function SheetLayout({
       bottom: dockBottom,
       bareBottom: dockBottom + PAGE_FADE,
       dockBottom,
-      footerSpace: 0,
       keyboardOffset: 0,
       extraContentPadding: undefined,
       composerGrowth: 0,
@@ -239,15 +233,6 @@ export type Chrome = {
   /** Moves the composer with its blur and scroll button, e.g. off with a page
    *  that has it; pages without it then pad by `bareBottom`. */
   dockStyle?: StyleProp<AnimatedStyle<ViewStyle>>;
-  /** Fork (Hari, L-237): a control centred at the bottom, e.g. a page switch.
-   *  It stays put while pages slide, over the composer while one is there. */
-  footer?: ReactNode;
-  /** How much of the composer is in place under `footer`, 0 to 1, as its
-   *  page slides; the footer drops to the bottom as it goes. Default 1. */
-  footerRaise?: SharedValue<number>;
-  /** The height of a bar the page without the composer keeps at the bottom
-   *  (a search bar), which the footer then rests on. */
-  footerFloor?: number;
 };
 
 /** Publishes a screen's chrome, filed under its route. */
@@ -274,9 +259,6 @@ export function SessionScreen({
   below,
   composer,
   dockStyle,
-  footer,
-  footerRaise,
-  footerFloor,
 }: Chrome & {
   children: ReactNode;
 }) {
@@ -301,9 +283,6 @@ export function SessionScreen({
         below,
         composer,
         dockStyle,
-        footer,
-        footerRaise,
-        footerFloor,
       });
     },
     [
@@ -321,9 +300,6 @@ export function SessionScreen({
       below,
       composer,
       dockStyle,
-      footer,
-      footerRaise,
-      footerFloor,
     ],
   );
   return children;
@@ -538,17 +514,9 @@ export function SessionFrame({
   const composerBottom = Math.max(insets.bottom, 12);
   const keyboardOffset = composerBottom - KEYBOARD_GAP;
   const keyboardLift = useKeyboardLift(keyboardOffset);
-  const [footerHeight, setFooterHeight] = useState(0);
-  const footerSpace = chrome?.footer && footerHeight ? footerHeight + FOOTER_GAP : 0;
-  const footerRaise = chrome?.footerRaise;
-  const floor = chrome?.footerFloor ? chrome.footerFloor + FOOTER_GAP : 0;
-  const footerStyle = useAnimatedStyle(() => {
-    const raise = chrome?.composer ? (footerRaise ? footerRaise.get() : 1) : 0;
-    const lift = raise * (composerHeight + FOOTER_GAP) + (1 - raise) * floor;
-    return { transform: [{ translateY: -lift }] };
-  });
-  const contentBottom =
-    (chrome?.composer ? composerHeight + composerBottom + FADE : composerBottom) + footerSpace;
+  const contentBottom = chrome?.composer
+    ? composerHeight + composerBottom + FADE
+    : composerBottom;
   const settled =
     !!chrome &&
     (!chrome.composer || composerHeight > 0) &&
@@ -560,9 +528,8 @@ export function SessionFrame({
       top: frameBottom + TOP_FADE,
       pageTop: frameBottom + PAGE_TOP_GAP,
       bottom: contentBottom,
-      bareBottom: composerBottom + PAGE_FADE + footerSpace,
+      bareBottom: composerBottom + PAGE_FADE,
       dockBottom: composerBottom,
-      footerSpace,
       keyboardOffset,
       extraContentPadding,
       composerGrowth,
@@ -572,7 +539,6 @@ export function SessionFrame({
       frameBottom,
       contentBottom,
       composerBottom,
-      footerSpace,
       keyboardOffset,
       extraContentPadding,
       composerGrowth,
@@ -771,23 +737,6 @@ export function SessionFrame({
                 ) : null}
               </Animated.View>
             </Animated.View>
-            {/* Outside the dock, so it stays while the dock slides off with a page. */}
-            {chrome?.footer ? (
-              <View pointerEvents="box-none" style={[styles.composerDock, covered && styles.hidden]}>
-                <Animated.View pointerEvents="box-none" style={keyboardLift}>
-                  <Animated.View
-                    pointerEvents="box-none"
-                    style={[styles.footer, { paddingBottom: composerBottom }, footerStyle]}
-                  >
-                    <View
-                      onLayout={(event) => setFooterHeight(Math.round(event.nativeEvent.layout.height))}
-                    >
-                      {chrome.footer}
-                    </View>
-                  </Animated.View>
-                </Animated.View>
-              </View>
-            ) : null}
           </KeyboardGestureArea>
         </SessionLayoutContext>
       </JumpToEndContext>
@@ -1128,9 +1077,6 @@ const useStyles = themedStyles((colors) => ({
     width: JUMP,
     height: JUMP,
     justifyContent: "center",
-    alignItems: "center",
-  },
-  footer: {
     alignItems: "center",
   },
   composerDock: {
