@@ -1,5 +1,6 @@
 import type { MobileUsageLimit } from "../../sessions/model/usageLimit";
 import type { UserQuestionPrompt } from "../../sessions/model/userQuestion";
+import type { MobileQueue } from "./mobileQueue";
 import type { MobileTurn } from "./mobileTranscript";
 
 /** What the phone last received for a watch, to send only what changed since. */
@@ -9,6 +10,8 @@ export type WatchBaseline = {
   /** The pending question as last sent, as JSON; "null" for none. */
   question: string;
   usageLimit?: string;
+  /** The queue as last sent, as JSON (L-238). */
+  queue?: string;
   order: string[];
   turns: Map<string, string>;
 };
@@ -81,11 +84,13 @@ export function watchUpdate(
     turns: MobileTurn[];
     question?: UserQuestionPrompt | null;
     usageLimit?: MobileUsageLimit | null;
+    queue?: MobileQueue | null;
   },
   incremental = false,
 ): { update: object; baseline: WatchBaseline } | null {
   const usageLimit = JSON.stringify(conversation.usageLimit ?? null);
   const question = JSON.stringify(conversation.question ?? null);
+  const queue = JSON.stringify(conversation.queue ?? null);
   const turns = new Map(
     conversation.turns.map((turn) => [turn.id, JSON.stringify(turn)]),
   );
@@ -99,6 +104,7 @@ export function watchUpdate(
     baseline.older === conversation.older &&
     baseline.question === question &&
     baseline.usageLimit === usageLimit &&
+    baseline.queue === queue &&
     changed.length === 0 &&
     baseline.order.length === order.length &&
     baseline.order.every((id, index) => id === order[index])
@@ -135,8 +141,9 @@ export function watchUpdate(
       ...(baseline?.question !== question
         ? { question: conversation.question ?? null }
         : {}),
+      ...(baseline?.queue !== queue ? { queue: conversation.queue ?? null } : {}),
     },
-    baseline: { busy, older, question, usageLimit, order, turns },
+    baseline: { busy, older, question, usageLimit, queue, order, turns },
   };
 }
 

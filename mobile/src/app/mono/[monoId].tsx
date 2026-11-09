@@ -1,4 +1,5 @@
 import { UsageLimitCard } from "@/features/sessions/UsageLimitCard";
+import { QueueStrip } from "@/features/sessions/QueueStrip";
 import {
   Redirect,
   router,
@@ -212,6 +213,9 @@ function MonoScreen({ monoOnly }: { monoOnly: boolean }) {
           ) : null}
           {conversationId && conversation.usageLimit ? (
             <UsageLimitCard key={`usage:${conversationId}`} conversationId={conversationId} state={conversation.usageLimit} />
+          ) : null}
+          {conversationId && conversation.queue ? (
+            <QueueStrip key={`queue:${conversationId}`} conversationId={conversationId} queue={conversation.queue} />
           ) : null}
           <Composer
             key={mono.id}

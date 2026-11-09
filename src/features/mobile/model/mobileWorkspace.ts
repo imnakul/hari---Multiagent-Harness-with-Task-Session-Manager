@@ -1,4 +1,5 @@
 import { mobileUsageLimit } from "../../sessions/model/usageLimit";
+import { mobileQueue } from "./mobileQueue";
 import { invoke } from "@tauri-apps/api/core";
 import {
   loadLinkCardStyle,
@@ -337,6 +338,8 @@ export async function mobileConversation(
       : [],
     busy: !!session?.busy,
     usageLimit: session ? mobileUsageLimit(session) : null,
+    // Fork (Hari, L-238): what waits to send, for the strip above the phone's composer.
+    queue: session ? mobileQueue(session, !!mono) : null,
     // What the agent asks, for the phone to answer as the desktop's card does.
     question: session?.pendingQuestion
       ? {

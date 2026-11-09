@@ -148,3 +148,19 @@ it("propagates reset metadata, automatic preference changes and clearing with un
   const cleared = watchUpdate(next.baseline, conversation)!;
   expect(cleared.update).toMatchObject({ usageLimit: null });
 });
+
+it("sends the queue with the first frame, then only when it changes (L-238)", () => {
+  const conversation = { busy: true, older: false, turns: [] };
+  const queue = {
+    status: "active" as const,
+    steer: "steer" as const,
+    messages: [{ id: "q", label: "hi", text: "hi", attachments: 0, canEdit: true }],
+  };
+  const initial = watchUpdate(null, { ...conversation, queue })!;
+  expect(initial.update).toMatchObject({ queue });
+  expect(watchUpdate(initial.baseline, { ...conversation, queue })).toBeNull();
+  const paused = { ...queue, status: "paused" as const };
+  const next = watchUpdate(initial.baseline, { ...conversation, queue: paused })!;
+  expect(next.update).toMatchObject({ queue: paused });
+  expect(watchUpdate(next.baseline, conversation)!.update).toMatchObject({ queue: null });
+});

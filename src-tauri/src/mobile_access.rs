@@ -768,6 +768,11 @@ async fn handle(
             "session.resumeUsage",
             "session.resumeUsageAtReset",
             "session.cancel",
+            // Fork (Hari, L-238): the queue strip above the phone's composer.
+            "session.queueDelete",
+            "session.queueEdit",
+            "session.queueSteer",
+            "session.queueResume",
             "session.rename",
             "session.delete",
             "session.archive",

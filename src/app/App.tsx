@@ -22,6 +22,7 @@ import {
 } from "../features/quick-composer/model/quickComposer";
 import { SessionTodoComposer } from "../features/session-board/ui/SessionTodoComposer";
 import { recoverMobileUsage } from "../features/mobile/model/mobileUsageLimit";
+import { checkMobileQueueAction } from "../features/mobile/model/mobileQueue";
 import { sessionConversationPage } from "../features/agent-app/model/sessionConversation";
 import { useMobileWorkspace } from "../features/mobile/hooks/useMobileWorkspace";
 import { hasMobileAttachments, mobileAttachments } from "../features/mobile/model/mobileAttachments";
@@ -2018,6 +2019,13 @@ function Workspace({
   const queueDispatchingRef = useRef(new Set<string>());
   const [queueDispatchVersion, setQueueDispatchVersion] = useState(0);
   const mobileUsageActions = useRef<{ resume: (id: string) => Promise<boolean>; automatic: (id: string, enabled: boolean) => void } | null>(null);
+  // Fork (Hari, L-238): the queue's buttons, for the phone's queue strip.
+  const mobileQueueActions = useRef<{
+    remove: (sessionId: string, messageId: string) => void;
+    edit: (sessionId: string, messageId: string, text: string) => void;
+    steer: (sessionId: string, messageId: string) => void;
+    resume: (sessionId: string) => void;
+  } | null>(null);
   const mobileUsagePending = useRef(new Set<string>());
   const usageResumingRef = useRef(new Set<string>());
   const usageResetLookups = useRef(new WeakSet<UsageLimit>());
@@ -11665,6 +11673,29 @@ function Workspace({
         await onStop(session.id);
         return { sessionId: session.id };
       }
+      if (
+        method === "session.queueDelete" ||
+        method === "session.queueEdit" ||
+        method === "session.queueSteer" ||
+        method === "session.queueResume"
+      ) {
+        // As the queue strip's buttons on the desktop composer (L-238).
+        const live = sessionsRef.current.find((current) => current.id === session.id);
+        const action = ({
+          "session.queueDelete": "delete",
+          "session.queueEdit": "edit",
+          "session.queueSteer": "steer",
+          "session.queueResume": "resume",
+        } as const)[method];
+        const text = checkMobileQueueAction(live, action, params, !!mono);
+        const messageId = String(params.messageId ?? "");
+        const actions = mobileQueueActions.current!;
+        if (action === "delete") actions.remove(session.id, messageId);
+        else if (action === "edit") actions.edit(session.id, messageId, text!);
+        else if (action === "steer") actions.steer(session.id, messageId);
+        else actions.resume(session.id);
+        return { sessionId: session.id };
+      }
       if (method === "session.configure") {
         // The phone's model sheet, through the same paths as the composer's
         // pickers, so a provider switch hands off on the next send as here.
@@ -11699,17 +11730,19 @@ function Workspace({
         return { sessionId: live.id };
       }
       if (method !== "conversation.send") throw new Error("Unsupported mobile command");
-      if (
-        session.blocks.some((block) => block.appRequestId === commandId) ||
-        session.queuedMessages?.some((message) => message.id === commandId)
-      )
+      if (session.blocks.some((block) => block.appRequestId === commandId))
         return { sessionId: session.id };
+      if (session.queuedMessages?.some((message) => message.id === commandId))
+        return { sessionId: session.id, ...(mono ? {} : { queued: commandId }) };
       const attachments = await mobileAttachments(params.attachments);
       // Mid-turn it steers or queues, as a message typed in the composer would.
       if (!submitSessionRef.current(session.id, text, attachments, { appRequestId: commandId, followsUp: true }))
         throw new Error("Desktop could not accept the message. Wait for the current turn to finish and try again.");
-      await upsertSession(sessionsRef.current.find(current => current.id === session.id) ?? session);
-      return { sessionId: session.id };
+      const accepted = sessionsRef.current.find(current => current.id === session.id) ?? session;
+      await upsertSession(accepted);
+      // Queued: the phone shows it in its queue strip, not as a sent bubble (L-238).
+      const queued = !mono && accepted.queuedMessages?.some((message) => message.id === commandId);
+      return { sessionId: session.id, ...(queued ? { queued: commandId } : {}) };
     },
   });
 
@@ -12339,6 +12372,12 @@ function Workspace({
   );
 
   mobileUsageActions.current = { resume: onUsageLimitResume, automatic: onUsageLimitResumeAtReset };
+  mobileQueueActions.current = {
+    remove: onDeleteQueuedMessage,
+    edit: onEditQueuedMessage,
+    steer: onSteerQueuedMessage,
+    resume: onResumeQueue,
+  };
 
   const usageLimitSwitching = useRef(new Set<string>());
   const onUsageLimitAccountChange = useCallback(

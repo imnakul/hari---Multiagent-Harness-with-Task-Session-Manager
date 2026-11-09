@@ -1,4 +1,5 @@
 import { UsageLimitCard } from "@/features/sessions/UsageLimitCard";
+import { QueueStrip } from "@/features/sessions/QueueStrip";
 import { router, Stack, useIsFocused } from "expo-router";
 import {
   ConnectionNotice,
@@ -363,6 +364,9 @@ export function ProjectScreen({
           ) : null}
           {sessionId && conversation.usageLimit ? (
             <UsageLimitCard key={`usage:${sessionId}`} conversationId={sessionId} state={conversation.usageLimit} />
+          ) : null}
+          {sessionId && conversation.queue ? (
+            <QueueStrip key={`queue:${sessionId}`} conversationId={sessionId} queue={conversation.queue} />
           ) : null}
           <Composer
             key={sessionId ?? project.id}

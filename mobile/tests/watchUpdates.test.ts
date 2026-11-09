@@ -79,5 +79,13 @@ describe("watch frames", () => {
     expect(applyFrames([], [{ usageLimit }, { usageLimit: armed }])!.usageLimit).toEqual(armed);
     expect(applyFrames([], [{ usageLimit: armed }, { usageLimit: null }])!.usageLimit).toBeNull();
   });
+  it("carries the latest queue, an explicit empty one, or none from an older desktop (L-238)", () => {
+    const queue = { status: "active" as const, steer: "steer" as const,
+      messages: [{ id: "q", label: "hi", text: "hi", attachments: 0, canEdit: true }] };
+    expect(applyFrames([], [{}])!).not.toHaveProperty("queue");
+    expect(applyFrames([], [{ queue }])!.queue).toEqual(queue);
+    expect(applyFrames([], [{ queue }, { busy: true }])!.queue).toEqual(queue);
+    expect(applyFrames([], [{ queue }, { queue: null }])!.queue).toBeNull();
+  });
 
 });

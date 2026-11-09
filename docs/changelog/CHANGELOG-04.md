@@ -1,4 +1,11 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-09 11:27 IST — Hari: the message queue on the phone; no blank chat on going back (L-238)
+- Type: feature + fix
+- What: The phone shows the desktop's message queue in a strip above its composer, with edit, send now (steer), delete, and Resume / Retry for a paused or held queue. A message sent mid-turn that the desktop queues shows there instead of as a sent bubble. Fix: going back to a running chat no longer opens on blank space (the list returns to its end when it gets shorter under the reader), and the chat returned to keeps getting updates (the watch was dropped when leaving a pushed chat).
+- Why: User asked for queues on the phone like the desktop (1A: full control) and reported the blank screen after going back.
+- Files: `src/features/mobile/model/{mobileQueue.ts (new),mobileQueue.test.ts (new),mobileWorkspace.ts,mobileWatch.ts,mobileWatch.test.ts}`, `src/features/mobile/hooks/useMobileWorkspace.ts`, `src/app/App.tsx`, `src-tauri/src/mobile_access.rs`, `mobile/src/features/sessions/{QueueStrip.tsx (new),Transcript.tsx}`, `mobile/src/features/workspace/{WorkspaceProvider.tsx,watchUpdates.ts,types.ts,ProjectScreen.tsx}`, `mobile/src/features/connection/ConnectionProvider.tsx`, `mobile/src/app/mono/[monoId].tsx`, `mobile/tests/watchUpdates.test.ts`, spec `docs/specs/hari-message-queue-plan.md`.
+- Verified: mobile tsc ✅, eslint 0 errors, mobile vitest 209/209 (watchFrames fails to load, as before), root tsc ✅, root vitest 8067 passed (iconCatalog load flake passes alone), cargo check ✅, rustfmt on mobile_access.rs ✅; phone check manual
+
 ## 2026-11-09 10:54 IST — Hari: New / Sessions switch back in the header (L-237 revert)
 - Type: revert
 - What: Put the project's New / Sessions switch back at the top centre; the bottom-centre version from 10:52 is undone. Release run 42567014456 (local32, which had it) was cancelled before publishing. The patient release builds stay.

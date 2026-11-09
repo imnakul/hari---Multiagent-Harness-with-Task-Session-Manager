@@ -49,6 +49,8 @@ import {
 const GAP = 4;
 /** How far from the end, past any blank space, before the scroll-to-end button shows. */
 const JUMP_DISTANCE = 160;
+/** How far past its end the list may sit before it is brought back (L-238). */
+const PAST_END_SLOP = 48;
 /** How far above the list's top inset the anchored message rests, a touch under the header. */
 const ANCHOR_LIFT = 36;
 /** How far the transcript rises as it fades in on open, say when switching sessions. */
@@ -148,6 +150,8 @@ export function Transcript({
   // the first turns arrive, and on with any message sent after.
   const anchoring = useRef<boolean | null>(null);
   const updateLayout = useRef<() => void>(() => {});
+  const keepInRangeRef = useRef<() => void>(() => {});
+  const offsetY = useRef(0);
   // Scroll the anchor into place once its rows are measured: instantly on open,
   // animated when a new message arrives.
   const pendingScroll = useRef<"instant" | "animated" | null>("instant");
@@ -196,6 +200,7 @@ export function Transcript({
   const onContentInsetChange = useCallback((insets: { bottom: number }) => {
     contentInsetBottom.current = insets.bottom;
     updateLayout.current();
+    keepInRangeRef.current();
   }, []);
 
   // Must keep its identity, or FlatList remounts every row.
@@ -209,6 +214,27 @@ export function Transcript({
     ),
     [blankSpace, onContentInsetChange],
   );
+
+  // Fork (Hari, L-238): Android keeps the scroll place when the list gets
+  // shorter under it, as when the desktop's fresh copy of a running chat
+  // replaces the one kept from the last visit. The reader was left on empty
+  // space past the end and had to scroll a long way up; bring the end back.
+  const keepInRange = () => {
+    if (!settled || viewportHeight.current === 0) return;
+    const end = Math.max(
+      0,
+      contentHeight.current + contentInsetBottom.current - viewportHeight.current,
+    );
+    if (offsetY.current <= end + PAST_END_SLOP) return;
+    if (__DEV__)
+      console.log(
+        `[mobile] transcript ${Math.round(offsetY.current - end)}px past its end; back to the end`,
+      );
+    offsetY.current = end;
+    const scroll = list.current?.getNativeScrollRef() as
+      ScrollView | null | undefined;
+    scroll?.scrollToEnd({ animated: false });
+  };
 
   const update = () => {
     anchorReady.current = false;
@@ -284,6 +310,7 @@ export function Transcript({
   // rather than another message to scroll to. Replies and history keep its place.
   useLayoutEffect(() => {
     updateLayout.current = update;
+    keepInRangeRef.current = keepInRange;
     const previous = previousAnchor.current;
     const confirmedPending =
       !agent &&
@@ -392,6 +419,7 @@ export function Transcript({
               contentInset,
               layoutMeasurement,
             } = event.nativeEvent;
+            offsetY.current = contentOffset.y;
             const visibleEnd = contentOffset.y + layoutMeasurement.height;
             atEnd.current = visibleEnd >= contentSize.height - 48;
             // The bottom inset holds the blank space under an anchored message.
@@ -405,6 +433,7 @@ export function Transcript({
             contentHeight.current = height;
             update();
             follow();
+            keepInRange();
           }}
           renderItem={({ item, index }) => (
             <HeldRow

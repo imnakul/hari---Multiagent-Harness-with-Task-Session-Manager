@@ -19,6 +19,7 @@ import type {
   Message,
   QuestionPrompt,
   UsageLimitState,
+  QueueState,
   Turn,
 } from "@/features/workspace/types";
 import {
@@ -338,6 +339,8 @@ export type Conversation = {
   /** What the agent waits on the user to answer; absent from an older desktop. */
   question?: QuestionPrompt | null;
   usageLimit?: UsageLimitState | null;
+  /** What waits to send (L-238); absent from an older desktop. */
+  queue?: QueueState | null;
 };
 
 /** What the desktop lists this phone as, e.g. "Nick's iPhone". */

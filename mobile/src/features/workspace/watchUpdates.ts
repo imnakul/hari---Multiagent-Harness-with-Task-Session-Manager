@@ -1,4 +1,4 @@
-import type { QuestionPrompt, Turn, UsageLimitState } from "./types";
+import type { QueueState, QuestionPrompt, Turn, UsageLimitState } from "./types";
 
 /** A frame of a watched conversation, from the desktop's watchUpdate. */
 export type WatchFrame = {
@@ -11,6 +11,8 @@ export type WatchFrame = {
   /** The pending question when it changes; null once it is answered. */
   question?: QuestionPrompt | null;
   usageLimit?: UsageLimitState | null;
+  /** The queue when it changes; null once empty (L-238). */
+  queue?: QueueState | null;
   error?: string;
 };
 
@@ -80,6 +82,7 @@ export function applyFrames(
 ): {
   turns: Turn[];
   usageLimit?: UsageLimitState | null;
+  queue?: QueueState | null;
   busy?: boolean;
   older?: boolean;
   /** Ordered transitions: a clear allows a later question to reuse its ID. */
@@ -89,6 +92,7 @@ export function applyFrames(
   let turns = previous;
   let busy: boolean | undefined;
   let usageLimit: UsageLimitState | null | undefined;
+  let queue: QueueState | null | undefined;
   const questions: (QuestionPrompt | null)[] = [];
   let older: boolean | undefined;
   let error: string | undefined;
@@ -99,6 +103,7 @@ export function applyFrames(
     }
     error = undefined;
     if (frame.usageLimit !== undefined) usageLimit = frame.usageLimit;
+    if (frame.queue !== undefined) queue = frame.queue;
     if (frame.busy !== undefined) busy = frame.busy;
     if (frame.older !== undefined) older = frame.older;
     if (frame.question !== undefined) questions.push(frame.question);
@@ -128,5 +133,13 @@ export function applyFrames(
         ? turns
         : next;
   }
-  return { turns, busy, older, questions, error, ...(usageLimit !== undefined ? { usageLimit } : {}) };
+  return {
+    turns,
+    busy,
+    older,
+    questions,
+    error,
+    ...(usageLimit !== undefined ? { usageLimit } : {}),
+    ...(queue !== undefined ? { queue } : {}),
+  };
 }

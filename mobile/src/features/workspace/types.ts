@@ -250,6 +250,25 @@ export type TurnMetrics = {
   cacheHitPercent?: number;
 };
 
+/** Fork (Hari, L-238): the desktop's message queue for a conversation, as its
+ *  composer strip shows it. Null or absent when nothing waits to send. */
+export type QueueState = {
+  status: "active" | "paused" | "resuming" | "steering" | "held";
+  holdReason?: string;
+  sendingId?: string;
+  /** What send now does; null where the phone offers none (a Mono). */
+  steer: "steer" | "send-now" | null;
+  messages: {
+    id: string;
+    label: string;
+    text: string;
+    attachments: number;
+    error?: string;
+    canEdit: boolean;
+  }[];
+};
+export type QueueAction = "delete" | "edit" | "steer" | "resume";
+
 /** Desktop-owned usage recovery state; mobile only renders these capabilities. */
 export type UsageLimitState = {
   token: string;

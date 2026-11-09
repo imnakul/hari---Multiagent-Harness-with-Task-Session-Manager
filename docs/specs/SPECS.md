@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-11-09 11:19 | [Review — Hari: the message queue on the phone (L-238)](hari-message-queue-plan.md) | Strip above the phone composer with edit, send now, delete and resume; queue rides on watch frames; four new phone commands. Phone check manual. |
 | 2026-11-01 14:08 | [Review — Zen mode (L-230)](zen-mode-plan.md) | The window narrows to a docked side panel with one or two chats, a slim top bar, Pin, and slim Tasks/Notes/Automations/Monos; animated native resize, exact restore. Desktop check manual. |
 | 2026-10-30 00:58 | [Review — Whiteboard tab with a drawing agent chat (L-194)](whiteboard-plan.md) | Excalidraw app tab: sheets saved to ~/.monocode/whiteboards, top bar (fonts incl. Kalam/Shantell Sans/Caveat/Geist/Geist Mono, lock, grid, snapping, zoom, export), right-click radial tool picker, Hugeicons library, agent chat sidebar that draws via AI helpers. Built; desktop check manual. |
 | 2026-10-26 08:39 | [Review — Focused pane styles: gliding everywhere, gradient, status ring, dimming (L-184)](focused-pane-styles-plan.md) | Implemented. Workspace splits glide like Focus mode; Settings → Appearance: Focused pane style (Static / Gradient / Status ring) and Dim other panes. Awaits the desktop check. |

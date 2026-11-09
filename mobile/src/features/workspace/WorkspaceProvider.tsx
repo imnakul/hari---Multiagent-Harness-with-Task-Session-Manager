@@ -25,7 +25,7 @@ import {
 import { selectedWorkspace } from "@/features/connection/selection";
 import type { ModelCatalog, ModelChoice } from "@/features/models/types";
 import { toWire, type Attachment } from "@/features/sessions/attachments";
-import type { DisplayedQuestionPrompt, Message, UsageLimitState, Mono, MonoSubsessions, Project, QuestionPrompt, QuestionReply, SessionSummary, Turn, TurnItem } from "./types";
+import type { DisplayedQuestionPrompt, Message, QueueAction, QueueState, UsageLimitState, Mono, MonoSubsessions, Project, QuestionPrompt, QuestionReply, SessionSummary, Turn, TurnItem } from "./types";
 import { applyFrames, type WatchFrame } from "./watchUpdates";
 /**
  * The workspace: what the desktop has and what can be done with it. Changes
@@ -55,7 +55,8 @@ type Workspace = {
   projects: Project[];
   monos: Mono[];
   sessions: SessionSummary[];
-  watch: (id: string | null) => void;
+  /** Follows a conversation while its screen is open; call the result to let go. */
+  watch: (id: string) => () => void;
   startSession: (
     projectId: string,
     text: string,
@@ -65,6 +66,13 @@ type Workspace = {
   sendMessage: (conversationId: string, text: string, attachments?: Attachment[]) => Promise<void>;
   stop: (conversationId: string) => Promise<void>;
   recoverUsage: (conversationId: string, state: UsageLimitState, automatic?: boolean) => Promise<void>;
+  /** Edits, deletes or sends now a queued message, or resumes the queue (L-238). */
+  changeQueue: (
+    conversationId: string,
+    action: QueueAction,
+    messageId?: string,
+    text?: string,
+  ) => Promise<void>;
   /** Answers, or skips, the question an agent waits on, as the desktop's card does. */
   answerQuestion: (
     conversationId: string,
@@ -124,6 +132,7 @@ type Status = {
   /** What each conversation's agent waits on the user to answer. */
   questions: Record<string, DisplayedQuestionPrompt>;
   usageLimits: Record<string, UsageLimitState>;
+  queues: Record<string, QueueState>;
 };
 export type SessionPage = { sessions: SessionSummary[]; hasMore: boolean };
 /** Narrows a page to sessions active since a time, and without some providers.
@@ -139,7 +148,13 @@ const OLDER_PAGE = 20;
 const STARTUP_GRACE_MS = 5_000;
 
 /** A message sent from here that the desktop has not echoed back yet. */
-type PendingSend = { turn: Turn; userCount: number; afterUserId?: string };
+type PendingSend = {
+  turn: Turn;
+  userCount: number;
+  afterUserId?: string;
+  /** The desktop queued it under this ID: shown in the queue strip instead (L-238). */
+  queuedId?: string;
+};
 export type NativeTranscriptStatus = {
   busy: boolean;
   error: string | null;
@@ -248,6 +263,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     );
   }, []);
   const [pending, setPending] = useState<Record<string, PendingSend>>({});
+  const [queues, setQueues] = useState<Record<string, QueueState>>({});
+  const queuesRef = useRef(queues);
+  const showQueue = useCallback((id: string, state: QueueState | null | undefined) => {
+    if (state === undefined) return; // An older desktop: no queue to show.
+    const next = state
+      ? JSON.stringify(queuesRef.current[id]) === JSON.stringify(state) ? queuesRef.current : withValue(queuesRef.current, id, state)
+      : withoutKey(queuesRef.current, id);
+    queuesRef.current = next;
+    setQueues(next);
+    // A message sent from here that the strip now shows leaves the chat.
+    if (state)
+      setPending((previous) => {
+        const queued = previous[id]?.queuedId;
+        return queued && state.messages.some((message) => message.id === queued)
+          ? withoutKey(previous, id)
+          : previous;
+      });
+  }, []);
   const nativeUserCounts = useRef<Record<string, number>>({});
   const nativeLastUsers = useRef<Record<string, string | null>>({});
   const starting = useRef(new Map<string, number>());
@@ -264,7 +297,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [renamed, setRenamed] = useState<Record<string, { title: string; from: string }>>({});
   const [monoEdits, setMonoEdits] = useState<MonoEdits>({});
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(new Set());
-  const [watching, watch] = useState<string | null>(null);
+  const [watching, setWatching] = useState<string | null>(null);
+  // Fork (Hari, L-238): every open chat screen holds its conversation and the
+  // newest one is watched. Going back hands the watch to the screen under it;
+  // before, leaving one chat stopped the one it returned to from updating.
+  const holds = useRef<{ id: string }[]>([]);
+  const watch = useCallback((id: string) => {
+    const hold = { id };
+    holds.current = [...holds.current, hold];
+    setWatching(id);
+    return () => {
+      holds.current = holds.current.filter((each) => each !== hold);
+      setWatching(holds.current.at(-1)?.id ?? null);
+    };
+  }, []);
   // Conversations showing turns from the disk cache, until the desktop's arrive.
   // They may be long out of date, so a watch opens on the latest turns rather
   // than carrying on from them.
@@ -299,6 +345,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setBusy((previous) => withValue(previous, id, result.busy));
       showQuestion(id, result.question);
       showUsageLimit(id, result.usageLimit);
+      showQueue(id, result.queue);
       // A read carries the whole conversation.
       if (!watched) setWindowOlder((previous) => withValue(previous, id, false));
       setErrors((previous) => withoutKey(previous, id));
@@ -307,7 +354,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (current.current.pairing === paired && !startupCatalogError(starting.current, id, message))
         setErrors((previous) => withValue(previous, id, message));
     }
-  }, [showQuestion, showUsageLimit]);
+  }, [showQuestion, showUsageLimit, showQueue]);
   // The open conversation streams from the desktop: one watch, whose frames
   // land as the desktop sends them. A desktop that cannot watch, or a dropped
   // link, falls back to reading once a second until a watch opens again.
@@ -347,6 +394,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (countUserItems(applied.turns) > 0) starting.current.delete(id);
       if (applied.busy !== undefined) setBusy((previous) => withValue(previous, id, applied.busy!));
       if (applied.usageLimit !== undefined) showUsageLimit(id, applied.usageLimit);
+      if (applied.queue !== undefined) showQueue(id, applied.queue);
       for (const question of applied.questions) showQuestion(id, question);
       if (applied.older !== undefined)
         setWindowOlder((previous) => withValue(previous, id, applied.older!));
@@ -426,7 +474,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       save();
       if (watchId !== null) void closeWatch(watchId);
     };
-  }, [watching, desktop, read, showQuestion, showUsageLimit]);
+  }, [watching, desktop, read, showQuestion, showUsageLimit, showQueue]);
   const mutationIds = useRef(new Map<string, string>());
   const { command, refresh } = connection;
   const mutate = useCallback(async <T,>(method: string, params: object): Promise<T> => {
@@ -506,15 +554,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           ? { afterUserId: nativeLastUsers.current[conversationId]! } : {}),
       },
     }));
+    let queued: string | undefined;
     try {
-      await mutate("conversation.send", {
+      const result = await mutate<{ queued?: string } | undefined>("conversation.send", {
         conversationId,
         text,
         ...(attachments.length ? { attachments: toWire(attachments) } : {}),
       });
+      queued = typeof result?.queued === "string" ? result.queued : undefined;
     } catch (reason) {
       setPending((previous) => withoutKey(previous, conversationId));
       throw reason;
+    }
+    // Queued mid-turn: it waits in the strip above the composer, not as a sent
+    // message. Gone at once if the strip already has it, else once it does.
+    if (queued) {
+      const shown = queuesRef.current[conversationId]?.messages.some((message) => message.id === queued);
+      setPending((previous) => {
+        const sent = previous[conversationId];
+        if (sent?.turn.id !== id) return previous;
+        return shown ? withoutKey(previous, conversationId) : { ...previous, [conversationId]: { ...sent, queuedId: queued } };
+      });
     }
     if (hasNativeTranscript) return; // The native watch retires the local echo.
     // So does a streaming watch, as the message reaches its turns (L-235).
@@ -588,6 +648,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (!hasNativeTranscript) void read(conversationId);
     }
   }, [mutate, read]);
+
+  const changeQueue = useCallback(
+    async (conversationId: string, action: QueueAction, messageId?: string, text?: string) => {
+      const method = {
+        delete: "session.queueDelete",
+        edit: "session.queueEdit",
+        steer: "session.queueSteer",
+        resume: "session.queueResume",
+      }[action];
+      await mutate(method, {
+        conversationId,
+        ...(messageId ? { messageId } : {}),
+        ...(text !== undefined ? { text } : {}),
+      });
+      // Shown at once; the desktop's next frame carries the queue as it is.
+      const queue = queuesRef.current[conversationId];
+      if (queue && (action === "delete" || action === "edit")) {
+        const messages = action === "delete"
+          ? queue.messages.filter((message) => message.id !== messageId)
+          : queue.messages.map((message) =>
+              message.id === messageId
+                ? { ...message, text: text!, label: text!.trim() || message.label, error: undefined }
+                : message);
+        showQueue(conversationId, messages.length ? { ...queue, messages } : null);
+      }
+      if (!hasNativeTranscript && !streaming.current.has(conversationId)) void read(conversationId);
+    },
+    [mutate, read, showQueue],
+  );
 
   const answerQuestion = useCallback(
     async (conversationId: string, requestId: number, reply: QuestionReply) => {
@@ -758,6 +847,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       answerQuestion,
       keepQuestionOpen,
       recoverUsage,
+      changeQueue,
       listSessions,
       rememberSession,
       loadOlder,
@@ -771,6 +861,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       nativeTranscriptStatus,
     };
   }, [
+    watch,
     renamed,
     monoEdits,
     editMono,
@@ -784,6 +875,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     answerQuestion,
     keepQuestionOpen,
     recoverUsage,
+    changeQueue,
     listSessions,
     rememberSession,
     loadOlder,
@@ -799,8 +891,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [messages, turns, pending, history, windowOlder],
   );
   const status = useMemo<Status>(
-    () => ({ busy, errors, questions, usageLimits }),
-    [busy, errors, questions, usageLimits],
+    () => ({ busy, errors, questions, usageLimits, queues }),
+    [busy, errors, questions, usageLimits, queues],
   );
   return (
     <WorkspaceContext value={workspace}>
@@ -833,15 +925,15 @@ export function useConversation(id: string | null, watching = true) {
   const status = use(StatusContext);
   if (!status) throw new Error("useConversation must be used inside WorkspaceProvider");
   useEffect(() => {
-    if (!watching) return;
-    watch(id);
-    return () => watch(null);
+    if (!watching || !id) return;
+    return watch(id);
   }, [id, watch, watching]);
   return {
     busy: id ? !!status.busy[id] : false,
     error: id ? (status.errors[id] ?? null) : null,
     question: id ? (status.questions[id] ?? null) : null,
     usageLimit: id ? (status.usageLimits[id] ?? null) : null,
+    queue: id ? (status.queues[id] ?? null) : null,
   };
 }
 /** A conversation's turns as they stream in. Re-renders with every frame. */
