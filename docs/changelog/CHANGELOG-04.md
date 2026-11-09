@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-09 13:16 IST — Hari release 0.16.0-local32 (message queue, blank chat, Tasks and Notes)
+- Type: chore
+- What: Published `hari-v0.16.0-local32` (run 42570432131, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160032), `latest.json`, `hari-android.json`. Carries L-236, L-237 and L-238 (local31 never published). The first APK attempt failed three times on a Gradle download 504; re-running the failed jobs passed.
+- Why: Ships the phone message queue and the blank-chat fix (L-238), with the Tasks and Notes work.
+- Files: GitHub release only; builds are no longer copied to `Installable versions`.
+- Commit: 13ca0104 (feature), 4e142aec (version)
+- Verified: CI ✅ (desktop 12m28s, APK 14m15s on re-run); `hari-android.json` served from releases/latest with 0.16.0-local32 ✅; update and phone checks manual
+
 ## 2026-11-09 11:27 IST — Hari: the message queue on the phone; no blank chat on going back (L-238)
 - Type: feature + fix
 - What: The phone shows the desktop's message queue in a strip above its composer, with edit, send now (steer), delete, and Resume / Retry for a paused or held queue. A message sent mid-turn that the desktop queues shows there instead of as a sent bubble. Fix: going back to a running chat no longer opens on blank space (the list returns to its end when it gets shorter under the reader), and the chat returned to keeps getting updates (the watch was dropped when leaving a pushed chat).
