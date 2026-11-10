@@ -11,6 +11,7 @@ import {
   fromDateInputValue,
   isCurrentPeriod,
   notesByDay,
+  notesMissing,
   periodKey,
   periodLabel,
   periodPromptLabel,
@@ -312,5 +313,16 @@ describe("periods", () => {
       { id: 3, ts: mon + 60_000, firstEventId: 3, lastEventId: 3, body: "c" },
     ]);
     expect(groups.map((g) => g.notes.map((n) => n.id))).toEqual([[2], [3, 1]]);
+  });
+});
+
+describe("notesMissing", () => {
+  const base = { phase: "idle", enabled: true, engine: "agy" } as const;
+  it("flags agy runs that produced no notes", () => {
+    expect(notesMissing({ ...base, today: { calls: 2, notes: 0, failures: 2 } })).toBe(true);
+    expect(notesMissing({ ...base, today: { calls: 2, notes: 1, failures: 1 } })).toBe(false);
+    expect(notesMissing({ ...base, today: { calls: 0, notes: 0, failures: 0 } })).toBe(false);
+    expect(notesMissing({ ...base, enabled: false, today: { calls: 2, notes: 0, failures: 0 } })).toBe(false);
+    expect(notesMissing(null)).toBe(false);
   });
 });

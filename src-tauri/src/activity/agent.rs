@@ -7,6 +7,7 @@
 //! off instead of hammering the quota, and a missing or logged-out CLI pauses
 //! the worker with a reason the Activity view can show.
 
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
@@ -30,6 +31,8 @@ const DEBOUNCE: Duration = Duration::from_secs(4);
 /// A steady stream of events still gets a note at least this often.
 const MAX_BATCH_WAIT: Duration = Duration::from_secs(20);
 const RUN_TIMEOUT: Duration = Duration::from_secs(180);
+/// agy's own limit for one turn, a little under ours.
+const PRINT_TIMEOUT: &str = "170s";
 const BACKOFF_BASE: Duration = Duration::from_secs(30);
 const BACKOFF_MAX: Duration = Duration::from_secs(15 * 60);
 /// Events per `agy` call; anything beyond runs as the next batch.
@@ -73,6 +76,61 @@ pub struct AgentStatus {
     /// Epoch ms of the next retry while in `Backoff`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_at: Option<i64>,
+    /// Today's calls, notes and failures.
+    pub today: DailyUsage,
+    /// What the most recent `agy` run returned, for the pill menu.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_run: Option<LastRun>,
+}
+
+/// Evidence from the latest `agy` run: whether it produced a note, why not,
+/// and the head of its raw output so a user can copy it into a bug report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastRun {
+    pub at: i64,
+    pub ok: bool,
+    /// One plain line: "Wrote a note (120 characters)" or the error.
+    pub summary: String,
+    /// Exit code, then the start of stdout and stderr.
+    pub output: String,
+}
+
+const OUTPUT_HEAD_CHARS: usize = 2_000;
+
+fn head(text: &str, max: usize) -> String {
+    let trimmed = text.trim();
+    if trimmed.chars().count() <= max {
+        return trimmed.to_string();
+    }
+    let mut cut: String = trimmed.chars().take(max).collect();
+    cut.push('…');
+    cut
+}
+
+/// Build the [`LastRun`] record for one finished (or failed) process.
+pub fn last_run_record(
+    at: i64,
+    result: &Result<String, AgentError>,
+    exit: Option<i32>,
+    stdout: &str,
+    stderr: &str,
+) -> LastRun {
+    let summary = match result {
+        Ok(note) => format!("Wrote a note ({} characters)", note.chars().count()),
+        Err(err) => err.message(),
+    };
+    let exit = exit.map_or_else(|| "none".to_string(), |code| code.to_string());
+    LastRun {
+        at,
+        ok: result.is_ok(),
+        summary,
+        output: format!(
+            "exit code: {exit}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+            head(stdout, OUTPUT_HEAD_CHARS),
+            head(stderr, OUTPUT_HEAD_CHARS / 2)
+        ),
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -114,6 +172,7 @@ struct State {
     failures: u32,
     running_pid: Option<u32>,
     usage: DailyUsage,
+    last_run: Option<LastRun>,
     shutdown: bool,
 }
 
@@ -180,6 +239,7 @@ impl NotesAgent {
                     failures: 0,
                     running_pid: None,
                     usage: DailyUsage::default(),
+                    last_run: None,
                     shutdown: false,
                 }),
                 wake: Condvar::new(),
@@ -329,6 +389,8 @@ fn kick_locked(state: &mut State) {
 }
 
 fn snapshot(state: &State) -> AgentStatus {
+    let mut today = state.usage;
+    today.roll(now_millis(), state.tz_offset_min);
     AgentStatus {
         phase: state.phase,
         enabled: state.enabled,
@@ -337,6 +399,8 @@ fn snapshot(state: &State) -> AgentStatus {
         last_error: state.last_error.clone(),
         last_note_at: state.last_note_at,
         retry_at: state.retry_at_ms,
+        today,
+        last_run: state.last_run.clone(),
     }
 }
 
@@ -536,16 +600,25 @@ fn run_agy(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let command = binary.to_string_lossy().into_owned();
-    let prompt = shim_safe_prompt(binary, prompt);
+    // Same headless protocol as the Antigravity CLI provider and AI helpers
+    // (L-208): the prompt goes in on stdin as one stream-json user message,
+    // so its size and line breaks never touch the command line.
     let mut cmd = Command::new(binary);
-    cmd.args(["-p", prompt.as_str(), "--output-format", "json"])
-        .current_dir(workdir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args([
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--print-timeout",
+        PRINT_TIMEOUT,
+    ])
+    .current_dir(workdir)
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
     prepare_child(&mut cmd, &command).map_err(AgentError::Other)?;
 
-    let child = cmd.spawn().map_err(|e| {
+    let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             AgentError::Missing
         } else {
@@ -561,111 +634,171 @@ fn run_agy(
         state.usage.calls = state.usage.calls.saturating_add(1);
     }
 
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = tx.send(child.wait_with_output());
+    let (tx, rx) = mpsc::channel::<String>();
+    if let Some(stdout) = child.stdout.take() {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    drop(tx);
+    let stderr_text = Arc::new(Mutex::new(String::new()));
+    if let Some(mut stderr) = child.stderr.take() {
+        let sink = Arc::clone(&stderr_text);
+        thread::spawn(move || {
+            let mut text = String::new();
+            let _ = stderr.read_to_string(&mut text);
+            *sink.lock().unwrap_or_else(|p| p.into_inner()) = text;
+        });
+    }
+    // Keep stdin open until the result arrives: closing it can end the session early.
+    let mut stdin = child.stdin.take();
+    let written = stdin.as_mut().map(|pipe| {
+        pipe.write_all(user_message(prompt).as_bytes())
+            .and_then(|()| pipe.flush())
     });
-    let result = rx.recv_timeout(RUN_TIMEOUT);
+
+    let deadline = Instant::now() + RUN_TIMEOUT;
+    let mut stream = StreamText::default();
+    let mut raw = String::new();
+    let mut outcome: Option<Result<String, AgentError>> = match written {
+        Some(Ok(())) => None,
+        Some(Err(e)) => Some(Err(AgentError::Other(format!(
+            "Could not send the prompt to agy: {e}"
+        )))),
+        None => Some(Err(AgentError::Other("agy has no input pipe.".into()))),
+    };
+    while outcome.is_none() {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(left) {
+            Ok(line) => {
+                if raw.chars().count() < OUTPUT_HEAD_CHARS {
+                    raw.push_str(&line);
+                    raw.push('\n');
+                }
+                outcome = stream.feed(&line);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                outcome = Some(Err(AgentError::Other(
+                    "agy took too long and was stopped.".into(),
+                )));
+            }
+            // stdout closed: agy exited without a result event.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                thread::sleep(Duration::from_millis(100)); // let stderr finish reading
+                let stderr = stderr_text
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .clone();
+                let detail = if stderr.trim().is_empty() {
+                    "agy exited without a reply."
+                } else {
+                    stderr.trim()
+                };
+                outcome = Some(Err(classify(detail)));
+            }
+        }
+    }
+    drop(stdin.take());
+    // One-shot: stop agy (and anything it started) as soon as the reply is in.
+    terminate(pid);
+    let exit = wait_briefly(&mut child);
     lock_state(shared).running_pid = None;
 
-    match result {
-        Ok(Ok(output)) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            parse_agy_output(&stdout, &stderr, output.status.success())
-        }
-        Ok(Err(e)) => Err(AgentError::Other(format!("agy failed: {e}"))),
-        Err(_) => {
-            terminate(pid);
-            Err(AgentError::Other(
-                "agy took too long and was stopped.".into(),
-            ))
+    let parsed =
+        outcome.unwrap_or_else(|| Err(AgentError::Other("agy produced no outcome.".into())));
+    let stderr = stderr_text
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    let record = last_run_record(now_millis(), &parsed, exit, &raw, &stderr);
+    lock_state(shared).last_run = Some(record);
+    parsed
+}
+
+/// Reap the stopped child without hanging the worker if it lingers.
+fn wait_briefly(child: &mut std::process::Child) -> Option<i32> {
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.code(),
+            Ok(None) if Instant::now() < until => thread::sleep(Duration::from_millis(50)),
+            _ => return None,
         }
     }
 }
 
-/// Windows runs `.cmd`/`.bat` shims through `cmd.exe`, and Rust refuses to
-/// pass an argument containing a newline to one (it cannot be escaped safely).
-/// Flatten the prompt for shims only; real executables keep the line breaks.
-fn shim_safe_prompt(binary: &Path, prompt: &str) -> String {
-    let is_shim = binary
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"));
-    if is_shim {
-        prompt
-            .lines()
-            .map(str::trim_end)
-            .collect::<Vec<_>>()
-            .join(" | ")
-    } else {
-        prompt.to_string()
-    }
+/// One stream-json user message, as agy reads it on stdin.
+pub fn user_message(text: &str) -> String {
+    let mut line =
+        serde_json::json!({ "event": "user", "message": { "content": text } }).to_string();
+    line.push('\n');
+    line
 }
 
-/// Pull the note text out of `agy --output-format json`.
-///
-/// The documented envelope has the answer in a top-level `response`; stream
-/// output nests it as `result.response`. Plain text is accepted as a fallback
-/// so a CLI update that changes the format degrades instead of failing.
-pub fn parse_agy_output(stdout: &str, stderr: &str, success: bool) -> Result<String, AgentError> {
-    let trimmed = stdout.trim();
-    let envelope = serde_json::from_str::<Value>(trimmed).ok().or_else(|| {
-        trimmed
-            .lines()
-            .rev()
-            .find_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
-    });
+/// Collects agy's stream-json events for one turn.
+#[derive(Debug, Default)]
+pub struct StreamText {
+    text: String,
+}
 
-    if let Some(value) = envelope.as_ref().filter(|v| v.is_object()) {
-        let status = value
-            .get("status")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_ascii_uppercase();
-        let response = value
-            .get("response")
-            .and_then(Value::as_str)
-            .or_else(|| value.pointer("/result/response").and_then(Value::as_str));
-        if status == "ERROR" || response.is_none() {
-            let detail = value
-                .get("error")
-                .map(|err| match err {
-                    Value::String(s) => s.clone(),
-                    other => other
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                        .unwrap_or_else(|| other.to_string()),
-                })
-                .unwrap_or_else(|| format!("{} {}", status, stderr.trim()).trim().to_string());
-            if status == "WAITING" {
-                return Err(AgentError::Other(
-                    "agy stopped to ask for approval; notes never need tools.".into(),
-                ));
+impl StreamText {
+    /// Feed one stdout line. Returns the outcome once the turn ends:
+    /// `result` with `SUCCESS` gives the note; a failed result or any tool
+    /// step is an error (notes never need tools). Non-JSON lines are ignored.
+    pub fn feed(&mut self, line: &str) -> Option<Result<String, AgentError>> {
+        let event: Value = serde_json::from_str(line.trim()).ok()?;
+        match event.get("event").and_then(Value::as_str)? {
+            "step_update" => {
+                let step = event.get("step_update")?;
+                match step.get("step_type").and_then(Value::as_str) {
+                    Some("agent_response") => {
+                        if let Some(delta) = step.get("text_delta").and_then(Value::as_str) {
+                            self.text.push_str(delta);
+                        }
+                        None
+                    }
+                    Some("tool") => Some(Err(AgentError::Other(
+                        "agy tried to use a tool; notes never need tools.".into(),
+                    ))),
+                    _ => None,
+                }
             }
-            return Err(classify(&detail));
+            "result" => {
+                let result = event.get("result")?;
+                let status = result.get("status").and_then(Value::as_str).unwrap_or("");
+                if status.eq_ignore_ascii_case("SUCCESS") {
+                    let response = result.get("response").and_then(Value::as_str).unwrap_or("");
+                    let text = sanitize_note(if response.trim().is_empty() {
+                        &self.text
+                    } else {
+                        response
+                    });
+                    if text.is_empty() {
+                        return Some(Err(AgentError::Other("agy returned an empty note.".into())));
+                    }
+                    return Some(Ok(text));
+                }
+                let error = result
+                    .get("error")
+                    .map(|err| match err {
+                        Value::String(text) => text.clone(),
+                        other => other
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| other.to_string()),
+                    })
+                    .unwrap_or_else(|| format!("agy finished with status {status}"));
+                Some(Err(classify(&error)))
+            }
+            _ => None,
         }
-        let text = sanitize_note(response.unwrap_or(""));
-        if text.is_empty() {
-            return Err(AgentError::Other("agy returned an empty note.".into()));
-        }
-        return Ok(text);
     }
-
-    if success && !trimmed.is_empty() {
-        return Ok(sanitize_note(trimmed));
-    }
-    let detail = if stderr.trim().is_empty() {
-        trimmed
-    } else {
-        stderr.trim()
-    };
-    Err(classify(if detail.is_empty() {
-        "agy exited without output"
-    } else {
-        detail
-    }))
 }
 
 /// Sort a failure into something the worker can act on.
@@ -853,48 +986,116 @@ mod tests {
         }
     }
 
-    #[test]
-    fn reads_documented_json_envelope() {
-        let out = r#"{"status":"SUCCESS","response":"- Fixed tabs in hari."}"#;
-        assert_eq!(
-            parse_agy_output(out, "", true),
-            Ok("- Fixed tabs in hari.".into())
-        );
+    fn feed_all(lines: &[&str]) -> Option<Result<String, AgentError>> {
+        let mut stream = StreamText::default();
+        lines.iter().find_map(|line| stream.feed(line))
     }
 
     #[test]
-    fn reads_stream_result_and_plain_text() {
-        let stream =
-            "{\"type\":\"progress\"}\n{\"type\":\"result\",\"result\":{\"response\":\"- Done\"}}\n";
-        assert_eq!(parse_agy_output(stream, "", true), Ok("- Done".into()));
-        assert_eq!(
-            parse_agy_output("  - Plain  \n", "", true),
-            Ok("- Plain".into())
-        );
+    fn writes_one_stream_json_user_message() {
+        let line = user_message("say \"hi\"\nthen stop");
+        assert!(line.ends_with('\n'));
+        let value: Value = serde_json::from_str(line.trim()).unwrap();
+        assert_eq!(value["event"], "user");
+        assert_eq!(value["message"]["content"], "say \"hi\"\nthen stop");
     }
 
     #[test]
-    fn classifies_failures() {
+    fn reads_the_note_from_stream_events() {
+        let init = r#"{"event":"init","conversation_id":"c1"}"#;
+        let delta_a = r#"{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","text_delta":"- Fixed "}}"#;
+        let delta_b = r#"{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","text_delta":"tabs."}}"#;
+        let thought = r#"{"event":"step_update","step_update":{"step_index":0,"step_type":"agent_thought","text_delta":"hmm"}}"#;
+        let done = r#"{"event":"result","result":{"status":"SUCCESS","response":""}}"#;
+        // Empty `response` falls back to the streamed text; noise lines are ignored.
+        assert_eq!(
+            feed_all(&["Loading…", init, thought, delta_a, delta_b, done]),
+            Some(Ok("- Fixed tabs.".into()))
+        );
+        let full = r#"{"event":"result","result":{"status":"SUCCESS","response":"- Whole reply"}}"#;
+        assert_eq!(feed_all(&[delta_a, full]), Some(Ok("- Whole reply".into())));
+        assert_eq!(feed_all(&[init, delta_a]), None, "no result yet");
+    }
+
+    #[test]
+    fn classifies_stream_failures() {
+        let limited =
+            r#"{"event":"result","result":{"status":"ERROR","error":"429 RESOURCE_EXHAUSTED"}}"#;
         assert!(matches!(
-            parse_agy_output(
-                r#"{"status":"ERROR","error":{"message":"429 RESOURCE_EXHAUSTED"}}"#,
-                "",
-                false
-            ),
-            Err(AgentError::RateLimited(_))
+            feed_all(&[limited]),
+            Some(Err(AgentError::RateLimited(_)))
         ));
+        let auth = r#"{"event":"result","result":{"status":"ERROR","error":{"message":"authentication required"}}}"#;
+        assert!(matches!(feed_all(&[auth]), Some(Err(AgentError::Auth(_)))));
+        let tool = r#"{"event":"step_update","step_update":{"step_index":2,"step_type":"tool","tool_name":"read_file"}}"#;
+        assert!(matches!(feed_all(&[tool]), Some(Err(AgentError::Other(_)))));
+        let empty = r#"{"event":"result","result":{"status":"SUCCESS","response":"  "}}"#;
         assert!(matches!(
-            parse_agy_output("", "Error: authentication required", false),
-            Err(AgentError::Auth(_))
+            feed_all(&[empty]),
+            Some(Err(AgentError::Other(_)))
         ));
-        assert!(matches!(
-            parse_agy_output(r#"{"status":"WAITING"}"#, "", true),
-            Err(AgentError::Other(_))
+    }
+
+    /// A stand-in `agy` that checks its flags, reads one stdin message, and
+    /// replies with stream-json, then waits (like the real one) until stopped.
+    #[cfg(unix)]
+    fn fake_agy(name: &str, body: &str) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "hari-fake-agy-{name}-{}-{}",
+            std::process::id(),
+            now_millis()
         ));
-        assert!(matches!(
-            parse_agy_output("", "", false),
-            Err(AgentError::Other(_))
-        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("agy");
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (dir, path)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runs_agy_over_stdin_and_stops_it_after_the_result() {
+        let (dir, agy) = fake_agy(
+            "ok",
+            r#"[ "$1 $2 $3 $4" = "--input-format stream-json --output-format stream-json" ] || { echo "bad args: $*" >&2; exit 2; }
+read line
+case "$line" in *'"event":"user"'*'notes please'*) ;; *) echo "bad input: $line" >&2; exit 3;; esac
+echo '{"event":"init","conversation_id":"c1"}'
+echo '{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","text_delta":"- Wrote "}}'
+echo '{"event":"result","result":{"status":"SUCCESS","response":"- Wrote the note."}}'
+sleep 30"#,
+        );
+        let agent = NotesAgent::new();
+        let started = Instant::now();
+        let note = run_agy(&agy, "notes please\nline two", &dir, &agent.shared);
+        assert_eq!(note, Ok("- Wrote the note.".into()));
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "stopped after the result"
+        );
+        let status = agent.status();
+        assert_eq!(status.today.calls, 1);
+        let last = status.last_run.expect("last run recorded");
+        assert!(last.ok, "{}", last.output);
+        assert!(last.output.contains("\"event\":\"result\""));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reports_agy_exiting_without_a_result() {
+        let (dir, agy) = fake_agy(
+            "fail",
+            "read line\necho 'Error: authentication required' >&2\nexit 1",
+        );
+        let agent = NotesAgent::new();
+        let result = run_agy(&agy, "x", &dir, &agent.shared);
+        assert!(matches!(result, Err(AgentError::Auth(_))), "{result:?}");
+        let last = agent.status().last_run.expect("last run recorded");
+        assert!(!last.ok);
+        assert!(last.output.contains("authentication required"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -915,11 +1116,28 @@ mod tests {
     }
 
     #[test]
-    fn flattens_prompts_only_for_windows_shims() {
-        let prompt = "a\nb\n";
-        assert_eq!(shim_safe_prompt(Path::new("C:/x/agy.cmd"), prompt), "a | b");
-        assert_eq!(shim_safe_prompt(Path::new("C:/x/agy.BAT"), prompt), "a | b");
-        assert_eq!(shim_safe_prompt(Path::new("/usr/bin/agy"), prompt), prompt);
+    fn records_the_last_run_for_the_pill_menu() {
+        let ok = last_run_record(
+            5,
+            &Ok("- note".into()),
+            Some(0),
+            "{\"response\":\"- note\"}",
+            "",
+        );
+        assert!(ok.ok);
+        assert_eq!(ok.summary, "Wrote a note (6 characters)");
+        assert!(ok.output.starts_with("exit code: 0\n--- stdout ---\n{"));
+        let failed = last_run_record(
+            6,
+            &Err(AgentError::Auth("login".into())),
+            Some(1),
+            "",
+            &"x".repeat(5_000),
+        );
+        assert!(!failed.ok);
+        assert!(failed.summary.contains("sign in"));
+        assert!(failed.output.contains("exit code: 1"));
+        assert!(failed.output.chars().count() < 1_200, "stderr is clipped");
     }
 
     #[test]

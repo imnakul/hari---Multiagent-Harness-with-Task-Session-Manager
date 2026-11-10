@@ -18518,6 +18518,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                         onClose={onLeaveNotes}
                         onToggleSidebar={onToggleSidebar}
                         onOpenSession={onOpenActivitySession}
+                        onOpenSettings={() => openSettings("general", "activity-tracker")}
                       />
                     </AppViewSurface>
                   ) : null}

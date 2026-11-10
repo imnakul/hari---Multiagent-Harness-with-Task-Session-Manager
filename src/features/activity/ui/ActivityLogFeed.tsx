@@ -3,6 +3,7 @@ import { Bot, GitBranch, MessageSquare, RefreshCw, Sparkles } from "../../../sha
 import {
   formatClock,
   formatDuration,
+  notesMissing,
   type ActivityEvent,
   type ActivityNote,
   type AgentStatus,
@@ -124,7 +125,36 @@ function NotesBanner({
   status: AgentStatus | null;
   onRetry: () => void;
 }): ReactElement | null {
-  if (!status || (status.phase !== "paused" && status.phase !== "backoff")) return null;
+  if (!status) return null;
+  if (status.phase !== "paused" && status.phase !== "backoff") {
+    if (!notesMissing(status)) return null;
+    return (
+      <div
+        role="alert"
+        className="mb-3 flex items-start gap-3 rounded-md border border-skill/30 bg-skill/[0.07] px-3 py-2.5"
+      >
+        <Sparkles className="mt-0.5 size-3.5 shrink-0 text-skill" strokeWidth={1.75} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium text-content">
+            agy ran {status.today?.calls} {status.today?.calls === 1 ? "time" : "times"} today
+            but wrote no notes
+          </p>
+          <p className="mt-0.5 break-words text-[11.5px] leading-snug text-content/55">
+            {status.lastRun?.summary ?? "No output was recorded."} Open the agy menu at the top
+            and use Copy details to see what it returned.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-content/15 px-2.5 text-[12px] text-content/80 transition-colors hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+        >
+          <RefreshCw className="size-3" strokeWidth={1.75} />
+          Try again
+        </button>
+      </div>
+    );
+  }
   const paused = status.phase === "paused";
   return (
     <div

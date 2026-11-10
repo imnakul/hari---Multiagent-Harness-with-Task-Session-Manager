@@ -13,7 +13,6 @@ import {
   dayRange,
   periodKey,
   periodPromptLabel,
-  saveAiNotesEnabled,
   shiftDay,
   shiftPeriod,
   summarizeProjects,
@@ -47,6 +46,8 @@ type Props = {
   onToggleSidebar?: () => void;
   /** Open the chat a logged prompt came from. */
   onOpenSession?: (sessionId: string) => void;
+  /** Open Settings at the Activity rows. */
+  onOpenSettings?: () => void;
 };
 
 /**
@@ -62,6 +63,7 @@ export function ActivityView({
   onClose,
   onToggleSidebar,
   onOpenSession,
+  onOpenSettings,
 }: Props): ReactElement {
   const [anchor, setAnchor] = useState<Date>(
     () => remembered?.anchor ?? shiftDay(new Date(), 0),
@@ -118,8 +120,12 @@ export function ActivityView({
     >
       {tabbed ? (
         <div className="flex h-10 shrink-0 items-center justify-end gap-2 border-b border-stroke px-3">
-          <AgentStatusPill status={agent} />
-          <NotesSwitch on={aiNotes} />
+          <AgentStatusPill
+            status={agent}
+            aiNotes={aiNotes}
+            onRetry={data.retryNotes}
+            onOpenSettings={onOpenSettings}
+          />
         </div>
       ) : (
         <div
@@ -135,8 +141,12 @@ export function ActivityView({
             <span className="min-w-0 truncate text-content">Activity</span>
           </div>
           <div className="flex shrink-0 items-center gap-2 pr-2">
-            <AgentStatusPill status={agent} />
-            <NotesSwitch on={aiNotes} />
+            <AgentStatusPill
+              status={agent}
+              aiNotes={aiNotes}
+              onRetry={data.retryNotes}
+              onOpenSettings={onOpenSettings}
+            />
           </div>
           {IS_MAC ? null : <WindowControls />}
         </div>
@@ -211,29 +221,6 @@ export function ActivityView({
         </div>
       </div>
     </div>
-  );
-}
-
-function NotesSwitch({ on }: { on: boolean }): ReactElement {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label="AI notes with Antigravity"
-      title={on ? "Turn AI notes off" : "Turn AI notes on"}
-      onClick={() => saveAiNotesEnabled(!on)}
-      className={`relative h-4 w-7 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
-        on ? "bg-accent" : "bg-content/20"
-      }`}
-    >
-      <span
-        aria-hidden
-        className={`absolute top-0.5 size-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          on ? "translate-x-3.5" : "translate-x-0.5"
-        }`}
-      />
-    </button>
   );
 }
 

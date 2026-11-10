@@ -12,7 +12,9 @@ AI notes written by the Antigravity CLI, and weekly/monthly views with an on-dem
 Locked decisions (user, 2026-11-09/10):
 - Inside Hari, not a separate app; a records view next to Notes.
 - Desktop context from ActivityWatch (local, MPL-2.0) when it runs; no own window watcher.
-- AI engine: Antigravity CLI only, headless `agy -p … --output-format json`, after every prompt/turn.
+- AI engine: Antigravity CLI only, after every prompt/turn. Since 2026-11-10 it runs the same
+  headless protocol as the Antigravity provider and AI helpers (L-208):
+  `agy --input-format stream-json --output-format stream-json --print-timeout 170s`, prompt on stdin.
 - The AI sees prompt text, a ≤600-char code-free reply excerpt, repo, branch, app names, website
   domains, meeting times. Never code, tool output, window/tab titles or full URLs.
 - Stored in its own `activity.db`, not `monocode.db`.
@@ -25,8 +27,8 @@ Locked decisions (user, 2026-11-09/10):
   interactive use; rapid calls can hit 429 (Google AI forum). Docs: antigravity.google/docs/cli/headless.
 - ActivityWatch REST: `GET /api/0/buckets/`, `GET /api/0/buckets/{id}/events?start&end&limit=-1`;
   bucket types `currentwindow`, `afkstatus`, `web.tab.current`. v0.14 adds sync, so filter by hostname.
-- Windows: `CreateProcess` command lines max 32,767 chars, and Rust refuses newline arguments to
-  `.cmd`/`.bat` shims, so prompts stay small and are flattened for shims.
+- Windows: `CreateProcess` command lines max 32,767 chars and Rust refuses newline arguments to
+  `.cmd`/`.bat` shims. Sending the prompt on stdin (stream-json) avoids both.
 
 ## Plan
 
@@ -59,6 +61,13 @@ Locked decisions (user, 2026-11-09/10):
 - `harness::tests::kill_all_reaps_term_ignoring_children_before_return` failed once under full-suite
   load and passes alone (timing; it also failed before this change).
 
+- Desktop check 1 (user, 2026-11-10): pill showed "agy Live" but no notes appeared. The first build
+  used `agy -p … --output-format json`; the fork's proven path is stream-json on stdin. Switched to
+  it, added an end-to-end test with a fake `agy`, and the pill now opens a menu with today's calls,
+  notes and failures plus the last run's output (Copy details), and the log warns when agy ran but
+  wrote nothing. The header switch was replaced by that menu.
+- Chrome tabs not listed: needs ActivityWatch running plus its browser extension (setup, no code).
+
 ## Learnings
 
 - Keep fork storage out of upstream files: a separate database file keeps merges clean and stops
@@ -69,6 +78,7 @@ Locked decisions (user, 2026-11-09/10):
 ## Desktop check (manual — not for an agent inside MonoCode)
 
 1. Settings → General: Activity tracker on, Activity notes on. Activity shows on the rail.
+   The header pill opens a menu (notes switch, today's counts, last run, Copy details, Retry).
 2. Send a prompt; Activity → Day shows it, then a "finished" row when the turn ends.
 3. With `agy` signed in: the pill says Live and a note appears seconds later. Sign out or rename
    `agy`: pill says Paused with Retry; prompts keep logging.

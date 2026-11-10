@@ -89,7 +89,26 @@ export type AgentStatus = {
   lastError?: string;
   lastNoteAt?: number;
   retryAt?: number;
+  /** Today's agy calls, notes written and failures. */
+  today?: { calls: number; notes: number; failures: number };
+  /** What the most recent agy run returned. */
+  lastRun?: AgentLastRun;
 };
+
+export type AgentLastRun = {
+  at: number;
+  ok: boolean;
+  /** One plain line: "Wrote a note (120 characters)" or the error. */
+  summary: string;
+  /** Exit code and the start of stdout/stderr, for "Copy details". */
+  output: string;
+};
+
+/** Notes are on and agy ran today, yet no note came out: worth flagging. */
+export function notesMissing(status: AgentStatus | null): boolean {
+  if (!status?.enabled || !status.today) return false;
+  return status.today.calls > 0 && status.today.notes === 0;
+}
 
 // ---------------------------------------------------------------------------
 // IPC

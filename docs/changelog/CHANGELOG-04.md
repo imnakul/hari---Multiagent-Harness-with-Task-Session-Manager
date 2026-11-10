@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-10 13:00 IST — Activity: agy notes over stream-json; pill menu replaces the switch (L-240)
+- Type: fix + change
+- What: Desktop check found no agy notes while the pill said Live. The notes worker now runs agy exactly like the Antigravity provider and AI helpers (`--input-format stream-json --output-format stream-json`, prompt on stdin, stopped after the `result` event) instead of `agy -p … --output-format json`. The header switch is gone: clicking the agy pill opens a menu with AI notes on/off, today's notes, calls and failures, what the last agy run returned (Copy details), Retry and Activity settings. The pill says "No notes" and the log shows a warning when agy ran but wrote nothing.
+- Why: User report with photo (switch looked wrong; notes missing). Chrome tabs need ActivityWatch and its browser extension; explained, no code change.
+- Files: `src-tauri/src/activity/agent.rs` (`run_agy`, `StreamText`, `user_message`, `LastRun`, `AgentStatus.today/last_run`), `src/features/activity/ui/{AgentStatusPill.tsx,ActivityView.tsx,ActivityLogFeed.tsx}`, `src/features/activity/model/activity.ts` (`notesMissing`), `src/app/App.tsx` (Activity → Settings link); spec and L-240 row updated.
+- Verified: see commit message | manual: spec § Desktop check (notes appear; pill menu)
+- Commit: the commit with this entry
+
 ## 2026-11-10 10:30 IST — Activity tracker: own activity.db, Day/Week/Month, summaries (L-240)
 - Type: feature
 - What: Activity (rail, inset sidebar, title tab) logs every prompt and finished agent turn with project, branch and agent time, and shows Day (timeline), Week and Month (bars per day, click to open a day) with a date picker. ActivityWatch, when running, adds active time, apps, meetings and websites (domains with local-only tab titles). An always-on Antigravity CLI (`agy`) writes a short note after each prompt or turn; Write summary sums up a week or month with one `agy` call, cached. Settings → General: Activity tracker (master switch) and Activity notes. The process monitor has an Activity tracker row (today's notes, calls, failures; live `agy` CPU/RAM). Data lives in its own `activity.db`, not `monocode.db`; `session_store.rs` is unchanged.
