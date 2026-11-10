@@ -534,6 +534,13 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             params![now_millis()],
         )?;
     }
+    if current < 12 {
+        crate::activity::store::ensure_activity_tables(conn)?;
+        conn.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (12, ?1)",
+            params![now_millis()],
+        )?;
+    }
     // Create even when a version row already exists (another build may have
     // used the same numbers, or a previous run recorded the version without
     // the table). Restore writes into these; missing tables look like a
@@ -551,6 +558,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
          );",
     )?;
     crate::notes::ensure_notes_table(conn)?;
+    crate::activity::store::ensure_activity_tables(conn)?;
     Ok(())
 }
 

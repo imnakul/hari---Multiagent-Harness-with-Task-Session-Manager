@@ -749,7 +749,7 @@ fn isolate_child(cmd: &mut Command) {
     }
 }
 
-fn terminate(pid: u32) {
+pub(crate) fn terminate(pid: u32) {
     terminate_after(pid, KILL_ESCALATE);
 }
 
@@ -1353,6 +1353,26 @@ fn resolve_grok() -> Option<PathBuf> {
     candidates.into_iter().find(|path| is_grok_agent(path))
 }
 
+/// Resolve Google's Antigravity CLI (`agy`). The activity notes worker runs it
+/// headless (`agy -p`); it is not a chat harness, so there is no session
+/// protocol to probe — an executable file with the right name is enough.
+pub(crate) fn resolve_agy() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(home) = dirs_home().map(PathBuf::from) {
+        candidates.push(home.join(".local/bin/agy"));
+        candidates.push(home.join(".antigravity/bin/agy"));
+        candidates.push(home.join(".npm-global/bin/agy"));
+    }
+    #[cfg(target_os = "macos")]
+    candidates.push(PathBuf::from("/opt/homebrew/bin/agy"));
+    candidates.push(PathBuf::from("/usr/local/bin/agy"));
+    candidates.push(PathBuf::from("/usr/bin/agy"));
+    if let Some(found) = resolve_gui_binary("agy") {
+        candidates.push(found);
+    }
+    candidates.into_iter().find(|path| is_executable_file(path))
+}
+
 fn is_pi_coding_agent(path: &Path) -> bool {
     if !path.is_file() {
         return false;
@@ -1694,7 +1714,7 @@ pub(crate) fn apply_gui_env(cmd: &mut Command) {
     }
 }
 
-fn prepare_child(cmd: &mut Command, command: &str) {
+pub(crate) fn prepare_child(cmd: &mut Command, command: &str) {
     apply_gui_env(cmd);
     if command_basename(command) == "fx" {
         apply_fx_env(cmd);

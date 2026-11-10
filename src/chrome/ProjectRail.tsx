@@ -1,4 +1,5 @@
 import {
+  Activity,
   Archive,
   Check,
   ChevronDown,
@@ -114,6 +115,8 @@ type Props = {
   notesEnabled?: boolean;
   onOpenNotes?: () => void;
   notesActive?: boolean;
+  onOpenActivity?: () => void;
+  activityActive?: boolean;
   onTogglePanel?: () => void;
   onSelectProject: (path: string) => void;
   onOpenProject: () => void;
@@ -147,6 +150,8 @@ export function ProjectRail({
   notesEnabled = true,
   onOpenNotes,
   notesActive = false,
+  onOpenActivity,
+  activityActive = false,
   onTogglePanel,
   onSelectProject,
   onOpenProject,
@@ -407,6 +412,13 @@ export function ProjectRail({
                 ariaLabel="Notes"
               />
             ) : null}
+            <RailAction
+              label="Activity"
+              icon={Activity}
+              onClick={onOpenActivity}
+              active={activityActive}
+              ariaLabel="Activity"
+            />
           </div>
 
           <div
@@ -424,7 +436,7 @@ export function ProjectRail({
                 busy={busy}
                 sortable={pinnedSortable}
                 pinned
-                searchActive={searchActive || inboxActive || notesActive}
+                searchActive={searchActive || inboxActive || notesActive || activityActive}
                 onSelect={onSelectProject}
                 onTogglePin={onTogglePin}
                 onContextMenu={onProjectContextMenu}
@@ -446,7 +458,7 @@ export function ProjectRail({
               busy={busy}
               sortable={projectSortable}
               pinned={false}
-              searchActive={searchActive || inboxActive || notesActive}
+              searchActive={searchActive || inboxActive || notesActive || activityActive}
               onSelect={onSelectProject}
               onTogglePin={onTogglePin}
               onContextMenu={onProjectContextMenu}

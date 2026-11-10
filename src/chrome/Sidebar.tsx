@@ -1,4 +1,5 @@
 import {
+  Activity,
   Check,
   ChevronDown,
   ChevronRight,
@@ -203,10 +204,12 @@ type Props = {
   onSearch?: () => void;
   onOpenInbox?: () => void;
   onOpenNotes?: () => void;
+  onOpenActivity?: () => void;
   onGoToFile?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
   notesActive?: boolean;
+  activityActive?: boolean;
   notesEnabled?: boolean;
   onToggleProjectRail?: () => void;
   projectRailOpen?: boolean;
@@ -269,10 +272,12 @@ function SidebarComponent({
   onSearch,
   onOpenInbox,
   onOpenNotes,
+  onOpenActivity,
   onGoToFile,
   searchActive = false,
   inboxActive = false,
   notesActive = false,
+  activityActive = false,
   notesEnabled = true,
   onToggleProjectRail,
   projectRailOpen = true,
@@ -440,6 +445,7 @@ function SidebarComponent({
     !searchActive &&
     !inboxActive &&
     !notesActive &&
+    !activityActive &&
     !settingsOpen &&
     inProject;
   const gitStatuses = useGitFileStatuses(gitRoot, open && tab === "files");
@@ -945,9 +951,11 @@ function SidebarComponent({
               onSearch={onSearch}
               onOpenInbox={onOpenInbox}
               onOpenNotes={notesEnabled ? onOpenNotes : undefined}
+              onOpenActivity={onOpenActivity}
               searchActive={searchActive}
               inboxActive={inboxActive}
               notesActive={notesActive}
+              activityActive={activityActive}
               inboxUnseen={inboxUnseen}
             />
           ) : null}
@@ -1343,6 +1351,8 @@ function SidebarComponent({
           notesEnabled={notesEnabled}
           onOpenNotes={onOpenNotes}
           notesActive={notesActive}
+          onOpenActivity={onOpenActivity}
+          activityActive={activityActive}
           onTogglePanel={onToggleProjectRail}
           onSelectProject={onSelectProject}
           onOpenProject={onOpenProject}
@@ -1373,9 +1383,11 @@ function SidebarProjectPicker({
   onSearch,
   onOpenInbox,
   onOpenNotes,
+  onOpenActivity,
   searchActive = false,
   inboxActive = false,
   notesActive = false,
+  activityActive = false,
   inboxUnseen = false,
 }: {
   cwd: string;
@@ -1386,9 +1398,11 @@ function SidebarProjectPicker({
   onSearch?: () => void;
   onOpenInbox?: () => void;
   onOpenNotes?: () => void;
+  onOpenActivity?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
   notesActive?: boolean;
+  activityActive?: boolean;
   inboxUnseen?: boolean;
 }) {
   const [groupLabels] = useState(loadTabGroupLabels);
@@ -1472,6 +1486,11 @@ function SidebarProjectPicker({
         {onOpenNotes ? (
           <IconButton label="Notes" active={notesActive} onClick={onOpenNotes}>
             <StickyNote className="size-3.5" strokeWidth={1.75} />
+          </IconButton>
+        ) : null}
+        {onOpenActivity ? (
+          <IconButton label="Activity" active={activityActive} onClick={onOpenActivity}>
+            <Activity className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
       </div>

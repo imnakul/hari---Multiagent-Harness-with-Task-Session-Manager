@@ -11,6 +11,7 @@ import { MenuBar } from "./chrome/MenuBar";
 import { FilePicker } from "./chrome/FilePicker";
 import { UsageFooter } from "./chrome/UsageFooter";
 import { useProjectBranches } from "./hooks/useProjectBranches";
+import { useActivityRecorder } from "./hooks/useActivityRecorder";
 import {
   loadProjectRailOpen,
   loadSidebarTabOrder,
@@ -266,6 +267,7 @@ import { SearchView } from "./surfaces/SearchView";
 import { SettingsView } from "./surfaces/SettingsView";
 import { InboxView } from "./surfaces/InboxView";
 import { NotesView } from "./surfaces/NotesView";
+import { ActivityView } from "./surfaces/ActivityView";
 import { inboxComposerCard, type InboxItem } from "./lib/githubTasks";
 import {
   linearIssueDetails,
@@ -484,6 +486,7 @@ export default function App({
   const [searchViewFocusToken, setSearchViewFocusToken] = useState(0);
   const [inboxViewOpen, setInboxViewOpen] = useState(false);
   const [notesViewOpen, setNotesViewOpen] = useState(false);
+  const [activityViewOpen, setActivityViewOpen] = useState(false);
   const notesEnabled = useSyncExternalStore(
     subscribeNotesEnabled,
     loadNotesEnabled,
@@ -532,6 +535,7 @@ export default function App({
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  useActivityRecorder(sessions);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const projectTerminalsRef = useRef(projectTerminals);
@@ -548,6 +552,8 @@ export default function App({
   inboxViewOpenRef.current = inboxViewOpen;
   const notesViewOpenRef = useRef(notesViewOpen);
   notesViewOpenRef.current = notesViewOpen;
+  const activityViewOpenRef = useRef(activityViewOpen);
+  activityViewOpenRef.current = activityViewOpen;
 
   useEffect(() => {
     if (!notesEnabled) setNotesViewOpen(false);
@@ -1187,6 +1193,7 @@ export default function App({
     setSearchViewOpen(false);
     setInboxViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     const cwd = active?.cwd ?? sessionDefaults?.cwd ?? projectCwd;
     const session = newDefaultSession(cwd, sessionDefaults?.runtimeMode);
     const tab = newTab(session.id);
@@ -1208,6 +1215,7 @@ export default function App({
       const start = (description?: string) => {
         setInboxViewOpen(false);
         setNotesViewOpen(false);
+        setActivityViewOpen(false);
         setSidebarTab("sessions");
         const cwd =
           item.projectPath ||
@@ -1264,6 +1272,7 @@ export default function App({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setNotesViewOpen(false);
+      setActivityViewOpen(false);
       setSidebarTab("sessions");
       const cwd =
         (card.sourceCwd && looksLikeProject(card.sourceCwd)
@@ -2583,6 +2592,7 @@ export default function App({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setNotesViewOpen(false);
+      setActivityViewOpen(false);
       const normalized = normalizeProjectPath(path);
       if (!looksLikeProject(normalized)) return;
 
@@ -3528,6 +3538,7 @@ export default function App({
       setSearchViewOpen(false);
       setInboxViewOpen(false);
       setNotesViewOpen(false);
+      setActivityViewOpen(false);
       onOpenApprovalSession(sessionId);
     },
     [onOpenApprovalSession],
@@ -3602,6 +3613,7 @@ export default function App({
     setSearchViewOpen(false);
     setInboxViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     setFilePickerOpen(true);
   }, []);
 
@@ -3609,6 +3621,7 @@ export default function App({
     setSearchViewOpen(false);
     setInboxViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     setSidebarTab("files");
     setFilesSearchOpen(true);
     setSearchFocusToken((token) => token + 1);
@@ -3619,6 +3632,7 @@ export default function App({
     setSettingsOpen(false);
     setInboxViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     setSearchViewOpen(true);
     setSearchViewFocusToken((token) => token + 1);
   }, []);
@@ -3632,6 +3646,7 @@ export default function App({
     setSettingsOpen(false);
     setSearchViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     setInboxViewOpen(true);
   }, []);
 
@@ -3645,6 +3660,7 @@ export default function App({
     setSettingsOpen(false);
     setSearchViewOpen(false);
     setInboxViewOpen(false);
+    setActivityViewOpen(false);
     setNotesViewOpen(true);
   }, []);
 
@@ -3652,11 +3668,33 @@ export default function App({
     setNotesViewOpen(false);
   }, []);
 
+  const onOpenActivity = useCallback(() => {
+    setFilePickerOpen(false);
+    setSettingsOpen(false);
+    setSearchViewOpen(false);
+    setInboxViewOpen(false);
+    setNotesViewOpen(false);
+    setActivityViewOpen(true);
+  }, []);
+
+  const onLeaveActivity = useCallback(() => {
+    setActivityViewOpen(false);
+  }, []);
+
+  const onOpenActivitySession = useCallback(
+    (sessionId: string) => {
+      setActivityViewOpen(false);
+      void onSelectHistorySession(sessionId);
+    },
+    [onSelectHistorySession],
+  );
+
   const openSettings = useCallback((section?: SettingsSectionId) => {
     setFilePickerOpen(false);
     setSearchViewOpen(false);
     setInboxViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     if (section) {
       setSettingsSection(section);
       saveSettingsSection(section);
@@ -3700,14 +3738,19 @@ export default function App({
       setNotesViewOpen(false);
       return;
     }
+    if (activityViewOpen) {
+      setActivityViewOpen(false);
+      return;
+    }
     onVisitBack();
-  }, [onVisitBack, searchViewOpen, settingsOpen, inboxViewOpen, notesViewOpen]);
+  }, [onVisitBack, searchViewOpen, settingsOpen, inboxViewOpen, notesViewOpen, activityViewOpen]);
 
   const onRailForward = useCallback(() => {
     setSearchViewOpen(false);
     setSettingsOpen(false);
     setInboxViewOpen(false);
     setNotesViewOpen(false);
+    setActivityViewOpen(false);
     onVisitForward();
   }, [onVisitForward]);
 
@@ -3846,7 +3889,7 @@ export default function App({
         else run(`activate-${cmd.activate}`, () => a.onActivate(cmd.activate));
         return;
       }
-      if (!searchViewOpenRef.current && !inboxViewOpenRef.current && !notesViewOpenRef.current && handleEditorFindKey(e)) {
+      if (!searchViewOpenRef.current && !inboxViewOpenRef.current && !notesViewOpenRef.current && !activityViewOpenRef.current && handleEditorFindKey(e)) {
         e.stopPropagation();
         return;
       }
@@ -4015,7 +4058,7 @@ export default function App({
         onOpenTerminal={(cwd) => onOpenTerminal(cwd)}
         onFileMoved={onFileMoved}
         onFileDeleted={onFileDeleted}
-        canGoBack={tabVisitNav.canBack || searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen}
+        canGoBack={tabVisitNav.canBack || searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen || activityViewOpen}
         canGoForward={tabVisitNav.canForward}
         onGoBack={onRailBack}
         onGoForward={onRailForward}
@@ -4044,6 +4087,8 @@ export default function App({
         searchActive={searchViewOpen}
         inboxActive={inboxViewOpen}
         notesActive={notesViewOpen}
+        onOpenActivity={onOpenActivity}
+        activityActive={activityViewOpen}
         notesEnabled={notesEnabled}
         projectRailOpen={projectRailOpen}
         onToggleProjectRail={onToggleProjectRail}
@@ -4061,12 +4106,12 @@ export default function App({
       <div className="body-glass flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           className={
-            searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen
+            searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen || activityViewOpen
               ? "hidden"
               : "flex min-h-0 min-w-0 flex-1 flex-col"
           }
-          aria-hidden={searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen}
-          inert={searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen || undefined}
+          aria-hidden={searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen || activityViewOpen}
+          inert={searchViewOpen || settingsOpen || inboxViewOpen || notesViewOpen || activityViewOpen || undefined}
         >
         {!IS_MAC ? (
           <MenuBar
@@ -4276,7 +4321,15 @@ export default function App({
             onOpenWhatsNew={onOpenWhatsNew}
           />
         ) : null}
-        {searchViewOpen || inboxViewOpen || notesViewOpen || settingsOpen ? null : (
+        {activityViewOpen ? (
+          <ActivityView
+            besideRail={projectRailOpen}
+            onClose={onLeaveActivity}
+            onToggleSidebar={onToggleSidebar}
+            onOpenSession={onOpenActivitySession}
+          />
+        ) : null}
+        {searchViewOpen || inboxViewOpen || notesViewOpen || activityViewOpen || settingsOpen ? null : (
           <UsageFooter
             providers={usageProviders}
             session={usageSession}

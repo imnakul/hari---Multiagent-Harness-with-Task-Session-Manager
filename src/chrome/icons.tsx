@@ -4,6 +4,7 @@ import {
   type HugeiconsIconProps,
   type IconSvgElement,
 } from "@hugeicons/react";
+import Activity01Icon from "@hugeicons/core-free-icons/Activity01Icon";
 import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
 import AddSquareIcon from "@hugeicons/core-free-icons/AddSquareIcon";
 import AlertCircleIcon from "@hugeicons/core-free-icons/AlertCircleIcon";
@@ -18,6 +19,7 @@ import BotIcon from "@hugeicons/core-free-icons/BotIcon";
 import BrainIcon from "@hugeicons/core-free-icons/BrainIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CaseSensitiveIcon from "@hugeicons/core-free-icons/CaseSensitiveIcon";
+import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
 import CircleArrowDown01Icon from "@hugeicons/core-free-icons/CircleArrowDown01Icon";
 import CancelCircleIcon from "@hugeicons/core-free-icons/CancelCircleIcon";
 import CircleDashedIcon from "@hugeicons/core-free-icons/CircleDashedIcon";
@@ -79,6 +81,7 @@ import StarIcon from "@hugeicons/core-free-icons/StarIcon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 import UndoIcon from "@hugeicons/core-free-icons/UndoIcon";
 import UngroupItemsIcon from "@hugeicons/core-free-icons/UngroupItemsIcon";
+import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 import WholeWordIcon from "@hugeicons/core-free-icons/WholeWordIcon";
 import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
 import { forwardRef, type Ref } from "react";
@@ -133,6 +136,7 @@ const UnfoldVerticalIcon: IconSvgElement = [
   ["path", { d: "M7 17L12 22L17 17", ...stroke, key: "5" }],
 ];
 
+export const Activity = wrap(Activity01Icon, "Activity");
 export const AlertCircle = wrap(AlertCircleIcon, "AlertCircle");
 export const AppWindow = wrap(AppWindowIcon, "AppWindow");
 export const Archive = wrap(ArchiveIcon, "Archive");
@@ -152,6 +156,7 @@ export const CircleDashed = wrap(CircleDashedIcon, "CircleDashed");
 export const CircleDot = wrap(CircleDotIcon, "CircleDot");
 export const CircleX = wrap(CancelCircleIcon, "CircleX");
 export const CloudUpload = wrap(CloudUploadIcon, "CloudUpload");
+export const Clock = wrap(Clock01Icon, "Clock");
 export const Copy = wrap(Copy01Icon, "Copy");
 export const ExternalLink = wrap(LinkSquare02Icon, "ExternalLink");
 export const File = wrap(File01Icon, "File");
@@ -220,6 +225,7 @@ export const Trash2 = wrap(Delete02Icon, "Trash2");
 export const Undo2 = wrap(UndoIcon, "Undo2");
 export const UnfoldVertical = wrap(UnfoldVerticalIcon, "UnfoldVertical");
 export const Ungroup = wrap(UngroupItemsIcon, "Ungroup");
+export const Video = wrap(Video01Icon, "Video");
 export const WandSparkles = wrap(MagicWand01Icon, "WandSparkles");
 export const WholeWord = wrap(WholeWordIcon, "WholeWord");
 export const Wrench = wrap(Wrench01Icon, "Wrench");

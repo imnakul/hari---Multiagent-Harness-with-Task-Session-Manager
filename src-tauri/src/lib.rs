@@ -1,5 +1,6 @@
 use tauri::Manager;
 
+mod activity;
 mod checkpoint;
 mod cursor_store;
 mod fs;
@@ -136,11 +137,13 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(harness::HarnessHost::new())
         .manage(pty::PtyHost::new())
+        .manage(activity::agent::NotesAgent::new())
         .manage(window_transfer::WindowTransferState::new())
         .setup(|app| {
             harness::reap_orphaned_harness_processes();
             session_store::init(app.handle())?;
             checkpoint::init(app.handle())?;
+            activity::init(app.handle());
             menu::install(app.handle())?;
             #[cfg(target_os = "macos")]
             {
@@ -257,6 +260,12 @@ pub fn run() {
             notes::notes_get,
             notes::notes_upsert,
             notes::notes_delete,
+            activity::activity_record,
+            activity::activity_list,
+            activity::activity_watch_summary,
+            activity::activity_agent_status,
+            activity::activity_agent_configure,
+            activity::activity_agent_retry,
             checkpoint::session_checkpoint_ensure,
             checkpoint::session_checkpoint_capture,
             checkpoint::session_checkpoint_sync,
@@ -331,6 +340,9 @@ fn reap_harness_children(handle: &tauri::AppHandle) {
     }
     if let Some(host) = handle.try_state::<pty::PtyHost>() {
         host.kill_all();
+    }
+    if let Some(agent) = handle.try_state::<activity::agent::NotesAgent>() {
+        agent.shutdown();
     }
 }
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Activity** on the project rail: a day view of what you and your agents did. Every prompt and finished turn is logged locally with project, branch, and agent time; a timeline, per-project breakdown, and log show it at a glance. Click a logged prompt to reopen its chat.
+- Optional desktop context from [ActivityWatch](https://activitywatch.net/) (free, open source, local): your active time, top apps, and meetings (Zoom, Google Meet, Teams, Webex, FaceTime, Slack huddles). Hari only reads its local API; window titles never leave the machine.
+- Always-on AI notes from Google's Antigravity CLI (`agy`). After each prompt or finished turn, `agy -p` writes a short work-log entry using your own sign-in and quota. Calls never overlap, bursts are batched, rate limits back off (30 s up to 15 min), and a missing or signed-out CLI pauses notes with a Retry button while logging continues. Toggle it in the Activity header or Settings → General.
+
 ## [0.1.30] - 2026-09-02
 
 ### Added

@@ -19,7 +19,9 @@ import { HarnessIcon } from "../chrome/HarnessIcon";
 import { InboxProviderMark } from "../chrome/InboxProviderMark";
 import { RemoveProjectDialog } from "../chrome/RemoveProjectDialog";
 import { WindowControls } from "../chrome/WindowControls";
+import { useAiNotesEnabled } from "../hooks/useActivityRecorder";
 import { useLockOverscroll } from "../hooks/useLockOverscroll";
+import { saveAiNotesEnabled } from "../lib/activity";
 import {
   applyBodyGlass,
   applyThemePreference,
@@ -267,6 +269,7 @@ function GeneralPage({
     loadGridArcadeEnabled,
   );
   const [notesEnabled, setNotesEnabled] = useState(loadNotesEnabled);
+  const aiNotesEnabled = useAiNotesEnabled();
   const [liveAgentsEnabled, setLiveAgentsEnabled] = useState(
     loadLiveAgentsEnabled,
   );
@@ -393,6 +396,16 @@ function GeneralPage({
         description="A global markdown notebook on the project rail. Save a finished turn from the transcript, then mention it later with @note or add it to chat. Turn this off to hide Notes from the UI."
       >
         <Toggle label="Notes" on={notesEnabled} onChange={onNotesEnabled} />
+      </Row>
+      <Row
+        label="Activity notes (Antigravity)"
+        description="Every prompt and finished turn is logged locally in Activity. With this on, Google's Antigravity CLI (agy) also writes a short note after each one, using your own agy sign-in and quota. It sees prompt text, a short reply excerpt, repo, branch, app names, and meeting times — never code or window titles."
+      >
+        <Toggle
+          label="Activity notes"
+          on={aiNotesEnabled}
+          onChange={saveAiNotesEnabled}
+        />
       </Row>
       <Row
         label="Working agents"
