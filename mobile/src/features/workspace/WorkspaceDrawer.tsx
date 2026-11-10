@@ -7,18 +7,27 @@ import {
   shapes,
   tag,
 } from "@expo/ui/swift-ui/modifiers";
+import * as Haptics from "expo-haptics";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useConnection, useMonoTools } from "@/features/connection/ConnectionProvider";
+import { isRunning } from "@/features/liveUpdates/liveCards";
 import { PixelMascot } from "@/features/mascots/PixelMascot";
 import { ProjectMascot } from "@/features/mascots/ProjectMascot";
 import { plainText } from "@/features/sessions/markdownParser";
 import { HEADER_GAP, HEADER_HEIGHT, useKeyboardLift } from "@/features/sessions/SessionScreen";
-import { MONOCODE_MARK } from "@/ui/brand";
+import { HARI_LOGO } from "@/ui/brand";
 import { ChoiceMenu } from "@/ui/ChoiceMenu";
 import { CircleButton } from "@/ui/CircleButton";
 import { useWarmDitherLoading } from "@/ui/DitherLoading";
@@ -35,7 +44,7 @@ import { useUnreadMonos } from "./monoSeen";
 import { onMonoCreated } from "./newMono";
 import { pickProject } from "./projectPick";
 import { projectForRoute } from "./routing";
-import type { Mono, Project } from "./types";
+import type { Mono, Project, SessionSummary } from "./types";
 import { useWorkspace } from "./WorkspaceProvider";
 
 /** As the composer's pill, so the drawer's foot lines up with a chat's. */
@@ -51,6 +60,9 @@ const AVATAR = 40;
 const LIST_INSET = 6;
 const ROW_INSET = 10;
 const ROW_GAP = 14;
+
+/** One empty list for every idle project, so their rows stay memoised. */
+const NO_SESSIONS: SessionSummary[] = [];
 
 type Filter = "all" | "unread" | "working";
 /** Which kinds the list shows. */
@@ -103,11 +115,28 @@ export function WorkspaceDrawer() {
         ),
     [roster, needle, filter, unread],
   );
+  // Fork (Hari, L-241): each project's running sessions, those waiting on the
+  // user first, then the newest, as the Live Update cards order them.
+  const runningByProject = useMemo(() => {
+    const byProject = new Map<string, SessionSummary[]>();
+    for (const session of catalog.sessions) {
+      if (!isRunning(session)) continue;
+      const list = byProject.get(session.projectId) ?? [];
+      list.push(session);
+      byProject.set(session.projectId, list);
+    }
+    for (const list of byProject.values())
+      list.sort(
+        (a, b) => Number(!!b.waiting) - Number(!!a.waiting) || b.updatedAt - a.updatedAt,
+      );
+    return byProject;
+  }, [catalog.sessions]);
   const shownProjects = projects.filter(
     (project) =>
       (!needle || project.name.toLowerCase().includes(needle)) &&
       // A project has no replies to read, so only "All" and "Working now" keep it.
-      (filter === "all" || (filter === "working" && project.busy)),
+      (filter === "all" ||
+        (filter === "working" && (project.busy || runningByProject.has(project.id)))),
   );
 
   // The drawer shuts at once over a loading cover, and the next screen is
@@ -119,6 +148,18 @@ export function WorkspaceDrawer() {
       // The project route takes a pick in place; any other screen is replaced.
       if (!pickProject(id))
         router.replace({ pathname: "/project/[projectId]", params: { projectId: id } });
+    });
+  };
+  // A running session opens over its project, as the project's own list
+  // pushes it, once the drawer is shut.
+  const openSession = (session: SessionSummary) => {
+    drawer.closeThen(() => {
+      if (session.projectId !== activeProject && !pickProject(session.projectId))
+        router.replace({ pathname: "/project/[projectId]", params: { projectId: session.projectId } });
+      router.push({
+        pathname: "/project/[projectId]/session/[sessionId]",
+        params: { projectId: session.projectId, sessionId: session.id },
+      });
     });
   };
   const openMono = (id: string) => {
@@ -202,8 +243,10 @@ export function WorkspaceDrawer() {
                 <ProjectRow
                   key={project.id}
                   project={project}
+                  running={runningByProject.get(project.id) ?? NO_SESSIONS}
                   active={project.id === activeProject}
                   onPress={openProject}
+                  onOpenSession={openSession}
                 />
               ))}
             </View>
@@ -222,8 +265,8 @@ export function WorkspaceDrawer() {
 
         <View style={[styles.header, { top: headerTop }]}>
           <Image
-            source={MONOCODE_MARK}
-            style={[styles.mark, { tintColor: colors.content }]}
+            source={HARI_LOGO}
+            style={styles.mark}
             accessibilityIgnoresInvertColors
           />
           <View style={styles.headerActions}>
@@ -445,38 +488,120 @@ export function oneLine(text: string) {
   return plainText(text.slice(0, 600));
 }
 
-/** A project as a row of the list, under the Monos: its mascot and name. */
+/**
+ * A project as a row of the list, under the Monos: its mascot and name. Fork
+ * (Hari, L-241): while sessions run in it, the name shimmers as on the
+ * desktop, their count sits at the row's end, and that count opens the
+ * running sessions under the row, each opening its chat.
+ */
 const ProjectRow = memo(function ProjectRow({
   project,
+  running,
   active,
   onPress,
+  onOpenSession,
 }: {
   project: Project;
+  /** Its running sessions, those waiting on the user first. */
+  running: SessionSummary[];
   active: boolean;
   onPress: (id: string) => void;
+  onOpenSession: (session: SessionSummary) => void;
 }) {
   const styles = useStyles();
+  const colors = useColors();
+  // The shimmer only runs where it can be seen.
+  const shown = useDrawerOpen();
+  const [expanded, setExpanded] = useState(false);
+  const count = running.length;
+  const open = expanded && count > 0;
+  const turn = useSharedValue(0);
+  useEffect(() => {
+    turn.set(withTiming(open ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }));
+  }, [open, turn]);
+  const chevron = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${turn.get() * 90}deg` }],
+  }));
+  const waiting = running.filter((session) => session.waiting).length;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={project.name}
-      accessibilityState={{ selected: active }}
-      onPress={() => onPress(project.id)}
-      style={({ pressed }) => [styles.projectRow, (active || pressed) && styles.rowActive]}
-    >
-      <View style={styles.projectIcon}>
-        <ProjectMascot
-          project={project.path}
-          name={project.mascot}
-          color={project.color}
-          size={24}
-          active={project.busy}
-        />
-      </View>
-      <Text style={[styles.rowLabel, styles.rowText]} numberOfLines={1}>
-        {project.name}
-      </Text>
-    </Pressable>
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={count ? `${project.name}, ${count} running` : project.name}
+        accessibilityState={{ selected: active }}
+        onPress={() => onPress(project.id)}
+        style={({ pressed }) => [
+          styles.projectRow,
+          count > 0 && styles.projectRowRunning,
+          (active || pressed) && styles.rowActive,
+        ]}
+      >
+        <View style={styles.projectIcon}>
+          <ProjectMascot
+            project={project.path}
+            name={project.mascot}
+            color={project.color}
+            size={24}
+            active={project.busy || count > 0}
+          />
+        </View>
+        {count > 0 && shown ? (
+          <Shimmer style={[styles.rowLabel, styles.rowText]} duration={2}>
+            {project.name}
+          </Shimmer>
+        ) : (
+          <Text style={[styles.rowLabel, styles.rowText]} numberOfLines={1}>
+            {project.name}
+          </Text>
+        )}
+        {count > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${open ? "Hide" : "Show"} ${count} running ${count === 1 ? "session" : "sessions"}`}
+            accessibilityState={{ expanded: open }}
+            hitSlop={4}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              setExpanded((value) => !value);
+            }}
+            style={({ pressed }) => [styles.runningToggle, pressed && styles.runningTogglePressed]}
+          >
+            <Text style={[styles.runningCount, waiting > 0 && styles.rowNeedsYou]}>{count}</Text>
+            <Animated.View style={chevron}>
+              <Icon name="chevronRight" size={16} color={colors.muted} />
+            </Animated.View>
+          </Pressable>
+        ) : null}
+      </Pressable>
+      {open ? (
+        <Animated.View
+          entering={FadeIn.duration(180)}
+          exiting={FadeOut.duration(120)}
+          style={styles.runningList}
+        >
+          {running.map((session) => (
+            <Pressable
+              key={session.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${session.title || "Untitled session"}, ${session.waiting ? "needs you" : "working"}`}
+              onPress={() => onOpenSession(session)}
+              style={({ pressed }) => [styles.sessionRow, pressed && styles.rowActive]}
+            >
+              <View
+                style={[
+                  styles.sessionDot,
+                  { backgroundColor: session.waiting ? colors.caution : colors.accent },
+                ]}
+              />
+              <Text style={styles.sessionTitle} numberOfLines={1}>
+                {session.title || "Untitled session"}
+              </Text>
+              {session.waiting ? <Text style={styles.sessionNeedsYou}>Needs you</Text> : null}
+            </Pressable>
+          ))}
+        </Animated.View>
+      ) : null}
+    </View>
   );
 });
 
@@ -627,6 +752,60 @@ const useStyles = themedStyles((colors) => ({
   },
   rowNeedsYou: {
     color: colors.caution,
+  },
+  projectRowRunning: {
+    paddingRight: 0,
+  },
+  // The running count and its chevron: a 48dp target at the row's end.
+  runningToggle: {
+    minWidth: 48,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    paddingRight: ROW_INSET,
+    borderRadius: radii.row,
+  },
+  runningTogglePressed: {
+    opacity: 0.6,
+    transform: [{ scale: 0.96 }],
+  },
+  runningCount: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  // The sessions under a project, starting where its name starts.
+  runningList: {
+    paddingLeft: ROW_INSET + AVATAR + ROW_GAP - 10,
+    paddingBottom: 4,
+  },
+  sessionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    borderRadius: radii.row,
+    borderCurve: "continuous",
+  },
+  sessionDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  sessionTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.content,
+    fontSize: 15,
+  },
+  sessionNeedsYou: {
+    color: colors.caution,
+    fontSize: 13,
+    fontWeight: "600",
   },
   unread: {
     width: 10,

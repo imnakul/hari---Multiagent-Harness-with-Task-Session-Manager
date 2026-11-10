@@ -72,8 +72,8 @@ export type AwSummary = {
   apps: { app: string; ms: number }[];
   /** Whether the ActivityWatch browser extension reported any tabs. */
   hasWeb: boolean;
-  /** Time per website domain; `titles` are local-only tab titles. */
-  sites: { domain: string; ms: number; titles: string[] }[];
+  /** Time per website domain; `titles` are local-only tab titles with their time, longest first. */
+  sites: { domain: string; ms: number; titles: { title: string; ms: number }[] }[];
   meetings: (Span & { label: string })[];
   meetingMs: number;
 };

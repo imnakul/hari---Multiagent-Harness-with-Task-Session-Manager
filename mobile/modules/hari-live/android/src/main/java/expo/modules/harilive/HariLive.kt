@@ -54,6 +54,10 @@ internal object HariLive {
   // On Android 16 QPR2 this is Notification.EXTRA_REQUEST_PROMOTED_ONGOING;
   // Android 16 itself reads the same key, before the builder had a setter.
   private const val REQUEST_PROMOTED = "android.requestPromotedOngoing"
+  // A card closes itself this long after it was last posted. The service
+  // posts the cards again on every tick, so they stay while it runs; if the
+  // app dies, they go within this time instead of staying for good.
+  private const val CARD_TIMEOUT_MS = 2 * 60_000L
 
   private val main = Handler(Looper.getMainLooper())
 
@@ -63,22 +67,86 @@ internal object HariLive {
   private var posted: Set<Int> = emptySet()
   var service: HariLiveService? = null
   private var starting = false
+  // Set once a card fails; this run shows no more cards.
+  private var failed = false
 
   // Set while the app listens; button presses wait here until it does.
   var emit: ((Map<String, Any?>) -> Unit)? = null
   private val pending = mutableListOf<Map<String, Any?>>()
 
   fun update(context: Context, next: List<LiveCard>) {
+    val app = context.applicationContext
     main.post {
-      cards = next
-      render(context.applicationContext)
+      // Runs outside React Native: anything thrown here would close the app,
+      // and it would close again on every launch while a session runs. A card
+      // Android or the phone maker rejects turns Live Updates off instead.
+      try {
+        if (failed && next.isNotEmpty()) return@post
+        cards = next
+        render(app)
+      } catch (error: Exception) {
+        fail(app, error)
+      }
     }
+  }
+
+  /** Posts the same cards again, which renews their timeout (each service tick). */
+  fun renew(context: Context) {
+    val app = context.applicationContext
+    main.post {
+      if (cards.isEmpty()) return@post
+      try {
+        render(app)
+      } catch (error: Exception) {
+        fail(app, error)
+      }
+    }
+  }
+
+  /** Closes every card after an error and tells the app, which stops sending them. */
+  fun fail(context: Context, error: Exception) {
+    Log.e(TAG, "Live Update failed; turning it off for this run", error)
+    failed = true
+    cards = emptyList()
+    try {
+      service?.finish()
+    } catch (stop: Exception) {
+      Log.w(TAG, "Could not stop the Live Update service", stop)
+    }
+    clearAll(context)
+    dispatch(mapOf("action" to "failed", "message" to (error.message ?: error.javaClass.simpleName)))
+  }
+
+  /**
+   * Cards outlive the app when Android kills it, and a new launch knows
+   * nothing of them, so they would stay on screen with no end. A new run
+   * clears any it finds before showing its own.
+   */
+  fun clearStale(context: Context) {
+    main.post {
+      if (service != null || starting || posted.isNotEmpty()) return@post
+      clearAll(context.applicationContext)
+    }
+  }
+
+  private fun clearAll(context: Context) {
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    try {
+      posted.forEach { manager.cancel(it) }
+      if (Build.VERSION.SDK_INT >= 26)
+        manager.activeNotifications
+          .filter { it.notification.channelId == CHANNEL }
+          .forEach { manager.cancel(it.tag, it.id) }
+    } catch (error: Exception) {
+      Log.w(TAG, "Could not clear Live Update cards", error)
+    }
+    posted = emptySet()
   }
 
   fun dispatch(event: Map<String, Any?>) {
     main.post {
       val send = emit
-      if (send != null) send(event)
+      if (send != null) deliver(send, event)
       // A tick is only worth anything to an app that's listening.
       else if (event["action"] != "tick") pending.add(event)
     }
@@ -90,8 +158,17 @@ internal object HariLive {
       if (send != null) {
         val waiting = pending.toList()
         pending.clear()
-        waiting.forEach(send)
+        waiting.forEach { deliver(send, it) }
       }
+    }
+  }
+
+  // The app's side may be gone (a reload); a lost event must not close the app.
+  private fun deliver(send: (Map<String, Any?>) -> Unit, event: Map<String, Any?>) {
+    try {
+      send(event)
+    } catch (error: Exception) {
+      Log.w(TAG, "Could not pass a Live Update event to the app", error)
     }
   }
 
@@ -106,8 +183,8 @@ internal object HariLive {
     val running = service
     if (shown.isEmpty()) {
       running?.finish()
-      posted.forEach { manager.cancel(it) }
-      posted = emptySet()
+      // Every card on the channel, including any a killed run left behind.
+      clearAll(context)
       return
     }
     if (running != null) running.foreground(shown[0].first, shown[0].second)
@@ -182,6 +259,7 @@ internal object HariLive {
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setCategory(Notification.CATEGORY_PROGRESS)
+    if (Build.VERSION.SDK_INT >= 26) builder.setTimeoutAfter(CARD_TIMEOUT_MS)
     if (card.startedAt != null) {
       builder.setWhen(card.startedAt).setShowWhen(true).setUsesChronometer(true)
     } else {

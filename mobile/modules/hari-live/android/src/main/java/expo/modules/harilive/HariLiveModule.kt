@@ -19,6 +19,9 @@ class HariLiveModule : Module() {
     Name("HariLive")
     Events("onAction")
 
+    // A new run: drop cards a killed run left behind (they would never end).
+    OnCreate { appContext.reactContext?.let { HariLive.clearStale(it) } }
+
     OnStartObserving { HariLive.listen { event -> sendEvent("onAction", event) } }
     OnStopObserving { HariLive.listen(null) }
     OnDestroy { HariLive.listen(null) }

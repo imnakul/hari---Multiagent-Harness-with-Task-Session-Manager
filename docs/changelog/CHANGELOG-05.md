@@ -1,0 +1,33 @@
+# Changelog 05 — MonoCode Windows fork
+
+## 2026-11-11 00:47 IST — Hari: running projects in the side menu, Tasks filters, colour logo; Live Update and Activity fixes (L-241, L-239, L-240)
+- Type: feature + fix
+- What: Hari phone app:
+  - The side menu shows running projects: the project name shimmers as on the desktop, and the number of running sessions sits at the right of the row. Tapping the number shows those sessions, and tapping a session opens it.
+  - Tasks gains a Focus button for today's tasks, Group by Status (the default) or Project, and a project filter.
+  - The side menu, empty chat, connect screen and Mono home show the colour feather-and-flute logo.
+  - Live Updates no longer crash the app. If a card can't be shown, Hari turns Live Updates off and says so. Leftover cards clear at launch and expire within 2 minutes after the app dies. The status-bar chip reads "Working" instead of the session title.
+- What (desktop Activity):
+  - Sites now include the Aside browser.
+  - Each site lists up to 8 tabs, each with its own time.
+- Why: The user reported "Hari keeps stopping" after a Live Update card stayed on screen indefinitely, and a Super Island too wide with the title. They asked for running sessions in the side menu, Tasks filters and the real logo. Aside wasn't in the browser list, so all of the day's site time was dropped.
+- Files:
+  - Phone:
+    - `mobile/modules/hari-live/android/.../{HariLive.kt,HariLiveService.kt,HariLiveModule.kt}` (try/catch, `fail`, `clearStale`, `clearAll`, `renew`, `setTimeoutAfter`)
+    - `mobile/src/features/liveUpdates/{liveCards.ts,nativeLive.ts,LiveUpdates.tsx}`
+    - `mobile/src/features/workspace/WorkspaceDrawer.tsx` (`ProjectRow` running list)
+    - `mobile/src/app/tasks/index.tsx`
+    - `mobile/src/features/tools/tools.ts` (`inFocusOn`, `localDay`, `taskProjectKey`, `groupTasks(by)`)
+    - `mobile/src/ui/brand.ts` (`HARI_LOGO`), `mobile/assets/images/hari-logo.png`
+    - `EmptySession.tsx`, `ConnectScreen.tsx`, `MonoHome.tsx`
+    - Tests: `mobile/tests/{tools,liveCards}.test.ts`
+  - Desktop:
+    - `src-tauri/src/mobile_tools.rs` (task summary adds `createdAt`, `focusDate`, `focusDays`)
+    - `src-tauri/src/activity/{aw.rs,agent.rs}` (`aside`, `TabUsage`, 8 tabs)
+    - `src/features/activity/{model/activity.ts,ui/Breakdown.tsx}`
+- Spec: [hari-sidebar-tasks-live-fixes-plan.md](../specs/hari-sidebar-tasks-live-fixes-plan.md)
+- Verified:
+  - Phone: mobile tsc ✅, eslint on changed files ✅, mobile vitest 228 ✅ (the `watchFrames` suite load failure predates this change), Kotlin `:hari-live:compileReleaseKotlin` ✅.
+  - Desktop: root tsc ✅, activity vitest 23 ✅, `cargo test` activity 38 and mobile_tools 3 ✅, rustfmt check ✅.
+  - Manual: the phone and desktop checks in the spec.
+- Commit: the commit with this entry

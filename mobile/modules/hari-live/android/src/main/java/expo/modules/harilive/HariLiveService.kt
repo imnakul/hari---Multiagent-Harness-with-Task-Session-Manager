@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 
 /**
  * Fork (Hari, L-239): keeps the app running while a session runs, so it can
@@ -24,6 +25,7 @@ class HariLiveService : Service() {
 
   private val tick = object : Runnable {
     override fun run() {
+      HariLive.renew(this@HariLiveService)
       HariLive.dispatch(mapOf("action" to "tick"))
       handler.postDelayed(this, TICK_MS)
     }
@@ -51,14 +53,27 @@ class HariLiveService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     HariLive.serviceStarted(this)
-    val first = HariLive.cards.firstOrNull()
-    if (first == null) {
-      // The last session ended while this was starting; Android still needs
-      // it to show a notification before it may stop.
-      foreground(HariLive.id("all"), placeholder())
+    try {
+      val first = HariLive.cards.firstOrNull()
+      if (first == null) {
+        // The last session ended while this was starting; Android still needs
+        // it to show a notification before it may stop.
+        foreground(HariLive.id("all"), placeholder())
+        finish()
+      } else {
+        HariLive.render(this)
+      }
+    } catch (error: Exception) {
+      // A rejected card must not close the app. Android still expects this
+      // service in the foreground, so show the plain placeholder, then stop.
+      Log.e(TAG, "Live Update service could not show its card", error)
+      try {
+        foreground(HariLive.id("all"), placeholder())
+      } catch (placeholderError: Exception) {
+        Log.e(TAG, "Live Update placeholder failed too", placeholderError)
+      }
+      HariLive.fail(applicationContext, error)
       finish()
-    } else {
-      HariLive.render(this)
     }
     return START_NOT_STICKY
   }
@@ -96,6 +111,7 @@ class HariLiveService : Service() {
   }
 
   private companion object {
+    const val TAG = "HariLiveService"
     const val TICK_MS = 15_000L
   }
 }

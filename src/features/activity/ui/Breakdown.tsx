@@ -147,9 +147,16 @@ export function SitesBreakdown({ aw }: { aw: AwSummary | null }): ReactElement |
               </div>
               {site.titles.length > 0 ? (
                 <ul className="mt-1 flex flex-col pl-[22px]">
-                  {site.titles.map((title) => (
-                    <li key={title} title={title} className="truncate text-[11px] text-content/40">
-                      {title}
+                  {site.titles.map((tab) => (
+                    <li
+                      key={tab.title}
+                      title={tab.title}
+                      className="flex items-center gap-2 text-[11px] text-content/40"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+                      <span className="shrink-0 tabular-nums text-content/35">
+                        {formatDuration(tab.ms)}
+                      </span>
                     </li>
                   ))}
                 </ul>

@@ -186,9 +186,12 @@ fn task_summary(task: &Task) -> Value {
         "tags": task.tags,
         "projectCwd": task.project_cwd,
         "sourceSessionId": task.source_session_id,
+        "createdAt": task.created_at,
         "updatedAt": task.updated_at,
         "completedAt": task.completed_at,
         "archived": deferred || task.archived_at.is_some(),
+        "focusDate": task.focus_date,
+        "focusDays": task.focus_days,
     })
 }
 

@@ -1159,7 +1159,10 @@ sleep 30"#,
             sites: vec![aw::SiteUsage {
                 domain: "github.com".into(),
                 ms: 40 * 60_000,
-                titles: vec!["Secret PR title".into()],
+                titles: vec![aw::TabUsage {
+                    title: "Secret PR title".into(),
+                    ms: 40 * 60_000,
+                }],
             }],
             meetings: vec![aw::Meeting {
                 start: 1_794_312_000_000,

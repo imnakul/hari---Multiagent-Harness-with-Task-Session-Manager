@@ -56,13 +56,13 @@ describe("liveCards", () => {
     expect(liveCards(input([session("a", { monoId: "m1" })]))).toEqual([]);
   });
 
-  it("times one working session, with Stop and Open", () => {
+  it("shows one working session as Working, timed, with Stop and Open", () => {
     const [card] = liveCards(input([session("a")]));
     expect(card).toMatchObject({
       key: "all",
       title: "Session a",
       text: "Thinking… · hari",
-      chip: null,
+      chip: "Working",
       startedAt: 1_000,
       url: sessionUrl(session("a")),
     });

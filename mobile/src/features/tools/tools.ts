@@ -25,9 +25,15 @@ export type TaskItem = {
   tags: string[];
   projectCwd?: string | null;
   sourceSessionId?: string | null;
+  /** Older desktops don't send it; Focus then treats the task as not created today. */
+  createdAt?: number;
   updatedAt: number;
   completedAt?: number | null;
   archived: boolean;
+  /** Local day (YYYY-MM-DD) the desktop pinned this task to Focus. */
+  focusDate?: string | null;
+  /** Past local days the task sat in Focus. */
+  focusDays?: string[];
 };
 
 export type NoteItem = {
@@ -175,16 +181,57 @@ export function projectLabel(cwd: string | null | undefined, projects: Project[]
 }
 
 export type TaskGroup = { key: string; label: string; tasks: TaskItem[] };
+export type TaskGrouping = "status" | "project";
+
+/** The project a task belongs to, as a stable key; "" for no project. */
+export const taskProjectKey = (task: Pick<TaskItem, "projectCwd">): string =>
+  task.projectCwd ? pathKey(task.projectCwd) : "";
+
+/** The phone's local day as YYYY-MM-DD, as the desktop's Focus reads days. */
+export function localDay(at: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+}
 
 /**
- * Tasks by project: projects by name, then those with none. Archived ones stay
- * hidden; in each group open tasks come first, newest first, then done ones.
+ * In the desktop's Focus on `day`: recorded there before, pinned to it, or
+ * created that day while not planned for a later day. Mirrors `inFocusOn` in
+ * the desktop's `src/features/tasks/tasks.ts`.
  */
-export function groupTasks(tasks: TaskItem[], projects: Project[]): TaskGroup[] {
+export function inFocusOn(
+  task: Pick<TaskItem, "focusDate" | "focusDays" | "createdAt">,
+  day: string,
+): boolean {
+  if ((task.focusDays ?? []).includes(day)) return true;
+  if (task.focusDate === day) return true;
+  if (task.createdAt === undefined || localDay(new Date(task.createdAt)) !== day) return false;
+  return !task.focusDate || task.focusDate <= day;
+}
+
+/**
+ * Tasks in groups. By project: projects by name, then those with none. By
+ * status: in the desktop's status order, empty ones left out. Archived ones
+ * stay hidden; in each group open tasks come first, newest first, then done
+ * ones.
+ */
+export function groupTasks(
+  tasks: TaskItem[],
+  projects: Project[],
+  by: TaskGrouping = "project",
+): TaskGroup[] {
+  if (by === "status") {
+    return TASK_STATUSES.map((status) => ({
+      key: status.value,
+      label: status.label,
+      tasks: tasks
+        .filter((task) => !task.archived && task.status === status.value)
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    })).filter((group) => group.tasks.length > 0);
+  }
   const groups = new Map<string, TaskGroup>();
   for (const task of tasks) {
     if (task.archived) continue;
-    const key = task.projectCwd ? pathKey(task.projectCwd) : "";
+    const key = taskProjectKey(task);
     let group = groups.get(key);
     if (!group) {
       group = { key, label: projectLabel(task.projectCwd, projects) ?? "No project", tasks: [] };

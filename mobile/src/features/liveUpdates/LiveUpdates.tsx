@@ -27,7 +27,7 @@ import {
  */
 export function LiveUpdates() {
   const { connected, catalog, refresh, command } = useConnection();
-  const [{ enabled, mode }] = useLivePreferences();
+  const [{ enabled, mode }, setPreferences] = useLivePreferences();
   // Moved on by each tick and button, to look at the sessions again.
   const [now, setNow] = useState(() => Date.now());
   const dismissed = useRef(new Set<string>());
@@ -98,6 +98,19 @@ export function LiveUpdates() {
         else void refresh().finally(() => setNow(Date.now()));
         return;
       }
+      if (event.action === "failed") {
+        // Off until the user turns it on again, so a card the phone rejects
+        // can't fail on every launch.
+        setPreferences({ enabled: false });
+        void Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Live Updates turned off",
+            body: "This phone couldn't show the running-session card. You can turn it on again in Settings.",
+          },
+          trigger: { channelId: "sessions" },
+        });
+        return;
+      }
       if (event.action === "dismiss") {
         for (const id of event.sessionIds ?? []) dismissed.current.add(id);
         setNow(Date.now());
@@ -133,7 +146,7 @@ export function LiveUpdates() {
         })
         .finally(() => setNow(Date.now()));
     };
-  }, [catalog, command, refresh]);
+  }, [catalog, command, refresh, setPreferences]);
 
   useEffect(() => {
     const subscription = onLiveEvent((event) => handle.current(event));

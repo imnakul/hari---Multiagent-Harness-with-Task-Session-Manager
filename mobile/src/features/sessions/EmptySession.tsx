@@ -12,7 +12,7 @@ import { FadingBackground } from "@/features/background/FadingBackground";
 import type { EmptyBackground } from "@/features/background/useEmptyBackground";
 import { PixelMascot } from "@/features/mascots/PixelMascot";
 import type { Project } from "@/features/workspace/types";
-import { MONOCODE_MARK } from "@/ui/brand";
+import { HARI_LOGO } from "@/ui/brand";
 import { themedStyles } from "@/ui/theme";
 
 import { COMPOSER_FADE, useSessionLayout } from "./SessionScreen";
@@ -21,8 +21,8 @@ import type { TranscriptAgent } from "./TranscriptTurn";
 export const EMPTY_HEADLINE = "What should we work on?";
 
 const MARK_SIZE = 84;
-/** Dimmed, so it reads as part of the screen, including over a photo. */
-const MARK_OPACITY = 0.3;
+/** The colour logo, softened a little so it sits in the screen, including over a photo. */
+const MARK_OPACITY = 0.9;
 
 /** Space between the composer and what rests on it. */
 const ACCESSORY_GAP = 10;
@@ -105,7 +105,7 @@ export function EmptySession({
           ) : (
             <>
               <Image
-                source={MONOCODE_MARK}
+                source={HARI_LOGO}
                 style={styles.mark}
                 accessibilityIgnoresInvertColors
               />
@@ -165,7 +165,6 @@ const useStyles = themedStyles((colors) => ({
     width: MARK_SIZE,
     height: MARK_SIZE,
     opacity: MARK_OPACITY,
-    tintColor: colors.mark,
   },
   headline: {
     color: colors.content,

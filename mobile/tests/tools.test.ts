@@ -5,7 +5,9 @@ import {
   excerptOf,
   groupTasks,
   hostOf,
+  inFocusOn,
   linkPreview,
+  localDay,
   newId,
   parseTags,
   projectLabel,
@@ -58,6 +60,43 @@ describe("groupTasks", () => {
       projects,
     );
     expect(group.tasks.map((each) => each.id)).toEqual(["new", "old", "done"]);
+  });
+
+  it("groups by status in the desktop's order, leaving out empty ones", () => {
+    const groups = groupTasks(
+      [
+        task("v", { status: "review" }),
+        task("t1", { updatedAt: 1 }),
+        task("t2", { updatedAt: 3 }),
+        task("hidden", { status: "blocked", archived: true }),
+      ],
+      projects,
+      "status",
+    );
+    expect(groups.map((group) => group.label)).toEqual(["Todo", "Verify"]);
+    expect(groups[0].tasks.map((each) => each.id)).toEqual(["t2", "t1"]);
+  });
+});
+
+describe("inFocusOn", () => {
+  const day = "2026-11-11";
+  const today = new Date(2026, 10, 11, 9).getTime();
+  const yesterday = new Date(2026, 10, 10, 9).getTime();
+
+  it("counts tasks pinned to the day or recorded there", () => {
+    expect(inFocusOn(task("p", { createdAt: yesterday, focusDate: day }), day)).toBe(true);
+    expect(inFocusOn(task("r", { createdAt: yesterday, focusDays: [day] }), day)).toBe(true);
+  });
+
+  it("counts tasks created that day unless planned for later", () => {
+    expect(inFocusOn(task("c", { createdAt: today }), day)).toBe(true);
+    expect(inFocusOn(task("l", { createdAt: today, focusDate: "2026-11-13" }), day)).toBe(false);
+    expect(inFocusOn(task("o", { createdAt: yesterday }), day)).toBe(false);
+    expect(inFocusOn(task("u"), day)).toBe(false);
+  });
+
+  it("reads the local day", () => {
+    expect(localDay(new Date(2026, 0, 5, 23, 59))).toBe("2026-01-05");
   });
 });
 

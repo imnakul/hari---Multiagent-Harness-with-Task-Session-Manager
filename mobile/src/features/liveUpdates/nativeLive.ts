@@ -11,7 +11,9 @@ export type LiveEvent =
   | { action: "tick" }
   | { action: "stop"; sessionId: string }
   | { action: "approve" | "deny"; sessionId: string; requestId: number }
-  | { action: "dismiss"; sessionIds?: string[] };
+  | { action: "dismiss"; sessionIds?: string[] }
+  /** Android or the phone maker rejected a card; none show for this run. */
+  | { action: "failed"; message?: string };
 
 type HariLiveModule = {
   update(cards: string): void;
@@ -36,14 +38,21 @@ export const liveAvailable = native !== null;
 /** Android 16 draws Live Updates; older Android shows a pinned notification. */
 export const livePromotable = native?.supported() ?? false;
 
-let last = "[]";
+// Null until the first call, so a new run always tells Android once, even
+// "none": that clears cards an earlier, killed run left on screen.
+let last: string | null = null;
 /** Shows these cards in place of the last; none closes the Live Update. */
 export function showLiveCards(cards: LiveCard[]) {
   const json = JSON.stringify(cards);
   // The app re-renders often; Android only hears of a change.
   if (!native || json === last) return;
   last = json;
-  native.update(json);
+  try {
+    native.update(json);
+  } catch (error) {
+    // Called from an effect: a throw here would close the app.
+    console.warn("Live Update: could not update the cards", error);
+  }
 }
 
 export function onLiveEvent(listener: (event: LiveEvent) => void) {

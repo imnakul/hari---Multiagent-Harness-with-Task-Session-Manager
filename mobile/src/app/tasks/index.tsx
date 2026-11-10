@@ -16,20 +16,26 @@ import { SettingsPage } from "@/features/settings/SettingsUI";
 import {
   createTask,
   groupTasks,
+  inFocusOn,
   listTasks,
+  localDay,
   onToolsChanged,
   parseTags,
+  projectLabel,
   statusLabel,
   TASK_STATUSES,
+  taskProjectKey,
   updateTask,
   type Command,
+  type TaskGrouping,
   type TaskItem,
   type TaskStatus,
 } from "@/features/tools/tools";
 import { Icon } from "@/ui/Icon";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
-// Fork (Hari, L-236): the desktop's Tasks on the phone. Grouped by project;
+// Fork (Hari, L-236, L-241): the desktop's Tasks on the phone. Grouped by
+// status or project, narrowed to today's Focus or one project;
 // the circle completes a task, a tap on it shows its status to change, and the
 // box on top adds one with a project and tags. Changes save on the desktop at
 // once, and its Tasks screen follows.
@@ -85,15 +91,58 @@ export default function TasksScreen() {
     }
   };
 
-  const doneCount = tasks?.filter((task) => !task.archived && task.status === "completed").length ?? 0;
+  // Fork (Hari, L-241): Focus shows the desktop's Focus for today; the project
+  // row narrows to one project; groups follow status (default) or project.
+  const [focus, setFocus] = useState(false);
+  const [grouping, setGrouping] = useState<TaskGrouping>("status");
+  const [pickedProject, setProjectFilter] = useState<string | null>(null);
+
+  // Projects that have live tasks, by name, then "No project".
+  const taskProjects = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const task of tasks ?? []) {
+      if (task.archived) continue;
+      const key = taskProjectKey(task);
+      if (!seen.has(key)) seen.set(key, projectLabel(task.projectCwd, projects) ?? "No project");
+    }
+    return [...seen.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => (!a.key ? 1 : !b.key ? -1 : a.label.localeCompare(b.label)));
+  }, [tasks, projects]);
+  // A pick for a project whose last task went away reads as "All projects".
+  const projectFilter =
+    pickedProject !== null && taskProjects.some((each) => each.key === pickedProject)
+      ? pickedProject
+      : null;
+
+  const visible = useMemo(() => {
+    const today = localDay();
+    return (tasks ?? []).filter(
+      (task) =>
+        !task.archived &&
+        (!focus || inFocusOn(task, today)) &&
+        (projectFilter === null || taskProjectKey(task) === projectFilter),
+    );
+  }, [tasks, focus, projectFilter]);
+
+  const doneCount = visible.filter((task) => task.status === "completed").length;
   const groups = useMemo(
     () =>
       groupTasks(
-        (tasks ?? []).filter((task) => showDone || task.status !== "completed"),
+        visible.filter((task) => showDone || task.status !== "completed"),
         projects,
+        grouping,
       ),
-    [tasks, projects, showDone],
+    [visible, projects, showDone, grouping],
   );
+  const narrowed = focus || projectFilter !== null;
+  const emptyText = doneCount
+    ? "Everything here is done."
+    : focus
+      ? "Nothing in Focus today."
+      : narrowed
+        ? "No tasks for this project."
+        : "No tasks yet.";
 
   return (
     <SettingsPage
@@ -104,13 +153,67 @@ export default function TasksScreen() {
       }}
     >
       <QuickAdd command={run} projects={projects} />
+      {tasks?.length ? (
+        <View style={styles.filters}>
+          <View style={styles.filterRow}>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: focus }}
+              accessibilityLabel="Focus: today's tasks only"
+              onPress={() => {
+                void Haptics.selectionAsync();
+                setFocus((on) => !on);
+              }}
+              style={({ pressed }) => [
+                styles.chip,
+                styles.focusChip,
+                focus && styles.chipOn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name="sun" size={15} color={focus ? "#ffffff" : colors.muted} />
+              <Text style={[styles.chipText, focus && styles.chipTextOn]}>Focus</Text>
+            </Pressable>
+            <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel="Group by">
+              {(["status", "project"] as const).map((value) => (
+                <Pressable
+                  key={value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: grouping === value }}
+                  onPress={() => setGrouping(value)}
+                  style={[styles.segmentItem, grouping === value && styles.segmentItemOn]}
+                >
+                  <Text style={[styles.segmentText, grouping === value && styles.segmentTextOn]}>
+                    {value === "status" ? "Status" : "Project"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          {taskProjects.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChips}
+            >
+              <Chip label="All projects" on={projectFilter === null} onPress={() => setProjectFilter(null)} />
+              {taskProjects.map((each) => (
+                <Chip
+                  key={each.key || "none"}
+                  label={each.label}
+                  on={projectFilter === each.key}
+                  onPress={() => setProjectFilter((current) => (current === each.key ? null : each.key))}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+        </View>
+      ) : null}
       {tasks === null && !error ? (
         <ActivityIndicator style={styles.loading} color={colors.muted} />
       ) : null}
       {error ? <Text style={styles.empty}>{error}</Text> : null}
-      {tasks !== null && !groups.length ? (
-        <Text style={styles.empty}>{doneCount ? "Everything is done." : "No tasks yet."}</Text>
-      ) : null}
+      {tasks !== null && !groups.length ? <Text style={styles.empty}>{emptyText}</Text> : null}
       {groups.map((group) => (
         <View key={group.key}>
           <Text style={styles.heading}>{group.label}</Text>
@@ -372,6 +475,21 @@ const useStyles = themedStyles((colors) => ({
     paddingVertical: 8,
     paddingLeft: 30,
   },
+  filters: { marginTop: 14, gap: 10 },
+  filterRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  focusChip: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36 },
+  pressed: { opacity: 0.7, transform: [{ scale: 0.96 }] },
+  segment: {
+    flexDirection: "row",
+    padding: 2,
+    borderRadius: radii.pill,
+    backgroundColor: withAlpha(colors.content, 0.06),
+  },
+  segmentItem: { minHeight: 32, justifyContent: "center", paddingHorizontal: 12, borderRadius: radii.pill },
+  segmentItemOn: { backgroundColor: colors.surface },
+  segmentText: { color: colors.muted, fontSize: 14 },
+  segmentTextOn: { color: colors.content, fontWeight: "600" },
+  filterChips: { gap: 6, paddingRight: 4 },
   showDone: { alignSelf: "center", marginTop: 20, padding: 8 },
   showDoneText: { color: colors.accent, fontSize: 15 },
 }));

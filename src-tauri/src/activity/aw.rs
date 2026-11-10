@@ -25,7 +25,7 @@ const ACTIVE_GAP_MS: i64 = 60_000;
 const TOP_APPS: usize = 8;
 const TOP_SITES: usize = 10;
 /// Tab titles kept per site for the local list; never sent to the notes AI.
-const TITLES_PER_SITE: usize = 3;
+const TITLES_PER_SITE: usize = 8;
 const TITLE_MAX_CHARS: usize = 120;
 /// Window `app` names (lower-case substrings) that are web browsers.
 const BROWSER_APPS: &[&str] = &[
@@ -44,6 +44,8 @@ const BROWSER_APPS: &[&str] = &[
     "floorp",
     "orion",
     "thorium",
+    // Aside (Chromium-based); its tabs come from the Chrome extension.
+    "aside",
 ];
 
 /// A closed `[start, end)` interval in epoch ms.
@@ -74,8 +76,16 @@ pub struct SiteUsage {
     /// Host without `www.`, e.g. `github.com`. The only part the notes AI sees.
     pub domain: String,
     pub ms: i64,
-    /// Most-viewed tab titles on this site, for the local list only.
-    pub titles: Vec<String>,
+    /// Most-viewed tab titles on this site with their time, for the local list only.
+    pub titles: Vec<TabUsage>,
+}
+
+/// Time on one tab title within a site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabUsage {
+    pub title: String,
+    pub ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -477,7 +487,7 @@ fn site_usage(
                 titles: titles
                     .into_iter()
                     .take(TITLES_PER_SITE)
-                    .map(|(t, _)| t)
+                    .map(|(title, ms)| TabUsage { title, ms })
                     .collect(),
             }
         })
@@ -784,12 +794,18 @@ mod tests {
                 SiteUsage {
                     domain: "figma.com".into(),
                     ms: 20 * MIN,
-                    titles: vec!["Design".into()]
+                    titles: vec![TabUsage {
+                        title: "Design".into(),
+                        ms: 20 * MIN
+                    }]
                 },
                 SiteUsage {
                     domain: "github.com".into(),
                     ms: 10 * MIN,
-                    titles: vec!["PR #1".into()]
+                    titles: vec![TabUsage {
+                        title: "PR #1".into(),
+                        ms: 10 * MIN
+                    }]
                 },
             ]
         );
@@ -802,6 +818,14 @@ mod tests {
                 ms: 20 * MIN
             }
         );
+    }
+
+    #[test]
+    fn recognises_browsers_by_app_name() {
+        assert!(is_browser_app("chrome.exe"));
+        // The user's browser; its tab time was dropped before (L-240).
+        assert!(is_browser_app("Aside.exe"));
+        assert!(!is_browser_app("monocode.exe"));
     }
 
     #[test]

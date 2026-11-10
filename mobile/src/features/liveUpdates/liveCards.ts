@@ -25,7 +25,7 @@ export type LiveCard = {
   /** What the lock screen shows when the phone hides private content. */
   publicTitle: string;
   publicText: string;
-  /** The chip's words; none shows the time running (chronometer). */
+  /** The chip's words (Super Island, status bar); short, under ~8 characters. */
   chip: string | null;
   startedAt: number | null;
   url: string;
@@ -197,10 +197,12 @@ function combinedCard(followed: SessionSummary[], input: LiveInput): LiveCard {
   };
 }
 
-function chipFor(session: SessionSummary): string | null {
+function chipFor(session: SessionSummary): string {
   if (session.waiting === "approval") return "Approve";
   if (session.waiting === "question") return "Reply";
-  return session.updatedAt > 0 ? null : "Working";
+  // HyperOS draws the title in its Super Island when the chip has no words,
+  // which runs across the screen; a short word keeps the island small.
+  return "Working";
 }
 
 /** How long the cards wait for the computer before closing. */
