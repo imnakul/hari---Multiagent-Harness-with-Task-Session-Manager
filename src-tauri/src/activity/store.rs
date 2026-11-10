@@ -1,11 +1,86 @@
-//! SQLite storage for activity events and AI notes. Lives in `monocode.db`
-//! next to sessions, so it shares one connection, backup, and migration path.
+//! SQLite storage for activity events, AI notes and period summaries.
+//!
+//! Lives in its own `activity.db` beside `monocode.db`: the tracker never
+//! waits on the lock that saves chats, it can be wiped or trimmed without
+//! touching them, and upstream's session store needs no fork changes.
+
+use std::path::Path;
+use std::sync::{Mutex, MutexGuard};
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 
-/// Hard cap per day query so a runaway recorder cannot stall the view.
-const LIST_LIMIT: i64 = 5_000;
+/// Hard cap per range query so a runaway recorder cannot stall the view
+/// (a busy month is a few thousand rows).
+const LIST_LIMIT: i64 = 20_000;
+
+/// The tracker's own database. If it cannot be opened, Hari still starts and
+/// every activity command reports the reason instead of silently doing nothing.
+pub struct ActivityDb {
+    conn: Mutex<Connection>,
+    open_error: Option<String>,
+}
+
+impl ActivityDb {
+    pub fn open(path: &Path) -> Self {
+        match Self::try_open(path) {
+            Ok(conn) => Self {
+                conn: Mutex::new(conn),
+                open_error: None,
+            },
+            Err(err) => {
+                let reason = format!("Could not open {}: {err}", path.display());
+                eprintln!("monocode: activity: {reason}");
+                Self::fallback(reason)
+            }
+        }
+    }
+
+    fn try_open(path: &Path) -> Result<Connection, String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let conn = Connection::open(path).map_err(|e| e.to_string())?;
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;")
+            .map_err(|e| e.to_string())?;
+        ensure_activity_tables(&conn).map_err(|e| e.to_string())?;
+        Ok(conn)
+    }
+
+    /// An in-memory stand-in that refuses work with `reason`.
+    fn fallback(reason: String) -> Self {
+        let conn = Connection::open_in_memory().expect("in-memory SQLite always opens");
+        Self {
+            conn: Mutex::new(conn),
+            open_error: Some(reason),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn open_in_memory() -> Self {
+        let conn = Connection::open_in_memory().expect("in-memory SQLite always opens");
+        ensure_activity_tables(&conn).expect("activity tables");
+        Self {
+            conn: Mutex::new(conn),
+            open_error: None,
+        }
+    }
+
+    /// Run `work` on the connection. One writer at a time; reads are short.
+    pub fn with<T>(
+        &self,
+        work: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+    ) -> Result<T, String> {
+        if let Some(reason) = &self.open_error {
+            return Err(reason.clone());
+        }
+        let conn: MutexGuard<'_, Connection> = self
+            .conn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        work(&conn).map_err(|e| e.to_string())
+    }
+}
 
 pub fn ensure_activity_tables(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -34,7 +109,14 @@ pub fn ensure_activity_tables(conn: &Connection) -> rusqlite::Result<()> {
            body TEXT NOT NULL
          );
          CREATE INDEX IF NOT EXISTS activity_notes_ts_idx
-           ON activity_notes (ts);",
+           ON activity_notes (ts);
+         CREATE TABLE IF NOT EXISTS activity_summaries (
+           period_key TEXT PRIMARY KEY,
+           start_ms INTEGER NOT NULL,
+           end_ms INTEGER NOT NULL,
+           body TEXT NOT NULL,
+           created_at INTEGER NOT NULL
+         );",
     )
 }
 
@@ -231,10 +313,56 @@ pub fn latest_note(conn: &Connection) -> rusqlite::Result<Option<ActivityNote>> 
     .optional()
 }
 
+/// A cached AI summary for a week or month (`week:2026-11-09`, `month:2026-11`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodSummary {
+    pub key: String,
+    pub start: i64,
+    pub end: i64,
+    pub body: String,
+    pub created_at: i64,
+}
+
+pub fn get_summary(conn: &Connection, key: &str) -> rusqlite::Result<Option<PeriodSummary>> {
+    conn.query_row(
+        "SELECT period_key, start_ms, end_ms, body, created_at
+         FROM activity_summaries WHERE period_key = ?1",
+        params![key],
+        |row| {
+            Ok(PeriodSummary {
+                key: row.get(0)?,
+                start: row.get(1)?,
+                end: row.get(2)?,
+                body: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        },
+    )
+    .optional()
+}
+
+pub fn put_summary(conn: &Connection, summary: &PeriodSummary) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO activity_summaries (period_key, start_ms, end_ms, body, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(period_key) DO UPDATE SET
+           start_ms = excluded.start_ms, end_ms = excluded.end_ms,
+           body = excluded.body, created_at = excluded.created_at",
+        params![
+            summary.key,
+            summary.start,
+            summary.end,
+            summary.body,
+            summary.created_at
+        ],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session_store::SessionStore;
 
     fn new_event<'a>(ts: i64, kind: &'a str, block_id: &'a str) -> NewEvent<'a> {
         NewEvent {
@@ -254,8 +382,8 @@ mod tests {
 
     #[test]
     fn migration_creates_tables_and_dedupes_events() {
-        let store = SessionStore::open_in_memory().unwrap();
-        let conn = store.lock_conn().unwrap();
+        let db = ActivityDb::open_in_memory();
+        let conn = db.conn.lock().unwrap();
         let (first, inserted) = insert_event(&conn, &new_event(10, "prompt", "b1")).unwrap();
         assert!(inserted);
         let (again, inserted) = insert_event(&conn, &new_event(99, "prompt", "b1")).unwrap();
@@ -271,8 +399,8 @@ mod tests {
 
     #[test]
     fn tracks_which_events_still_need_notes() {
-        let store = SessionStore::open_in_memory().unwrap();
-        let conn = store.lock_conn().unwrap();
+        let db = ActivityDb::open_in_memory();
+        let conn = db.conn.lock().unwrap();
         let (a, _) = insert_event(&conn, &new_event(10, "prompt", "a")).unwrap();
         let (b, _) = insert_event(&conn, &new_event(20, "prompt", "b")).unwrap();
         let (c, _) = insert_event(&conn, &new_event(30, "prompt", "c")).unwrap();
@@ -286,5 +414,53 @@ mod tests {
         // Too old to replay.
         assert!(unnoted_events(&conn, b.id, 31, 10).unwrap().is_empty());
         assert_eq!(list_notes(&conn, 0, 100).unwrap(), vec![note]);
+    }
+
+    #[test]
+    fn caches_and_replaces_period_summaries() {
+        let db = ActivityDb::open_in_memory();
+        let first = PeriodSummary {
+            key: "week:2026-11-09".into(),
+            start: 1,
+            end: 2,
+            body: "- first".into(),
+            created_at: 10,
+        };
+        db.with(|conn| put_summary(conn, &first)).unwrap();
+        let second = PeriodSummary {
+            body: "- second".into(),
+            created_at: 20,
+            ..first.clone()
+        };
+        db.with(|conn| put_summary(conn, &second)).unwrap();
+        assert_eq!(
+            db.with(|conn| get_summary(conn, "week:2026-11-09"))
+                .unwrap(),
+            Some(second)
+        );
+        assert_eq!(
+            db.with(|conn| get_summary(conn, "month:2026-11")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_db_that_failed_to_open_reports_why() {
+        let db = ActivityDb::fallback("Could not open x: denied".into());
+        assert_eq!(
+            db.with(last_noted_event_id),
+            Err("Could not open x: denied".into())
+        );
+    }
+
+    #[test]
+    fn opens_a_file_database_with_tables() {
+        let dir = std::env::temp_dir().join(format!("hari-activity-db-{}", std::process::id()));
+        let path = dir.join("nested/activity.db");
+        let db = ActivityDb::open(&path);
+        assert!(db.open_error.is_none());
+        assert_eq!(db.with(last_noted_event_id), Ok(0));
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

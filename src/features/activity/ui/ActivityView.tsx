@@ -1,13 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import {
-  Activity,
-  ChevronLeft,
-  ChevronRight,
-  CircleAlert,
-  ExternalLink,
-  RefreshCw,
-} from "../../../shared/ui/icons";
+import { Activity, CircleAlert, ExternalLink } from "../../../shared/ui/icons";
 import { OverlayNav } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
 import { useAiNotesEnabled } from "../model/useActivityRecorder";
@@ -16,24 +9,32 @@ import {
   activityTotals,
   agentSpans,
   buildLogItems,
-  formatDayLabel,
+  dailyTotals,
+  dayRange,
+  periodKey,
+  periodPromptLabel,
   saveAiNotesEnabled,
   shiftDay,
+  shiftPeriod,
   summarizeProjects,
   type ActivityLog,
+  type ActivityScope,
 } from "../model/activity";
 import { IS_MAC } from "../../../platform/tauri/platform";
 import { ActivityLogFeed } from "./ActivityLogFeed";
 import { AgentStatusPill } from "./AgentStatusPill";
 import { AppsBreakdown, ProjectBreakdown, SitesBreakdown } from "./Breakdown";
+import { DailyBars } from "./DailyBars";
 import { DayTimeline } from "./DayTimeline";
+import { PeriodNav } from "./PeriodNav";
+import { PeriodNotes, PeriodSummaryCard } from "./PeriodSummary";
 import { StatTiles } from "./StatTiles";
 import { useActivityData } from "./useActivityData";
 
 const ACTIVITYWATCH_URL = "https://activitywatch.net/";
 const EMPTY_LOG: ActivityLog = { events: [], notes: [] };
-/** Remember the viewed day while the app runs, like Notes remembers its note. */
-let rememberedDay: Date | null = null;
+/** Remember the viewed period while the app runs, like Notes remembers its note. */
+let remembered: { anchor: Date; scope: ActivityScope } | null = null;
 
 type Props = {
   /** Rendered as an inset-layout title tab, which supplies its own header. */
@@ -49,8 +50,9 @@ type Props = {
 };
 
 /**
- * Activity: what you and your agents did on one day — headline numbers, a
- * timeline, per-project time, top apps, and a log with Antigravity notes.
+ * Activity: what you and your agents did on a day, week or month — headline
+ * numbers, a timeline (day) or daily bars (week/month), per-project time, top
+ * apps and sites, and a log with Antigravity notes or a period summary.
  */
 export function ActivityView({
   tabbed = false,
@@ -61,17 +63,25 @@ export function ActivityView({
   onToggleSidebar,
   onOpenSession,
 }: Props): ReactElement {
-  const [day, setDay] = useState<Date>(() => rememberedDay ?? shiftDay(new Date(), 0));
+  const [anchor, setAnchor] = useState<Date>(
+    () => remembered?.anchor ?? shiftDay(new Date(), 0),
+  );
+  const [scope, setScope] = useState<ActivityScope>(() => remembered?.scope ?? "day");
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const scrollLock = useLockOverscroll<HTMLDivElement>();
   const aiNotes = useAiNotesEnabled();
-  const data = useActivityData(day);
-  const { log, aw, agent, isToday } = data;
+  const data = useActivityData(anchor, scope);
+  const { log, aw, agent, isLive } = data;
 
   useEffect(() => {
-    rememberedDay = day;
-  }, [day]);
+    remembered = { anchor, scope };
+  }, [anchor, scope]);
+
+  const openDay = (start: number): void => {
+    setAnchor(new Date(start));
+    setScope("day");
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -91,6 +101,11 @@ export function ActivityView({
   const items = useMemo(() => buildLogItems(current), [current]);
   const turns = useMemo(() => agentSpans(current.events), [current]);
   const awData = aw.data;
+  const days = useMemo(
+    () => (scope === "day" ? [] : dailyTotals(data.range, current.events, awData)),
+    [scope, data.range, current.events, awData],
+  );
+  const summaryKey = periodKey(anchor, scope);
   const awHint = awData && !awData.available ? "ActivityWatch not running" : undefined;
   const firstLoad = log.data == null && log.loading;
 
@@ -129,12 +144,14 @@ export function ActivityView({
 
       <div ref={scrollLock} className="min-h-0 flex-1 overflow-y-auto overscroll-none">
         <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-5 sm:px-6">
-          <DayNav
-            day={day}
-            isToday={isToday}
+          <PeriodNav
+            anchor={anchor}
+            scope={scope}
+            isLive={isLive}
             refreshing={log.loading || aw.loading}
-            onShift={(delta) => setDay((d) => shiftDay(d, delta))}
-            onToday={() => setDay(shiftDay(new Date(), 0))}
+            onScope={setScope}
+            onShift={(delta) => setAnchor((a) => shiftPeriod(a, scope, delta))}
+            onJump={(date) => setAnchor(shiftDay(date, 0))}
             onRefresh={data.refresh}
           />
 
@@ -146,92 +163,54 @@ export function ActivityView({
             <>
               <StatTiles totals={totals} aw={awData?.available ? awData : null} />
               {awData && !awData.available ? <ActivityWatchHint reason={awData.error} /> : null}
-              <DayTimeline
-                day={data.range}
-                active={awData?.activeSpans ?? []}
-                agents={turns}
-                meetings={awData?.meetings ?? []}
-                now={isToday ? Date.now() : null}
-                awHint={awHint}
-              />
+              {scope === "day" ? (
+                <DayTimeline
+                  day={data.range}
+                  active={awData?.activeSpans ?? []}
+                  agents={turns}
+                  meetings={awData?.meetings ?? []}
+                  now={isLive ? Date.now() : null}
+                  awHint={awHint}
+                />
+              ) : (
+                <DailyBars
+                  days={days}
+                  showDesktop={awData?.available === true}
+                  today={dayRange(new Date()).start}
+                  onOpenDay={openDay}
+                />
+              )}
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
                 <div className="flex min-w-0 flex-col gap-6">
                   <ProjectBreakdown projects={projects} />
                   <AppsBreakdown aw={awData} />
                   <SitesBreakdown aw={awData} />
                 </div>
-                <ActivityLogFeed
-                  items={items}
-                  agent={agent}
-                  onRetry={data.retryNotes}
-                  onOpenSession={onOpenSession}
-                />
+                {summaryKey ? (
+                  <div className="flex min-w-0 flex-col gap-6">
+                    <PeriodSummaryCard
+                      periodKey={summaryKey}
+                      label={periodPromptLabel(anchor, scope)}
+                      range={data.range}
+                      notesEnabled={aiNotes}
+                      hasActivity={current.events.length > 0 || current.notes.length > 0}
+                    />
+                    <PeriodNotes notes={current.notes} onOpenDay={openDay} />
+                  </div>
+                ) : (
+                  <ActivityLogFeed
+                    items={items}
+                    agent={agent}
+                    onRetry={data.retryNotes}
+                    onOpenSession={onOpenSession}
+                  />
+                )}
               </div>
             </>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-function DayNav({
-  day,
-  isToday,
-  refreshing,
-  onShift,
-  onToday,
-  onRefresh,
-}: {
-  day: Date;
-  isToday: boolean;
-  refreshing: boolean;
-  onShift: (delta: number) => void;
-  onToday: () => void;
-  onRefresh: () => void;
-}): ReactElement {
-  const iconButton =
-    "grid size-7 place-items-center rounded-md text-content/55 transition-colors hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:pointer-events-none disabled:opacity-30";
-  return (
-    <nav aria-label="Choose day" className="flex items-center gap-1">
-      <button type="button" aria-label="Previous day" className={iconButton} onClick={() => onShift(-1)}>
-        <ChevronLeft className="size-4" strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        aria-label="Next day"
-        className={iconButton}
-        disabled={isToday}
-        onClick={() => onShift(1)}
-      >
-        <ChevronRight className="size-4" strokeWidth={1.75} />
-      </button>
-      <h2 className="ml-1.5 text-[17px] font-semibold tracking-tight" aria-live="polite">
-        {formatDayLabel(day)}
-      </h2>
-      {isToday ? null : (
-        <span className="ml-1 text-[12px] text-content/40">
-          {day.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
-        </span>
-      )}
-      <div className="ml-auto flex items-center gap-1">
-        {isToday ? null : (
-          <button
-            type="button"
-            onClick={onToday}
-            className="h-7 rounded-md px-2.5 text-[12px] text-content/60 transition-colors hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
-          >
-            Today
-          </button>
-        )}
-        <button type="button" aria-label="Refresh" title="Refresh" className={iconButton} onClick={onRefresh}>
-          <RefreshCw
-            className={`size-3.5 ${refreshing ? "motion-safe:animate-spin" : ""}`}
-            strokeWidth={1.75}
-          />
-        </button>
-      </div>
-    </nav>
   );
 }
 

@@ -31,6 +31,7 @@ import CleanIcon from "@hugeicons/core-free-icons/CleanIcon";
 import PencilIcon from "@hugeicons/core-free-icons/PencilIcon";
 import AddSquareIcon from "@hugeicons/core-free-icons/AddSquareIcon";
 import Activity01Icon from "@hugeicons/core-free-icons/Activity01Icon";
+import Calendar03Icon from "@hugeicons/core-free-icons/Calendar03Icon";
 import AlertCircleIcon from "@hugeicons/core-free-icons/AlertCircleIcon";
 import AppWindowIcon from "@hugeicons/core-free-icons/AppWindowIcon";
 import Archive02Icon from "@hugeicons/core-free-icons/Archive02Icon";
@@ -202,6 +203,7 @@ const UnfoldVerticalIcon: IconSvgElement = [
 ];
 
 export const Activity = wrap(Activity01Icon, "Activity");
+export const Calendar = wrap(Calendar03Icon, "Calendar");
 export const AlertCircle = wrap(AlertCircleIcon, "AlertCircle");
 export const AppWindow = wrap(AppWindowIcon, "AppWindow");
 export const Archive = wrap(Archive02Icon, "Archive");

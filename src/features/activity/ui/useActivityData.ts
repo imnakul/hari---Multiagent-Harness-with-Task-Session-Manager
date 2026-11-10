@@ -3,12 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ACTIVITY_AGENT_STATUS_EVENT,
   ACTIVITY_CHANGED_EVENT,
-  dayRange,
-  isSameLocalDay,
+  isCurrentPeriod,
   loadActivityLog,
   loadActivityWatch,
   loadAgentStatus,
+  periodRange,
   retryAgent,
+  type ActivityScope,
   type ActivityLog,
   type AgentStatus,
   type AwSummary,
@@ -23,8 +24,15 @@ export type Loadable<T> = {
 };
 
 const EMPTY: Loadable<never> = { data: null, loading: true, error: null };
-/** ActivityWatch has no push channel; poll it while viewing today. */
-const AW_POLL_MS = 60_000;
+/**
+ * ActivityWatch has no push channel, so the current period polls it. A week or
+ * month re-reads many more events per poll, so it polls far less often.
+ */
+const AW_POLL_MS: Record<ActivityScope, number> = {
+  day: 60_000,
+  week: 10 * 60_000,
+  month: 10 * 60_000,
+};
 /** Coalesce bursts of `activity-changed` (prompt + note land together). */
 const CHANGE_DEBOUNCE_MS = 250;
 
@@ -34,7 +42,8 @@ function message(err: unknown): string {
 
 export type ActivityData = {
   range: Span;
-  isToday: boolean;
+  /** The period holds "now", so it can still change. */
+  isLive: boolean;
   log: Loadable<ActivityLog>;
   aw: Loadable<AwSummary>;
   agent: AgentStatus | null;
@@ -43,16 +52,19 @@ export type ActivityData = {
 };
 
 /**
- * Loads one local day of activity: the event/note log from SQLite, the
- * ActivityWatch summary, and the notes worker status. Today's view stays live
- * via Rust events and a light ActivityWatch poll; responses for a day the
- * user already navigated away from are dropped.
+ * Loads a day, week or month of activity: the event/note log from
+ * `activity.db`, the ActivityWatch summary, and the notes worker status. The
+ * current period stays live via Rust events and a light ActivityWatch poll;
+ * responses for a period the user already left are dropped.
  */
-export function useActivityData(day: Date): ActivityData {
-  // Key on the day's start so a new Date object for the same day keeps the range.
-  const dayStart = dayRange(day).start;
-  const range = useMemo(() => dayRange(new Date(dayStart)), [dayStart]);
-  const isToday = isSameLocalDay(day, new Date());
+export function useActivityData(anchor: Date, scope: ActivityScope): ActivityData {
+  // Key on the period's start so a new Date for the same period keeps the range.
+  const periodStart = periodRange(anchor, scope).start;
+  const range = useMemo(
+    () => periodRange(new Date(periodStart), scope),
+    [periodStart, scope],
+  );
+  const isLive = isCurrentPeriod(anchor, scope);
 
   const [log, setLog] = useState<Loadable<ActivityLog>>(EMPTY);
   const [aw, setAw] = useState<Loadable<AwSummary>>(EMPTY);
@@ -93,7 +105,7 @@ export function useActivityData(day: Date): ActivityData {
     [range],
   );
 
-  // New day: drop the previous day's data so stale numbers never show.
+  // New period: drop the previous one's data so stale numbers never show.
   useEffect(() => {
     const gen = ++generation.current;
     setLog(EMPTY);
@@ -115,9 +127,9 @@ export function useActivityData(day: Date): ActivityData {
     };
   }, []);
 
-  // Live updates for today only; a past day cannot change.
+  // Live updates for the current period only; a past one cannot change.
   useEffect(() => {
-    if (!isToday) return;
+    if (!isLive) return;
     let timer: number | null = null;
     const unlisten: Array<Promise<() => void>> = [
       listen(ACTIVITY_CHANGED_EVENT, () => {
@@ -126,7 +138,7 @@ export function useActivityData(day: Date): ActivityData {
       }),
       listen<AgentStatus>(ACTIVITY_AGENT_STATUS_EVENT, (event) => setAgent(event.payload)),
     ];
-    const poll = window.setInterval(() => loadAw(generation.current), AW_POLL_MS);
+    const poll = window.setInterval(() => loadAw(generation.current), AW_POLL_MS[scope]);
     return () => {
       if (timer != null) window.clearTimeout(timer);
       window.clearInterval(poll);
@@ -134,7 +146,7 @@ export function useActivityData(day: Date): ActivityData {
         void pending.then((off) => off());
       }
     };
-  }, [isToday, loadLog, loadAw]);
+  }, [isLive, scope, loadLog, loadAw]);
 
   const refresh = useCallback(() => {
     loadLog(generation.current);
@@ -147,5 +159,5 @@ export function useActivityData(day: Date): ActivityData {
     );
   }, []);
 
-  return { range, isToday, log, aw, agent, refresh, retryNotes };
+  return { range, isLive, log, aw, agent, refresh, retryNotes };
 }

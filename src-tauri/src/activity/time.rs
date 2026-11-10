@@ -115,6 +115,22 @@ pub fn format_clock(ms: i64, offset_minutes: i64) -> String {
     format!("{:02}:{:02}", rem / 3_600_000, (rem / 60_000) % 60)
 }
 
+/// Local day number (days since 1970-01-01 in the viewer's zone).
+pub fn local_day(ms: i64, offset_minutes: i64) -> i64 {
+    (ms + offset_minutes * 60_000).div_euclid(MS_PER_DAY)
+}
+
+/// `Mon 9 Nov` for a local day number from [`local_day`].
+pub fn format_day(day: i64) -> String {
+    const WEEKDAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let (_, month, date) = civil_from_days(day);
+    let weekday = WEEKDAYS[day.rem_euclid(7) as usize];
+    format!("{weekday} {date} {}", MONTHS[(month - 1) as usize])
+}
+
 /// Compact duration such as `45s`, `12m`, or `1h 05m`.
 pub fn format_duration(ms: i64) -> String {
     let total_seconds = ms.max(0) / 1000;
@@ -172,6 +188,15 @@ mod tests {
         assert_eq!(format_clock(ms, 0), "23:50");
         assert_eq!(format_clock(ms, 330), "05:20");
         assert_eq!(format_clock(ms, -480), "15:50");
+    }
+
+    #[test]
+    fn names_local_days() {
+        let ms = parse_iso_ms("2026-11-09T20:00:00Z").unwrap();
+        assert_eq!(format_day(local_day(ms, 0)), "Mon 9 Nov");
+        // 01:30 next day in IST.
+        assert_eq!(format_day(local_day(ms, 330)), "Tue 10 Nov");
+        assert_eq!(format_day(local_day(0, 0)), "Thu 1 Jan");
     }
 
     #[test]

@@ -1333,7 +1333,6 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
            ON sessions (updated_at DESC, id) WHERE is_sidechat = 1;",
     )?;
     crate::notes::ensure_notes_table(conn)?;
-    crate::activity::store::ensure_activity_tables(conn)?;
     crate::tasks::ensure_tasks_table(conn)?;
     crate::session_board::ensure_session_board_table(conn)?;
     crate::reminders::ensure_table(conn)?;

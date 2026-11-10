@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-11-10 10:30 | [Review — Activity tracker (L-240)](activity-tracker-plan.md) | Local log of prompts and agent time in its own `activity.db`; Day/Week/Month with a date picker; ActivityWatch apps, meetings and sites; always-on `agy` notes and on-demand week/month summaries; Settings master switch; process-monitor row. Desktop check manual. |
 | 2026-11-09 15:40 | [Review — Hari: running sessions as an Android Live Update (L-239)](hari-live-updates-plan.md) | Status-bar chip, Super Island, shade and lock-screen card with Stop / Approve / Deny; Settings switch (off by default) and one-or-each card choice; new `session.approve` command. Phone check manual. |
 | 2026-11-09 11:19 | [Review — Hari: the message queue on the phone (L-238)](hari-message-queue-plan.md) | Strip above the phone composer with edit, send now, delete and resume; queue rides on watch frames; four new phone commands. Phone check manual. |
 | 2026-11-01 14:08 | [Review — Zen mode (L-230)](zen-mode-plan.md) | The window narrows to a docked side panel with one or two chats, a slim top bar, Pin, and slim Tasks/Notes/Automations/Monos; animated native resize, exact restore. Desktop check manual. |

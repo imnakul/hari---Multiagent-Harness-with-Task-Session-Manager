@@ -6,7 +6,18 @@ import {
   buildLogItems,
   collectActivityEvents,
   createRecorderState,
+  dailyTotals,
   dayRange,
+  fromDateInputValue,
+  isCurrentPeriod,
+  notesByDay,
+  periodKey,
+  periodLabel,
+  periodPromptLabel,
+  periodRange,
+  shiftPeriod,
+  toDateInputValue,
+  weekStart,
   formatDuration,
   replyExcerpt,
   shiftDay,
@@ -211,5 +222,95 @@ describe("time helpers", () => {
       start: 18 * hour,
       end: 24 * hour,
     });
+  });
+});
+
+describe("periods", () => {
+  // Wed 11 Nov 2026, 15:30 local.
+  const wed = new Date(2026, 10, 11, 15, 30);
+
+  it("finds Monday-to-Sunday weeks and calendar months", () => {
+    const week = periodRange(wed, "week");
+    expect(new Date(week.start)).toEqual(new Date(2026, 10, 9));
+    expect(new Date(week.end)).toEqual(new Date(2026, 10, 16));
+    // Sunday belongs to the week that started the Monday before.
+    expect(weekStart(new Date(2026, 10, 15, 23))).toEqual(new Date(2026, 10, 9));
+    const month = periodRange(wed, "month");
+    expect(new Date(month.start)).toEqual(new Date(2026, 10, 1));
+    expect(new Date(month.end)).toEqual(new Date(2026, 11, 1));
+  });
+
+  it("steps by a whole period", () => {
+    expect(shiftPeriod(wed, "day", -1)).toEqual(new Date(2026, 10, 10));
+    expect(shiftPeriod(wed, "week", -1)).toEqual(new Date(2026, 10, 2));
+    expect(shiftPeriod(new Date(2026, 0, 31), "month", 1)).toEqual(new Date(2026, 1, 1));
+    expect(shiftPeriod(new Date(2026, 0, 15), "month", -1)).toEqual(new Date(2025, 11, 1));
+  });
+
+  it("keys summaries by the week's Monday or the month", () => {
+    expect(periodKey(wed, "day")).toBeNull();
+    expect(periodKey(wed, "week")).toBe("week:2026-11-09");
+    expect(periodKey(wed, "month")).toBe("month:2026-11");
+    expect(periodPromptLabel(wed, "month")).toBe("November 2026");
+    expect(periodPromptLabel(wed, "week")).toContain("9 Nov 2026");
+  });
+
+  it("names the current and previous week", () => {
+    expect(periodLabel(wed, "week", wed)).toBe("This week");
+    expect(periodLabel(shiftPeriod(wed, "week", -1), "week", wed)).toBe("Last week");
+    expect(isCurrentPeriod(wed, "month", wed)).toBe(true);
+    expect(isCurrentPeriod(shiftPeriod(wed, "month", -1), "month", wed)).toBe(false);
+  });
+
+  it("round-trips date input values and rejects bad ones", () => {
+    expect(toDateInputValue(wed)).toBe("2026-11-11");
+    expect(fromDateInputValue("2026-11-11")).toEqual(new Date(2026, 10, 11));
+    expect(fromDateInputValue("2026-02-30")).toBeNull();
+    expect(fromDateInputValue("11/11/2026")).toBeNull();
+  });
+
+  it("splits time across days, including spans over midnight", () => {
+    const range = periodRange(wed, "week");
+    const mon = new Date(2026, 10, 9).getTime();
+    const tue = new Date(2026, 10, 10).getTime();
+    const events: ActivityEvent[] = [
+      event({ id: 1, kind: "prompt", ts: mon + 3_600_000 }),
+      // A turn from Mon 23:30 to Tue 00:30.
+      event({ id: 2, kind: "turn", ts: tue + 1_800_000, durationMs: 3_600_000 }),
+    ];
+    const aw = {
+      available: true,
+      hasAfk: true,
+      hasWeb: false,
+      activeMs: 0,
+      activeSpans: [{ start: tue - 600_000, end: tue + 600_000 }],
+      apps: [],
+      sites: [],
+      meetings: [{ start: tue + 7_200_000, end: tue + 9_000_000, label: "Zoom" }],
+      meetingMs: 1_800_000,
+    };
+    const days = dailyTotals(range, events, aw);
+    expect(days).toHaveLength(7);
+    expect(days[0]).toMatchObject({ start: mon, prompts: 1, agentMs: 1_800_000, activeMs: 600_000 });
+    expect(days[1]).toMatchObject({
+      start: tue,
+      prompts: 0,
+      agentMs: 1_800_000,
+      activeMs: 600_000,
+      meetingMs: 1_800_000,
+    });
+    // Without ActivityWatch, desktop numbers stay zero.
+    expect(dailyTotals(range, events, null)[1].activeMs).toBe(0);
+  });
+
+  it("groups notes by day, newest first", () => {
+    const mon = new Date(2026, 10, 9, 10).getTime();
+    const tue = new Date(2026, 10, 10, 9).getTime();
+    const groups = notesByDay([
+      { id: 1, ts: mon, firstEventId: 1, lastEventId: 1, body: "a" },
+      { id: 2, ts: tue, firstEventId: 2, lastEventId: 2, body: "b" },
+      { id: 3, ts: mon + 60_000, firstEventId: 3, lastEventId: 3, body: "c" },
+    ]);
+    expect(groups.map((g) => g.notes.map((n) => n.id))).toEqual([[2], [3, 1]]);
   });
 });

@@ -17,11 +17,11 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::store::{self, ActivityEvent};
+use super::store::{self, ActivityDb, ActivityEvent};
 use super::time::{format_clock, format_duration};
 use super::{aw, CHANGED_EVENT};
 use crate::harness::{prepare_child, resolve_agy, terminate};
-use crate::session_store::{now_millis, SessionStore};
+use crate::session_store::now_millis;
 
 pub const STATUS_EVENT: &str = "activity-agent-status";
 
@@ -276,6 +276,22 @@ impl NotesAgent {
         status
     }
 
+    /// Run one `agy` prompt now (period summaries). Waits for any note in
+    /// progress, counts toward today's usage, and shows in the Process Monitor.
+    pub fn run_once(&self, app: &AppHandle, prompt: &str) -> Result<String, String> {
+        let binary = resolve_agy().ok_or_else(|| AgentError::Missing.message())?;
+        let workdir = scratch_dir(app).map_err(|e| e.message())?;
+        let result = run_agy(&binary, prompt, &workdir, &self.shared);
+        let mut state = self.lock();
+        let tz = state.tz_offset_min;
+        state.usage.roll(now_millis(), tz);
+        if result.is_err() {
+            state.usage.failures = state.usage.failures.saturating_add(1);
+        }
+        drop(state);
+        result.map_err(|e| e.message())
+    }
+
     /// Stop the worker and kill a running `agy` (app quit).
     pub fn shutdown(&self) {
         let mut state = self.lock();
@@ -453,19 +469,17 @@ enum BatchOutcome {
 }
 
 fn run_batch(app: &AppHandle, shared: &Arc<Shared>) -> Result<BatchOutcome, AgentError> {
-    let store = app.state::<SessionStore>();
+    let db = app.state::<ActivityDb>();
     let now = now_millis();
-    let (events, more, previous) = {
-        let conn = store.lock_conn().map_err(AgentError::Other)?;
-        let after =
-            store::last_noted_event_id(&conn).map_err(|e| AgentError::Other(e.to_string()))?;
-        let mut events = store::unnoted_events(&conn, after, now - LOOKBACK_MS, BATCH_LIMIT + 1)
-            .map_err(|e| AgentError::Other(e.to_string()))?;
-        let more = events.len() > BATCH_LIMIT;
-        events.truncate(BATCH_LIMIT);
-        let previous = store::latest_note(&conn).map_err(|e| AgentError::Other(e.to_string()))?;
-        (events, more, previous)
-    };
+    let (mut events, previous) = db
+        .with(|conn| {
+            let after = store::last_noted_event_id(conn)?;
+            let events = store::unnoted_events(conn, after, now - LOOKBACK_MS, BATCH_LIMIT + 1)?;
+            Ok((events, store::latest_note(conn)?))
+        })
+        .map_err(AgentError::Other)?;
+    let more = events.len() > BATCH_LIMIT;
+    events.truncate(BATCH_LIMIT);
     let (Some(first), Some(last)) = (events.first(), events.last()) else {
         return Ok(BatchOutcome::Nothing);
     };
@@ -492,9 +506,8 @@ fn run_batch(app: &AppHandle, shared: &Arc<Shared>) -> Result<BatchOutcome, Agen
     let workdir = scratch_dir(app)?;
     let body = run_agy(&binary, &prompt, &workdir, shared)?;
 
-    let conn = store.lock_conn().map_err(AgentError::Other)?;
-    store::insert_note(&conn, now_millis(), first_id, last_id, &body)
-        .map_err(|e| AgentError::Other(e.to_string()))?;
+    db.with(|conn| store::insert_note(conn, now_millis(), first_id, last_id, &body))
+        .map_err(AgentError::Other)?;
     Ok(BatchOutcome::Wrote { more })
 }
 
@@ -509,12 +522,19 @@ fn scratch_dir(app: &AppHandle) -> Result<PathBuf, AgentError> {
     Ok(dir)
 }
 
+/// One `agy` at a time across the notes worker and on-demand summaries, so
+/// "calls never overlap" holds for the user's quota whatever asks.
+static AGY_GATE: Mutex<()> = Mutex::new(());
+
 fn run_agy(
     binary: &Path,
     prompt: &str,
     workdir: &Path,
     shared: &Arc<Shared>,
 ) -> Result<String, AgentError> {
+    let _turn = AGY_GATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let command = binary.to_string_lossy().into_owned();
     let prompt = shim_safe_prompt(binary, prompt);
     let mut cmd = Command::new(binary);

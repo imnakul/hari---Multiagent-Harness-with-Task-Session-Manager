@@ -498,3 +498,192 @@ export function timelineWindow(day: Span, spans: readonly Span[]): Span {
 export function spanLength(span: Span): number {
   return Math.max(0, span.end - span.start);
 }
+
+// ---------------------------------------------------------------------------
+// Periods: day, week, month
+// ---------------------------------------------------------------------------
+
+export type ActivityScope = "day" | "week" | "month";
+
+const pad2 = (value: number): string => String(value).padStart(2, "0");
+
+/** Local midnight of the Monday on or before `date`. */
+export function weekStart(date: Date): Date {
+  const start = shiftDay(date, 0);
+  const mondayOffset = (start.getDay() + 6) % 7;
+  return shiftDay(start, -mondayOffset);
+}
+
+/** Local range of the day, week (Monday–Sunday) or month containing `anchor`. */
+export function periodRange(anchor: Date, scope: ActivityScope): Span {
+  if (scope === "day") return dayRange(anchor);
+  if (scope === "week") {
+    const start = weekStart(anchor);
+    return { start: start.getTime(), end: shiftDay(start, 7).getTime() };
+  }
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+  return { start: start.getTime(), end: end.getTime() };
+}
+
+/** Move the anchor by whole days, weeks or months (months clamp to day 1). */
+export function shiftPeriod(anchor: Date, scope: ActivityScope, delta: number): Date {
+  if (scope === "day") return shiftDay(anchor, delta);
+  if (scope === "week") return shiftDay(weekStart(anchor), delta * 7);
+  return new Date(anchor.getFullYear(), anchor.getMonth() + delta, 1);
+}
+
+/** Whether the period holds `now` (live updates, no "next" button). */
+export function isCurrentPeriod(
+  anchor: Date,
+  scope: ActivityScope,
+  now: Date = new Date(),
+): boolean {
+  const range = periodRange(anchor, scope);
+  return now.getTime() >= range.start && now.getTime() < range.end;
+}
+
+/** Cache key for an AI summary: `week:2026-11-09` (its Monday) or `month:2026-11`. */
+export function periodKey(anchor: Date, scope: ActivityScope): string | null {
+  if (scope === "day") return null;
+  if (scope === "week") {
+    const monday = weekStart(anchor);
+    return `week:${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`;
+  }
+  return `month:${anchor.getFullYear()}-${pad2(anchor.getMonth() + 1)}`;
+}
+
+/** Heading for the period: "Today", "This week", "Week of Mon, 2 Nov", "November 2026". */
+export function periodLabel(
+  anchor: Date,
+  scope: ActivityScope,
+  now: Date = new Date(),
+): string {
+  if (scope === "day") return formatDayLabel(anchor, now);
+  if (scope === "week") {
+    const monday = weekStart(anchor);
+    if (isCurrentPeriod(anchor, "week", now)) return "This week";
+    if (isCurrentPeriod(shiftDay(monday, 7), "week", now)) return "Last week";
+    return `Week of ${monday.toLocaleDateString(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    })}`;
+  }
+  return anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+/** Words the AI summary prompt uses for the period. */
+export function periodPromptLabel(anchor: Date, scope: ActivityScope): string {
+  if (scope === "month") {
+    return anchor.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  }
+  return `week of ${weekStart(anchor).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
+}
+
+/** `YYYY-MM-DD` for an `<input type="date">`. */
+export function toDateInputValue(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/** Local midnight for an `<input type="date">` value, or null when invalid. */
+export function fromDateInputValue(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) || date.getDate() !== Number(match[3]) ? null : date;
+}
+
+export type DayTotals = {
+  /** Local midnight. */
+  start: number;
+  end: number;
+  prompts: number;
+  agentMs: number;
+  activeMs: number;
+  meetingMs: number;
+};
+
+/** Overlap of `span` with `[start, end)`. */
+function overlap(span: Span, start: number, end: number): number {
+  return Math.max(0, Math.min(span.end, end) - Math.max(span.start, start));
+}
+
+/**
+ * Per-day numbers for a week or month. Spans that cross midnight are split
+ * between the days they touch; agent time counts on the day its turn ran.
+ */
+export function dailyTotals(
+  range: Span,
+  events: readonly ActivityEvent[],
+  aw: AwSummary | null,
+): DayTotals[] {
+  const days: DayTotals[] = [];
+  for (let day = new Date(range.start); day.getTime() < range.end; day = shiftDay(day, 1)) {
+    const start = day.getTime();
+    const end = Math.min(range.end, shiftDay(day, 1).getTime());
+    days.push({ start, end, prompts: 0, agentMs: 0, activeMs: 0, meetingMs: 0 });
+  }
+  for (const day of days) {
+    for (const event of events) {
+      if (event.kind === "prompt" && event.ts >= day.start && event.ts < day.end) {
+        day.prompts += 1;
+      }
+    }
+    for (const span of agentSpans(events)) day.agentMs += overlap(span, day.start, day.end);
+    if (aw?.available) {
+      for (const span of aw.activeSpans) day.activeMs += overlap(span, day.start, day.end);
+      for (const span of aw.meetings) day.meetingMs += overlap(span, day.start, day.end);
+    }
+  }
+  return days;
+}
+
+/** Notes grouped by local day, newest day first. */
+export function notesByDay(
+  notes: readonly ActivityNote[],
+): { day: number; notes: ActivityNote[] }[] {
+  const groups = new Map<number, ActivityNote[]>();
+  for (const note of notes) {
+    const day = dayRange(new Date(note.ts)).start;
+    groups.set(day, [...(groups.get(day) ?? []), note]);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([day, list]) => ({ day, notes: [...list].sort((a, b) => b.ts - a.ts) }));
+}
+
+// ---------------------------------------------------------------------------
+// Period summaries (agy)
+// ---------------------------------------------------------------------------
+
+export type PeriodSummary = {
+  key: string;
+  start: number;
+  end: number;
+  body: string;
+  createdAt: number;
+};
+
+export function loadPeriodSummary(key: string): Promise<PeriodSummary | null> {
+  return invoke<PeriodSummary | null>("activity_period_summary", { key });
+}
+
+export function writePeriodSummary(input: {
+  key: string;
+  label: string;
+  range: Span;
+}): Promise<PeriodSummary> {
+  return invoke<PeriodSummary>("activity_period_summarize", {
+    key: input.key,
+    label: input.label,
+    start: input.range.start,
+    end: input.range.end,
+    tzOffsetMin: tzOffsetMinutes(),
+  });
+}

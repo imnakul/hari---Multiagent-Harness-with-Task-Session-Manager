@@ -1,11 +1,13 @@
 //! Activity: a local log of what you did in Hari, plus desktop context from
 //! ActivityWatch and an always-on Antigravity (`agy`) scribe that turns it
-//! into short notes. Everything is stored in `monocode.db`; nothing leaves the
-//! machine except the note prompt sent through the user's own `agy` login.
+//! into short notes and week/month summaries. Everything is stored in its own
+//! `activity.db`; nothing leaves the machine except the prompts sent through
+//! the user's own `agy` login.
 
 pub mod agent;
 pub mod aw;
 pub mod store;
+pub mod summary;
 pub mod time;
 
 use std::path::{Path, PathBuf};
@@ -13,9 +15,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::session_store::{now_millis, validate_id, SessionStore};
+use crate::session_store::{now_millis, validate_id};
 use agent::{AgentStatus, NotesAgent};
-use store::{ActivityEvent, ActivityNote, NewEvent};
+use store::{ActivityDb, ActivityEvent, ActivityNote, NewEvent, PeriodSummary};
 
 /// Emitted (no payload) whenever events or notes change.
 pub const CHANGED_EVENT: &str = "activity-changed";
@@ -24,8 +26,9 @@ const TEXT_MAX_CHARS: usize = 2_000;
 const TITLE_MAX_CHARS: usize = 200;
 const FIELD_MAX_CHARS: usize = 120;
 const CWD_MAX_CHARS: usize = 4_096;
-/// Longest range one query may cover (a week), to keep the view snappy.
-const RANGE_MAX_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+/// Longest range one query may cover: a month, with a day to spare for DST.
+const RANGE_MAX_MS: i64 = 32 * 24 * 60 * 60 * 1000;
+const LABEL_MAX_CHARS: usize = 80;
 
 /// Event as sent by the frontend recorder.
 #[derive(Debug, Clone, Deserialize)]
@@ -60,14 +63,20 @@ pub struct ActivityLog {
     pub notes: Vec<ActivityNote>,
 }
 
-/// Start the notes worker. Tables are created by the session store migration;
-/// the worker stays idle until the frontend turns notes on.
+/// Open `activity.db` beside `monocode.db` and start the notes worker, which
+/// stays idle until the frontend turns notes on. A database that cannot open
+/// does not stop Hari; activity commands then report why.
 pub fn init(app: &AppHandle) {
+    let db = match app.path().app_data_dir() {
+        Ok(dir) => ActivityDb::open(&dir.join("activity.db")),
+        Err(err) => ActivityDb::open(&PathBuf::from(format!("<no app data folder: {err}>"))),
+    };
+    app.manage(db);
     app.state::<NotesAgent>().start(app.clone());
 }
 
 /// Store one prompt or finished turn and kick the notes worker. Runs on the
-/// blocking pool like every other `SessionStore` command.
+/// blocking pool so a busy disk never stalls the window.
 #[tauri::command]
 pub async fn activity_record(
     app: AppHandle,
@@ -76,7 +85,7 @@ pub async fn activity_record(
     crate::background_work::store(app, move |app| {
         record_blocking(
             app,
-            &app.state::<SessionStore>(),
+            &app.state::<ActivityDb>(),
             &app.state::<NotesAgent>(),
             event,
         )
@@ -86,7 +95,7 @@ pub async fn activity_record(
 
 fn record_blocking(
     app: &AppHandle,
-    store: &SessionStore,
+    db: &ActivityDb,
     agent: &NotesAgent,
     event: ActivityEventInput,
 ) -> Result<ActivityEvent, String> {
@@ -115,10 +124,9 @@ fn record_blocking(
     let harness = truncate(event.harness.trim(), FIELD_MAX_CHARS);
     let model = truncate(event.model.trim(), FIELD_MAX_CHARS);
 
-    let (stored, inserted) = {
-        let conn = store.lock_conn()?;
+    let (stored, inserted) = db.with(|conn| {
         store::insert_event(
-            &conn,
+            conn,
             &NewEvent {
                 ts,
                 kind,
@@ -133,8 +141,7 @@ fn record_blocking(
                 duration_ms,
             },
         )
-        .map_err(|e| e.to_string())?
-    };
+    })?;
     if inserted {
         agent.kick(event.tz_offset_min);
         let _ = app.emit(CHANGED_EVENT, ());
@@ -142,17 +149,75 @@ fn record_blocking(
     Ok(stored)
 }
 
-/// One day's events and notes, read on the query-only connection.
+/// Events and notes for a day, week or month.
 #[tauri::command]
 pub async fn activity_list(app: AppHandle, start: i64, end: i64) -> Result<ActivityLog, String> {
     validate_range(start, end)?;
     crate::background_work::store(app, move |app| {
-        app.state::<SessionStore>().read(|conn| {
+        app.state::<ActivityDb>().with(|conn| {
             Ok(ActivityLog {
-                events: store::list_events(conn, start, end).map_err(|e| e.to_string())?,
-                notes: store::list_notes(conn, start, end).map_err(|e| e.to_string())?,
+                events: store::list_events(conn, start, end)?,
+                notes: store::list_notes(conn, start, end)?,
             })
         })
+    })
+    .await
+}
+
+/// The cached AI summary for a week or month, if one was written.
+#[tauri::command]
+pub async fn activity_period_summary(
+    app: AppHandle,
+    key: String,
+) -> Result<Option<PeriodSummary>, String> {
+    if !summary::valid_period_key(&key) {
+        return Err("Invalid period".into());
+    }
+    crate::background_work::store(app, move |app| {
+        app.state::<ActivityDb>()
+            .with(|conn| store::get_summary(conn, &key))
+    })
+    .await
+}
+
+/// Write (or rewrite) a week or month summary with `agy` and cache it.
+/// Waits for a note in progress, so `agy` calls never overlap.
+#[tauri::command]
+pub async fn activity_period_summarize(
+    app: AppHandle,
+    key: String,
+    label: String,
+    start: i64,
+    end: i64,
+    tz_offset_min: i64,
+) -> Result<PeriodSummary, String> {
+    if !summary::valid_period_key(&key) {
+        return Err("Invalid period".into());
+    }
+    validate_range(start, end)?;
+    let label = truncate(label.trim(), LABEL_MAX_CHARS);
+    let tz = tz_offset_min.clamp(-14 * 60, 14 * 60);
+    crate::background_work::store(app, move |app| {
+        let db = app.state::<ActivityDb>();
+        let (events, notes) = db.with(|conn| {
+            Ok((
+                store::list_events(conn, start, end)?,
+                store::list_notes(conn, start, end)?,
+            ))
+        })?;
+        let desktop = aw::summary(start, end.min(now_millis()));
+        let prompt = summary::period_prompt(&label, &events, &notes, Some(&desktop), tz);
+        let body = app.state::<NotesAgent>().run_once(app, &prompt)?;
+        let saved = PeriodSummary {
+            key,
+            start,
+            end,
+            body,
+            created_at: now_millis(),
+        };
+        db.with(|conn| store::put_summary(conn, &saved))?;
+        let _ = app.emit(CHANGED_EVENT, ());
+        Ok(saved)
     })
     .await
 }

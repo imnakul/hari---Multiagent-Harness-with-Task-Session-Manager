@@ -1,4 +1,12 @@
 # Changelog 04 — MonoCode Windows fork
+## 2026-11-10 10:30 IST — Activity tracker: own activity.db, Day/Week/Month, summaries (L-240)
+- Type: feature
+- What: Activity (rail, inset sidebar, title tab) logs every prompt and finished agent turn with project, branch and agent time, and shows Day (timeline), Week and Month (bars per day, click to open a day) with a date picker. ActivityWatch, when running, adds active time, apps, meetings and websites (domains with local-only tab titles). An always-on Antigravity CLI (`agy`) writes a short note after each prompt or turn; Write summary sums up a week or month with one `agy` call, cached. Settings → General: Activity tracker (master switch) and Activity notes. The process monitor has an Activity tracker row (today's notes, calls, failures; live `agy` CPU/RAM). Data lives in its own `activity.db`, not `monocode.db`; `session_store.rs` is unchanged.
+- Why: User asked for an always-on activity log in Hari with Antigravity notes, then a separate store, date jumps and weekly/monthly views.
+- Files: `src-tauri/src/activity/{mod,store,agent,aw,summary,time}.rs` (new), `src-tauri/src/{lib.rs,harness.rs (resolve_agy, prepare_child visibility),process_stats.rs}`, `src/features/activity/**` (new), `src/app/App.tsx`, `src/app/shell/{Sidebar,ProjectRail,TitleBar,ProcessMonitor}.tsx`, `src/app/shell/processMonitorModel.ts`, `src/features/settings/{model/settings.ts,ui/SettingsView.tsx}`, `src/features/workspace/model/appViewTabs.ts`, `src/shared/ui/icons.tsx`, tests `src/features/activity/model/activity.test.ts`, `src/app/shell/processMonitorActivity.test.ts`, `src/app/shell/TitleBarNewTabMenu.test.ts`; spec `docs/specs/activity-tracker-plan.md`.
+- Verified: tsc ✅ vitest ✅ (8,100+; 35 unhandled errors from `NotesView.test.ts` are pre-existing) cargo test ✅ (activity 37/37; `kill_all_reaps…` flaky under load, passes alone, pre-existing) clippy on changed files ✅ (31 pre-existing Linux errors elsewhere) | manual: spec § Desktop check
+- Commit: bb8d8383 (first version) + the follow-up commit with this entry
+
 ## 2026-11-09 15:58 IST — Hari release 0.16.0-local33 (Live Updates)
 - Type: chore
 - What: Published `hari-v0.16.0-local33` (run 42599158652, manual run with update notes) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160033), `latest.json`, `hari-android.json`.

@@ -748,6 +748,8 @@ pub fn run() {
             notes::notes_delete,
             activity::activity_record,
             activity::activity_list,
+            activity::activity_period_summary,
+            activity::activity_period_summarize,
             activity::activity_watch_summary,
             activity::activity_agent_status,
             activity::activity_agent_configure,
