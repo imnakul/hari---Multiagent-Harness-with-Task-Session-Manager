@@ -84,6 +84,17 @@ pub struct ProcessMonitorStats {
     owned: Vec<ProcessRow>,
     /// The Browser tabs' own WebView2 profile (L-207), split out of the app.
     browser: Option<AppUsage>,
+    /// Activity tracker: today's agy notes usage, plus the live `agy` process
+    /// (split out of the app's tree like the Browser) while a note is written.
+    activity: ActivityUsage,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityUsage {
+    #[serde(flatten)]
+    tracker: crate::activity::agent::AgentUsage,
+    process: Option<AppUsage>,
 }
 
 pub(crate) fn has_descendants(pid: u32) -> Result<bool, String> {
@@ -188,6 +199,7 @@ pub fn process_monitor_stats(
     pty: State<'_, crate::pty::PtyHost>,
     stats: State<'_, ProcessStats>,
     browser: State<'_, crate::browser_view::BrowserTabs>,
+    activity: State<'_, crate::activity::agent::NotesAgent>,
 ) -> Result<ProcessMonitorStats, String> {
     let mut roots = harness.process_roots();
     roots.extend(pty.process_roots());
@@ -200,6 +212,9 @@ pub fn process_monitor_stats(
     // claims its renderers and GPU process, so they leave the app's total.
     let browser_pid = browser.browser_pid().filter(|pid| *pid != app_pid);
     pids.extend(browser_pid);
+    let tracker = activity.usage();
+    let agy_pid = tracker.running_pid.filter(|pid| *pid != app_pid);
+    pids.extend(agy_pid);
     let samples = process_metrics::owned_snapshot(&pids)?;
     let trees = process_metrics::tree(&pids, &samples);
     let gpu = stats.gpu.lock().unwrap_or_else(|e| e.into_inner()).sample();
@@ -241,10 +256,17 @@ pub fn process_monitor_stats(
     let browser = browser_pid
         .filter(|pid| samples.iter().any(|s| s.pid == *pid))
         .map(|pid| app_usage(pid, &trees, &samples, &cpu, &gpu));
+    let agy = agy_pid
+        .filter(|pid| samples.iter().any(|s| s.pid == *pid))
+        .map(|pid| app_usage(pid, &trees, &samples, &cpu, &gpu));
     Ok(ProcessMonitorStats {
         app: app_usage(app_pid, &trees, &samples, &cpu, &gpu),
         owned,
         browser,
+        activity: ActivityUsage {
+            tracker,
+            process: agy,
+        },
     })
 }
 

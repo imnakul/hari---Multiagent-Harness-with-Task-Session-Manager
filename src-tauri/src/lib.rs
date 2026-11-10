@@ -1,6 +1,7 @@
 use tauri::Manager;
 
 mod account_identity;
+mod activity;
 pub mod antigravity_acp;
 mod antigravity_cli;
 mod artifacts;
@@ -377,6 +378,7 @@ pub fn run() {
         .manage(pty::PtyHost::new())
         .manage(claude_interactive::InteractiveHost::default())
         .manage(process_stats::ProcessStats::default())
+        .manage(activity::agent::NotesAgent::new())
         .manage(browser_view::BrowserTabs::default())
         .manage(webview_recovery::WebviewRecovery::default())
         .manage(remote::RemoteConnections::default())
@@ -388,6 +390,7 @@ pub fn run() {
             mobile_access::init(app.handle())?;
             reminders::init(app.handle());
             checkpoint::init(app.handle())?;
+            activity::init(app.handle());
             menu::install(app.handle())?;
             #[cfg(target_os = "windows")]
             tray::install(app.handle())?;
@@ -743,6 +746,12 @@ pub fn run() {
             artifacts::artifacts_upsert,
             artifacts::artifacts_delete,
             notes::notes_delete,
+            activity::activity_record,
+            activity::activity_list,
+            activity::activity_watch_summary,
+            activity::activity_agent_status,
+            activity::activity_agent_configure,
+            activity::activity_agent_retry,
             notes::notes_save_image,
             notes::notes_image_path,
             tasks::tasks_list,
@@ -939,6 +948,9 @@ fn reap_harness_children(handle: &tauri::AppHandle) {
     }
     if let Some(host) = handle.try_state::<pty::PtyHost>() {
         host.kill_all();
+    }
+    if let Some(agent) = handle.try_state::<activity::agent::NotesAgent>() {
+        agent.shutdown();
     }
 }
 

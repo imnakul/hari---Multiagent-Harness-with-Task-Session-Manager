@@ -79,6 +79,7 @@ describe("new tab menu beside + (L-206)", () => {
       "Browser",
       "Whiteboard",
       "Notes",
+      "Activity",
       "Task Manager",
       "Session Manager",
       "Automations",
@@ -111,5 +112,10 @@ describe("new tab menu beside + (L-206)", () => {
   it("leaves Notes out when Notes is off", () => {
     expect(newTabViews((view) => view !== "notes")).not.toContain("notes");
     expect(newTabViews()[0]).toBe("browser");
+  });
+
+  it("leaves Activity out when the tracker is off", () => {
+    expect(newTabViews((view) => view !== "activity")).not.toContain("activity");
+    expect(newTabViews()).toContain("activity");
   });
 });

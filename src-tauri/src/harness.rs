@@ -3653,6 +3653,12 @@ fn antigravity_cli_candidates(home: Option<&Path>, local_app_data: Option<&Path>
     candidates
 }
 
+/// The official `agy` CLI for the Activity notes worker, resolved the same way
+/// as the Antigravity CLI provider so both always agree on the binary.
+pub(crate) fn resolve_agy() -> Option<PathBuf> {
+    resolve_antigravity_cli()
+}
+
 fn resolve_antigravity_cli() -> Option<PathBuf> {
     if let Some(found) = which_in_path(&gui_search_path(), "agy") {
         return Some(found);
@@ -4616,7 +4622,7 @@ pub(crate) fn apply_gui_env(cmd: &mut Command) {
     }
 }
 
-fn prepare_child(cmd: &mut Command, command: &str) -> Result<(), String> {
+pub(crate) fn prepare_child(cmd: &mut Command, command: &str) -> Result<(), String> {
     apply_gui_env(cmd);
     match command_stem(command).as_str() {
         "fx" => apply_fx_env(cmd),

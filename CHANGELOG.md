@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Activity** on the project rail, in the inset sidebar and as a title tab: a day view of what you and your agents did. Every prompt and finished turn is logged locally with project, branch and agent time, shown as headline numbers, a timeline, a per-project breakdown and a log. Click a logged prompt to reopen its chat.
+- Optional desktop context from [ActivityWatch](https://activitywatch.net/) (free, open source, local): active time, top apps (Figma, Teams, browsers…), meetings (Zoom, Google Meet, Teams, Webex, FaceTime, Slack huddles), and, with its browser extension, time per website with the top tabs on each. Window and tab titles never leave the machine.
+- Always-on Antigravity CLI (`agy`) notes: after each prompt or finished turn, `agy -p` writes a short work-log entry with your own sign-in and quota. It sees prompt text, a short reply excerpt, repo, branch, app names, website domains and meeting times only. Calls never overlap, bursts are batched, rate limits back off (30 s up to 15 min), and a missing or signed-out CLI pauses notes with Retry while logging continues.
+- **Settings → General → Activity tracker** turns all tracking on or off (off also hides Activity); **Activity notes (Antigravity)** toggles the AI notes.
+- The Process Monitor in the bottom bar has an **Activity tracker** row: today's notes, agy calls and failures, plus the live CPU/RAM of `agy` while a note is written.
+
 ## [0.16.0] - 2026-10-19
 
 ### Added

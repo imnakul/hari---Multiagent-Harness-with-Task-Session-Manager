@@ -20,7 +20,9 @@ import {
   parkInteractiveClaude,
   stopInteractiveClaude,
 } from "../../integrations/harness/providers/claude/claudeInteractive";
+import { useTrackerEnabled } from "../../features/activity/model/useActivityRecorder";
 import {
+  activitySummary,
   processIdleAge,
   processIdleCandidate,
   processLabel,
@@ -29,6 +31,7 @@ import {
   processSessionId,
   processTotals,
   retainExitedProcesses,
+  type ActivityTrackerUsage,
   type AppProcess,
   type OwnedProcess,
   type ProcessDetail,
@@ -65,6 +68,8 @@ function EnabledProcessMonitor({
   const [rows, setRows] = useState<OwnedProcess[] | null>(null);
   const [app, setApp] = useState<AppProcess | null>(null);
   const [browser, setBrowser] = useState<AppProcess | null>(null);
+  const [activity, setActivity] = useState<ActivityTrackerUsage | null>(null);
+  const trackerEnabled = useTrackerEnabled();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [stopping, setStopping] = useState(new Set<string>());
@@ -102,6 +107,7 @@ function EnabledProcessMonitor({
           setRows(merged);
           setApp(next.app);
           setBrowser(next.browser ?? null);
+          setActivity(next.activity ?? null);
           setError(undefined);
         }
       } catch (failure) {
@@ -194,7 +200,9 @@ function EnabledProcessMonitor({
       refresh.current();
     }
   };
-  const totals = app ? processTotals(app, rows ?? [], browser) : null;
+  const totals = app
+    ? processTotals(app, rows ?? [], browser, activity?.process)
+    : null;
   const cpu = totals?.cpu == null ? "…" : processPercent(totals.cpu);
   const gpu = totals?.gpu == null ? "" : ` · GPU ${processPercent(totals.gpu)}`;
   const groups = new Map<string, OwnedProcess[]>();
@@ -360,6 +368,20 @@ function EnabledProcessMonitor({
                     ) : null}
                   </>
                 ) : null}
+                {trackerEnabled && activity ? (
+                  <ActivityTrackerRow
+                    usage={activity}
+                    appPid={app.pid}
+                    expanded={
+                      activity.process != null &&
+                      expanded.has(`activity:${activity.process.pid}`)
+                    }
+                    onToggle={() =>
+                      activity.process &&
+                      toggle(`activity:${activity.process.pid}`)
+                    }
+                  />
+                ) : null}
               </div>
             ) : null}
             {rows?.length === 0 ? (
@@ -466,6 +488,58 @@ function EnabledProcessMonitor({
             </p>
           </div>
         </Popover>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The Activity tracker's own usage. It works inside the app process, so its
+ * only separate cost is the short-lived `agy` CLI that writes each note; the
+ * row shows that process while it runs, and today's note/call counts always.
+ */
+function ActivityTrackerRow({
+  usage,
+  appPid,
+  expanded,
+  onToggle,
+}: {
+  usage: ActivityTrackerUsage;
+  appPid: number;
+  expanded: boolean;
+  onToggle: () => void;
+}): ReactElement {
+  const proc = usage.process;
+  return (
+    <>
+      <div className="flex items-center gap-2 py-2">
+        {proc ? (
+          <DisclosureButton label="Activity tracker" expanded={expanded} onToggle={onToggle} />
+        ) : (
+          <span aria-hidden className="size-5 shrink-0" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate">Activity tracker</div>
+          <div className="truncate text-content/50" title={activitySummary(usage)}>
+            {activitySummary(usage)}
+          </div>
+        </div>
+        {proc ? (
+          <UsageCells
+            cpu={proc.cpu}
+            memory={proc.memory}
+            gpu={proc.gpu}
+            measuring={proc.memory != null}
+          />
+        ) : (
+          <span className="flex w-36 shrink-0 justify-end text-content/40">
+            {usage.phase === "writing" ? "Starting agy…" : "No agy running"}
+          </span>
+        )}
+        <span aria-hidden className="size-6 shrink-0" />
+      </div>
+      {proc && expanded ? (
+        <ProcessList label="Activity tracker" items={proc.children} appPid={appPid} />
       ) : null}
     </>
   );

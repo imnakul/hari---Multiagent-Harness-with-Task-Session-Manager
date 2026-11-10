@@ -43,12 +43,43 @@ export type AppProcess = {
   unreadable: number;
   children: ProcessDetail[];
 };
+/** The Activity tracker's notes worker: state, today's counts, and its live `agy`. */
+export type ActivityTrackerUsage = {
+  phase: "off" | "idle" | "queued" | "writing" | "backoff" | "paused";
+  enabled: boolean;
+  today: { calls: number; notes: number; failures: number };
+  runningPid?: number;
+  /** The `agy` process tree while a note is being written, split off the app's. */
+  process: AppProcess | null;
+};
 export type ProcessMonitorStats = {
   app: AppProcess;
   /** Fork (L-207): the Browser's pages, split off the app's tree. */
   browser?: AppProcess | null;
+  activity?: ActivityTrackerUsage | null;
   owned: OwnedProcess[];
 };
+
+/** One line describing the Activity tracker for the Process Monitor. */
+export function activitySummary(usage: ActivityTrackerUsage): string {
+  if (!usage.enabled) return "AI notes off · prompts still logged locally";
+  const state = {
+    off: "Off",
+    idle: "Idle",
+    queued: "Note queued",
+    writing: "Writing a note with agy",
+    backoff: "Waiting to retry agy",
+    paused: "Paused — agy needs attention",
+  }[usage.phase];
+  const { notes, calls, failures } = usage.today;
+  const parts = [
+    state,
+    `${notes} ${notes === 1 ? "note" : "notes"} today`,
+    `${calls} agy ${calls === 1 ? "call" : "calls"}`,
+  ];
+  if (failures > 0) parts.push(`${failures} failed`);
+  return parts.join(" · ");
+}
 /**
  * Bottom-bar totals over the app and every live row. Each total sums the parts that
  * have a reading, so one unreadable chat cannot blank the chip; a total is `null`
@@ -58,6 +89,7 @@ export function processTotals(
   app: AppProcess,
   rows: OwnedProcess[],
   browser?: AppProcess | null,
+  activity?: AppProcess | null,
 ): {
   cpu: number | null;
   memory: number | null;
@@ -65,7 +97,9 @@ export function processTotals(
   partial: boolean;
 } {
   const live = rows.filter((r) => r.status !== "exited");
-  const parts = browser ? [app, browser, ...live] : [app, ...live];
+  const parts = [app, browser, activity, ...live].filter(
+    (part): part is AppProcess | OwnedProcess => part != null,
+  );
   const sum = (values: (number | null | undefined)[]): number | null => {
     const known = values.filter((v): v is number => v != null);
     return known.length ? known.reduce((n, v) => n + v, 0) : null;

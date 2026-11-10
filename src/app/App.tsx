@@ -918,6 +918,11 @@ import {
 import { SessionSurface } from "../features/sessions/ui/SessionSurface";
 import { ProjectTerminalDock } from "../features/terminal/ui/ProjectTerminalDock";
 import { lazySurface } from "../shared/ui/lazySurface";
+import {
+  useActivityRecorder,
+  useTrackerEnabled,
+} from "../features/activity/model/useActivityRecorder";
+import { loadTrackerEnabled } from "../features/activity/model/activity";
 import { useStartupProviderCheck } from "../features/providers/model/useStartupProviderCheck";
 import { OPEN_PROVIDER_SETTINGS_EVENT } from "../features/providers/ui/ProviderCheckIndicator";
 import { preloadNavigationWhenIdle } from "./model/preloadNavigation";
@@ -1136,6 +1141,13 @@ const NotesView = lazySurface(
   async () => {
     const module = await import("../features/notes/ui/NotesView");
     return { default: module.NotesView };
+  },
+  { suspense: false },
+);
+const ActivityView = lazySurface(
+  async () => {
+    const module = await import("../features/activity/ui/ActivityView");
+    return { default: module.ActivityView };
   },
   { suspense: false },
 );
@@ -1721,7 +1733,7 @@ function Workspace({
     useState<InboxSessionPortal | null>(null);
   const openingInboxSessions = useRef(new Map<string, Promise<string>>());
   const [recordsViewOpen, setRecordsViewOpen] = useState(false);
-  const [recordKind, setRecordKind] = useState<"notes" | "tasks" | "kanban">(
+  const [recordKind, setRecordKind] = useState<"notes" | "tasks" | "kanban" | "activity">(
     "notes",
   );
   /** The shared session composer in a modal: Session Manager drafts, or Task Manager "Work on…" (`task`). */
@@ -1734,6 +1746,7 @@ function Workspace({
   } | null>(null);
   const boardOpen = recordsViewOpen && recordKind === "kanban";
   const notesViewOpen = recordsViewOpen && recordKind === "notes";
+  const activityViewOpen = recordsViewOpen && recordKind === "activity";
   const [boardWorkspaceHost, setBoardWorkspaceHost] =
     useState<HTMLElement | null>(null);
   const [boardPaneVisible, setBoardPaneVisible] = useState(false);
@@ -1801,6 +1814,9 @@ function Workspace({
     loadNotesEnabled,
     () => true,
   );
+  const trackerEnabled = useTrackerEnabled();
+  // Logs each prompt and finished turn for Activity; a no-op while it is off.
+  useActivityRecorder(sessions);
   const liveAgentsEnabled = useSyncExternalStore(
     subscribeLiveAgentsEnabled,
     loadLiveAgentsEnabled,
@@ -1898,7 +1914,7 @@ function Workspace({
     search: false,
     inbox: false,
     notes: false,
-    recordKind: "notes" as "notes" | "tasks" | "kanban",
+    recordKind: "notes" as "notes" | "tasks" | "kanban" | "activity",
     automations: false,
     whiteboard: false,
     browser: false,
@@ -2239,6 +2255,10 @@ function Workspace({
   useEffect(() => {
     if (!notesEnabled && recordKind === "notes") setRecordsViewOpen(false);
   }, [notesEnabled, recordKind]);
+
+  useEffect(() => {
+    if (!trackerEnabled && recordKind === "activity") setRecordsViewOpen(false);
+  }, [trackerEnabled, recordKind]);
 
   useEffect(
     () =>
@@ -15038,7 +15058,11 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       ),
       ...(insetLayout
         ? openAppViews
-            .filter((view) => view !== "notes" || notesEnabled)
+            .filter(
+              (view) =>
+                (view !== "notes" || notesEnabled) &&
+                (view !== "activity" || trackerEnabled),
+            )
             .map((view): TitleTab => ({
               id: appViewTabId(view),
               appView: view,
@@ -15546,9 +15570,36 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     });
   }, []);
 
+  const onOpenActivity = useCallback(() => {
+    workspaceNavigation.cancel();
+    if (!loadTrackerEnabled()) return;
+    startTransition(() => {
+      closeMonoView();
+      rememberAppView("activity");
+      setFilePickerOpen(false);
+      setSettingsOpen(false);
+      setSearchViewOpen(false);
+      setInboxViewOpen(false);
+      setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
+      setRecordKind("activity");
+      setRecordsViewOpen(true);
+    });
+  }, []);
+
   const onLeaveNotes = useCallback(() => {
     setRecordsViewOpen(false);
   }, []);
+
+  /** Activity log row → its chat. Leaves Activity so the chat is in view. */
+  const onOpenActivitySession = useCallback(
+    (sessionId: string) => {
+      setRecordsViewOpen(false);
+      void onSelectHistorySession(sessionId);
+    },
+    [onSelectHistorySession],
+  );
 
   const onOpenAutomations = useCallback(() => {
     workspaceNavigation.cancel();
@@ -15741,6 +15792,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       notes: leavingFocus(onOpenNotes),
       tasks: leavingFocus(onOpenTasks),
       kanban: leavingFocus(onOpenKanban),
+      activity: leavingFocus(onOpenActivity),
       automations: leavingFocus(onOpenAutomations),
       whiteboard: leavingFocus(onOpenWhiteboard),
       browser: leavingFocus(() => onOpenBrowser()),
@@ -15754,6 +15806,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     onOpenNotes,
     onOpenTasks,
     onOpenKanban,
+    onOpenActivity,
     onOpenAutomations,
     onOpenWhiteboard,
     onOpenBrowser,
@@ -15774,7 +15827,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordKind(returnView.recordKind);
     setRecordsViewOpen(
       returnView.notes &&
-        (returnView.recordKind !== "notes" || loadNotesEnabled()),
+        (returnView.recordKind !== "notes" || loadNotesEnabled()) &&
+        (returnView.recordKind !== "activity" || loadTrackerEnabled()),
     );
     setAutomationsViewOpen(returnView.automations);
     setWhiteboardViewOpen(returnView.whiteboard);
@@ -15998,6 +16052,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
           notes: onOpenNotes,
           tasks: onOpenTasks,
           kanban: onOpenKanban,
+          activity: onOpenActivity,
           automations: onOpenAutomations,
           whiteboard: onOpenWhiteboard,
           browser: () => onOpenBrowser(),
@@ -16022,6 +16077,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onOpenNotes,
       onOpenTasks,
       onOpenKanban,
+      onOpenActivity,
       onOpenAutomations,
       onOpenWhiteboard,
       onOpenBrowser,
@@ -16056,7 +16112,12 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       );
       if (view === "search") setSearchViewOpen(false);
       if (view === "inbox") setInboxViewOpen(false);
-      if (view === "notes" || view === "tasks" || view === "kanban") {
+      if (
+        view === "notes" ||
+        view === "tasks" ||
+        view === "kanban" ||
+        view === "activity"
+      ) {
         setRecordsViewOpen((open) => recordKindRef.current === view ? false : open);
       }
       if (view === "automations") setAutomationsViewOpen(false);
@@ -17393,7 +17454,11 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     onNew();
   };
   // Fork (L-206): the arrow beside the tab strip's + opens these views.
-  const newTabViewList = newTabViews((view) => view !== "notes" || notesEnabled);
+  const newTabViewList = newTabViews(
+    (view) =>
+      (view !== "notes" || notesEnabled) &&
+      (view !== "activity" || trackerEnabled),
+  );
   const onOpenViewFromTitleBar = (view: AppView) => sidebarPages[view]();
   const workspaceTitleBar = (
     <TitleBar
@@ -17625,6 +17690,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       searchActive={searchViewOpen}
       inboxActive={inboxViewOpen}
       notesActive={recordsViewOpen && recordKind === "notes"}
+      onOpenActivity={trackerEnabled ? sidebarPages.activity : undefined}
+      activityActive={activityViewOpen}
       automationsActive={automationsViewOpen}
       whiteboardActive={whiteboardViewOpen}
       browserActive={browserViewOpen}
@@ -18433,6 +18500,24 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                         recents={recents}
                         onClose={onLeaveNotes}
                         onToggleSidebar={onToggleSidebar}
+                      />
+                    </AppViewSurface>
+                  ) : null}
+                  {activityViewOpen ||
+                  (insetLayout &&
+                    trackerEnabled &&
+                    openAppViews.includes("activity")) ? (
+                    <AppViewSurface active={activityViewOpen}>
+                      <ActivityView
+                        tabbed={insetLayout}
+                        active={activityViewOpen && !zenMode}
+                        besideRail={
+                          insetLayout || projectRailOpen || compactProjectRail
+                        }
+                        compactRail={!insetLayout && compactRailActive}
+                        onClose={onLeaveNotes}
+                        onToggleSidebar={onToggleSidebar}
+                        onOpenSession={onOpenActivitySession}
                       />
                     </AppViewSurface>
                   ) : null}

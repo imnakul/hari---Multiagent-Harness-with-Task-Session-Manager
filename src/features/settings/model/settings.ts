@@ -277,6 +277,18 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "notebook markdown rail scratchpad",
   },
   {
+    id: "activity-tracker",
+    section: "general",
+    label: "Activity tracker",
+    keywords: "time tracking log prompts meetings apps browser sites activitywatch productivity",
+  },
+  {
+    id: "activity-notes",
+    section: "general",
+    label: "Activity notes (Antigravity)",
+    keywords: "agy antigravity ai notes summary work log",
+  },
+  {
     id: "session-labels",
     section: "general",
     label: "Show label where available",

@@ -1,4 +1,5 @@
 import {
+  Activity,
   CheckCircle,
   MessageMultiple,
   BellOff,
@@ -139,9 +140,11 @@ type Props = {
   inboxActive?: boolean;
   notesEnabled?: boolean;
   onOpenNotes?: () => void;
+  onOpenActivity?: () => void;
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   notesActive?: boolean;
+  activityActive?: boolean;
   tasksActive?: boolean;
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
@@ -198,9 +201,11 @@ export function ProjectRail({
   inboxActive = false,
   notesEnabled = true,
   onOpenNotes,
+  onOpenActivity,
   onOpenTasks,
   onOpenKanban,
   notesActive = false,
+  activityActive = false,
   tasksActive = false,
   kanbanActive = false,
   onOpenAutomations,
@@ -409,7 +414,7 @@ export function ProjectRail({
   const otherViewActive =
     searchActive ||
     inboxActive ||
-    notesActive || tasksActive || kanbanActive || selectedProvider !== null ||
+    notesActive || activityActive || tasksActive || kanbanActive || selectedProvider !== null ||
     automationsActive ||
     whiteboardActive ||
     browserActive ||
@@ -493,6 +498,15 @@ export function ProjectRail({
                 onClick={onOpenNotes}
                 active={notesActive}
                 ariaLabel="Notes"
+              />
+            ) : null}
+            {onOpenActivity ? (
+              <RailAction
+                label="Activity"
+                icon={Activity}
+                onClick={onOpenActivity}
+                active={activityActive}
+                ariaLabel="Activity"
               />
             ) : null}
             {onOpenTasks ? <RailAction label="Task Manager" icon={CheckCircle} onClick={onOpenTasks} active={tasksActive} ariaLabel="Task Manager" /> : null}

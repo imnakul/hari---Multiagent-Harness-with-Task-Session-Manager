@@ -66,6 +66,14 @@ import { GradientBlurBackground } from "./GradientBlurBackground";
 import { McpSettings } from "./McpSettings";
 import { DebugInspector } from "../../debug-inspector/ui/DebugInspector";
 import { SettingsToggle as Toggle } from "./SettingsToggle";
+import {
+  useAiNotesEnabled,
+  useTrackerEnabled,
+} from "../../activity/model/useActivityRecorder";
+import {
+  saveAiNotesEnabled,
+  saveTrackerEnabled,
+} from "../../activity/model/activity";
 import { InboxProviderMark } from "../../inbox/ui/InboxProviderMark";
 import { RemoveProjectDialog } from "../../projects/ui/RemoveProjectDialog";
 import { WindowControls } from "../../../app/shell/WindowControls";
@@ -1224,6 +1232,8 @@ function GeneralPage({
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermission>(cachedNotificationPermission);
   const [notesEnabled, setNotesEnabled] = useState(loadNotesEnabled);
+  const trackerEnabled = useTrackerEnabled();
+  const aiNotesEnabled = useAiNotesEnabled();
   const [sessionLabels, setSessionLabels] = useState(loadSessionLabels);
   const sessionOverviewReturn = useSessionOverviewReturn();
   const [sessionMetadataHover, setSessionMetadataHover] = useState(
@@ -1446,6 +1456,29 @@ function GeneralPage({
           description="A global markdown notebook on the project rail. Save a finished turn from the transcript, then mention it later with @note or add it to chat."
         >
           <Toggle label="Notes" on={notesEnabled} onChange={onNotesEnabled} />
+        </Row>
+        <Row
+          id="activity-tracker"
+          label="Activity tracker"
+          description="Logs every prompt and finished agent turn on this machine and shows your day in Activity on the project rail: agent time per project, plus app, website, idle and meeting time when ActivityWatch is running. Turn this off to stop all tracking and hide Activity."
+        >
+          <Toggle
+            label="Activity tracker"
+            on={trackerEnabled}
+            onChange={saveTrackerEnabled}
+          />
+        </Row>
+        <Row
+          id="activity-notes"
+          label="Activity notes (Antigravity)"
+          description="With the tracker on, Google's Antigravity CLI (agy) writes a short note after each prompt or finished turn, using your own agy sign-in and quota. It sees prompt text, a short reply excerpt, repo, branch, app names, website domains and meeting times — never code, window or tab titles, or full URLs."
+        >
+          <Toggle
+            label="Activity notes"
+            on={trackerEnabled && aiNotesEnabled}
+            onChange={saveAiNotesEnabled}
+            disabled={!trackerEnabled}
+          />
         </Row>
         <Row
           id="session-labels"

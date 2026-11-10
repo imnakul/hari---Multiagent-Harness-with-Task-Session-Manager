@@ -27,6 +27,7 @@ import {
 } from "../../features/sessions/ui/useCompactModelLabels";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+  Activity,
   Archive,
   Chatting,
   Check,
@@ -441,6 +442,7 @@ type Props = {
   onOpenInbox?: () => void;
   onOpenInboxItem?: (item: LinkedWorkItem, sessionId: string) => void;
   onOpenNotes?: () => void;
+  onOpenActivity?: () => void;
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
@@ -450,6 +452,7 @@ type Props = {
   searchActive?: boolean;
   inboxActive?: boolean;
   notesActive?: boolean;
+  activityActive?: boolean;
   tasksActive?: boolean;
   kanbanActive?: boolean;
   automationsActive?: boolean;
@@ -580,6 +583,7 @@ function SidebarComponent({
   onOpenInbox,
   onOpenInboxItem,
   onOpenNotes,
+  onOpenActivity,
   onOpenTasks,
   onOpenKanban,
   onOpenAutomations,
@@ -589,6 +593,7 @@ function SidebarComponent({
   searchActive = false,
   inboxActive = false,
   notesActive = false,
+  activityActive = false,
   tasksActive = false,
   kanbanActive = false,
   automationsActive = false,
@@ -1158,6 +1163,7 @@ function SidebarComponent({
     searchActive ||
     inboxActive ||
     notesActive ||
+    activityActive ||
     tasksActive ||
     kanbanActive ||
     automationsActive ||
@@ -1184,6 +1190,7 @@ function SidebarComponent({
     !searchActive &&
     !inboxActive &&
     !notesActive &&
+    !activityActive &&
     !tasksActive &&
     !kanbanActive &&
     !monoViewActive &&
@@ -1200,6 +1207,7 @@ function SidebarComponent({
     !searchActive &&
     !inboxActive &&
     !notesActive &&
+    !activityActive &&
     !tasksActive &&
     !kanbanActive &&
     !automationsActive &&
@@ -2864,6 +2872,12 @@ function SidebarComponent({
             active: notesActive,
             onClick: onOpenNotes,
           },
+        onOpenActivity && {
+          label: "Activity",
+          icon: Activity,
+          active: activityActive,
+          onClick: onOpenActivity,
+        },
         onOpenTasks && {
           label: "Task Manager",
           icon: CheckCircle,
@@ -3084,6 +3098,8 @@ function SidebarComponent({
               searchActive={searchActive}
               inboxActive={inboxActive}
               notesActive={notesActive}
+              activityActive={activityActive}
+              onOpenActivity={onOpenActivity}
               automationsActive={automationsActive}
               whiteboardActive={whiteboardActive}
               browserActive={browserActive}
@@ -3701,6 +3717,8 @@ function SidebarComponent({
           onOpenTasks={onOpenTasks}
           onOpenKanban={onOpenKanban}
           notesActive={notesActive}
+          activityActive={activityActive}
+          onOpenActivity={onOpenActivity}
           tasksActive={tasksActive}
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
@@ -3744,6 +3762,8 @@ function SidebarComponent({
           onOpenTasks={onOpenTasks}
           onOpenKanban={onOpenKanban}
           notesActive={notesActive}
+          activityActive={activityActive}
+          onOpenActivity={onOpenActivity}
           tasksActive={tasksActive}
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
@@ -3899,6 +3919,7 @@ function SidebarProjectPicker({
   onOpenInbox,
   onOpenNotificationSettings,
   onOpenNotes,
+  onOpenActivity,
   onOpenTasks,
   onOpenKanban,
   onOpenAutomations,
@@ -3907,6 +3928,7 @@ function SidebarProjectPicker({
   searchActive = false,
   inboxActive = false,
   notesActive = false,
+  activityActive = false,
   tasksActive = false,
   kanbanActive = false,
   automationsActive = false,
@@ -3925,6 +3947,7 @@ function SidebarProjectPicker({
   onOpenInbox?: () => void;
   onOpenNotificationSettings?: (projectPath?: string) => void;
   onOpenNotes?: () => void;
+  onOpenActivity?: () => void;
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
@@ -3933,6 +3956,7 @@ function SidebarProjectPicker({
   searchActive?: boolean;
   inboxActive?: boolean;
   notesActive?: boolean;
+  activityActive?: boolean;
   tasksActive?: boolean;
   kanbanActive?: boolean;
   automationsActive?: boolean;
@@ -4001,6 +4025,11 @@ function SidebarProjectPicker({
         {onOpenNotes ? (
           <IconButton label="Notes" active={notesActive} onClick={onOpenNotes}>
             <StickyNote className="size-3.5" strokeWidth={1.75} />
+          </IconButton>
+        ) : null}
+        {onOpenActivity ? (
+          <IconButton label="Activity" active={activityActive} onClick={onOpenActivity}>
+            <Activity className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
         {onOpenTasks ? (
@@ -4087,9 +4116,11 @@ function CompactProjectRail({
   inboxActive,
   onOpenNotificationSettings,
   onOpenNotes,
+  onOpenActivity,
   onOpenTasks,
   onOpenKanban,
   notesActive,
+  activityActive = false,
   tasksActive = false,
   kanbanActive = false,
   onOpenAutomations,
@@ -4128,9 +4159,11 @@ function CompactProjectRail({
   inboxActive: boolean;
   onOpenNotificationSettings?: (projectPath?: string) => void;
   onOpenNotes?: () => void;
+  onOpenActivity?: () => void;
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   notesActive: boolean;
+  activityActive?: boolean;
   tasksActive?: boolean;
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
@@ -4183,6 +4216,7 @@ function CompactProjectRail({
     !searchActive &&
     !inboxActive &&
     !notesActive &&
+    !activityActive &&
     !tasksActive &&
     !kanbanActive &&
     !automationsActive &&
@@ -4333,6 +4367,14 @@ function CompactProjectRail({
             icon={StickyNote}
             active={notesActive}
             onClick={action(notesActive, onOpenNotes)}
+          />
+        ) : null}
+        {onOpenActivity ? (
+          <CompactRailAction
+            label="Activity"
+            icon={Activity}
+            active={activityActive}
+            onClick={action(activityActive, onOpenActivity)}
           />
         ) : null}
         {onOpenTasks ? (
