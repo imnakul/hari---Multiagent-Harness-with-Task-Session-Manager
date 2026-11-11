@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-11 18:31 IST — Hari: every running session on a project's screen (L-249)
+- Type: feature
+- What: With several sessions running, a project's screen showed only one at a time ("1 of 2") with a skip button. Now every running session shows: the first in the big pill and each other one in its own pill above it, each with open and stop.
+- Why: Request on local36 with a screenshot of the "1 of 2" pill.
+- Files: [LiveSessions.tsx (NowWorking)](mobile/src/features/sessions/LiveSessions.tsx:171), [LiveSessions.test.tsx](mobile/tests/LiveSessions.test.tsx)
+- Commit: uncommitted
+- Verified: tsc ✅ expo lint ✅ (0 errors; 2 old warnings) vitest ✅ 245/245 (`../tests/mobile/watchFrames.test.ts` fails to load, pre-existing) · the old skip/"2 of 2" test was rewritten for the new design · phone check manual
+
+## 2026-11-11 18:31 IST — Hari: reopened long chats no longer spin until you scroll (L-248)
+- Type: fix
+- What: Reopening a chat with long messages showed blank, then a spinner that kept going until you scrolled. The chat now goes straight to its newest messages.
+- Why: Report on local36 with a screenshot. Cause: the desktop sends the latest 30 turns, the list draws only its first 25 on opening, so the newest rows were never drawn and the chat waited for them forever. It now scrolls to the end once when that happens, which draws them.
+- Files: [Transcript.tsx (INITIAL_ROWS, update)](mobile/src/features/sessions/Transcript.tsx:263), [Transcript.test.tsx](mobile/tests/Transcript.test.tsx)
+- Commit: uncommitted
+- Verified: tsc ✅ expo lint ✅ (0 errors; 2 old warnings) vitest ✅ 245/245 (watchFrames load failure pre-existing) · new test fails without the fix · phone check manual
+
+## 2026-11-11 17:01 IST — Hari: Live Updates no longer close the app (L-247)
+- Type: fix
+- What: With Live Updates on and sessions running, Hari closed on every launch until the sessions ended. Now, if the running-session card can't be shown, Hari turns Live Updates off and the notice says Android's reason, instead of closing.
+- Why: Report on local36 with the Xiaomi crash report: `ForegroundServiceDidNotStartInTimeException` from `HariLive.start`. `startForegroundService` lets Android close the app if the service doesn't reach the foreground in time, past any try/catch. The service is now started plainly and goes to the foreground itself, or stops.
+- Files: [HariLive.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLive.kt), [HariLiveService.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLiveService.kt), [LiveUpdates.tsx](mobile/src/features/liveUpdates/LiveUpdates.tsx), [liveService.test.ts](mobile/tests/liveService.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ expo lint ✅ (0 errors; 2 old warnings) vitest ✅ 243/243 (`../tests/mobile/watchFrames.test.ts` fails to load, pre-existing) · new test fails on the old Kotlin · Kotlin compiles in CI only · phone check manual
+
 ## 2026-11-11 11:18 IST — Hari release 0.16.0-local36 (look fixes, no blank chat)
 - Type: chore
 - What: Published `hari-v0.16.0-local36` (run 42966015450) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160036), `latest.json`, `hari-android.json`.
