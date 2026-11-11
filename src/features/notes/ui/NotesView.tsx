@@ -193,10 +193,14 @@ export function NotesView({
     void refresh();
     window.addEventListener(NOTES_CHANGED_EVENT, refresh);
     // Fork (Hari, L-236): a note saved from the phone.
-    const fromPhone = listen(NOTES_CHANGED_TAURI_EVENT, () => void refresh());
+    // The catch is attached at once: a failed subscription (no Tauri bridge)
+    // only means phone saves need a manual refresh, never an unhandled rejection.
+    const fromPhone = listen(NOTES_CHANGED_TAURI_EVENT, () => void refresh()).catch(
+      () => null,
+    );
     return () => {
       window.removeEventListener(NOTES_CHANGED_EVENT, refresh);
-      void fromPhone.then((stop) => stop()).catch(() => {});
+      void fromPhone.then((stop) => stop?.());
     };
   }, [refresh]);
 

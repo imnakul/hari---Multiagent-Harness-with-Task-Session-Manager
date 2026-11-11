@@ -5,6 +5,7 @@ import { AppState } from "react-native";
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { makeCommandId } from "@/features/connection/nativeLink";
 import { useLivePreferences } from "@/features/settings/liveUpdates";
+import { useColors } from "@/ui/theme";
 import {
   isRunning,
   liveCards,
@@ -28,6 +29,8 @@ import {
 export function LiveUpdates() {
   const { connected, catalog, refresh, command } = useConnection();
   const [{ enabled, mode }, setPreferences] = useLivePreferences();
+  // Fork (L-245): the card takes the app's accent.
+  const accent = useColors().accent;
   // Moved on by each tick and button, to look at the sessions again.
   const [now, setNow] = useState(() => Date.now());
   const dismissed = useRef(new Set<string>());
@@ -88,8 +91,8 @@ export function LiveUpdates() {
       reconnecting: lostSince.current !== null,
     });
     showing.current = cards.length > 0;
-    showLiveCards(cards);
-  }, [enabled, mode, connected, catalog, now]);
+    showLiveCards(cards, accent);
+  }, [enabled, mode, connected, catalog, now, accent]);
 
   useEffect(() => {
     handle.current = (event) => {

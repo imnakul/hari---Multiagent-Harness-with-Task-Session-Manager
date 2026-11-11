@@ -41,9 +41,10 @@ export const livePromotable = native?.supported() ?? false;
 // Null until the first call, so a new run always tells Android once, even
 // "none": that clears cards an earlier, killed run left on screen.
 let last: string | null = null;
-/** Shows these cards in place of the last; none closes the Live Update. */
-export function showLiveCards(cards: LiveCard[]) {
-  const json = JSON.stringify(cards);
+/** Shows these cards in place of the last; none closes the Live Update.
+ *  `color` (`#rrggbb`, the app's accent; L-245) tints its icon and progress. */
+export function showLiveCards(cards: LiveCard[], color?: string) {
+  const json = JSON.stringify(color ? cards.map((card) => ({ ...card, color })) : cards);
   // The app re-renders often; Android only hears of a change.
   if (!native || json === last) return;
   last = json;

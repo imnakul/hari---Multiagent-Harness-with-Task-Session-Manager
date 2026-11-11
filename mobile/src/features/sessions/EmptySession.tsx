@@ -11,9 +11,10 @@ import { AsciiField } from "@/features/background/AsciiField";
 import { FadingBackground } from "@/features/background/FadingBackground";
 import type { EmptyBackground } from "@/features/background/useEmptyBackground";
 import { PixelMascot } from "@/features/mascots/PixelMascot";
+import { useWallpaper } from "@/features/wallpaper/wallpaper";
 import type { Project } from "@/features/workspace/types";
 import { HARI_LOGO } from "@/ui/brand";
-import { themedStyles } from "@/ui/theme";
+import { themedStyles, useColors } from "@/ui/theme";
 
 import { COMPOSER_FADE, useSessionLayout } from "./SessionScreen";
 import type { TranscriptAgent } from "./TranscriptTurn";
@@ -33,6 +34,8 @@ const BACKGROUND_ENTER = FadeIn.duration(520).easing(Easing.out(Easing.quad));
 // Empty conversation: a dimmed Monocode logo above the prompt, and the
 // project's name under it, over the background set for it on this phone, or
 // a still frame of the connect screen's ASCII field where no photo is set.
+// Fork (Hari, L-245): over the app's wallpaper, no ASCII field; a photo set
+// for the project covers the wallpaper, on the page's own colour.
 // A Mono's chat greets with its own mascot instead, on a plain background.
 export function EmptySession({
   project,
@@ -52,6 +55,8 @@ export function EmptySession({
   accessory?: ReactNode;
 }) {
   const styles = useStyles();
+  const colors = useColors();
+  const hasWallpaper = useWallpaper().source.kind !== "none";
   // Held hidden until the insets it centres between are final, so it doesn't
   // jump up as the composer is first measured.
   const { top, bottom, settled, extraContentPadding } = useSessionLayout();
@@ -73,9 +78,10 @@ export function EmptySession({
           style={StyleSheet.absoluteFill}
           entering={BACKGROUND_ENTER}
         >
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
           <FadingBackground {...background} />
         </Animated.View>
-      ) : hasPhoto || mono ? null : (
+      ) : hasPhoto || mono || hasWallpaper ? null : (
         <Animated.View
           pointerEvents="none"
           style={StyleSheet.absoluteFill}

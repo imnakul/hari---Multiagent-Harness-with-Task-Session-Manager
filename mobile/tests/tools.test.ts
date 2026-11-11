@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { parseMarkdown } from "@/features/sessions/markdownParser";
 import {
+  carryOverTasks,
   excerptOf,
   groupTasks,
   hostOf,
@@ -12,6 +13,7 @@ import {
   parseTags,
   projectLabel,
   titleFrom,
+  updateTask,
   webLinks,
   type Command,
   type TaskItem,
@@ -97,6 +99,38 @@ describe("inFocusOn", () => {
 
   it("reads the local day", () => {
     expect(localDay(new Date(2026, 0, 5, 23, 59))).toBe("2026-01-05");
+  });
+});
+
+describe("carryOverTasks", () => {
+  const day = "2026-11-11";
+
+  it("lists unfinished tasks pinned to an earlier day and not in today's Focus", () => {
+    const carried = carryOverTasks(
+      [
+        task("old", { focusDate: "2026-11-09" }),
+        task("done", { focusDate: "2026-11-09", status: "completed" }),
+        task("gone", { focusDate: "2026-11-09", archived: true }),
+        task("kept", { focusDate: "2026-11-09", focusDays: [day] }),
+        task("today", { focusDate: day }),
+        task("later", { focusDate: "2026-11-13" }),
+        task("loose"),
+      ],
+      day,
+    );
+    expect(carried.map((each) => each.id)).toEqual(["old"]);
+  });
+});
+
+describe("updateTask", () => {
+  it("sends a Focus change with the phone's day", async () => {
+    const command = vi.fn(async () => ({ task: task("t") }));
+    await updateTask(command as unknown as Command, "t", { focusDate: null, today: "2026-11-11" });
+    expect(command).toHaveBeenCalledWith("tasks.update", {
+      id: "t",
+      focusDate: null,
+      today: "2026-11-11",
+    });
   });
 });
 

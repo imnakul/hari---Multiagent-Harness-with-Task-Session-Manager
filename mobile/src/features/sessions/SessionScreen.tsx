@@ -969,7 +969,7 @@ function HeaderTrailing({ chrome }: { chrome: Chrome }) {
 const useStyles = themedStyles((colors) => ({
   scene: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.page,
   },
   below: {
     position: "absolute",

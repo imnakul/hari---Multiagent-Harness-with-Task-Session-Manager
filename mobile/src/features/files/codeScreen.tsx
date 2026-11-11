@@ -4,6 +4,7 @@ import { useHeaderHeight } from "expo-router/react-navigation";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Backdrop } from "@/features/wallpaper/Backdrop";
 import { GradualBlur } from "@/ui/GradualBlur";
 import { Icon, type IconName } from "@/ui/Icon";
 import { themedStyles, useColors, type Palette } from "@/ui/theme";
@@ -38,8 +39,9 @@ export function HeaderBlur({ color }: { color: string }) {
 }
 
 /**
- * Each screen of a modal's own stack: its content, then the header's blur
- * and, where iOS puts the header's search bar at the bottom, one under it.
+ * Each screen of a modal's own stack: the wallpaper, if one is set (L-245),
+ * its content, then the header's blur and, where iOS puts the header's
+ * search bar at the bottom, one under it.
  */
 export function sheetScreenLayout(color: string) {
   return function SheetScreenLayout({
@@ -68,6 +70,7 @@ function SheetScreen({
 }) {
   return (
     <>
+      <Backdrop />
       {children}
       <HeaderBlur color={color} />
       {SCROLL_EDGE_EFFECTS && searchBar ? <SearchBarBlur color={color} /> : null}
@@ -116,7 +119,7 @@ export const modalStackOptions = (colors: Palette): NativeStackNavigationOptions
   headerBackButtonDisplayMode: "minimal",
   headerTitleStyle: { fontWeight: "600" },
   ...HEADER_OWN_BLUR,
-  contentStyle: { backgroundColor: colors.sheet },
+  contentStyle: { backgroundColor: colors.sheetPage },
 });
 
 // Shared by the file and diff screens, and remembered between them for as

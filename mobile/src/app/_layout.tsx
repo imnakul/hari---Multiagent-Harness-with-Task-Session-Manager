@@ -33,16 +33,15 @@ import { applySavedAppearance } from "@/features/settings/appearance";
 import { modalSheetOptions } from "@/ui/ModalSheet";
 import { useLayoutChanging, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { DitherLoading } from "@/ui/DitherLoading";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { ScenePagerHost } from "@/ui/ScenePager";
+import { Backdrop } from "@/features/wallpaper/Backdrop";
 import {
   paletteFor,
-  useAccent,
+  useLook,
   useScheme,
-  useTheme,
   type Palette,
   type Scheme,
-  type ThemeName,
 } from "@/ui/theme";
 
 // Light or dark as set in settings, or as the phone is.
@@ -74,7 +73,7 @@ const nativeHeader = (colors: Palette): NativeStackNavigationOptions => ({
   headerTintColor: colors.content,
   headerBackButtonDisplayMode: "minimal",
   ...HEADER_OWN_BLUR,
-  contentStyle: { backgroundColor: colors.background },
+  contentStyle: { backgroundColor: colors.page },
 });
 
 /** Every screen's options, in each scheme's colours. */
@@ -100,7 +99,7 @@ const screenOptions = (colors: Palette) => ({
   modal: {
     presentation: "modal",
     animation: "default",
-    contentStyle: { backgroundColor: colors.sheet },
+    contentStyle: { backgroundColor: colors.sheetPage },
   } satisfies NativeStackNavigationOptions,
   // A modal of one screen, as a modal stack's are: a transparent native
   // header over the sheet's colour, with the screen's own gradual blur.
@@ -123,24 +122,21 @@ type NavigationLook = {
   screens: ReturnType<typeof screenOptions>;
 };
 
-// Built the first time a scheme, theme and accent are drawn, and kept, so the
-// navigators see the same objects until any changes.
-const looks = new Map<string, NavigationLook>();
+// Built the first time a scheme and look are drawn, and kept, so the
+// navigators see the same objects until either changes.
+const looks = new Map<Palette, NavigationLook>();
 
-/** The navigation theme and screen options of the scheme and theme in use. */
+/** The navigation theme and screen options of the scheme and look in use. */
 function useNavigationLook(): NavigationLook {
   const scheme = useScheme();
-  const theme: ThemeName = useTheme();
-  const accent = useAccent();
-  const key = `${theme}.${scheme}.${accent}`;
-  let look = looks.get(key);
+  const colors = paletteFor(scheme, useLook());
+  let look = looks.get(colors);
   if (!look) {
-    const colors = paletteFor(scheme, theme, accent);
     look = {
       navigation: navigationTheme(scheme, colors),
       screens: screenOptions(colors),
     };
-    looks.set(key, look);
+    looks.set(colors, look);
   }
   return look;
 }
@@ -190,7 +186,10 @@ function LinkedWorkspace() {
                   picker present
                   over the rest as native modals; everything else swaps in place,
                   as a plain slot did. */}
-              <Stack screenOptions={{ headerShown: false, animation: "none" }}>
+              <Stack
+                screenOptions={{ headerShown: false, animation: "none" }}
+                screenLayout={WallpaperLayout}
+              >
                 {/* Monos only: the list and each chat under native headers, a
                     chat pushing over the list as a session does over its
                     project, its buttons morphing as it goes. */}
@@ -232,5 +231,48 @@ function LinkedWorkspace() {
         <DitherLoading leaving={!changing} onGone={() => setCovered(false)} />
       ) : null}
     </WorkspaceProvider>
+  );
+}
+
+// Drawn on solid sheets: code and Changes. Modals with stacks of their own
+// draw it behind each of their screens instead (see sheetScreenLayout).
+const SOLID_ROUTES = new Set([
+  "file",
+  "document",
+  "diff",
+  "changes",
+  "settings",
+  "projects",
+  "models",
+  "tasks",
+  "notes",
+  "mono-profile/[monoId]",
+]);
+// A conversation's messages, over a stronger dim.
+const READING_ROUTES = new Set([
+  "project/[projectId]/session/[sessionId]",
+  "session",
+  "mono/[monoId]",
+]);
+
+/**
+ * Fork (Hari, L-245): each screen over its own copy of the wallpaper, so a
+ * screen pushed over another covers it as a solid page would. Screens are
+ * clear (`page` in ui/theme) only while a wallpaper is set; without one,
+ * Backdrop draws nothing.
+ */
+function WallpaperLayout({
+  route,
+  children,
+}: {
+  route: { name: string };
+  children: ReactElement;
+}) {
+  if (SOLID_ROUTES.has(route.name)) return children;
+  return (
+    <>
+      <Backdrop reading={READING_ROUTES.has(route.name)} />
+      {children}
+    </>
   );
 }

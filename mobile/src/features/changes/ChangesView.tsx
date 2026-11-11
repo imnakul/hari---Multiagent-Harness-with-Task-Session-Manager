@@ -367,7 +367,7 @@ function FileChange({
         style={[styles.check, staged && styles.checkOn, partly && styles.checkPartly]}
       >
         {staged ? (
-          <Icon name="check" size={13} color={colors.inverse} />
+          <Icon name="check" size={13} color={colors.onAccent} />
         ) : partly ? (
           <Icon name="minus" size={13} color={colors.content} />
         ) : null}
@@ -492,8 +492,8 @@ const useStyles = themedStyles((colors) => ({
     justifyContent: "center",
   },
   checkOn: {
-    borderColor: colors.inverseSurface,
-    backgroundColor: colors.inverseSurface,
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
   },
   checkPartly: {
     borderColor: colors.muted,

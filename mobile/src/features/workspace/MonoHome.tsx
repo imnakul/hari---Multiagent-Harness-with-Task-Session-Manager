@@ -490,7 +490,7 @@ function MonoPreview({ mono }: { mono: Mono }) {
 const useStyles = themedStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.page,
   },
   preview: {
     width: PREVIEW_WIDTH,

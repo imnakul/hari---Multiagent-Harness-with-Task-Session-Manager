@@ -33,7 +33,7 @@ import { updatesSupported } from "@/features/updates/useHariUpdate";
 import { projectForRoute } from "@/features/workspace/routing";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { Icon, type IconName } from "@/ui/Icon";
-import { radii, themedStyles, THEMES, useColors, useTheme } from "@/ui/theme";
+import { lookLabel, radii, themedStyles, useColors, useLook } from "@/ui/theme";
 
 const CATEGORY_ICONS: Record<NotificationCategory, IconName> = {
   agentInput: "lock",
@@ -48,7 +48,7 @@ export default function SettingsScreen() {
   const { projectId } = useLocalSearchParams<{ projectId?: string }>();
   const project = projectForRoute(useWorkspace().projects, projectId);
   const [appearance] = useAppearancePreference();
-  const theme = THEMES[useTheme()].label;
+  const theme = lookLabel(useLook());
   const defaultModel = useDefaultModel();
   const defaultAccess = useDefaultRuntimeMode();
   const notifications = useNotificationPreferences();

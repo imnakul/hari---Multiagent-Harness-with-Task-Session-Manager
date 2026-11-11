@@ -41,6 +41,7 @@ vi.mock("@/ui/theme", () => ({
   themedStyles: (factory: (colors: object) => object) => () => factory({}),
 }));
 vi.mock("@/ui/Icon", () => ({ Icon: () => null }));
+vi.mock("@/features/wallpaper/Backdrop", () => ({ Backdrop: () => null }));
 vi.mock("@/features/mascots/ProjectMascot", () => ({ ProjectMascot: () => null }));
 vi.mock("@/features/sessions/ProviderLogo", () => ({ ProviderLogo: () => null }));
 vi.mock("@/features/workspace/WorkspaceProvider", () => ({

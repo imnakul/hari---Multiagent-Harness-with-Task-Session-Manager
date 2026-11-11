@@ -12,11 +12,14 @@ export type BackgroundSettings = {
   image: string | null;
   /** 0.05–0.65, the desktop's range. */
   opacity: number;
+  /** Fork (Hari, L-245): drawn in the desktop's dither, faded out toward the
+   *  composer; off, the photo as it is, over the whole screen. */
+  dither: boolean;
 };
 
 export const OPACITY_RANGE = { min: 0.05, max: 0.65 } as const;
 
-const DEFAULTS: BackgroundSettings = { image: null, opacity: 0.45 };
+const DEFAULTS: BackgroundSettings = { image: null, opacity: 0.45, dither: false };
 
 /** How the empty session shows it. */
 export type EmptyBackground = {
@@ -36,8 +39,8 @@ function load(projectId: string): BackgroundSettings {
   try {
     const raw = Storage.getItemSync(storageKey(projectId));
     if (!raw) return DEFAULTS;
-    const { image, opacity } = { ...DEFAULTS, ...JSON.parse(raw) };
-    return { image, opacity };
+    const { image, opacity, dither } = { ...DEFAULTS, ...JSON.parse(raw) };
+    return { image, opacity, dither: dither === true };
   } catch {
     return DEFAULTS;
   }
@@ -50,7 +53,7 @@ function load(projectId: string): BackgroundSettings {
  */
 export function useEmptyBackground(projectId: string) {
   const [settings, setSettings] = useState(() => load(projectId));
-  // The last photo drawn; a new one replaces it once ready.
+  // The last photo dithered; a new one replaces it once ready.
   // Faded out to clear, so the one render suits every scheme and theme.
   const [drawn, setDrawn] = useState<{ image: string; uri: string | null } | null>(null);
   // Another project's screen, without remounting: its own settings.
@@ -87,9 +90,10 @@ export function useEmptyBackground(projectId: string) {
     [projectId],
   );
 
-  const { image, opacity } = settings;
+  const { image, opacity, dither } = settings;
   useEffect(() => {
-    if (!image) return;
+    // Without the dither, the prepared photo itself: nothing to draw.
+    if (!image || !dither) return;
     let cancelled = false;
     const source = new File(BACKGROUNDS, image).uri;
     const key = renderKey(projectId, image);
@@ -108,7 +112,7 @@ export function useEmptyBackground(projectId: string) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, image]);
+  }, [projectId, image, dither]);
 
   /** Lets the user pick a photo, then uses it. False if they cancelled. */
   const pickImage = useCallback(async () => {
@@ -133,8 +137,8 @@ export function useEmptyBackground(projectId: string) {
   }, [projectId, image, update]);
 
   // The last photo's render stays up until this one's is ready.
-  const shown = !!image && drawn?.image === image;
-  const uri = shown ? drawn.uri : null;
+  const shown = !!image && (!dither || drawn?.image === image);
+  const uri = !image ? null : !dither ? new File(BACKGROUNDS, image).uri : shown ? (drawn?.uri ?? null) : null;
   return {
     settings,
     background: uri ? { source: { uri }, opacity } : null,
@@ -143,6 +147,7 @@ export function useEmptyBackground(projectId: string) {
     pickImage,
     removeImage,
     setOpacity: (next: number) => update({ opacity: next }),
+    setDither: (next: boolean) => update({ dither: next }),
   };
 }
 

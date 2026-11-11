@@ -123,7 +123,7 @@ function MonoScreen({ monoOnly }: { monoOnly: boolean }) {
   // contrast on the pale background.
   const appAccent = useAccent();
   const ownAccent =
-    monoOnly && appAccent === "theme" && /^#[0-9a-f]{6}$/i.test(color)
+    monoOnly && appAccent === "default" && /^#[0-9a-f]{6}$/i.test(color)
       ? scheme === "light"
         ? mix(color, "#000000", 0.22)
         : color

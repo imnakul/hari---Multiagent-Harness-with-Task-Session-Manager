@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { memo, type RefObject } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
-import { useScheme, withAlpha } from "./theme";
+import { useLook, useScheme, withAlpha } from "./theme";
 
 /**
  * Blur that fades out away from a screen edge, so content scrolling under a
@@ -38,6 +38,8 @@ export const GradualBlur = memo(function GradualBlur({
   const fromTop = edge === "top";
   const tint = withAlpha(color, 0.5);
   const scheme = useScheme();
+  // Over a wallpaper (glass on), the band lets a little of it through.
+  const glassy = useLook().glass !== null;
 
   if (Platform.OS === "android") {
     // Fork (Hari, L-235): a solid band that fades out, not a blur. Android's
@@ -45,6 +47,7 @@ export const GradualBlur = memo(function GradualBlur({
     // dark grey bars; without a target it was see-through. Solid is reliable
     // and cheaper to draw while scrolling.
     const fade = Math.min(36, height / 2);
+    const band = glassy ? withAlpha(color, 0.85) : color;
     return (
       <View
         pointerEvents="none"
@@ -54,11 +57,11 @@ export const GradualBlur = memo(function GradualBlur({
           style={[
             styles.androidBand,
             fromTop ? { top: 0, bottom: fade } : { bottom: 0, top: fade },
-            { backgroundColor: color },
+            { backgroundColor: band },
           ]}
         />
         <LinearGradient
-          colors={fromTop ? [color, withAlpha(color, 0)] : [withAlpha(color, 0), color]}
+          colors={fromTop ? [band, withAlpha(color, 0)] : [withAlpha(color, 0), band]}
           style={[styles.androidBand, fromTop ? { bottom: 0, height: fade } : { top: 0, height: fade }]}
         />
       </View>

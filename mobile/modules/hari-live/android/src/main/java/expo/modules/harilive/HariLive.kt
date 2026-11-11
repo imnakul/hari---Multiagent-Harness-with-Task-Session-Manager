@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
@@ -41,6 +42,8 @@ internal data class LiveCard(
   val url: String,
   val sessionIds: List<String>,
   val actions: List<LiveAction>,
+  /** The app's accent, as an ARGB colour; null for the system's. */
+  val color: Int? = null,
 )
 
 internal object HariLive {
@@ -259,6 +262,7 @@ internal object HariLive {
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setCategory(Notification.CATEGORY_PROGRESS)
+    card.color?.let { builder.setColor(it) }
     if (Build.VERSION.SDK_INT >= 26) builder.setTimeoutAfter(CARD_TIMEOUT_MS)
     if (card.startedAt != null) {
       builder.setWhen(card.startedAt).setShowWhen(true).setUsesChronometer(true)
@@ -336,6 +340,7 @@ internal object HariLive {
             url = action.optStringOrNull("url"),
           )
         },
+        color = card.optStringOrNull("color")?.let { runCatching { Color.parseColor(it) }.getOrNull() },
       )
     }
   }

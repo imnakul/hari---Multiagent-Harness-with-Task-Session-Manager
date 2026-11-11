@@ -35,7 +35,7 @@ const HARNESS_NAMES: Record<Harness, string> = {
   omp: "OMP",
   fx: "FX",
   hermes: "Hermes",
-  antigravity: "Antigravity",
+  "antigravity-cli": "Antigravity CLI",
   devin: "Devin",
 };
 

@@ -236,12 +236,14 @@ export function DictationBar({ onClose }: { onClose: (words: string | null) => v
         onPress={() => void finish()}
         style={({ pressed }) => [
           styles.done,
+          // Fork (Hari, L-245): in the accent, a Mono chat's own included.
+          { backgroundColor: colors.accent },
           phase !== "recording" && styles.doneWaiting,
           pressed && styles.pressed,
         ]}
       >
         {phase === "recording" ? (
-          <Icon name="check" size={18} color={colors.inverse} />
+          <Icon name="check" size={18} color={colors.onAccent} />
         ) : (
           <ActivityIndicator size="small" color={colors.muted} />
         )}
@@ -335,7 +337,6 @@ const useStyles = themedStyles((colors) => ({
     borderRadius: BUTTON / 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.inverseSurface,
   },
   doneWaiting: {
     backgroundColor: colors.fill,

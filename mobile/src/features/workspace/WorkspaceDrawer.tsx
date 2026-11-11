@@ -643,7 +643,7 @@ const useStyles = themedStyles((colors) => ({
   },
   container: {
     flex: 1,
-    backgroundColor: colors.drawer,
+    backgroundColor: colors.page,
   },
   header: {
     position: "absolute",
@@ -753,8 +753,11 @@ const useStyles = themedStyles((colors) => ({
   rowNeedsYou: {
     color: colors.caution,
   },
+  // The 48dp count toggle sets this row's height, so it keeps only enough
+  // padding to match a plain project row (52dp) instead of growing to 64.
   projectRowRunning: {
     paddingRight: 0,
+    paddingVertical: 2,
   },
   // The running count and its chevron: a 48dp target at the row's end.
   runningToggle: {

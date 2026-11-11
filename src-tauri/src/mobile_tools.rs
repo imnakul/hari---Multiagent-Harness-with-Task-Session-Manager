@@ -98,6 +98,12 @@ fn run(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String> {
             if params.get("projectCwd").is_some() {
                 next.project_cwd = optional(params, "projectCwd");
             }
+            // Fork (L-243): the phone pins a task to a day, or unpins it, with
+            // its own local day so the desktop records Focus history.
+            if let Some(focus) = focus_change(params)? {
+                next.focus_date = focus;
+                next.today = optional(params, "today");
+            }
             let task = tasks_upsert_blocking(app.state(), next)?;
             Ok(json!({ "task": task_summary(&task) }))
         }
@@ -229,6 +235,20 @@ fn upsert_of(task: Task) -> TaskUpsert {
     }
 }
 
+/// A Focus change in `params`: `None` when `focusDate` is absent; otherwise the
+/// day to pin to (`null` unpins). Every change must carry the phone's `today`.
+fn focus_change(params: &Value) -> Result<Option<Option<String>>, String> {
+    match params.get("focusDate") {
+        None => Ok(None),
+        Some(_) if optional(params, "today").is_none() => {
+            Err("A Focus change needs the phone's day".into())
+        }
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(day)) if !day.trim().is_empty() => Ok(Some(Some(day.trim().to_owned()))),
+        Some(_) => Err("Invalid task focus date".into()),
+    }
+}
+
 fn text(params: &Value, key: &str) -> String {
     params[key].as_str().unwrap_or_default().to_owned()
 }
@@ -316,6 +336,21 @@ mod tests {
             Some(vec!["bug-fix".to_string(), "ui".to_string()])
         );
         assert_eq!(tags(&json!({})), None);
+    }
+
+    #[test]
+    fn focus_changes_need_the_phones_day() {
+        assert_eq!(focus_change(&json!({})).unwrap(), None);
+        assert_eq!(
+            focus_change(&json!({ "focusDate": "2026-11-11", "today": "2026-11-11" })).unwrap(),
+            Some(Some("2026-11-11".to_string()))
+        );
+        assert_eq!(
+            focus_change(&json!({ "focusDate": null, "today": "2026-11-11" })).unwrap(),
+            Some(None)
+        );
+        assert!(focus_change(&json!({ "focusDate": "2026-11-11" })).is_err());
+        assert!(focus_change(&json!({ "focusDate": 5, "today": "2026-11-11" })).is_err());
     }
 
     #[test]

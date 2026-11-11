@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ProjectMascot } from "@/features/mascots/ProjectMascot";
+import { Backdrop } from "@/features/wallpaper/Backdrop";
 import { ProviderLogo } from "@/features/sessions/ProviderLogo";
 import { Icon } from "@/ui/Icon";
 import { themedStyles, useColors } from "@/ui/theme";
@@ -31,6 +32,7 @@ export function WorkspaceSidebar() {
       testID="workspace-sidebar"
       style={[styles.sidebar, { paddingTop: insets.top, paddingLeft: insets.left }]}
     >
+      <Backdrop />
       <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.heading}>Projects</Text>
         <Pressable
@@ -117,7 +119,7 @@ export function WorkspaceSidebar() {
 }
 
 const useStyles = themedStyles((colors) => ({
-  sidebar: { flex: 1, backgroundColor: colors.drawer, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.stroke },
+  sidebar: { flex: 1, backgroundColor: colors.page, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.stroke },
   header: { flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 8, paddingTop: 20, minHeight: 64 },
   heading: { flex: 1, color: colors.muted, fontSize: 12, fontWeight: "600" },
   button: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },

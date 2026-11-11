@@ -331,9 +331,9 @@ export function CommitSheet({
                     ]}
                   >
                     {busy === "commit" ? (
-                      <ActivityIndicator size="small" color={colors.inverse} />
+                      <ActivityIndicator size="small" color={colors.onAccent} />
                     ) : (
-                      <Icon name="check" size={18} color={colors.inverse} />
+                      <Icon name="check" size={18} color={colors.onAccent} />
                     )}
                     <Text style={[styles.label, styles.primaryLabel]}>Commit</Text>
                   </Pressable>
@@ -504,7 +504,7 @@ const useStyles = themedStyles((colors) => ({
     borderRadius: BUTTON / 2,
   },
   primary: {
-    backgroundColor: colors.inverseSurface,
+    backgroundColor: colors.accent,
   },
   secondary: {
     backgroundColor: withAlpha(colors.content, 0.07),
@@ -516,7 +516,7 @@ const useStyles = themedStyles((colors) => ({
     fontWeight: "600",
   },
   primaryLabel: {
-    color: colors.inverse,
+    color: colors.onAccent,
   },
   dimmed: {
     opacity: 0.4,

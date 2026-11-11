@@ -7,13 +7,16 @@ import {
   tint,
 } from "@expo/ui/swift-ui/modifiers";
 import * as Haptics from "expo-haptics";
+import { Image as ExpoImage } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { Fragment, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -30,29 +33,45 @@ import {
 } from "@/features/settings/appearance";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
 import { useCollapsedToolCalls } from "@/features/settings/toolCalls";
+import { useWallpaperUri } from "@/features/wallpaper/Backdrop";
+import {
+  PRESET_IDS,
+  presetHue,
+  presetLabel,
+  type PresetId,
+} from "@/features/wallpaper/presets";
+import {
+  BLUR_RANGE,
+  DIM_RANGE,
+  pickWallpaperPhoto,
+  setWallpaper,
+  useWallpaper,
+  type WallpaperSource,
+} from "@/features/wallpaper/wallpaper";
 import { projectForRoute } from "@/features/workspace/routing";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { Icon } from "@/ui/Icon";
 import {
   ACCENTS,
-  paletteFor,
+  accentColor,
+  accentLabel,
+  GLASS_RANGE,
+  hueOf,
   radii,
-  setAccent,
-  setTheme,
+  setLook,
   themedStyles,
-  THEMES,
-  useAccent,
+  TINT_STRENGTH,
   useColors,
+  useLook,
   useScheme,
-  useTheme,
-  type AccentName,
-  type ThemeName,
+  type AccentChoice,
+  type AccentPreset,
 } from "@/ui/theme";
 
-// Appearance: the open project's empty-session background first, shown as it
-// will look, then light, dark or the phone's own as a native segmented
-// control, the theme both are drawn in as a list, and how the transcript
-// shows tool calls. An accent can be picked over any theme's own.
+// Appearance: the open project's empty-chat photo first, shown as it will
+// look, then light, dark or the phone's own as a native segmented control,
+// and the app's look (L-245): its accent, a tint of it over the backgrounds,
+// and a wallpaper behind every screen. Last, how the transcript shows tool calls.
 export default function AppearanceScreen() {
   const styles = useStyles();
   const { projectId } = useLocalSearchParams<{ projectId?: string }>();
@@ -62,7 +81,7 @@ export default function AppearanceScreen() {
       {project ? (
         <>
           <Text style={[styles.heading, styles.firstHeading]}>
-            Background image
+            Empty chat photo
           </Text>
           <BackgroundSection projectId={project.id} />
         </>
@@ -71,8 +90,9 @@ export default function AppearanceScreen() {
         Color scheme
       </Text>
       <SchemeControl />
-      <ThemeList />
-      <AccentPicker />
+      <AccentSection />
+      <TintSection />
+      <WallpaperSection />
       <TranscriptSection />
     </SettingsPage>
   );
@@ -133,114 +153,426 @@ function SchemeControl() {
   );
 }
 
-const THEME_NAMES = Object.keys(THEMES) as ThemeName[];
+/** How long a slider rests before the app redraws in its value. */
+const COMMIT_DELAY = 120;
 
-function ThemeList() {
-  const colors = useColors();
+/**
+ * A labelled slider whose thumb follows the finger at once, while the app
+ * redraws in its value only once it rests a moment: each look change redraws
+ * every screen, too much for every frame of a drag.
+ */
+function LookSlider({
+  label,
+  value,
+  min,
+  max,
+  format,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  format: (value: number) => string;
+  onCommit: (value: number) => void;
+}) {
   const styles = useStyles();
-  const theme = useTheme();
-  // The tapped row checks at once; the app redraws in its theme a frame
-  // later, so the tap answers before that work starts.
-  const [tapped, setTapped] = useState<ThemeName | null>(null);
-  const shown = tapped ?? theme;
-  const pick = (name: ThemeName) => {
-    if (name === shown) return;
-    void Haptics.selectionAsync();
-    setTapped(name);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        setTheme(name);
-        setTapped(null);
-      }),
-    );
+  const [draft, setDraft] = useState<number | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const shown = draft ?? value;
+  const change = (next: number) => {
+    setDraft(next);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      onCommit(next);
+      setDraft(null);
+    }, COMMIT_DELAY);
   };
   return (
-    <>
-      <Text style={styles.heading}>Theme</Text>
-      <View style={styles.card}>
-        {THEME_NAMES.map((name, index) => (
-          <Fragment key={name}>
-            {index > 0 ? <View style={styles.divider} /> : null}
-            <SettingsRow
-              icon={<Swatch name={name} />}
-              label={THEMES[name].label}
-              showChevron={false}
-              accessory={
-                name === shown ? (
-                  <Icon name="check" size={18} color={colors.accent} />
-                ) : null
-              }
-              onPress={() => pick(name)}
-            />
-          </Fragment>
-        ))}
+    <View style={styles.sliderRow}>
+      <View style={styles.sliderLabels}>
+        <Text style={styles.sliderLabel}>{label}</Text>
+        <Text style={styles.sliderValue}>{format(shown)}</Text>
       </View>
+      <View accessible accessibilityLabel={label} accessibilityValue={{ text: format(shown) }}>
+        <UniversalHost style={styles.slider}>
+          <UniversalSlider value={shown} min={min} max={max} onValueChange={change} />
+        </UniversalHost>
+      </View>
+    </View>
+  );
+}
+
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+
+/** Plays the tap's haptic, then changes the look two frames later, so the
+ *  tap answers before every screen redraws. */
+function changeLook(change: () => void) {
+  void Haptics.selectionAsync();
+  requestAnimationFrame(() => requestAnimationFrame(change));
+}
+
+// Blue is the app's own, so it stands for "default" rather than appearing twice.
+const PRESETS = (Object.keys(ACCENTS) as AccentPreset[]).filter((name) => name !== "blue");
+const ACCENT_CHOICES: AccentChoice[] = ["default", ...PRESETS];
+
+/** The accent: the app's blue, a preset, any hue, or the wallpaper's own. */
+function AccentSection() {
+  const styles = useStyles();
+  const colors = useColors();
+  const scheme = useScheme();
+  const look = useLook();
+  const wallpaperHue = useWallpaperHue();
+  // The tapped dot checks at once; the app redraws a moment later.
+  const [tapped, setTapped] = useState<AccentChoice | null>(null);
+  const shown = tapped ?? look.accent;
+  const custom = shown.startsWith("hue:");
+  const pick = (choice: AccentChoice) => {
+    if (choice === shown) return;
+    setTapped(choice);
+    changeLook(() => {
+      setLook({ accent: choice });
+      setTapped(null);
+    });
+  };
+  const matched = wallpaperHue !== null && shown === `hue:${wallpaperHue}`;
+  // A custom hue starts from the accent in use.
+  const customHue = custom ? Number(shown.slice(4)) : hueOf(accentColor(shown, "dark"));
+  return (
+    <>
+      <Text style={styles.heading}>Accent</Text>
+      <View style={[styles.card, styles.accents]}>
+        {ACCENT_CHOICES.map((choice) => (
+          <AccentDot
+            key={choice}
+            fill={accentColor(choice, scheme)}
+            label={choice === "default" ? "Blue (default)" : accentLabel(choice)}
+            selected={choice === shown}
+            onPress={() => pick(choice)}
+          />
+        ))}
+        <AccentDot
+          fill={accentColor(`hue:${customHue}`, scheme)}
+          label="Custom colour"
+          selected={custom && !matched}
+          custom
+          onPress={() => pick(`hue:${customHue}`)}
+        />
+      </View>
+      {custom && !matched ? (
+        <View style={[styles.card, styles.sliderCard]}>
+          <LookSlider
+            label="Hue"
+            value={customHue}
+            min={0}
+            max={359}
+            format={(hue) => `${Math.round(hue)}°`}
+            onCommit={(hue) => setLook({ accent: `hue:${Math.round(hue) % 360}` })}
+          />
+        </View>
+      ) : null}
+      {wallpaperHue !== null ? (
+        <View style={[styles.card, styles.followingCard]}>
+          <SettingsRow
+            icon="image"
+            label="Match wallpaper"
+            showChevron={false}
+            onPress={() => pick(`hue:${wallpaperHue}`)}
+            accessory={matched ? <Icon name="check" size={18} color={colors.accent} /> : null}
+          />
+        </View>
+      ) : null}
+      <Text style={styles.note}>
+        {matched ? "Matched to your wallpaper." : `${accentLabel(shown)}.`} Send and stop,
+        switches, links and selections take it, and so does the Live Update.
+      </Text>
     </>
   );
 }
 
-const ACCENT_NAMES: AccentName[] = ["theme", ...(Object.keys(ACCENTS) as AccentName[])];
-
-/** The accent over whatever theme is picked: the theme's own first, then a
- *  row of colours, each in the scheme in use. */
-function AccentPicker() {
+function AccentDot({
+  fill,
+  label,
+  selected,
+  custom = false,
+  onPress,
+}: {
+  fill: string;
+  label: string;
+  selected: boolean;
+  custom?: boolean;
+  onPress: () => void;
+}) {
   const styles = useStyles();
-  const scheme = useScheme();
-  const theme = useTheme();
-  const accent = useAccent();
-  // As the theme list: the tap answers before the app redraws.
-  const [tapped, setTapped] = useState<AccentName | null>(null);
-  const shown = tapped ?? accent;
-  const pick = (name: AccentName) => {
-    if (name === shown) return;
-    void Haptics.selectionAsync();
-    setTapped(name);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        setAccent(name);
-        setTapped(null);
-      }),
-    );
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: selected }}
+      hitSlop={4}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.accentRing,
+        selected && { borderColor: fill },
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={[styles.accentDot, { backgroundColor: fill }]}>
+        {selected ? (
+          <Icon name="check" size={14} color={colors.onAccent === "#ffffff" ? "#ffffff" : "#0c0c0c"} />
+        ) : custom ? (
+          <Icon name="add" size={14} color="#ffffff" />
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+/** The accent washed over backgrounds, cards and sheets, and how strongly. */
+function TintSection() {
+  const styles = useStyles();
+  const colors = useColors();
+  const look = useLook();
+  const [tapped, setTapped] = useState<boolean | null>(null);
+  const on = tapped ?? look.tint;
+  const turn = (next: boolean) => {
+    setTapped(next);
+    changeLook(() => {
+      setLook({ tint: next });
+      setTapped(null);
+    });
   };
   return (
     <>
-      <Text style={styles.heading}>Accent color</Text>
-      <View style={[styles.card, styles.accents]}>
-        {ACCENT_NAMES.map((name) => {
-          const fill =
-            name === "theme"
-              ? paletteFor(scheme, theme, "theme").accent
-              : ACCENTS[name][scheme];
-          const label = name === "theme" ? `${THEMES[theme].label} (theme)` : ACCENTS[name].label;
-          const selected = name === shown;
-          return (
-            <Pressable
-              key={name}
-              accessibilityRole="radio"
-              accessibilityLabel={label}
-              accessibilityState={{ checked: selected }}
-              hitSlop={4}
-              onPress={() => pick(name)}
-              style={[styles.accentRing, selected && { borderColor: fill }]}
-            >
-              <View style={[styles.accentDot, { backgroundColor: fill }]}>
-                {name === "theme" ? (
-                  <View style={styles.accentThemeMark} />
-                ) : selected ? (
-                  <Icon name="check" size={14} color="#ffffff" />
-                ) : null}
-              </View>
-            </Pressable>
-          );
-        })}
+      <Text style={styles.heading}>Backgrounds</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon="layers"
+          label="Tint with the accent"
+          showChevron={false}
+          onPress={() => turn(!on)}
+          accessory={
+            <Switch
+              accessibilityLabel="Tint with the accent"
+              value={on}
+              onValueChange={turn}
+              trackColor={{ true: colors.accent }}
+            />
+          }
+        />
+        {on ? (
+          <>
+            <View style={styles.divider} />
+            <LookSlider
+              label="Tint strength"
+              value={look.strength}
+              min={TINT_STRENGTH.min}
+              max={TINT_STRENGTH.max}
+              format={percent}
+              onCommit={(strength) => setLook({ strength })}
+            />
+          </>
+        ) : null}
       </View>
       <Text style={styles.note}>
-        {shown === "theme"
-          ? `Using ${THEMES[theme].label}'s own accent.`
-          : `${ACCENTS[shown].label} over every theme.`}{" "}
-        Buttons, links and your messages in a Mono chat take it.
+        {on
+          ? "Backgrounds, cards and sheets take a little of the accent's colour."
+          : "Backgrounds stay neutral grey; only buttons and highlights take the accent."}
       </Text>
     </>
+  );
+}
+
+/** The wallpaper's main hue, for an accent to match; null without one. */
+function useWallpaperHue(): number | null {
+  const { source } = useWallpaper();
+  const look = useLook();
+  if (source.kind === "preset") return presetHue(source.id, hueOf(accentColor(look.accent, "dark")));
+  if (source.kind === "photo") return source.hue;
+  return null;
+}
+
+const NONE: WallpaperSource = { kind: "none" };
+
+/** The picture behind every screen: none, one of the app's, or a photo. */
+function WallpaperSection() {
+  const styles = useStyles();
+  const scheme = useScheme();
+  const wallpaper = useWallpaper();
+  const { source } = wallpaper;
+  const [busy, setBusy] = useState(false);
+  const choose = (next: WallpaperSource) => {
+    void Haptics.selectionAsync();
+    setWallpaper({ source: next });
+  };
+  const pickPhoto = () => {
+    setBusy(true);
+    pickWallpaperPhoto()
+      .catch(() => {
+        Alert.alert("Couldn't use that photo", "Try another one.");
+        return false;
+      })
+      .finally(() => setBusy(false));
+  };
+  const dimKey = scheme === "dark" ? "dimDark" : "dimLight";
+  return (
+    <>
+      <Text style={styles.heading}>Wallpaper</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tiles}
+        style={styles.tileStrip}
+      >
+        <WallpaperTile label="None" selected={source.kind === "none"} onPress={() => choose(NONE)} />
+        {PRESET_IDS.map((id) => (
+          <PresetTile
+            key={id}
+            id={id}
+            selected={source.kind === "preset" && source.id === id}
+            onPress={() => choose({ kind: "preset", id })}
+          />
+        ))}
+        <PhotoTile
+          source={source.kind === "photo" ? source : null}
+          busy={busy}
+          onPress={pickPhoto}
+        />
+      </ScrollView>
+      {source.kind !== "none" ? (
+        <View style={[styles.card, styles.sliderCard]}>
+          <LookSlider
+            label={scheme === "dark" ? "Dim (dark)" : "Dim (light)"}
+            value={wallpaper[dimKey]}
+            min={DIM_RANGE.min}
+            max={DIM_RANGE.max}
+            format={percent}
+            onCommit={(dim) => setWallpaper({ [dimKey]: dim })}
+          />
+          <View style={styles.sliderDivider} />
+          <LookSlider
+            label="Card opacity"
+            value={wallpaper.glass}
+            min={GLASS_RANGE.min}
+            max={GLASS_RANGE.max}
+            format={percent}
+            onCommit={(glass) => setWallpaper({ glass })}
+          />
+          <View style={styles.sliderDivider} />
+          <LookSlider
+            label="Softness"
+            value={wallpaper.blur}
+            min={BLUR_RANGE.min}
+            max={BLUR_RANGE.max}
+            format={(blur) => `${Math.round(blur)}`}
+            onCommit={(blur) => setWallpaper({ blur: Math.round(blur) })}
+          />
+        </View>
+      ) : null}
+      <Text style={styles.note}>
+        {source.kind === "none"
+          ? "A picture behind the side menu, lists, Tasks, Activity and chats."
+          : "Dim is set for light and dark apart, and is a little stronger behind messages. Code and Changes keep a plain background."}
+      </Text>
+    </>
+  );
+}
+
+function WallpaperTile({
+  label,
+  selected,
+  uri,
+  icon,
+  busy = false,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  uri?: string | null;
+  icon?: "add" | "image";
+  busy?: boolean;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: selected, busy }}
+      onPress={onPress}
+      disabled={busy}
+      style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+    >
+      <View style={[styles.tileFrame, selected && { borderColor: colors.accent }]}>
+        <View style={styles.tileImage}>
+          {uri ? (
+            <ExpoImage
+              source={{ uri }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              style={StyleSheet.absoluteFill}
+              accessible={false}
+            />
+          ) : null}
+          {busy ? (
+            <ActivityIndicator color={colors.muted} />
+          ) : icon && !uri ? (
+            <Icon name={icon} size={20} color={colors.muted} />
+          ) : null}
+          {selected ? (
+            <View style={[styles.tileCheck, { backgroundColor: colors.accent }]}>
+              <Icon name="check" size={12} color={colors.onAccent} />
+            </View>
+          ) : null}
+        </View>
+      </View>
+      <Text style={[styles.tileLabel, selected && { color: colors.content }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function PresetTile({
+  id,
+  selected,
+  onPress,
+}: {
+  id: PresetId;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const uri = useWallpaperUri({ kind: "preset", id });
+  return <WallpaperTile label={presetLabel(id)} uri={uri} selected={selected} onPress={onPress} />;
+}
+
+function PhotoTile({
+  source,
+  busy,
+  onPress,
+}: {
+  source: Extract<WallpaperSource, { kind: "photo" }> | null;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  const uri = useWallpaperUri(source ?? NONE);
+  return (
+    <WallpaperTile
+      label={source ? "Change photo" : "Photo"}
+      uri={uri}
+      icon={source ? "image" : "add"}
+      selected={!!source}
+      busy={busy}
+      onPress={onPress}
+    />
   );
 }
 
@@ -274,105 +606,113 @@ function TranscriptSection() {
   );
 }
 
-/** A theme in both schemes at once: its light and dark backgrounds split
- *  across a circle, its accent at the centre. */
-function Swatch({ name }: { name: ThemeName }) {
-  const styles = useStyles();
-  // The theme as it comes, before any accent picked over it.
-  const light = paletteFor("light", name, "theme");
-  const dark = paletteFor("dark", name, "theme");
-  return (
-    <View style={styles.swatch}>
-      <View style={[styles.swatchHalf, { backgroundColor: light.surface }]} />
-      <View style={[styles.swatchHalf, { backgroundColor: dark.surface }]} />
-      <View style={[styles.swatchAccent, { backgroundColor: dark.accent }]} />
-    </View>
-  );
-}
-
-/** The project's empty-session background: the photo as the session shows
- *  it, picked, changed or removed here, and how strongly it shows. */
+/** The project's empty-chat photo: shown as the chat shows it, picked,
+ *  changed or removed here, how strongly it shows, and whether it is dithered. */
 function BackgroundSection({ projectId }: { projectId: string }) {
   const colors = useColors();
   const styles = useStyles();
   const controls = useEmptyBackground(projectId);
   const { settings, background, busy } = controls;
   return (
-    <View style={[styles.card, styles.backgroundCard]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={settings.image ? "Change photo" : "Choose photo"}
-        onPress={() => void controls.pickImage()}
-        style={[styles.preview, { backgroundColor: colors.background }]}
-      >
-        {background ? (
-          <Image
-            source={background.source}
-            resizeMode="cover"
-            style={[StyleSheet.absoluteFill, { opacity: background.opacity }]}
-          />
-        ) : null}
-        {busy ? (
-          <ActivityIndicator color={colors.muted} />
-        ) : settings.image ? null : (
-          <View style={styles.previewEmpty}>
-            <Icon name="image" size={26} color={colors.muted} />
-            <Text style={styles.previewHint}>Choose a photo</Text>
-          </View>
-        )}
-      </Pressable>
+    <>
+      <View style={[styles.card, styles.backgroundCard]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={settings.image ? "Change photo" : "Choose photo"}
+          onPress={() => void controls.pickImage()}
+          style={[styles.preview, { backgroundColor: colors.background }]}
+        >
+          {background ? (
+            <Image
+              source={background.source}
+              resizeMode="cover"
+              style={[StyleSheet.absoluteFill, { opacity: background.opacity }]}
+            />
+          ) : null}
+          {busy ? (
+            <ActivityIndicator color={colors.muted} />
+          ) : settings.image ? null : (
+            <View style={styles.previewEmpty}>
+              <Icon name="image" size={26} color={colors.muted} />
+              <Text style={styles.previewHint}>Choose a photo</Text>
+            </View>
+          )}
+        </Pressable>
 
-      <View style={styles.backgroundRows}>
-        {settings.image ? (
-          <>
-            <View style={styles.visibility}>
-              {Platform.OS === "android" ? (
-                <UniversalHost style={styles.slider}>
-                  <UniversalSlider
+        <View style={styles.backgroundRows}>
+          {settings.image ? (
+            <>
+              <View style={styles.visibility}>
+                {Platform.OS === "android" ? (
+                  <UniversalHost style={styles.slider}>
+                    <UniversalSlider
+                      value={settings.opacity}
+                      min={OPACITY_RANGE.min}
+                      max={OPACITY_RANGE.max}
+                      onValueChange={controls.setOpacity}
+                    />
+                  </UniversalHost>
+                ) : <Host style={styles.slider}>
+                  <Slider
                     value={settings.opacity}
                     min={OPACITY_RANGE.min}
                     max={OPACITY_RANGE.max}
+                    step={0.01}
                     onValueChange={controls.setOpacity}
+                    modifiers={[
+                      tint(colors.accent),
+                      accessibilityLabel("Background visibility"),
+                    ]}
                   />
-                </UniversalHost>
-              ) : <Host style={styles.slider}>
-                <Slider
-                  value={settings.opacity}
-                  min={OPACITY_RANGE.min}
-                  max={OPACITY_RANGE.max}
-                  step={0.01}
-                  onValueChange={controls.setOpacity}
-                  modifiers={[
-                    tint(colors.accent),
-                    accessibilityLabel("Background visibility"),
-                  ]}
-                />
-              </Host>}
-            </View>
-            <View style={styles.divider} />
-          </>
-        ) : null}
-        <SettingsRow
-          icon="image"
-          label={settings.image ? "Change photo" : "Choose photo"}
-          onPress={() => void controls.pickImage()}
-        />
-        {settings.image ? (
-          <>
-            <View style={styles.divider} />
-            <SettingsRow
-              icon="trash"
-              label="Remove photo"
-              showChevron={false}
-              destructive
-              onPress={controls.removeImage}
-            />
-          </>
-        ) : null}
+                </Host>}
+              </View>
+              <View style={styles.divider} />
+              <SettingsRow
+                icon="sparkle"
+                label="Dither effect"
+                showChevron={false}
+                onPress={() => controls.setDither(!settings.dither)}
+                accessory={
+                  <Switch
+                    accessibilityLabel="Dither effect"
+                    value={settings.dither}
+                    onValueChange={controls.setDither}
+                    trackColor={{ true: colors.accent }}
+                  />
+                }
+              />
+              <View style={styles.divider} />
+            </>
+          ) : null}
+          <SettingsRow
+            icon="image"
+            label={settings.image ? "Change photo" : "Choose photo"}
+            onPress={() => void controls.pickImage()}
+          />
+          {settings.image ? (
+            <>
+              <View style={styles.divider} />
+              <SettingsRow
+                icon="trash"
+                label="Remove photo"
+                showChevron={false}
+                destructive
+                onPress={controls.removeImage}
+              />
+            </>
+          ) : null}
+        </View>
       </View>
-    </View>
+      <Text style={styles.note}>
+        Covers the wallpaper in this project&apos;s new chats. The dither effect draws it
+        in dots, faded out toward the composer, as the desktop does.
+      </Text>
+    </>
   );
 }
+
+const TILE_WIDTH = 68;
+const TILE_HEIGHT = 120;
 
 const useStyles = themedStyles((colors) => ({
   heading: {
@@ -393,6 +733,11 @@ const useStyles = themedStyles((colors) => ({
   divider: {
     height: StyleSheet.hairlineWidth,
     marginLeft: 40,
+    backgroundColor: colors.stroke,
+  },
+  sliderDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 6,
     backgroundColor: colors.stroke,
   },
   note: {
@@ -435,27 +780,6 @@ const useStyles = themedStyles((colors) => ({
     marginTop: 6,
     marginHorizontal: -2,
   },
-  swatch: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.stroke,
-  },
-  swatchHalf: {
-    flex: 1,
-    alignSelf: "stretch",
-  },
-  swatchAccent: {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
   accents: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -481,13 +805,29 @@ const useStyles = themedStyles((colors) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  // The theme's own: a small hollow centre, so it reads as "default".
-  accentThemeMark: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: "#ffffff",
+  sliderCard: {
+    marginTop: 10,
+    paddingVertical: 4,
+  },
+  followingCard: {
+    marginTop: 10,
+  },
+  sliderRow: {
+    paddingHorizontal: 6,
+    paddingTop: 10,
+  },
+  sliderLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  sliderLabel: {
+    color: colors.content,
+    fontSize: 15,
+  },
+  sliderValue: {
+    color: colors.muted,
+    fontSize: 15,
+    fontVariant: ["tabular-nums"],
   },
   visibility: {
     paddingVertical: 4,
@@ -495,6 +835,53 @@ const useStyles = themedStyles((colors) => ({
   },
   slider: {
     height: 44,
+  },
+  tileStrip: {
+    marginHorizontal: -16,
+  },
+  tiles: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  tile: {
+    width: TILE_WIDTH,
+    alignItems: "center",
+    gap: 6,
+  },
+  // The ring around a tile, in the accent once picked; the image sits inside
+  // it at a radius 3 smaller, so the curves stay concentric.
+  tileFrame: {
+    padding: 3,
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  tileImage: {
+    width: TILE_WIDTH - 10,
+    height: TILE_HEIGHT,
+    borderRadius: 11,
+    borderCurve: "continuous",
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.stroke,
+  },
+  tileCheck: {
+    position: "absolute",
+    right: 5,
+    bottom: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileLabel: {
+    color: colors.muted,
+    fontSize: 12,
   },
   segments: {
     flexDirection: "row",

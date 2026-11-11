@@ -203,7 +203,7 @@ export default function NewMonoScreen() {
 const useStyles = themedStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.sheet,
+    backgroundColor: colors.sheetPage,
   },
   content: {
     paddingHorizontal: 20,

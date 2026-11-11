@@ -109,7 +109,18 @@ export async function createTask(
 export async function updateTask(
   command: Command,
   id: string,
-  changes: { status?: TaskStatus; title?: string; tags?: string[] },
+  changes: {
+    status?: TaskStatus;
+    title?: string;
+    tags?: string[];
+    /**
+     * Pins the task to Focus on this local day, or unpins it with null. Needs
+     * `today` (the phone's local day) so the desktop records the day it leaves.
+     * Desktops older than 0.16.0-local35 ignore it.
+     */
+    focusDate?: string | null;
+    today?: string;
+  },
 ) {
   const { task } = await command<{ task: TaskItem }>("tasks.update", { id, ...changes });
   toolsChanged("tasks");
@@ -206,6 +217,22 @@ export function inFocusOn(
   if (task.focusDate === day) return true;
   if (task.createdAt === undefined || localDay(new Date(task.createdAt)) !== day) return false;
   return !task.focusDate || task.focusDate <= day;
+}
+
+/**
+ * Unfinished tasks pinned to an earlier day and not in Focus on `day`: the
+ * ones the desktop offers to carry over. Mirrors `carryOver` in the desktop's
+ * `src/features/tasks/ui/TasksView.tsx`.
+ */
+export function carryOverTasks(tasks: TaskItem[], day: string): TaskItem[] {
+  return tasks.filter(
+    (task) =>
+      !!task.focusDate &&
+      task.focusDate < day &&
+      task.status !== "completed" &&
+      !task.archived &&
+      !inFocusOn(task, day),
+  );
 }
 
 /**

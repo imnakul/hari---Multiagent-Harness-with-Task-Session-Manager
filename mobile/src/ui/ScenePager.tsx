@@ -18,6 +18,8 @@ import {
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+
+import { Backdrop } from "@/features/wallpaper/Backdrop";
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -520,7 +522,10 @@ export function ScenePagerHost({
         <SwitchingContext value={switchState}>
         <ScenePagerContext value={pager}>
           <GestureDetector gesture={pan}>
-            <View style={[styles.root, { backgroundColor: colors.drawer }]}>
+            <View style={[styles.root, { backgroundColor: colors.page }]}>
+              {/* Fork (Hari, L-245): the wallpaper behind the drawer; the
+                  scene stays solid, each screen in it drawing its own. */}
+              {drawer ? <Backdrop /> : null}
               {drawer ? (
                 // Kept as a view of its own: flattened away, the drawer's
                 // header and footer would stack over the scene.

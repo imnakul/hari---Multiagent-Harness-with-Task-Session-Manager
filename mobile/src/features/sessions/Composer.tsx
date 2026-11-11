@@ -510,7 +510,7 @@ export function Composer({
           />
         ) : busy && onStop ? (
           <RoundButton label="Stop" onPress={() => { void onStop().catch(reason => Alert.alert("Could not stop", String(reason))); }} primary disabled={offline}>
-            <View style={styles.stop} />
+            <View style={[styles.stop, { backgroundColor: colors.onAccent }]} />
           </RoundButton>
         ) : (
           <RoundButton icon="mic" label="Dictate" onPress={dictate} />
@@ -655,14 +655,15 @@ function RoundButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.round,
-        primary && styles.roundPrimary,
+        // Fork (Hari, L-245): send and stop in the accent, a Mono chat's own included.
+        primary && { backgroundColor: colors.accent },
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
     >
       {children ??
         (icon ? (
-          <Icon name={icon} size={18} color={primary ? colors.inverse : colors.content} />
+          <Icon name={icon} size={18} color={primary ? colors.onAccent : colors.content} />
         ) : null)}
     </Pressable>
   );
@@ -673,7 +674,6 @@ const useStyles = themedStyles((colors) => ({
     width: 12,
     height: 12,
     borderRadius: 3,
-    backgroundColor: colors.inverse,
   },
   contextRow: {
     position: "absolute",
@@ -855,9 +855,6 @@ const useStyles = themedStyles((colors) => ({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.fill,
-  },
-  roundPrimary: {
-    backgroundColor: colors.inverseSurface,
   },
   pressed: {
     opacity: 0.6,

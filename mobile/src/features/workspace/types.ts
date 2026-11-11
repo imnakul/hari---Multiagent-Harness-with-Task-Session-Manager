@@ -14,7 +14,7 @@ export type Harness =
   | "omp"
   | "fx"
   | "hermes"
-  | "antigravity"
+  | "antigravity-cli"
   | "devin";
 
 export type Project = {

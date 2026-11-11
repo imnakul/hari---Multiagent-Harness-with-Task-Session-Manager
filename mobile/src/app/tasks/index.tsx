@@ -14,6 +14,7 @@ import {
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import {
+  carryOverTasks,
   createTask,
   groupTasks,
   inFocusOn,
@@ -91,6 +92,35 @@ export default function TasksScreen() {
     }
   };
 
+  // Fork (Hari, L-243): pins a task to today's Focus (or unpins it), as the
+  // desktop's Focus button does. Every change carries the phone's day so the
+  // desktop records the day the task leaves. Desktops before L-243 ignore the
+  // pin and send the task back unchanged; that reads as "update the desktop".
+  const focusTasks = async (picked: TaskItem[], focusDate: string | null) => {
+    if (!picked.length) return;
+    void Haptics.selectionAsync();
+    const today = localDay();
+    const ids = new Set(picked.map((task) => task.id));
+    setTasks((all) => all?.map((each) => (ids.has(each.id) ? { ...each, focusDate } : each)) ?? all);
+    const results = await Promise.allSettled(
+      picked.map(async (task) => {
+        const saved = await updateTask(run, task.id, { focusDate, today });
+        if ((saved.focusDate ?? null) !== focusDate)
+          throw new Error("Update MonoCode on the desktop to change Focus from the phone.");
+      }),
+    );
+    const failed = picked.filter((_, index) => results[index].status === "rejected");
+    if (!failed.length) return;
+    const back = new Map(failed.map((task) => [task.id, task]));
+    setTasks((all) => all?.map((each) => back.get(each.id) ?? each) ?? all);
+    const first = results.find((result) => result.status === "rejected");
+    const reason = first?.status === "rejected" ? first.reason : null;
+    Alert.alert(
+      "Couldn’t change Focus",
+      reason instanceof Error ? reason.message : String(reason ?? "The desktop didn’t answer."),
+    );
+  };
+
   // Fork (Hari, L-241): Focus shows the desktop's Focus for today; the project
   // row narrows to one project; groups follow status (default) or project.
   const [focus, setFocus] = useState(false);
@@ -124,6 +154,17 @@ export default function TasksScreen() {
         (projectFilter === null || taskProjectKey(task) === projectFilter),
     );
   }, [tasks, focus, projectFilter]);
+
+  const today = localDay();
+  // Unfinished tasks from an earlier day's Focus, in the picked project.
+  const carryOver = useMemo(
+    () =>
+      carryOverTasks(tasks ?? [], today).filter(
+        (task) => projectFilter === null || taskProjectKey(task) === projectFilter,
+      ),
+    [tasks, today, projectFilter],
+  );
+  const [carrying, setCarrying] = useState(false);
 
   const doneCount = visible.filter((task) => task.status === "completed").length;
   const groups = useMemo(
@@ -209,6 +250,31 @@ export default function TasksScreen() {
           ) : null}
         </View>
       ) : null}
+      {focus && carryOver.length ? (
+        <View style={styles.carry}>
+          <Icon name="sun" size={16} color={colors.muted} />
+          <Text style={styles.carryText}>
+            {carryOver.length} unfinished from earlier focus
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Carry over ${carryOver.length} to today`}
+            accessibilityState={{ busy: carrying, disabled: carrying }}
+            disabled={carrying}
+            onPress={() => {
+              setCarrying(true);
+              void focusTasks(carryOver, today).finally(() => setCarrying(false));
+            }}
+            style={({ pressed }) => [styles.carryButton, pressed && styles.pressed]}
+          >
+            {carrying ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Text style={styles.carryButtonText}>Carry over</Text>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
       {tasks === null && !error ? (
         <ActivityIndicator style={styles.loading} color={colors.muted} />
       ) : null}
@@ -226,6 +292,8 @@ export default function TasksScreen() {
                   open={open === task.id}
                   onToggle={() => setOpen((current) => (current === task.id ? null : task.id))}
                   onChange={(status) => void change(task, status)}
+                  pinned={task.focusDate === today}
+                  onFocus={() => void focusTasks([task], task.focusDate === today ? null : today)}
                 />
               </View>
             ))}
@@ -252,11 +320,16 @@ function TaskRow({
   open,
   onToggle,
   onChange,
+  pinned,
+  onFocus,
 }: {
   task: TaskItem;
   open: boolean;
   onToggle: () => void;
   onChange: (status: TaskStatus) => void;
+  /** Pinned to today's Focus. */
+  pinned: boolean;
+  onFocus: () => void;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -280,7 +353,7 @@ function TaskRow({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityHint="Shows its status to change"
+          accessibilityHint="Shows its status and Focus to change"
           onPress={onToggle}
           style={styles.rowText}
         >
@@ -303,6 +376,24 @@ function TaskRow({
       </View>
       {open ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: pinned }}
+            accessibilityLabel={pinned ? "Remove from today's Focus" : "Add to today's Focus"}
+            onPress={onFocus}
+            style={({ pressed }) => [
+              styles.chip,
+              styles.focusChip,
+              pinned && styles.chipOn,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Icon name="sun" size={14} color={pinned ? "#ffffff" : colors.muted} />
+            <Text style={[styles.chipText, pinned && styles.chipTextOn]}>
+              {pinned ? "In Focus" : "Focus today"}
+            </Text>
+          </Pressable>
+          <View style={styles.chipGap} />
           {TASK_STATUSES.map((status) => (
             <Chip
               key={status.value}
@@ -490,6 +581,30 @@ const useStyles = themedStyles((colors) => ({
   segmentText: { color: colors.muted, fontSize: 14 },
   segmentTextOn: { color: colors.content, fontWeight: "600" },
   filterChips: { gap: 6, paddingRight: 4 },
+  chipGap: { width: StyleSheet.hairlineWidth, marginHorizontal: 2, backgroundColor: colors.stroke },
+  carry: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 14,
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 6,
+    borderRadius: radii.card,
+    borderCurve: "continuous",
+    backgroundColor: colors.surface,
+  },
+  carryText: { flex: 1, color: colors.muted, fontSize: 14 },
+  carryButton: {
+    minHeight: 36,
+    minWidth: 96,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    backgroundColor: withAlpha(colors.accent, 0.12),
+  },
+  carryButtonText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   showDone: { alignSelf: "center", marginTop: 20, padding: 8 },
   showDoneText: { color: colors.accent, fontSize: 15 },
 }));
