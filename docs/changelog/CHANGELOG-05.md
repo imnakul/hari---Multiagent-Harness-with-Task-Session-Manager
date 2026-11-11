@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-11 18:52 IST — Hari release 0.16.0-local37 (Live Updates crash, chat spinner, all running sessions)
+- Type: chore
+- What: Published `hari-v0.16.0-local37` (run 43025608667) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160037), `latest.json`, `hari-android.json`.
+- Why: Ships the Live Updates launch-crash fix (L-247), the reopened-chat spinner fix (L-248) and every running session on a project's screen (L-249).
+- Files: GitHub release only.
+- Commit: b1d576b7, 41789cab, 93a14bcc (changes), 5a963bea (records), 010515ce (version)
+- Verified: CI ✅ (desktop 8m28s, APK 17m27s, first try; changed `hari-live` Kotlin compiled); `hari-android.json` served from releases/latest with 0.16.0-local37 ✅; phone checks manual
+
 ## 2026-11-11 18:31 IST — Hari: every running session on a project's screen (L-249)
 - Type: feature
 - What: With several sessions running, a project's screen showed only one at a time ("1 of 2") with a skip button. Now every running session shows: the first in the big pill and each other one in its own pill above it, each with open and stop.
