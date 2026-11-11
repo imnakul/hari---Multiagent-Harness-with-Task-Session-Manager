@@ -9,6 +9,9 @@ const scrollToEnd = vi.hoisted(() => vi.fn());
 const native = vi.hoisted(() => ({
   scrollTo: vi.fn(), dismissKeyboard: vi.fn(), top: 156, bottom: 106,
   focused: true, pushedIn: true,
+  // When set, the list draws only this many rows until sent to its end, as
+  // FlatList does with rows far below where it is.
+  rows: null as number | null,
 }));
 type ListProps = {
   data: Turn[];
@@ -31,7 +34,7 @@ let listProps: ListProps;
 const rowHeight = (turn: Turn) => 100 + (turn.items.length - 1) * 40;
 
 vi.mock("react-native", async () => {
-  const { forwardRef, useImperativeHandle, useLayoutEffect } = await import("react");
+  const { forwardRef, useImperativeHandle, useLayoutEffect, useState } = await import("react");
   type Layout = { nativeEvent: { layout: { height: number } } };
   const View = ({ children, onLayout }: {
     children?: ReactNode;
@@ -49,11 +52,19 @@ vi.mock("react-native", async () => {
   };
   const FlatList = forwardRef((props: ListProps, ref) => {
     listProps = props;
-    useImperativeHandle(ref, () => ({ getNativeScrollRef: () => ({ scrollToEnd, scrollTo: native.scrollTo }) }));
+    const [reached, setReached] = useState(false);
+    useImperativeHandle(ref, () => ({ getNativeScrollRef: () => ({
+      scrollToEnd: (options: unknown) => {
+        scrollToEnd(options);
+        if (native.rows !== null) setReached(true);
+      },
+      scrollTo: native.scrollTo,
+    }) }));
+    const drawn = native.rows === null || reached ? props.data : props.data.slice(0, native.rows);
     useLayoutEffect(() => {
       props.onLayout({ nativeEvent: { layout: { height: 800 } } });
     }, [props.onLayout]);
-    return <div>{props.data.map((item) => <div key={item.id}>{props.renderItem({ item })}</div>)}</div>;
+    return <div>{drawn.map((item) => <div key={item.id}>{props.renderItem({ item })}</div>)}</div>;
   });
   return {
     View,
@@ -168,6 +179,7 @@ describe("transcript anchoring", () => {
     native.bottom = 106;
     native.focused = true;
     native.pushedIn = true;
+    native.rows = null;
     vi.stubGlobal("__DEV__", false);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       frames.set(++frameId, callback);
@@ -229,6 +241,18 @@ describe("transcript anchoring", () => {
     render(turns.slice(-3));
     flushFrames();
     expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+  });
+
+  it("has the newest rows drawn when they are past the rows drawn on mount", () => {
+    // The desktop sends 30 turns; FlatList draws 25, then only rows near
+    // where the list is, so the anchor and below were never measured (L-248).
+    native.rows = 25;
+    const turns = Array.from({ length: 30 }, (_, index) => userTurn(`turn-${index}`, `Message ${index}`));
+    render(turns);
+    flushFrames();
+    expect(container.textContent).toContain("turn-29");
+    expect(scrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    expect(container.querySelector("[data-loading]")).toBeNull();
   });
 
   it("shows a spinner while turns it already has are still being placed", () => {

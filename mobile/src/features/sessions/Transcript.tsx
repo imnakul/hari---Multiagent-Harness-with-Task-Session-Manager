@@ -58,6 +58,8 @@ const ANCHOR_LIFT = 36;
 const REVEAL_RISE = 10;
 /** A conversation that loads within this long shows no spinner at all. */
 const LOADING_AFTER = 250;
+/** Rows FlatList draws on mount; past them it draws only near where the list is. */
+const INITIAL_ROWS = 25;
 const NO_TURNS: Turn[] = [];
 
 /**
@@ -157,6 +159,8 @@ export function Transcript({
   // animated when a new message arrives.
   const pendingScroll = useRef<"instant" | "animated" | null>("instant");
   const scrollFrame = useRef<number | null>(null);
+  // Whether the hidden list was sent to its end to have its last rows drawn.
+  const reached = useRef(false);
   useEffect(() => () => {
     if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
   }, []);
@@ -252,10 +256,26 @@ export function Transcript({
     }
     const below = turns.slice(anchorIndex);
     let belowHeight = GAP * (below.length - 1);
-    for (const turn of below) {
+    for (const [offset, turn] of below.entries()) {
       const height = heights.current.get(turn.id);
       // Wait until every row from the anchor down has been measured.
-      if (height === undefined) return;
+      if (height === undefined) {
+        // Fork (Hari, L-248): FlatList draws the first INITIAL_ROWS rows,
+        // then only those within some screens of where it is: the top, until
+        // the first scroll. The desktop sends the latest 30 turns (more after
+        // paging), so with long ones the newest rows were never drawn and the
+        // chat waited for them behind its spinner until the reader scrolled.
+        // Send the still-hidden list to its end once so they are drawn.
+        if (!settled && !reached.current && anchorIndex + offset >= INITIAL_ROWS) {
+          const scroll = list.current?.getNativeScrollRef() as
+            ScrollView | null | undefined;
+          if (scroll) {
+            reached.current = true;
+            scroll.scrollToEnd({ animated: false });
+          }
+        }
+        return;
+      }
       belowHeight += height;
     }
     if (moving.current === 0)
@@ -403,7 +423,7 @@ export function Transcript({
           ]}
           showsVerticalScrollIndicator={false}
           // The whole window the desktop sends, in one pass.
-          initialNumToRender={25}
+          initialNumToRender={INITIAL_ROWS}
           onStartReached={pageOlder}
           onStartReachedThreshold={1}
           // Keep the reader's place as earlier turns land above it.
