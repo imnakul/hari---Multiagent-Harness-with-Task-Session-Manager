@@ -143,6 +143,15 @@ export { MessageQueue } from "./MessageQueue";
 import { SkillPicker } from "../../skills/ui/SkillPicker";
 import { SavedPromptMenu } from "../../prompts/ui/SavedPromptMenu";
 import { useSavedPromptMenu } from "../../prompts/ui/useSavedPromptMenu";
+import {
+  ImprovePromptButton,
+  ImprovePromptStrip,
+} from "../../prompt-improve/ui/PromptImproveControls";
+import { RewriteReveal } from "../../prompt-improve/ui/RewriteReveal";
+import {
+  isImprovePromptShortcut,
+  usePromptImprove,
+} from "../../prompt-improve/ui/usePromptImprove";
 import { TaskPickerMenu } from "../../tasks/ui/TaskPickerMenu";
 import { useTaskPickerMenu } from "../../tasks/ui/useTaskPickerMenu";
 import { pathKey, projectKey } from "../../../shared/lib/paths";
@@ -1227,6 +1236,17 @@ export function Composer({
     syncHasValue(next, attachmentsRef.current);
     el.focus();
   };
+  // Fork (L-252): ✨ rewrites the draft in place; not for host sessions.
+  const promptImprove = usePromptImprove({
+    available: !remote,
+    scopeKey: sessionId ?? executionCwd,
+    text: draft,
+    cwd,
+    harness,
+    blocks,
+    getText: () => ref.current?.value ?? draft,
+    setText: (next) => applyInsertedText(next, next.length),
+  });
   // `!` inserts a saved prompt (Settings → Prompts) at the caret.
   const promptMenu = useSavedPromptMenu({ apply: applyInsertedText });
   // `#` inserts a Todo task of this project or Personal (L-180).
@@ -1771,6 +1791,7 @@ export function Composer({
       restoreDraft(text, files);
       return;
     }
+    promptImprove.recordSend(value);
     pasteGenerationRef.current += 1;
     if (ref.current) {
       ref.current.value = "";
@@ -1822,6 +1843,16 @@ export function Composer({
     if (creatingSkill) return;
     if (promptMenu.onKeyDown(e)) return;
     if (taskMenu.onKeyDown(e)) return;
+    // Esc cancels a running rewrite before it can stop the chat's turn.
+    if (e.key === "Escape" && promptImprove.cancel()) {
+      e.preventDefault();
+      return;
+    }
+    if (promptImprove.visible && isImprovePromptShortcut(e)) {
+      e.preventDefault();
+      promptImprove.trigger();
+      return;
+    }
     if (
       e.key === "Enter" &&
       !e.shiftKey &&
@@ -2530,6 +2561,8 @@ export function Composer({
             </p>
           ) : null}
 
+          <ImprovePromptStrip improve={promptImprove} />
+
           {inboxCard ? (
             <InboxMiniCard card={inboxCard} onDismiss={onInboxCardDismiss} />
           ) : null}
@@ -2553,7 +2586,7 @@ export function Composer({
               style={{ textIndent: modeIndent }}
               className={`composer-highlight pointer-events-none absolute inset-0 max-h-40 overflow-hidden whitespace-pre-wrap wrap-break-word px-3 text-sm leading-5.5 text-content font-sans ${
                 fieldPadding
-              }`}
+              } ${promptImprove.peekText !== null ? "invisible" : ""}`}
             >
               <ComposerHighlight
                 text={draft}
@@ -2589,7 +2622,7 @@ export function Composer({
               disabled={disabled}
               className={`composer-field scrollbar-none relative max-h-40 w-full resize-none overflow-x-hidden whitespace-pre-wrap wrap-break-word bg-transparent px-3 text-sm leading-5.5 outline-none placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap font-sans ${
                 fieldPadding
-              }`}
+              } ${promptImprove.peekText !== null ? "opacity-0" : ""}`}
               onFocus={onFocus}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
@@ -2621,6 +2654,22 @@ export function Composer({
                 syncHasValue(el.value, attachments);
                 syncTokensFromTextarea(el);
               }}
+            />
+            {promptImprove.peekText !== null ? (
+              <div
+                aria-hidden
+                style={{ textIndent: modeIndent }}
+                className={`scrollbar-none pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word px-3 text-sm leading-5.5 text-content/70 font-sans ${
+                  fieldPadding
+                }`}
+              >
+                {promptImprove.peekText}
+              </div>
+            ) : null}
+            <RewriteReveal
+              reveal={promptImprove.reveal}
+              textStyle={{ textIndent: modeIndent }}
+              textClassName={`scrollbar-none overflow-hidden whitespace-pre-wrap wrap-break-word px-3 text-sm leading-5.5 text-content font-sans ${fieldPadding}`}
             />
           </div>
 
@@ -2956,6 +3005,7 @@ export function Composer({
               </button>
             ) : null}
             <div className="flex shrink-0 items-center gap-1">
+              <ImprovePromptButton improve={promptImprove} />
               <ComposerAction
                 busy={busy}
                 disabled={disabled || (cloudLaunch?.active === true && !cloudLaunch.canLaunch)}

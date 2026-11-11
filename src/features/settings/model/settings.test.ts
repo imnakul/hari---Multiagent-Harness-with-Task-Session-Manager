@@ -86,7 +86,13 @@ import {
   saveQuickComposerShortcut,
   saveTabAnimationsEnabled,
 } from "./settings";
-import { IS_MAC, IS_WIN, MOD, SHIFT } from "../../../platform/tauri/platform";
+import {
+  ALT,
+  IS_MAC,
+  IS_WIN,
+  MOD,
+  SHIFT,
+} from "../../../platform/tauri/platform";
 
 const KEY = "monocode.composerRunner";
 const MODEL_CONTROLS_KEY = "monocode.modelControls";
@@ -600,6 +606,15 @@ describe("workspace navigation keybindings", () => {
       command: "Composer: Toggle Workspace",
       keys: `${MOD}${SHIFT}G`,
       when: "Draft session composer",
+    });
+  });
+  it("documents the Improve prompt shortcut (L-252)", () => {
+    expect(
+      KEYBINDINGS.find((row) => row.command === "Composer: Improve Prompt"),
+    ).toEqual({
+      command: "Composer: Improve Prompt",
+      keys: `${MOD}${ALT}I`,
+      when: "Composer",
     });
   });
   it("documents session and project cycling in the shortcut list", () => {

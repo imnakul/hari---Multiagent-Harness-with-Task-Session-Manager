@@ -16,6 +16,20 @@ import {
   subscribeSessionMetadataAi,
   type SessionMetadataAiSettings,
 } from "../../sessions/model/sessionMetadataAi";
+import { DEFAULT_IMPROVE_INSTRUCTIONS } from "../../prompt-improve/model/promptImprove";
+import {
+  clearPromptMemory,
+  loadPromptImproveSettings,
+  loadPromptMemory,
+  removeProjectMemory,
+  savePromptImproveSettings,
+  savePromptMemory,
+  setProjectGlossary,
+  subscribePromptImproveSettings,
+  subscribePromptMemory,
+  type PromptImproveSettings,
+} from "../../prompt-improve/model/promptImproveStore";
+import { improveShortcutLabel } from "../../prompt-improve/ui/usePromptImprove";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   ArrowDownCircle,
@@ -1939,6 +1953,10 @@ function ChatPage() {
 
       <SessionMetadataAiGroup />
 
+      <PromptImproveGroup />
+
+      <PromptMemoryGroup />
+
       <Group
         title="Editor"
         description="What happens when you save a file in the workspace editor."
@@ -2070,7 +2088,9 @@ function SessionMetadataAiGroup() {
             })),
           ]}
           onChange={(value) => {
-            const effort = SESSION_AI_EFFORTS.find((candidate) => candidate === value);
+            const effort = SESSION_AI_EFFORTS.find(
+              (candidate) => candidate === value,
+            );
             const { effort: _previous, ...rest } = settings;
             saveSessionMetadataAi(effort ? { ...rest, effort } : rest);
           }}
@@ -2126,6 +2146,301 @@ function SessionMetadataAiGroup() {
           spellCheck={false}
           className="block w-full resize-y rounded-md border border-content/10 bg-content/4 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-content outline-none focus:border-content/25"
         />
+      </div>
+    </Group>
+  );
+}
+
+/** ✨ Improve prompt in the composers (fork, L-252). */
+function PromptImproveGroup() {
+  const settings = useSyncExternalStore(
+    subscribePromptImproveSettings,
+    loadPromptImproveSettings,
+  );
+  const update = (patch: Partial<PromptImproveSettings>) =>
+    savePromptImproveSettings({ ...settings, ...patch });
+  const instructions = settings.instructions || DEFAULT_IMPROVE_INSTRUCTIONS;
+  const isDefault = instructions.trim() === DEFAULT_IMPROVE_INSTRUCTIONS.trim();
+  const shortcut = improveShortcutLabel();
+
+  return (
+    <Group
+      title="Improve prompt"
+      description="✨ beside Send rewrites your draft into a clearer prompt, in place. Hold Original to compare, or Restore original to put your words back. The helper sees the draft, the last few turns and the project name."
+    >
+      <Row
+        id="prompt-improve-enabled"
+        label="Improve prompt button"
+        description={`Shows ✨ in chat composers and in Session Manager's draft composer. Remote chats don't show it.${
+          shortcut ? ` Shortcut: ${shortcut}.` : ""
+        }`}
+      >
+        <Toggle
+          label="Improve prompt button"
+          on={settings.enabled}
+          onChange={(enabled) => update({ enabled })}
+        />
+      </Row>
+      <Row
+        id="prompt-improve-model"
+        label="Model"
+        description="Same as AI helper follows the AI helper settings above, including its backup."
+      >
+        <Segmented
+          label="Improve prompt model"
+          value={settings.helper ? "custom" : "same"}
+          options={[
+            { value: "same", label: "Same as AI helper" },
+            { value: "custom", label: "Choose a model" },
+          ]}
+          onChange={(value) =>
+            update({
+              helper:
+                value === "custom"
+                  ? (settings.helper ?? { provider: AI_HELPER_PROVIDERS[0] })
+                  : null,
+            })
+          }
+        />
+      </Row>
+      {settings.helper ? (
+        <AiHelperTargetEditor
+          id="prompt-improve-target"
+          label="Rewrite model"
+          target={settings.helper}
+          onChange={(helper) => update({ helper })}
+        />
+      ) : null}
+      <Row
+        id="prompt-improve-effort"
+        label="Effort"
+        description="Automatic lets the provider decide. Low is fastest; providers without an effort setting ignore it."
+      >
+        <Segmented
+          label="Improve prompt effort"
+          value={settings.effort ?? "auto"}
+          options={[
+            { value: "auto", label: "Automatic" },
+            ...SESSION_AI_EFFORTS.map((effort) => ({
+              value: effort,
+              label: effort[0]!.toUpperCase() + effort.slice(1),
+            })),
+          ]}
+          onChange={(value) => {
+            const effort = SESSION_AI_EFFORTS.find((candidate) => candidate === value);
+            const { effort: _previous, ...rest } = settings;
+            savePromptImproveSettings(effort ? { ...rest, effort } : rest);
+          }}
+        />
+      </Row>
+      <div
+        id={settingDomId("prompt-improve-instructions")}
+        data-setting-id="prompt-improve-instructions"
+        className="flex flex-col gap-2 px-4 py-3.5"
+      >
+        <div className="flex items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium text-content">
+              Rewrite instructions
+            </div>
+            <p className="mt-1 text-[12px] leading-relaxed text-content/45">
+              How the rewrite should read. The fixed rules (only rewrite, never
+              do the work; keep file paths, @mentions, URLs and IDs exactly as
+              typed) always apply.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={isDefault}
+            onClick={() => update({ instructions: "" })}
+            className="shrink-0 text-[12px] text-content/55 hover:text-content disabled:opacity-40 disabled:hover:text-content/55"
+          >
+            Reset to default
+          </button>
+        </div>
+        <textarea
+          aria-label="Rewrite instructions"
+          value={instructions}
+          onChange={(event) =>
+            update({
+              instructions:
+                event.target.value.trim() ===
+                DEFAULT_IMPROVE_INSTRUCTIONS.trim()
+                  ? ""
+                  : event.target.value,
+            })
+          }
+          rows={6}
+          spellCheck={false}
+          className="block w-full resize-y rounded-md border border-content/10 bg-content/4 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-content outline-none focus:border-content/25"
+        />
+      </div>
+    </Group>
+  );
+}
+
+/** What Improve prompt has learned; local only, editable, clearable (fork, L-252). */
+function PromptMemoryGroup() {
+  const settings = useSyncExternalStore(
+    subscribePromptImproveSettings,
+    loadPromptImproveSettings,
+  );
+  const memory = useSyncExternalStore(subscribePromptMemory, loadPromptMemory);
+  const projects = Object.entries(memory.projects).sort(([, a], [, b]) =>
+    a.name.localeCompare(b.name),
+  );
+  const isEmpty =
+    !memory.profile.trim() &&
+    projects.length === 0 &&
+    memory.samples.length === 0 &&
+    memory.accepted === 0 &&
+    memory.edited === 0;
+
+  const clearMemory = async () => {
+    const confirmed = await ask(
+      "Forget everything Improve prompt has learned: How I write, every project glossary and the repeated requests it was counting? Rules already added to AGENTS.md stay in those files.",
+      {
+        title: "Clear Improve prompt memory",
+        kind: "warning",
+        okLabel: "Clear memory",
+        cancelLabel: "Cancel",
+      },
+    );
+    if (confirmed) clearPromptMemory();
+  };
+
+  return (
+    <Group
+      title="How I write"
+      description="What Improve prompt learns from the rewrites you keep and the edits you make before sending. It stays on this computer and is only sent inside an Improve prompt request."
+      action={
+        <button
+          type="button"
+          disabled={isEmpty}
+          onClick={() => void clearMemory()}
+          className="text-[12px] text-content/55 hover:text-content disabled:opacity-40 disabled:hover:text-content/55"
+        >
+          Clear memory
+        </button>
+      }
+    >
+      <Row
+        id="prompt-improve-learn"
+        label="Learn how I write"
+        description="Off keeps using what is already here but adds nothing new."
+      >
+        <Toggle
+          label="Learn how I write"
+          on={settings.learn}
+          onChange={(learn) =>
+            savePromptImproveSettings({ ...settings, learn })
+          }
+        />
+      </Row>
+      <Row
+        id="prompt-improve-rules"
+        label="Suggest AGENTS.md rules"
+        description="When you ask for the same thing in three prompts in a project, offer to add it to that project's AGENTS.md under Standing rules. Nothing is written until you click Add."
+      >
+        <Toggle
+          label="Suggest AGENTS.md rules"
+          on={settings.suggestRules}
+          onChange={(suggestRules) =>
+            savePromptImproveSettings({ ...settings, suggestRules })
+          }
+        />
+      </Row>
+      <div
+        id={settingDomId("prompt-improve-memory")}
+        data-setting-id="prompt-improve-memory"
+        className="flex flex-col gap-2 px-4 py-3.5"
+      >
+        <div className="text-[13px] font-medium text-content">
+          Writing profile
+        </div>
+        <p className="text-[12px] leading-relaxed text-content/45">
+          One habit per line, such as “I say ‘the panel’ for the Session
+          overview”. Edit or delete anything that is wrong.
+        </p>
+        <textarea
+          aria-label="Writing profile"
+          value={memory.profile}
+          placeholder="Nothing learned yet. Use ✨ a few times, or write your own lines here."
+          onChange={(event) =>
+            savePromptMemory({ ...memory, profile: event.target.value })
+          }
+          rows={5}
+          spellCheck={false}
+          className="block w-full resize-y rounded-md border border-content/10 bg-content/4 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-content outline-none placeholder:text-content/35 focus:border-content/25"
+        />
+        <p className="text-[12px] tabular-nums text-content/45">
+          Rewrites sent as written: {memory.accepted} · Edited before sending:{" "}
+          {memory.edited}
+          {memory.samples.length > 0
+            ? ` · Edits waiting to be learned: ${memory.samples.length}`
+            : ""}
+        </p>
+        <div className="pt-2 text-[13px] font-medium text-content">
+          Project glossaries
+        </div>
+        {projects.length === 0 ? (
+          <p className="text-[12px] leading-relaxed text-content/45">
+            No projects yet. A project appears here after its first rewrite.
+          </p>
+        ) : (
+          <ul role="list" className="flex flex-col gap-3">
+            {projects.map(([key, project]) => {
+              const added = project.rules.filter(
+                (rule) => rule.state === "added",
+              ).length;
+              return (
+                <li key={key} className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="min-w-0 flex-1 truncate text-[12px] font-medium text-content/80"
+                      title={key}
+                    >
+                      {project.name || key}
+                    </span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-content/40">
+                      {project.rules.length} repeated{" "}
+                      {project.rules.length === 1 ? "request" : "requests"}
+                      {added > 0 ? ` · ${added} in AGENTS.md` : ""}
+                    </span>
+                    <button
+                      type="button"
+                      title={`Forget ${project.name || key}`}
+                      aria-label={`Forget ${project.name || key}`}
+                      onClick={() =>
+                        savePromptMemory(removeProjectMemory(memory, key))
+                      }
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-content/45 transition-[transform,background-color,color] duration-150 hover:bg-selection-hover hover:text-content active:scale-96"
+                    >
+                      <Trash2
+                        aria-hidden
+                        className="size-3.5"
+                        strokeWidth={1.75}
+                      />
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label={`${project.name || key} glossary`}
+                    value={project.glossary}
+                    placeholder="term = what it means, one per line"
+                    onChange={(event) =>
+                      savePromptMemory(
+                        setProjectGlossary(memory, key, event.target.value),
+                      )
+                    }
+                    rows={3}
+                    spellCheck={false}
+                    className="block w-full resize-y rounded-md border border-content/10 bg-content/4 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-content outline-none placeholder:text-content/35 focus:border-content/25"
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </Group>
   );

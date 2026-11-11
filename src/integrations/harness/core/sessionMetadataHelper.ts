@@ -69,7 +69,7 @@ function targetKey(target: AiHelperTarget): string {
 
 /** The chosen model, then the AI helper settings, the chat's provider and the rest. */
 export function sessionMetadataHelperTargets(input: {
-  settings: SessionMetadataAiSettings;
+  settings: Pick<SessionMetadataAiSettings, "helper">;
   aiHelper: AiHelperSettings;
   harness: HarnessId;
 }): AiHelperTarget[] {

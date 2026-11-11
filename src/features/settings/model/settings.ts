@@ -604,6 +604,50 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "session overview summary metadata notes instructions prompt style ai reset default",
   },
   {
+    id: "prompt-improve-enabled",
+    section: "chat",
+    label: "Improve prompt",
+    keywords: "improve prompt rewrite sparkle composer draft ai helper clarify",
+  },
+  {
+    id: "prompt-improve-model",
+    section: "chat",
+    label: "Improve prompt model",
+    keywords: "improve prompt rewrite ai helper model",
+  },
+  {
+    id: "prompt-improve-effort",
+    section: "chat",
+    label: "Improve prompt effort",
+    keywords:
+      "improve prompt rewrite ai helper effort reasoning thinking low medium high",
+  },
+  {
+    id: "prompt-improve-instructions",
+    section: "chat",
+    label: "Improve prompt instructions",
+    keywords: "improve prompt rewrite instructions style reset default",
+  },
+  {
+    id: "prompt-improve-learn",
+    section: "chat",
+    label: "Learn how I write",
+    keywords: "improve prompt memory learn edits profile glossary",
+  },
+  {
+    id: "prompt-improve-rules",
+    section: "chat",
+    label: "Suggest AGENTS.md rules",
+    keywords: "improve prompt rules agents.md repeated standing rules suggest",
+  },
+  {
+    id: "prompt-improve-memory",
+    section: "chat",
+    label: "How I write",
+    keywords:
+      "improve prompt memory how i write profile glossary project terms clear forget",
+  },
+  {
     id: "composer-autocorrect",
     section: "chat",
     label: "Autocorrect",
@@ -2138,6 +2182,12 @@ export const KEYBINDINGS: KeybindingRow[] = [
     command: "Composer: Toggle Workspace",
     keys: `${MOD}${SHIFT}G`,
     when: "Draft session composer",
+  },
+  // Fork (L-252): ✨ rewrite of the draft by the AI helper.
+  {
+    command: "Composer: Improve Prompt",
+    keys: `${MOD}${ALT}I`,
+    when: "Composer",
   },
   { command: "View: Reload", keys: `${MOD}${SHIFT}R`, when: "Always" },
   {

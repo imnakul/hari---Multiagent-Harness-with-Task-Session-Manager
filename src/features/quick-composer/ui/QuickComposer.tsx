@@ -83,6 +83,15 @@ import { QuickModelSelector } from "./QuickModelSelector";
 import { QuickPermissionIcon, QuickPermissions } from "./QuickPermissions";
 import { SavedPromptMenu } from "../../prompts/ui/SavedPromptMenu";
 import { useSavedPromptMenu } from "../../prompts/ui/useSavedPromptMenu";
+import {
+  ImprovePromptButton,
+  ImprovePromptStrip,
+} from "../../prompt-improve/ui/PromptImproveControls";
+import { RewriteReveal } from "../../prompt-improve/ui/RewriteReveal";
+import {
+  isImprovePromptShortcut,
+  usePromptImprove,
+} from "../../prompt-improve/ui/usePromptImprove";
 import { TaskPickerMenu } from "../../tasks/ui/TaskPickerMenu";
 import { useTaskPickerMenu } from "../../tasks/ui/useTaskPickerMenu";
 import { useQuickPickerMotion } from "./useQuickPickerMotion";
@@ -532,6 +541,18 @@ export function QuickComposer({
   const promptMenu = useSavedPromptMenu({ apply: applyInsertedText });
   // `#` inserts a Todo task of the chosen project or Personal (L-180).
   const taskMenu = useTaskPickerMenu({ cwd, apply: applyInsertedText });
+  // Fork (L-252): ✨ only where a workspace window hosts this composer. The
+  // floating panel would start its own helper under the same process id as
+  // the workspace window's helper, so it stays off there.
+  const promptImprove = usePromptImprove({
+    available: embedded && !taskMode && !!cwd,
+    scopeKey: `${kind}:${cwd ?? ""}`,
+    text: prompt,
+    cwd: cwd ?? "",
+    harness: model.harness,
+    getText: () => promptRef.current?.value ?? prompt,
+    setText: (next) => applyInsertedText(next, next.length),
+  });
 
   const syncPromptCommand = (field: HTMLTextAreaElement) => {
     if (!taskMode) {
@@ -596,6 +617,7 @@ export function QuickComposer({
       await saveTask();
       return;
     }
+    const sentPrompt = prompt;
     const launchMode = quickPromptMode(prompt.trim());
     // `/draft` keeps working as a shortcut for Save to Draft.
     const action: SessionAction =
@@ -671,6 +693,7 @@ export function QuickComposer({
       rememberQuickProject(cwd);
       saveLastModelSettings(settings);
       saveRecentModelChoice(picked.harness, picked.model);
+      promptImprove.recordSend(sentPrompt);
       setPrompt("");
       setRemoteChoice(null);
       setPicker(null);
@@ -687,6 +710,15 @@ export function QuickComposer({
     if (event.nativeEvent.isComposing) return;
     if (!taskMode && promptMenu.onKeyDown(event)) return;
     if (!taskMode && taskMenu.onKeyDown(event)) return;
+    if (event.key === "Escape" && promptImprove.cancel()) {
+      event.preventDefault();
+      return;
+    }
+    if (promptImprove.visible && isImprovePromptShortcut(event)) {
+      event.preventDefault();
+      promptImprove.trigger();
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       if (picker) closePicker();
@@ -798,6 +830,7 @@ export function QuickComposer({
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented) return;
         event.preventDefault();
+        if (promptImprove.cancel()) return;
         if (picker) closePicker();
         else dismiss();
       }}
@@ -907,12 +940,15 @@ export function QuickComposer({
           ))}
         </div>
       ) : null}
+      <ImprovePromptStrip improve={promptImprove} />
       <div className="relative shrink-0">
         <div
           ref={highlightRef}
           aria-hidden
           style={{ textIndent: indent }}
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 text-content"
+          className={`pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 text-content ${
+            promptImprove.peekText !== null ? "invisible" : ""
+          }`}
         >
           {showMode && leadingMode ? (
             <>
@@ -968,7 +1004,23 @@ export function QuickComposer({
               : undefined
           }
           spellCheck
-          className="composer-field scrollbar-none relative block w-full resize-none bg-transparent px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 outline-none select-text"
+          className={`composer-field scrollbar-none relative block w-full resize-none bg-transparent px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 outline-none select-text ${
+            promptImprove.peekText !== null ? "opacity-0" : ""
+          }`}
+        />
+        {promptImprove.peekText !== null ? (
+          <div
+            aria-hidden
+            style={{ textIndent: indent }}
+            className="scrollbar-none pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap wrap-break-word px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 text-content/70"
+          >
+            {promptImprove.peekText}
+          </div>
+        ) : null}
+        <RewriteReveal
+          reveal={promptImprove.reveal}
+          textStyle={{ textIndent: indent }}
+          textClassName="overflow-hidden whitespace-pre-wrap wrap-break-word px-4 pt-2 pb-2.5 font-sans text-sm leading-5.5 text-content"
         />
       </div>
       {taskMode ? (
@@ -1189,6 +1241,7 @@ export function QuickComposer({
             </button>
           ) : (
             <>
+              <ImprovePromptButton improve={promptImprove} />
               <button
                 type="button"
                 onClick={() => void submit("draft")}
