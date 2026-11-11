@@ -1,5 +1,12 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { Activity, CircleAlert, ExternalLink } from "../../../shared/ui/icons";
 import { OverlayNav } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
@@ -20,7 +27,7 @@ import {
   type ActivityScope,
 } from "../model/activity";
 import { IS_MAC } from "../../../platform/tauri/platform";
-import { ActivityLogFeed } from "./ActivityLogFeed";
+import { ActivityLogFeed, type LogFilter } from "./ActivityLogFeed";
 import { AgentStatusPill } from "./AgentStatusPill";
 import { AppsBreakdown, ProjectBreakdown, SitesBreakdown } from "./Breakdown";
 import { DailyBars } from "./DailyBars";
@@ -33,7 +40,7 @@ import { useActivityData } from "./useActivityData";
 const ACTIVITYWATCH_URL = "https://activitywatch.net/";
 const EMPTY_LOG: ActivityLog = { events: [], notes: [] };
 /** Remember the viewed period while the app runs, like Notes remembers its note. */
-let remembered: { anchor: Date; scope: ActivityScope } | null = null;
+let remembered: { anchor: Date; scope: ActivityScope; logFilter: LogFilter } | null = null;
 
 type Props = {
   /** Rendered as an inset-layout title tab, which supplies its own header. */
@@ -69,6 +76,7 @@ export function ActivityView({
     () => remembered?.anchor ?? shiftDay(new Date(), 0),
   );
   const [scope, setScope] = useState<ActivityScope>(() => remembered?.scope ?? "day");
+  const [logFilter, setLogFilter] = useState<LogFilter>(() => remembered?.logFilter ?? "all");
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const scrollLock = useLockOverscroll<HTMLDivElement>();
@@ -77,12 +85,19 @@ export function ActivityView({
   const { log, aw, agent, isLive } = data;
 
   useEffect(() => {
-    remembered = { anchor, scope };
-  }, [anchor, scope]);
+    remembered = { anchor, scope, logFilter };
+  }, [anchor, scope, logFilter]);
 
   const openDay = (start: number): void => {
     setAnchor(new Date(start));
     setScope("day");
+    setLogFilter("all");
+  };
+
+  /** From "Notes by day": the day opens showing only its notes. */
+  const openDayNotes = (start: number): void => {
+    openDay(start);
+    setLogFilter("notes");
   };
 
   useEffect(() => {
@@ -152,7 +167,11 @@ export function ActivityView({
         </div>
       )}
 
-      <div ref={scrollLock} className="min-h-0 flex-1 overflow-y-auto overscroll-none">
+      {/* A size container, so lists inside can stop at its height (`cqh`). */}
+      <div
+        ref={scrollLock}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-none [container-type:size]"
+      >
         <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-5 sm:px-6">
           <PeriodNav
             anchor={anchor}
@@ -197,7 +216,7 @@ export function ActivityView({
                   <SitesBreakdown aw={awData} />
                 </div>
                 {summaryKey ? (
-                  <div className="flex min-w-0 flex-col gap-6">
+                  <MatchLeftColumn>
                     <PeriodSummaryCard
                       periodKey={summaryKey}
                       label={periodPromptLabel(anchor, scope)}
@@ -205,20 +224,40 @@ export function ActivityView({
                       notesEnabled={aiNotes}
                       hasActivity={current.events.length > 0 || current.notes.length > 0}
                     />
-                    <PeriodNotes notes={current.notes} onOpenDay={openDay} />
-                  </div>
+                    <PeriodNotes notes={current.notes} onOpenDay={openDayNotes} />
+                  </MatchLeftColumn>
                 ) : (
-                  <ActivityLogFeed
-                    items={items}
-                    agent={agent}
-                    onRetry={data.retryNotes}
-                    onOpenSession={onOpenSession}
-                  />
+                  <MatchLeftColumn>
+                    <ActivityLogFeed
+                      items={items}
+                      agent={agent}
+                      filter={logFilter}
+                      onFilter={setLogFilter}
+                      onRetry={data.retryNotes}
+                      onOpenSession={onOpenSession}
+                    />
+                  </MatchLeftColumn>
                 )}
               </div>
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The right column on a wide window: as tall as the left column (at least
+ * 320px), never taller than the Activity pane, like the task panel; its list
+ * fills the rest and scrolls inside. Absolute so it adds no height to the row.
+ * Stacked on a narrow window it flows normally.
+ */
+function MatchLeftColumn({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <div className="relative min-w-0 lg:min-h-80">
+      <div className="flex min-h-0 flex-col gap-6 lg:absolute lg:inset-0 lg:max-h-[calc(100cqh-2.5rem)] lg:overflow-y-auto lg:overscroll-contain">
+        {children}
       </div>
     </div>
   );

@@ -187,32 +187,88 @@ function NotesBanner({
   );
 }
 
+/**
+ * A long list fills its column and scrolls inside it (see `MatchLeftColumn` in
+ * ActivityView). Stacked on a narrow window it stops at the height of the
+ * Activity pane (`cqh` of its scroller). Focusable so the keyboard can scroll
+ * it (WCAG 2.1.1).
+ */
+export const SCROLL_LIST =
+  "min-h-0 flex-1 max-h-[calc(100cqh-2.5rem)] lg:max-h-none overflow-y-auto overscroll-contain rounded-md pr-1 outline-none focus-visible:ring-1 focus-visible:ring-accent/60";
+
+/** What the day's log shows: everything, or only agy notes. */
+export type LogFilter = "all" | "notes";
+
+const LOG_FILTERS: { id: LogFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "notes", label: "Notes" },
+];
+
 /** Logbook of the day: agy notes interleaved with prompts and finished turns. */
 export function ActivityLogFeed({
   items,
   agent,
+  filter,
+  onFilter,
   onRetry,
   onOpenSession,
 }: {
   items: LogItem[];
   agent: AgentStatus | null;
+  filter: LogFilter;
+  onFilter: (filter: LogFilter) => void;
   onRetry: () => void;
   onOpenSession?: (sessionId: string) => void;
 }): ReactElement {
+  const noteCount = items.filter((item) => item.type === "note").length;
+  const shown = filter === "notes" ? items.filter((item) => item.type === "note") : items;
   return (
-    <section aria-label="Log" className="flex min-w-0 flex-col">
-      <header className="flex items-baseline justify-between px-1 pb-2">
+    <section aria-label="Log" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex items-center justify-between gap-2 px-1 pb-2">
         <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-content/45">Log</h3>
-        <span className="text-[11px] text-content/35">Newest first</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-content/35">Newest first</span>
+          <div
+            role="radiogroup"
+            aria-label="Show in the log"
+            className="flex rounded-md border border-stroke p-0.5"
+          >
+            {LOG_FILTERS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={filter === option.id}
+                onClick={() => onFilter(option.id)}
+                className={`flex h-5.5 items-center gap-1 rounded px-2 text-[11.5px] transition-[background-color,color,transform] duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 active:scale-96 ${
+                  filter === option.id
+                    ? "bg-content/10 font-medium text-content"
+                    : "text-content/55 hover:text-content"
+                }`}
+              >
+                {option.label}
+                {option.id === "notes" ? (
+                  <span className="tabular-nums text-content/40">{noteCount}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
       <NotesBanner status={agent} onRetry={onRetry} />
-      {items.length === 0 ? (
+      {shown.length === 0 ? (
         <p className="px-1 text-[12px] text-content/40">
-          Nothing yet. Send a prompt in any session and it lands here.
+          {filter === "notes" && items.length > 0
+            ? "No agy notes on this day yet."
+            : "Nothing yet. Send a prompt in any session and it lands here."}
         </p>
       ) : (
-        <ol className="relative flex flex-col">
-          {items.map((item) => (
+        <ol
+          tabIndex={0}
+          aria-label={filter === "notes" ? "Notes on this day" : "Log entries"}
+          className={`relative flex flex-col ${SCROLL_LIST}`}
+        >
+          {shown.map((item) => (
             <li key={item.key} className="grid grid-cols-[42px_minmax(0,1fr)] gap-2 py-1">
               <time
                 dateTime={new Date(item.ts).toISOString()}

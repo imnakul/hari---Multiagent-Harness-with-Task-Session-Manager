@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
-import { LoaderCircle, RefreshCw, Sparkles } from "../../../shared/ui/icons";
+import { ChevronRight, LoaderCircle, RefreshCw, Sparkles } from "../../../shared/ui/icons";
 import { AgentMarkdown } from "../../sessions/ui/AgentMarkdown";
 import {
   formatClock,
@@ -10,6 +10,7 @@ import {
   type PeriodSummary,
   type Span,
 } from "../model/activity";
+import { SCROLL_LIST } from "./ActivityLogFeed";
 
 const BUTTON =
   "flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-stroke px-2.5 text-[12px] text-content/80 transition-colors hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:pointer-events-none disabled:opacity-40";
@@ -128,7 +129,10 @@ export function PeriodSummaryCard({
   );
 }
 
-/** The period's agy notes, grouped by day, newest first. A day heading opens that day. */
+/**
+ * The period's agy notes, grouped by day, newest first; the list fills the
+ * rest of its column and scrolls. A day heading opens that day in Day view showing only its notes.
+ */
 export function PeriodNotes({
   notes,
   onOpenDay,
@@ -138,7 +142,7 @@ export function PeriodNotes({
 }): ReactElement {
   const groups = notesByDay(notes);
   return (
-    <section aria-label="Notes by day" className="flex min-w-0 flex-col">
+    <section aria-label="Notes by day" className="flex min-h-48 min-w-0 flex-1 flex-col">
       <header className="flex items-baseline justify-between px-1 pb-2">
         <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-content/45">
           Notes by day
@@ -148,19 +152,35 @@ export function PeriodNotes({
       {groups.length === 0 ? (
         <p className="px-1 text-[12px] text-content/40">No agy notes in this period.</p>
       ) : (
-        <ol className="flex flex-col gap-4">
+        <ol
+          tabIndex={0}
+          aria-label="Notes, newest day first"
+          className={`flex flex-col gap-4 ${SCROLL_LIST}`}
+        >
           {groups.map((group) => (
             <li key={group.day}>
               <button
                 type="button"
                 onClick={() => onOpenDay(group.day)}
-                className="mb-1.5 rounded px-1 text-[12px] font-medium text-content/80 transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+                title="View this day's notes in Day view"
+                className="group mb-1.5 flex items-center gap-1.5 rounded px-1 text-[12px] font-medium text-content/80 transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
               >
                 {new Date(group.day).toLocaleDateString(undefined, {
                   weekday: "long",
                   day: "numeric",
                   month: "short",
                 })}
+                <span className="font-normal tabular-nums text-content/35">
+                  {group.notes.length} {group.notes.length === 1 ? "note" : "notes"}
+                </span>
+                <span className="flex items-center gap-0.5 text-[11px] font-normal text-content/45 transition-colors group-hover:text-accent">
+                  View notes
+                  <ChevronRight
+                    aria-hidden
+                    className="size-3 transition-transform duration-150 group-hover:translate-x-0.5"
+                    strokeWidth={1.75}
+                  />
+                </span>
               </button>
               <ul className="flex flex-col gap-1.5 border-l border-stroke pl-3">
                 {group.notes.map((note) => (
