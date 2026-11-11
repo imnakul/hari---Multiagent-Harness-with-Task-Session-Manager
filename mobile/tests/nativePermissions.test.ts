@@ -69,7 +69,7 @@ it("removes unused Android microphone, storage and audio foreground-service perm
     "RECORD_AUDIO",
     "READ_EXTERNAL_STORAGE",
     "WRITE_EXTERNAL_STORAGE",
-    "FOREGROUND_SERVICE",
+    // Fork (Hari, L-254): FOREGROUND_SERVICE stays; see the Live Update test below.
     "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
   ]) {
     expect(permissions).toContainEqual({
@@ -81,4 +81,17 @@ it("removes unused Android microphone, storage and audio foreground-service perm
     "expo.modules.audio.service.AudioControlsService",
   );
   expect(ios.infoPlist.UIBackgroundModes ?? []).not.toContain("audio");
+});
+
+// Fork (Hari, L-254): a blocked permission becomes tools:node="remove", which
+// also strips hari-live's own declaration, so Android refused startForeground
+// ("requires android.permission.FOREGROUND_SERVICE") and Live Updates turned off.
+it("keeps the foreground-service permissions Hari's Live Update needs", () => {
+  const permissions = android.manifest.manifest["uses-permission"];
+  for (const name of ["FOREGROUND_SERVICE", "FOREGROUND_SERVICE_SPECIAL_USE"]) {
+    expect(permissions).toContainEqual({ $: { "android:name": `android.permission.${name}` } });
+    expect(permissions).not.toContainEqual({
+      $: { "android:name": `android.permission.${name}`, "tools:node": "remove" },
+    });
+  }
 });

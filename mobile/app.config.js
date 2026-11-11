@@ -3,6 +3,8 @@
 // layers the fork's name, icons, version, signing and update check on top.
 const { version } = require("../package.json");
 
+const { LIVE_UPDATE_PERMISSIONS } = require("./plugins/with-live-update-permissions");
+
 const HARI_REPO = "imnakul/hari---Multiagent-Harness-with-Task-Session-Manager";
 
 /**
@@ -33,6 +35,11 @@ module.exports = ({ config }) => {
         ]
       : plugin,
   );
+  // Fork (Hari, L-254): upstream blocks FOREGROUND_SERVICE (no background
+  // audio there); Hari's Live Update needs it. See with-live-update-permissions.
+  const blockedPermissions = (config.android?.blockedPermissions ?? []).filter(
+    (permission) => !LIVE_UPDATE_PERMISSIONS.includes(permission),
+  );
   return {
     ...config,
     name: "Hari",
@@ -51,9 +58,19 @@ module.exports = ({ config }) => {
         backgroundImage: "./assets/images/hari-android-background.png",
         monochromeImage: "./assets/images/hari-android-monochrome.png",
       },
-      permissions: [...(config.android?.permissions ?? []), "android.permission.REQUEST_INSTALL_PACKAGES"],
+      blockedPermissions,
+      permissions: [
+        ...(config.android?.permissions ?? []),
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        ...LIVE_UPDATE_PERMISSIONS,
+      ],
     },
-    plugins: [...plugins, "./plugins/with-hari-signing", "./plugins/with-system-bars"],
+    plugins: [
+      ...plugins,
+      "./plugins/with-hari-signing",
+      "./plugins/with-system-bars",
+      "./plugins/with-live-update-permissions",
+    ],
     // Updates come as whole APKs from GitHub releases, not Expo's update service.
     updates: { enabled: false },
     extra: {
