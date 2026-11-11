@@ -21,6 +21,7 @@ import {
 import Animated, {
   Easing,
   FadeIn,
+  FadeOut,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -428,7 +429,11 @@ export function Transcript({
                 JUMP_DISTANCE,
             );
           }}
-          scrollEventThrottle={100}
+          // Every event: Android drops one that comes within the throttle of
+          // the last and sends no trailing one, so two quick programmatic
+          // scrolls left `offsetY` behind and `keepInRange` missed a reader
+          // left past the end (L-246). Below 17ms it throttles nothing.
+          scrollEventThrottle={16}
           onContentSizeChange={(_, height) => {
             contentHeight.current = height;
             update();
@@ -448,6 +453,10 @@ export function Transcript({
           )}
         />
       </Animated.View>
+      {/* Fork (Hari, L-246): turns kept from the last visit are here, but the
+          list stays hidden until it has placed them; without this the screen
+          showed only the wallpaper meanwhile, like an empty chat. */}
+      {allTurns.length > 0 && !settled ? <TranscriptLoading since={mountedAt} /> : null}
     </TranscriptOpened>
   );
 }
@@ -511,19 +520,26 @@ function HeldRow({
  * A spinner in the middle of the transcript's space while a session's turns
  * load, so opening one shows it is on its way rather than an empty screen.
  */
-export function TranscriptLoading() {
+export function TranscriptLoading({
+  since,
+}: {
+  /** When the wait began, if before this mounted: the delay counts from then. */
+  since?: number;
+} = {}) {
   const colors = useColors();
   const { top, bottom } = useSessionLayout();
   const [shown, setShown] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setShown(true), LOADING_AFTER);
+    const waited = since === undefined ? 0 : Date.now() - since;
+    const timer = setTimeout(() => setShown(true), Math.max(0, LOADING_AFTER - waited));
     return () => clearTimeout(timer);
-  }, []);
+  }, [since]);
   if (!shown) return null;
   return (
     <Animated.View
       pointerEvents="none"
       entering={FadeIn.duration(200)}
+      exiting={FadeOut.duration(150)}
       style={[styles.loading, { paddingTop: top, paddingBottom: bottom }]}
     >
       <ActivityIndicator color={colors.muted} />

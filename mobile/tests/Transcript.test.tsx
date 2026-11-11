@@ -15,6 +15,12 @@ type ListProps = {
   renderItem: (row: { item: Turn }) => ReactNode;
   onLayout: (event: { nativeEvent: { layout: { height: number } } }) => void;
   onContentSizeChange: (width: number, height: number) => void;
+  onScroll: (event: { nativeEvent: {
+    contentOffset: { y: number };
+    contentSize: { height: number };
+    layoutMeasurement: { height: number };
+  } }) => void;
+  scrollEventThrottle: number;
   contentContainerStyle: { paddingTop?: number; paddingBottom?: number }[];
   renderScrollComponent: (props: ListProps) => ReactElement<{
     blankSpace: { get: () => number };
@@ -52,7 +58,7 @@ vi.mock("react-native", async () => {
   return {
     View,
     FlatList,
-    ActivityIndicator: () => null,
+    ActivityIndicator: () => <i data-loading />,
     Keyboard: { dismiss: native.dismissKeyboard },
     StyleSheet: { create: (styles: unknown) => styles },
     useColorScheme: () => "dark",
@@ -66,6 +72,8 @@ vi.mock("react-native-reanimated", async () => {
   return {
     default: { View: ({ children }: { children?: ReactNode }) => <div>{children}</div> },
     Easing: { out: () => {}, cubic: () => {}, bezier: () => () => 0 },
+    FadeIn: { duration: () => ({}) },
+    FadeOut: { duration: () => ({}) },
     useAnimatedReaction: () => {},
   useAnimatedStyle: () => ({}),
   useDerivedValue: (compute: () => number) => ({ get: compute }),
@@ -204,6 +212,37 @@ describe("transcript anchoring", () => {
     expect(scrollToEnd).toHaveBeenCalledExactlyOnceWith({ animated: false });
     const scroll = listProps.renderScrollComponent(listProps).props;
     expect(scroll.blankSpace.get()).toBe(0);
+  });
+
+  it("returns to the end when the list shrinks under a reader left past it", () => {
+    const turns = Array.from({ length: 12 }, (_, index) => userTurn(`turn-${index}`, `Message ${index}`));
+    render(turns);
+    flushFrames();
+    // Android drops a scroll event within the throttle of the last one; the
+    // list must hear every one to know where the reader really is (L-246).
+    expect(listProps.scrollEventThrottle).toBeLessThan(17);
+    act(() => listProps.onScroll({ nativeEvent: {
+      contentOffset: { y: 900 }, contentSize: { height: 1700 }, layoutMeasurement: { height: 800 },
+    } }));
+    scrollToEnd.mockClear();
+    // The desktop's fresh copy is shorter: the reader is now past its end.
+    render(turns.slice(-3));
+    flushFrames();
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+  });
+
+  it("shows a spinner while turns it already has are still being placed", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const loading = () => container.querySelector("[data-loading]");
+      render([userTurn("previous", "Earlier message")]);
+      act(() => vi.advanceTimersByTime(300));
+      expect(loading()).not.toBeNull();
+      flushFrames();
+      expect(loading()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens a working session anchored", () => {
