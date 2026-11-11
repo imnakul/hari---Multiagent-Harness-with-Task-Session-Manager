@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-11-11 23:25 | [Review — Improve prompt in the composer (L-252)](improve-prompt-plan.md) | ✨ next to Send rewrites the draft in place (Original toggle, hold to peek, Restore); keeps paths, mentions, IDs and a leading /command; learns a "How I write" profile and a project glossary on this device; offers Add to AGENTS.md for a rule said in 3+ prompts. Desktop check manual. |
 | 2026-11-11 07:24 | [Review — Remove Antigravity ACP (L-244)](remove-antigravity-acp.md) | ACP gone from desktop, phone and remote host; Antigravity CLI kept. Desktop check manual. |
 | 2026-11-11 00:47 | [Review — Hari: running projects in the side menu, Tasks filters, colour logo, Live Update fixes (L-241)](hari-sidebar-tasks-live-fixes-plan.md) | Shimmer and running count with expandable sessions in the side menu; Tasks Focus / Group by / project chips; colour logo; Live Update crash guard, stale-card cleanup and short chip; Activity Aside sites and per-tab time. Phone and desktop checks manual. |
 | 2026-11-10 10:30 | [Review — Activity tracker (L-240)](activity-tracker-plan.md) | Local log of prompts and agent time in its own `activity.db`; Day/Week/Month with a date picker; ActivityWatch apps, meetings and sites; always-on `agy` notes and on-demand week/month summaries; Settings master switch; process-monitor row. Desktop check manual. |

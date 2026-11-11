@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 11 Nov 2026 | Send Interactive messages as several small pastes so Claude never folds them | Claude Interactive, paste folding |
 | 20 Oct 2026 | Fall back to the prompt screen when native output never goes quiet | ConPTY, paste settlement |
 | 18 Oct 2026 | Verify native process identity before stopping a tool | resources, PID reuse |
 | 17 Oct 2026 | Reconcile folded native input with the original GUI turn | Claude Interactive, timing |
@@ -62,6 +63,18 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 11 Nov 2026 - Send Interactive messages as several small pastes so Claude never folds them
+
+Claude Code 2.1.322 folds one bracketed paste with more than 800 characters, or
+more than `min(rows - 10, 2)` line breaks, into a "[Pasted text #N]" pill, and
+signed-in accounts send it to the model as `<pasted_content>`. Its tokenizer
+handles each bracketed frame on its own, so `paste_payload` now splits the text
+around the typed letter into frames of at most 700 UTF-16 units and 2 breaks
+(a tab counts 4, "\r\n" is never split). Past 120 frames it keeps one frame per
+part, as before. ConPTY ingest and the single Enter are unchanged: the settle
+floor still uses the whole payload size (L-250, amends the 17 Oct section
+"Keep literal request text outside a folded Claude paste").
 
 ## 20 Oct 2026 - Fall back to the prompt screen when native output never goes quiet
 
