@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-12 01:23 IST — Hari release run failed on local39; config fix, release as local40 (L-254)
+- Type: fix
+- What: The local39 release stopped at its first step (run 43091034448), before building anything, so nothing was published. That step reads the phone app's settings file before any package is installed, and the L-254 change made the file load an Expo package. The list of Live Update permissions now sits in a small file of its own, and a test checks that the settings file loads without any package. The release goes out as 0.16.0-local40; the `hari-v0.16.0-local39` tag stays on GitHub without a release.
+- Why: Release run failure ("Cannot find module 'expo/config-plugins'" from `with-live-update-permissions.js`).
+- Files: [live-update-permissions.js](mobile/plugins/live-update-permissions.js), [app.config.js (line 7)](mobile/app.config.js:7), [with-live-update-permissions.js (line 8)](mobile/plugins/with-live-update-permissions.js:8), [nativePermissions.test.ts (lines 98–113)](mobile/tests/nativePermissions.test.ts:98)
+- Commit: uncommitted
+- Verified: mobile typecheck ✅ lint ✅ nativePermissions 6/6 ✅; the Version job's `node -e "require('./mobile/app.config.js')..."` runs locally ✅
+
 ## 2026-11-12 01:12 IST — Hari: Live Updates can start; the APK keeps the foreground-service permission (L-254)
 - Type: fix
 - What: Turning on Live Updates in Hari showed "Live Updates turned off … requires android.permission.FOREGROUND_SERVICE" and the running-session card never appeared. The phone app was built without the permission Android needs for that card. It now has it, so the card can show on the status bar and lock screen.
