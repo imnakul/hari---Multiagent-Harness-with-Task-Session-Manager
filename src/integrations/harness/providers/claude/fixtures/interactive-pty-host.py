@@ -48,12 +48,31 @@ def frame(text):
     return "\x1b[200~" + text + "\x1b[201~"
 
 
+def chunks(text):
+    # Mirrors interactive_delivery::chunks (L-250): Claude folds a paste over
+    # 800 characters or 2 line breaks into a label the model treats as quoted.
+    parts, start, units, breaks, index = [], 0, 0, 0, 0
+    while index < len(text):
+        end = index + (2 if text[index:index + 2] == "\r\n" else 1)
+        size = 4 if text[index] == "\t" else len(text[index:end].encode("utf-16-le")) // 2
+        line = 1 if text[index] in "\r\n" else 0
+        if index > start and (units + size > 700 or breaks + line > 2):
+            parts.append(text[start:index])
+            start, units, breaks = index, 0, 0
+        units, breaks, index = units + size, breaks + line, end
+    if start < len(text):
+        parts.append(text[start:])
+    return parts
+
+
 def paste_payload(text):
     if text != "/compact":
         for offset, letter in enumerate(text):
             if letter.isalnum():
-                return ((frame(text[:offset]) if offset else "") + letter +
-                        (frame(text[offset + 1:]) if offset + 1 < len(text) else ""))
+                parts = [chunks(text[:offset]), chunks(text[offset + 1:])]
+                if len(parts[0]) + len(parts[1]) > 120:
+                    parts = [[part] if part else [] for part in (text[:offset], text[offset + 1:])]
+                return "".join(map(frame, parts[0])) + letter + "".join(map(frame, parts[1]))
     return frame(text)
 
 

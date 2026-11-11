@@ -118,6 +118,7 @@ it
     const attachmentPaths: string[] = [];
     let sawAttachedImage = false;
     let output = Buffer.alloc(0);
+    let foldedPaste = false;
     const server = createServer(async (request, response) => {
       try {
         const chunks: Buffer[] = [];
@@ -329,6 +330,9 @@ it
       if (value.event === "data") {
         const chunk = Buffer.from(value.data!, "base64");
         output = Buffer.concat([output, chunk]);
+        foldedPaste ||= output
+          .subarray(Math.max(0, output.length - chunk.length - 32))
+          .includes("[Pasted text #");
         ipc.listeners.get("pty-data")?.({
           payload: { id: `claude-interactive:${id}`, data: value.data },
         });
@@ -367,6 +371,8 @@ it
           if (command === "claude_interactive_start") {
             const input = args.input as Record<string, unknown>;
             starts.push(input);
+            const prompt = input.prompt as { text: string } | undefined;
+            if (prompt) sends.push(prompt.text);
             phase = "ready";
             skipForkHistory = !!input.fork;
             output = Buffer.alloc(0);
@@ -460,6 +466,8 @@ it
                 input.effort,
                 "--settings",
                 JSON.stringify(settings),
+                // Launch prompt, last as in the native start command.
+                ...(prompt ? [prompt.text] : []),
               ],
               cwd,
               env: {
@@ -658,6 +666,11 @@ it
         resume: true,
       });
       expect(requests.length).toBeGreaterThanOrEqual(messages.length);
+      // Multi-line and long sends stay inline. A folded paste reaches the model
+      // of a signed-in account wrapped in <pasted_content>, as quoted material
+      // rather than the user's own words (L-250). This fixture account gets no
+      // wrapper, so check the fold itself.
+      expect(foldedPaste).toBe(false);
       // Native resume reuses the recorded system/tool prefix; no summary or
       // added system instructions are introduced by our idle-stop path.
       expect(requestPrefixes[2] === requestPrefixes[0]).toBe(true);

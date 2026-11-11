@@ -6,6 +6,51 @@ fn frame(text: &str) -> String {
     format!("\x1b[200~{text}\x1b[201~")
 }
 
+/// Claude folds one paste longer than 800 characters, or with more than two
+/// line breaks, into a "[Pasted text #1 +N lines]" label. The model then gets
+/// it as quoted material "the user did not write", so it may not follow the
+/// instructions in it (fork, L-250). Smaller pastes are inserted as typed text,
+/// and Claude handles each bracketed paste on its own, so a message goes as
+/// several small pastes. Limits keep a margin under Claude's; a tab counts as
+/// the four spaces Claude turns it into.
+const PASTE_UNITS: usize = 700;
+const PASTE_BREAKS: usize = 2;
+/// Past this many pastes (about 240 lines or 80 KB), keep one folded paste per
+/// part as before: Claude redraws its prompt once per paste.
+const MAX_PASTES: usize = 120;
+
+fn chunks(text: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let (mut start, mut units, mut breaks) = (0, 0, 0);
+    let mut chars = text.char_indices().peekable();
+    while let Some((index, c)) = chars.next() {
+        // "\r\n" is one break and is never split across two pastes.
+        let end = match (c, chars.peek()) {
+            ('\r', Some(&(next, '\n'))) => {
+                chars.next();
+                next + 1
+            }
+            _ => index + c.len_utf8(),
+        };
+        let size = if c == '\t' {
+            4
+        } else {
+            text[index..end].encode_utf16().count()
+        };
+        let line = usize::from(c == '\n' || c == '\r');
+        if index > start && (units + size > PASTE_UNITS || breaks + line > PASTE_BREAKS) {
+            parts.push(&text[start..index]);
+            (start, units, breaks) = (index, 0, 0);
+        }
+        units += size;
+        breaks += line;
+    }
+    if start < text.len() {
+        parts.push(&text[start..]);
+    }
+    parts
+}
+
 /// Claude manual mode needs literal request text outside a folded context paste.
 /// Keep every original character and never type a control or mode shortcut.
 pub(crate) fn paste_payload(text: &str) -> String {
@@ -26,26 +71,27 @@ pub(crate) fn repaste_payload(text: &str) -> String {
 }
 
 fn payload(text: &str, typed: bool) -> String {
-    if text != "/compact" {
-        if let Some((offset, letter)) = text.char_indices().find(|(_, c)| c.is_alphanumeric()) {
-            let end = offset + letter.len_utf8();
-            return format!(
-                "{}{}{}",
-                if offset == 0 {
-                    String::new()
-                } else {
-                    frame(&text[..offset])
-                },
-                if typed { letter.to_string() } else { String::new() },
-                if end == text.len() {
-                    String::new()
-                } else {
-                    frame(&text[end..])
-                },
-            );
-        }
+    let letter = (text != "/compact")
+        .then(|| text.char_indices().find(|(_, c)| c.is_alphanumeric()))
+        .flatten();
+    let Some((offset, letter)) = letter else {
+        return frame(text);
+    };
+    let (before, after) = (&text[..offset], &text[offset + letter.len_utf8()..]);
+    let mut parts = [chunks(before), chunks(after)];
+    if parts.iter().map(Vec::len).sum::<usize>() > MAX_PASTES {
+        parts =
+            [before, after].map(|part| (!part.is_empty()).then_some(part).into_iter().collect());
     }
-    frame(text)
+    let [before, after] = parts.map(|part| part.into_iter().map(frame).collect::<String>());
+    format!(
+        "{before}{}{after}",
+        if typed {
+            letter.to_string()
+        } else {
+            String::new()
+        }
+    )
 }
 
 pub(crate) fn paste_settle_delay(bytes: usize) -> Duration {
@@ -118,7 +164,7 @@ mod tests {
         for (text, expected) in [
             (
                 "Read files\none\ntwo\nthree\nfour",
-                "R\x1b[200~ead files\none\ntwo\nthree\nfour\x1b[201~",
+                "R\x1b[200~ead files\none\ntwo\x1b[201~\x1b[200~\nthree\nfour\x1b[201~",
             ),
             (
                 "\n\t!हैलो\nworld",
@@ -143,9 +189,57 @@ mod tests {
             ("C", "C"),
             ("/compact", "\x1b[200~/compact\x1b[201~"),
             ("?!", "\x1b[200~?!\x1b[201~"),
+            (
+                "Fix a\nb\nc\nd",
+                "\x1b[200~ix a\nb\nc\x1b[201~\x1b[200~\nd\x1b[201~",
+            ),
         ] {
             assert_eq!(repaste_payload(text), expected);
         }
+    }
+
+    fn frames(payload: &str) -> Vec<&str> {
+        payload
+            .split("\x1b[200~")
+            .filter_map(|part| part.split_once("\x1b[201~").map(|(inside, _)| inside))
+            .collect()
+    }
+
+    /// Regression (L-250): one paste with 3+ line breaks or 800+ characters
+    /// reached the model as `<pasted_content>`, so a multi-line request was
+    /// treated as quoted material instead of the user's own words.
+    #[test]
+    fn every_paste_stays_under_claudes_fold_limits_and_keeps_the_text() {
+        let paragraphs = (1..=12)
+            .map(|n| format!("Paragraph {n}: keep\tthe onboarding styles, 你好 नमस्ते 😀."))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let crlf = "Line one\r\nLine two\r\nLine three\r\nLine four";
+        let dense = format!("Dense {}", "context ".repeat(300));
+        let blank = format!("Start{}end", "\n".repeat(9));
+        for text in [paragraphs.as_str(), crlf, dense.as_str(), blank.as_str()] {
+            let payload = paste_payload(text);
+            assert_eq!(
+                payload.replace("\x1b[200~", "").replace("\x1b[201~", ""),
+                text
+            );
+            let pasted = frames(&payload);
+            assert!(pasted.len() > 1, "{text:?} must not be one folded paste");
+            for part in pasted {
+                assert!(!part.is_empty() && !part.ends_with('\r'));
+                assert!(part.matches(['\n', '\r']).count() - part.matches("\r\n").count() <= 2);
+                assert!(part.encode_utf16().count() + part.matches('\t').count() * 3 <= 700);
+            }
+        }
+    }
+
+    #[test]
+    fn very_long_text_keeps_one_paste_per_part() {
+        let text = format!("Log\n{}", "line\n".repeat(400));
+        assert_eq!(
+            paste_payload(&text),
+            format!("L\x1b[200~{}\x1b[201~", &text[1..])
+        );
     }
 
     #[test]
