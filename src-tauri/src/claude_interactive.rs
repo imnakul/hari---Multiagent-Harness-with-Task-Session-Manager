@@ -39,6 +39,9 @@ struct LiveState {
     background: HashSet<String>,
     uncertain_background: bool,
     skip_fork_history: bool,
+    /// Fork (L-242): when the fork launched. The forked transcript starts with
+    /// the copied history; the first record stamped at or after this is new.
+    fork_since: Option<time::OffsetDateTime>,
     background_coverage: bool,
     untracked_work: bool,
     paste: Option<PendingPaste>,
@@ -335,6 +338,7 @@ pub fn claude_interactive_start(
             offset: if input.fork.is_some() { 0 } else { offset },
             activity: Some(Instant::now()),
             skip_fork_history: input.fork.is_some(),
+            fork_since: input.fork.is_some().then(time::OffsetDateTime::now_utc),
             background_coverage,
             ..Default::default()
         }),
@@ -500,15 +504,15 @@ fn handle_hook(live: Arc<Live>, mut request: tiny_http::Request) {
             {
                 live.changed.notify_all();
             }
-            if let Some(path) = value["transcript_path"]
-                .as_str()
-                .and_then(|p| safe_transcript(&live.root, &live.native_id, Path::new(p)))
-            {
-                if state.skip_fork_history && event == "UserPromptSubmit" {
-                    state.offset = path.metadata().map(|m| m.len()).unwrap_or(0);
-                    state.skip_fork_history = false;
+            if let Some(raw) = value["transcript_path"].as_str() {
+                if let Some(path) = safe_transcript(&live.root, &live.native_id, Path::new(raw)) {
+                    state.transcript = Some(path);
+                } else if state.skip_fork_history && state.transcript.is_none() {
+                    // Fork (L-242): Claude 2.1.322 writes the forked file just
+                    // after its first prompt hook. Keep the path; the poll
+                    // validates it once the file exists.
+                    state.transcript = Some(PathBuf::from(raw));
                 }
-                state.transcript = Some(path);
             }
         }
         if permission {
@@ -851,6 +855,51 @@ fn safe_transcript(root: &Path, id: &str, path: &Path) -> Option<PathBuf> {
     (path.starts_with(root) && path.file_name()?.to_str()? == format!("{id}.jsonl")).then_some(path)
 }
 
+/// Fork (L-242): where the forked conversation's new turn starts. Claude writes
+/// the copied history first (its records keep their original times), then the
+/// new turn. The first complete conversation record stamped at or after the
+/// launch is new; `None` until Claude has written one.
+fn fork_turn_offset(path: &Path, since: time::OffsetDateTime) -> Result<Option<u64>, String> {
+    use std::io::BufRead;
+    #[derive(Deserialize)]
+    struct Stamp {
+        #[serde(rename = "sessionId")]
+        session_id: Option<String>,
+        timestamp: Option<String>,
+    }
+    let mut reader = std::io::BufReader::new(std::fs::File::open(path).map_err(|e| e.to_string())?);
+    let mut line = Vec::new();
+    let mut at = 0u64;
+    loop {
+        line.clear();
+        let read = reader
+            .read_until(b'\n', &mut line)
+            .map_err(|e| e.to_string())?;
+        if read == 0 || line.last() != Some(&b'\n') {
+            return Ok(None);
+        }
+        let new = serde_json::from_slice::<Stamp>(&line)
+            .ok()
+            .is_some_and(|stamp| {
+                stamp.session_id.is_some_and(|id| !id.is_empty())
+                    && stamp
+                        .timestamp
+                        .and_then(|t| {
+                            time::OffsetDateTime::parse(
+                                &t,
+                                &time::format_description::well_known::Rfc3339,
+                            )
+                            .ok()
+                        })
+                        .is_some_and(|t| t >= since)
+            });
+        if new {
+            return Ok(Some(at));
+        }
+        at += read as u64;
+    }
+}
+
 fn permission_reply(behavior: &str, updated_input: Option<Value>) -> Value {
     let mut decision = json!({"behavior":behavior});
     if let Some(input) = updated_input {
@@ -901,6 +950,22 @@ pub fn claude_interactive_poll(
             "Interactive event coverage was lost. Review the native terminal before continuing."
                 .into(),
         );
+    }
+    if state.skip_fork_history {
+        let found = match (
+            state.fork_since,
+            state
+                .transcript
+                .as_ref()
+                .and_then(|p| safe_transcript(&live.root, &live.native_id, p)),
+        ) {
+            (Some(since), Some(path)) => fork_turn_offset(&path, since)?,
+            _ => None,
+        };
+        if let Some(at) = found {
+            state.offset = at;
+            state.skip_fork_history = false;
+        }
     }
     let mut lines = Vec::new();
     let mut more = false;
@@ -1677,6 +1742,41 @@ mod tests {
         assert!(response.contains("\"behavior\":\"allow\""));
         worker.join().unwrap();
         assert!(live.state.lock().unwrap().replies.is_empty());
+    }
+
+    #[test]
+    fn forked_transcripts_start_at_the_first_record_after_launch() {
+        // Claude 2.1.322 shape: metadata, file-history snapshots stamped now but
+        // without a session, the copied history, then the new turn.
+        let path =
+            std::env::temp_dir().join(format!("monocode-fork-{}.jsonl", uuid::Uuid::new_v4()));
+        let since = time::OffsetDateTime::parse(
+            "2026-11-10T18:00:49.300Z",
+            &time::format_description::well_known::Rfc3339,
+        )
+        .unwrap();
+        let head = concat!(
+            "{\"type\":\"ai-title\",\"sessionId\":\"n\"}\n",
+            "{\"type\":\"file-history-snapshot\",\"timestamp\":\"2026-11-10T18:00:50.494Z\"}\n",
+            "{\"type\":\"user\",\"sessionId\":\"n\",\"timestamp\":\"2026-11-10T17:59:00.000Z\"}\n",
+            "{\"type\":\"assistant\",\"sessionId\":\"n\",\"timestamp\":\"2026-11-10T17:59:30.000Z\",\"message\":{\"timestamp\":\"2026-11-10T19:00:00.000Z\"}}\n",
+        );
+        std::fs::write(&path, head).unwrap();
+        assert_eq!(fork_turn_offset(&path, since).unwrap(), None);
+        let partial =
+            "{\"type\":\"user\",\"sessionId\":\"n\",\"timestamp\":\"2026-11-10T18:00:50.017Z\"}";
+        std::fs::write(&path, format!("{head}{partial}")).unwrap();
+        assert_eq!(
+            fork_turn_offset(&path, since).unwrap(),
+            None,
+            "waits for a complete record"
+        );
+        std::fs::write(&path, format!("{head}{partial}\n")).unwrap();
+        assert_eq!(
+            fork_turn_offset(&path, since).unwrap(),
+            Some(head.len() as u64)
+        );
+        std::fs::remove_file(&path).unwrap();
     }
 
     #[test]
