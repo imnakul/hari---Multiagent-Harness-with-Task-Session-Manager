@@ -12,7 +12,6 @@ const activity = vi.hoisted(() => ({
   finished: [] as FinishedSession[],
   arrivals: {} as Record<string, number>,
   hidden: false,
-  activate: (_index: number) => {},
 }));
 
 vi.mock("react-native", () => ({
@@ -164,14 +163,7 @@ vi.mock("@/ui/LiquidView", async () => {
   };
 });
 vi.mock("@/ui/Ticker", () => ({
-  Ticker: ({
-    items,
-    onActiveChange,
-  }: {
-    items: { key: string; text: string }[];
-    onActiveChange: (index: number) => void;
-  }) => {
-    activity.activate = onActiveChange;
+  Ticker: ({ items }: { items: { key: string; text: string }[] }) => {
     return (
       <div data-ticker>
         {items.map((item) => (
@@ -270,21 +262,29 @@ describe("working-to-finished pill handoff", () => {
     );
   });
 
-  it("holds the last selected session and controls when several sessions finish together", () => {
+  it("shows every working session at once, each with its own stop", () => {
+    activity.working = [session("First"), session("Second"), session("Third")];
+    activity.arrivals = {};
+    render();
+    // Fork (L-249): the first in the big pill, the others each in a pill above.
+    expect(container.querySelector("[data-ticker]")?.textContent).toBe("First");
+    for (const title of ["Second", "Third"])
+      expect(container.textContent).toContain(title);
+    expect(container.querySelectorAll('[aria-label="Stop"]')).toHaveLength(3);
+    expect(container.textContent).not.toContain("of 3");
+    expect(
+      container.querySelector('[aria-label="Next working session"]'),
+    ).toBeNull();
+  });
+
+  it("holds the sessions on screen when several finish together", () => {
     activity.working = [session("First"), session("Second")];
     activity.arrivals = {};
     render();
-    act(() => activity.activate(1));
     activity.finished = activity.working.map(completed);
     activity.working = [];
     render();
-    expect(container.querySelector("[data-ticker]")?.textContent).toBe(
-      "FirstSecond",
-    );
-    expect(
-      container.querySelector('[aria-label="Next working session"]'),
-    ).not.toBeNull();
-    expect(container.textContent).toContain("2 of 2");
+    expect(container.querySelector("[data-ticker]")?.textContent).toBe("First");
     advance(WORKING_PRESENCE_MS);
     expect(container.querySelector("[data-ticker]")).toBeNull();
     expect(container.querySelector("[data-finished]")?.textContent).toBe(

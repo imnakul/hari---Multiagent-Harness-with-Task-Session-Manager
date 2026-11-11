@@ -6,9 +6,7 @@ import Animated, {
   cancelAnimation,
   Easing,
   FadeIn,
-  FadeInDown,
   FadeOut,
-  FadeOutUp,
   FlipInEasyY,
   FlipOutEasyY,
   interpolate,
@@ -22,7 +20,6 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
 
 import type { SessionSummary } from "@/features/workspace/types";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
@@ -33,7 +30,7 @@ import {
   usePopStyle,
 } from "@/ui/LiquidView";
 import { GLASS_MIN_OPACITY } from "@/ui/SceneFade";
-import { Ticker, type TickerHandle } from "@/ui/Ticker";
+import { Ticker } from "@/ui/Ticker";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
 import { FinishedSessions } from "./FinishedSessions";
@@ -58,6 +55,8 @@ const MINI_GAP = 8;
 /** Between one mini pill setting off and the next. */
 const MINI_STAGGER = 45;
 const MINI_SPRING = { damping: 17, stiffness: 210, mass: 0.8 };
+/** The one-title line in the big pill has no others to say are in front. */
+const noop = () => {};
 
 /**
  * A project's sessions at work, resting on the composer: the finished ones
@@ -140,14 +139,11 @@ function LiveSessionsShown({
 }
 
 /**
- * The sessions at work in one pill: the one in front's agent for artwork,
- * and every title on a line scrolling through without end, as a now-playing
- * title does. As each title reaches the front its agent flips onto the
- * artwork and the count rolls on, "2 of 3". The square stops the one in
- * front, the skip button brings the next title in. With one, a tap opens
- * it; with more, a tap fans them out above as a pill each (see MiniPills),
- * and another folds them back. One that starts working on the desktop slides
- * to the front with a pulse.
+ * The sessions at work, every one in sight: the first in a now-playing pill,
+ * its agent for artwork and its title on a line that scrolls when too long,
+ * and the rest each in a pill of its own stacked above it (see MiniPills).
+ * A tap opens one, its square stops it. One that starts working on the
+ * desktop rises in with a buzz.
  */
 function NowWorking({
   swiping,
@@ -164,8 +160,6 @@ function NowWorking({
 }) {
   const styles = useStyles();
   const { stop, rememberSession } = useWorkspace();
-  const ticker = useRef<TickerHandle>(null);
-  const [active, setActive] = useState(0);
   // Keep the entire presentation, including titles, count and arrival subtitle,
   // until the outgoing pill has cleared. An empty ticker flashes mid-exit.
   const [shown, setShown] = useState({ live, arrivals });
@@ -173,13 +167,14 @@ function NowWorking({
     setShown({ live, arrivals });
   const displayed = live.length > 0 ? live : shown.live;
   const shownArrivals = live.length > 0 ? arrivals : shown.arrivals;
-  const index = Math.min(active, Math.max(0, displayed.length - 1));
-  const current = live[index] as SessionSummary | undefined;
-  const [open, setOpen] = useState(false);
-  if (open && (live.length < 2 || hidden)) setOpen(false);
+  const current = live[0] as SessionSummary | undefined;
+  // Fork (Hari, L-249): every session at work shows at once, the first in
+  // the big pill and the rest each in a pill of its own above it.
+  const others = useMemo(() => displayed.slice(1), [displayed]);
+  const stacked = live.length > 1 && !hidden;
 
-  // A session that starts working once the pill is up is brought to the
-  // front. The ones there at first aren't news.
+  // A session that starts working once the pill is up rises in with a buzz,
+  // and a pulse if it's the one in front. The ones there at first aren't news.
   const known = useRef<Set<string> | null>(null);
   const [pulse, setPulse] = useState(0);
   useEffect(() => {
@@ -189,10 +184,7 @@ function NowWorking({
     const arrived = live.findIndex((session) => !before.has(session.id));
     if (arrived < 0) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setPulse((count) => count + 1);
-    // Once the ticker has the new title's width.
-    const timer = setTimeout(() => ticker.current?.skipTo(arrived), 120);
-    return () => clearTimeout(timer);
+    if (arrived === 0) setPulse((count) => count + 1);
   }, [live]);
 
   // Opacity alone leaves native glass behind, so the glass forms and clears
@@ -218,15 +210,13 @@ function NowWorking({
     height: (pillHeight.get() + miniHeight.get() + STACK_GAP) * occupied.get(),
   }));
 
+  const session = displayed[0] as SessionSummary | undefined;
   const items = useMemo(
-    () => displayed.map((session) => ({ key: session.id, text: session.title })),
-    [displayed],
+    () => (session ? [{ key: session.id, text: session.title }] : []),
+    [session],
   );
 
-  const session = displayed[index];
-
   const openSession = (picked: SessionSummary) => {
-    setOpen(false);
     rememberSession(picked);
     onOpen(picked);
   };
@@ -246,8 +236,8 @@ function NowWorking({
       {mounted && session ? (
         <View style={styles.workingContent} pointerEvents="box-none">
           <MiniPills
-            live={displayed}
-            open={open}
+            live={others}
+            open={stacked}
             height={miniHeight}
             onOpen={openSession}
             onStop={stopSession}
@@ -261,44 +251,24 @@ function NowWorking({
               <LiquidView
                 borderRadius={radii.pill}
                 innerStyle={styles.pill}
-                onPress={() => {
-                  if (displayed.length > 1) {
-                    void Haptics.selectionAsync();
-                    setOpen((was) => !was);
-                  } else openSession(session);
-                }}
+                onPress={() => openSession(session)}
                 pressedScale={1.02}
-                accessibilityLabel={
-                  displayed.length > 1
-                    ? `${displayed.length} working sessions. ${open ? "Hide" : "Show"} them`
-                    : `${session.title}, ${statusLabel(session)}. Open`
-                }
+                accessibilityLabel={`${session.title}, ${statusLabel(session)}. Open`}
               >
                 <Artwork session={session} pulse={pulse} />
                 <View style={styles.text}>
                   <Ticker
-                    ref={ticker}
                     held={swiping}
                     items={items}
                     style={styles.title}
-                    onActiveChange={setActive}
+                    onActiveChange={noop}
                   />
                   <Subtitle
                     session={session}
                     arrived={session.id in shownArrivals}
-                    index={index}
-                    count={displayed.length}
                   />
                 </View>
                 <StopButton onPress={() => stopSession(session)} />
-                {displayed.length > 1 ? (
-                  <SkipButton
-                    onPress={() => {
-                      void Haptics.selectionAsync();
-                      ticker.current?.skipTo((index + 1) % displayed.length);
-                    }}
-                  />
-                ) : null}
               </LiquidView>
             </Animated.View>
           </GlassPresence>
@@ -309,7 +279,7 @@ function NowWorking({
 }
 
 /**
- * Every session at work as a pill of its own, fanned out above the
+ * Every other session at work as a pill of its own, stacked above the
  * now-playing pill: each rises out from behind it in turn, the nearest
  * first, and sinks back into it, the farthest first. The space they take
  * eases open and shut with them, so what's stacked above moves along. A tap
@@ -559,18 +529,14 @@ function Artwork({
   );
 }
 
-/** What the one in front is up to, its model, and its place in the line. */
+/** What the one in front is up to, and its model. */
 function Subtitle({
   session,
   arrived,
-  index,
-  count,
 }: {
   session: SessionSummary;
   /** It started working on the desktop a moment ago. */
   arrived: boolean;
-  index: number;
-  count: number;
 }) {
   const colors = useColors();
   const styles = useStyles();
@@ -593,25 +559,6 @@ function Subtitle({
       >
         {detail}
       </Animated.Text>
-      {count > 1 ? (
-        <View
-          style={styles.position}
-          accessibilityLabel={`${index + 1} of ${count}`}
-        >
-          {/* The number rolls up as the next title comes in, as an odometer. */}
-          <View style={styles.digit}>
-            <Animated.Text
-              key={index}
-              style={styles.positionText}
-              entering={FadeInDown.duration(240)}
-              exiting={FadeOutUp.duration(240)}
-            >
-              {index + 1}
-            </Animated.Text>
-          </View>
-          <Text style={styles.positionText}>{` of ${count}`}</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -632,27 +579,6 @@ function StopButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-/** The Music app's skip: two triangles nose to tail. */
-function SkipButton({ onPress }: { onPress: () => void }) {
-  const colors = useColors();
-  const styles = useStyles();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Next working session"
-      hitSlop={6}
-      onPress={onPress}
-      style={({ pressed }) => [styles.control, pressed && styles.pressed]}
-    >
-      <Svg width={26} height={16} viewBox="0 0 26 16">
-        <Path
-          d="M1 1.6v12.8c0 .9 1 1.4 1.7.9L12 8.9c.6-.4.6-1.3 0-1.8L2.7.7C2 .2 1 .7 1 1.6Zm12.5 0v12.8c0 .9 1 1.4 1.7.9l9.3-6.4c.6-.4.6-1.3 0-1.8L15.2.7c-.7-.5-1.7 0-1.7.9Z"
-          fill={colors.muted}
-        />
-      </Svg>
-    </Pressable>
-  );
-}
 
 const useStyles = themedStyles((colors) => ({
   workingContent: {
@@ -755,21 +681,6 @@ const useStyles = themedStyles((colors) => ({
     flexShrink: 1,
     color: colors.muted,
     fontSize: 13,
-  },
-  position: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  digit: {
-    height: 16,
-    overflow: "hidden",
-    justifyContent: "center",
-  },
-  positionText: {
-    color: colors.faint,
-    fontSize: 12,
-    lineHeight: 16,
-    fontVariant: ["tabular-nums"],
   },
   spinner: {
     width: 12,
