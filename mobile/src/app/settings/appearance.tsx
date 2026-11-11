@@ -1,4 +1,5 @@
 import { Host as UniversalHost, Slider as UniversalSlider } from "@expo/ui";
+import { Slider as ComposeSlider } from "@expo/ui/jetpack-compose";
 import { Host, Picker, Slider, Text as NativeText } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
@@ -18,10 +19,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
+import { AccentSwitch } from "@/ui/AccentSwitch";
 
 import {
   OPACITY_RANGE,
@@ -64,6 +65,7 @@ import {
   useColors,
   useLook,
   useScheme,
+  withAlpha,
   type AccentChoice,
   type AccentPreset,
 } from "@/ui/theme";
@@ -177,6 +179,7 @@ function LookSlider({
   onCommit: (value: number) => void;
 }) {
   const styles = useStyles();
+  const colors = useColors();
   const [draft, setDraft] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -202,7 +205,22 @@ function LookSlider({
       </View>
       <View accessible accessibilityLabel={label} accessibilityValue={{ text: format(shown) }}>
         <UniversalHost style={styles.slider}>
-          <UniversalSlider value={shown} min={min} max={max} onValueChange={change} />
+          {Platform.OS === "android" ? (
+            // Android's own colours are Material's (from the phone's wallpaper), not the app's.
+            <ComposeSlider
+              value={shown}
+              min={min}
+              max={max}
+              onValueChange={change}
+              colors={{
+                thumbColor: colors.accent,
+                activeTrackColor: colors.accent,
+                inactiveTrackColor: withAlpha(colors.accent, 0.24),
+              }}
+            />
+          ) : (
+            <UniversalSlider value={shown} min={min} max={max} onValueChange={change} />
+          )}
         </UniversalHost>
       </View>
     </View>
@@ -338,7 +356,6 @@ function AccentDot({
 /** The accent washed over backgrounds, cards and sheets, and how strongly. */
 function TintSection() {
   const styles = useStyles();
-  const colors = useColors();
   const look = useLook();
   const [tapped, setTapped] = useState<boolean | null>(null);
   const on = tapped ?? look.tint;
@@ -359,11 +376,10 @@ function TintSection() {
           showChevron={false}
           onPress={() => turn(!on)}
           accessory={
-            <Switch
+            <AccentSwitch
               accessibilityLabel="Tint with the accent"
               value={on}
               onValueChange={turn}
-              trackColor={{ true: colors.accent }}
             />
           }
         />
@@ -578,7 +594,6 @@ function PhotoTile({
 
 /** Tool calls folded to their phase's label until tapped, on by default. */
 function TranscriptSection() {
-  const colors = useColors();
   const styles = useStyles();
   const [collapsed, setCollapsed] = useCollapsedToolCalls();
   return (
@@ -590,10 +605,9 @@ function TranscriptSection() {
           label="Collapse tool calls"
           onPress={() => setCollapsed(!collapsed)}
           accessory={
-            <Switch
+            <AccentSwitch
               value={collapsed}
               onValueChange={setCollapsed}
-              trackColor={{ true: colors.accent }}
             />
           }
         />
@@ -673,11 +687,10 @@ function BackgroundSection({ projectId }: { projectId: string }) {
                 showChevron={false}
                 onPress={() => controls.setDither(!settings.dither)}
                 accessory={
-                  <Switch
+                  <AccentSwitch
                     accessibilityLabel="Dither effect"
                     value={settings.dither}
                     onValueChange={controls.setDither}
-                    trackColor={{ true: colors.accent }}
                   />
                 }
               />

@@ -9,10 +9,10 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
+import { AccentSwitch } from "@/ui/AccentSwitch";
 
 import { ProviderLogo } from "@/features/sessions/ProviderLogo";
 import { SettingsPage } from "@/features/settings/SettingsUI";
@@ -512,12 +512,11 @@ export function ModelOptions({
                   <Text style={styles.rowLabel}>{option.label}</Text>
                   <Text style={styles.rowHint}>{option.choices[1]?.hint}</Text>
                 </View>
-                <Switch
+                <AccentSwitch
                   value={option.value === option.choices[1]?.value}
                   onValueChange={(on) =>
                     option.onPick(option.choices[on ? 1 : 0].value)
                   }
-                  trackColor={{ true: colors.accent }}
                 />
               </View>
             </View>

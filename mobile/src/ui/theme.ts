@@ -360,9 +360,12 @@ function tinted(base: Palette, scheme: Scheme, hue: number, strength: number): P
  * opacity over it. The solid colours stay for what needs one: edge fades,
  * cut-out rings, ink on the accent.
  */
-function glassed(base: Palette, glass: number): Palette {
+function glassed(base: Palette, scheme: Scheme, glass: number): Palette {
   return {
     ...base,
+    // Secondary text sits on a photo, not a flat page: a step nearer the ink.
+    muted: scheme === "dark" ? "#a6a6a6" : "#575757",
+    faint: scheme === "dark" ? "#7a7a7a" : "#808080",
     page: "transparent",
     sheetPage: "transparent",
     surface: withAlpha(base.surface, glass),
@@ -393,7 +396,7 @@ export function paletteFor(scheme: Scheme, value: Look = look): Palette {
   }
   palette.page = palette.background;
   palette.sheetPage = palette.sheet;
-  if (value.glass !== null) palette = glassed(palette, value.glass);
+  if (value.glass !== null) palette = glassed(palette, scheme, value.glass);
   built.set(key, palette);
   return palette;
 }

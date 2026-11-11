@@ -40,13 +40,17 @@ export const READING_DIM = 0.15;
 
 const DEFAULT_WALLPAPER: Wallpaper = {
   source: { kind: "none" },
-  dimDark: 0.55,
-  dimLight: 0.45,
+  dimDark: 0.6,
+  dimLight: 0.7,
   blur: 6,
   glass: GLASS_RANGE.default,
 };
 
 const KEY = "wallpaper";
+// Saved with the record from local36 on: older ones were saved under weaker
+// default dims that left light-mode text hard to read, so they come up to
+// the new defaults once (a dim set lower after that is kept).
+const VERSION = 2;
 /** Where picked wallpapers are kept, cropped and scaled for the screen. */
 const WALLPAPERS = new Directory(Paths.document, "wallpapers");
 
@@ -73,10 +77,14 @@ export function parseWallpaper(raw: string): Wallpaper {
   if (typeof saved !== "object" || saved === null) return DEFAULT_WALLPAPER;
   const fields = new Map(Object.entries(saved));
   const d = DEFAULT_WALLPAPER;
+  const dim = (key: "dimDark" | "dimLight") => {
+    const value = clamp(fields.get(key), DIM_RANGE.min, DIM_RANGE.max, d[key]);
+    return fields.get("v") === VERSION ? value : Math.max(value, d[key]);
+  };
   return {
     source: parseSource(fields.get("source")),
-    dimDark: clamp(fields.get("dimDark"), DIM_RANGE.min, DIM_RANGE.max, d.dimDark),
-    dimLight: clamp(fields.get("dimLight"), DIM_RANGE.min, DIM_RANGE.max, d.dimLight),
+    dimDark: dim("dimDark"),
+    dimLight: dim("dimLight"),
     blur: clamp(fields.get("blur"), BLUR_RANGE.min, BLUR_RANGE.max, d.blur),
     glass: clamp(fields.get("glass"), GLASS_RANGE.min, GLASS_RANGE.max, d.glass),
   };
@@ -110,7 +118,7 @@ export function setWallpaper(patch: Partial<Wallpaper>): void {
   const previous = wallpaper.source;
   wallpaper = { ...wallpaper, ...patch };
   if (previous.kind === "photo" && wallpaper.source !== previous) removePhoto(previous.file);
-  void Storage.setItem(KEY, JSON.stringify(wallpaper));
+  void Storage.setItem(KEY, JSON.stringify({ ...wallpaper, v: VERSION }));
   syncGlass();
   listeners.forEach((listener) => listener());
 }

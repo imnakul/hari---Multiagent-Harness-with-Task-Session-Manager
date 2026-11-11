@@ -1,6 +1,9 @@
+import MaskedView from "@react-native-masked-view/masked-view";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { createContext, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { useSafeAreaFrame } from "react-native-safe-area-context";
 
 import { accentColor, hueOf, useColors, useLook, useScheme, withAlpha } from "@/ui/theme";
 
@@ -33,6 +36,46 @@ export function useWallpaperUri(source: WallpaperSource): string | null {
 }
 
 /**
+ * Fork (Hari, L-245): whether the screen below dims its wallpaper for reading
+ * (a conversation's). Set per screen by the root stack, so an edge fade drawn
+ * over that screen dims its copy of the wallpaper to match.
+ */
+export const BackdropReading = createContext<boolean | undefined>(undefined);
+
+type BackdropLayer = { uri: string; dim: number; blur: number };
+
+/** The wallpaper as a screen draws it; null without one, or before a preset is drawn. */
+export function useBackdrop(reading: boolean): BackdropLayer | null {
+  const wallpaper = useWallpaper();
+  const uri = useWallpaperUri(wallpaper.source);
+  const scheme = useScheme();
+  if (!uri) return null;
+  const dim = Math.min(
+    0.95,
+    (scheme === "dark" ? wallpaper.dimDark : wallpaper.dimLight) + (reading ? READING_DIM : 0),
+  );
+  return { uri, dim, blur: wallpaper.blur };
+}
+
+function BackdropImage({ layer }: { layer: BackdropLayer }) {
+  const colors = useColors();
+  return (
+    <>
+      <Image
+        source={{ uri: layer.uri }}
+        contentFit="cover"
+        blurRadius={layer.blur}
+        cachePolicy="memory-disk"
+        transition={0}
+        style={StyleSheet.absoluteFill}
+        accessible={false}
+      />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.background, layer.dim) }]} />
+    </>
+  );
+}
+
+/**
  * Fork (Hari, L-245): the wallpaper behind a screen, softened and dimmed in
  * the page's colour; nothing without one. One image per screen, blurred once
  * and cached by the image view, with no live blur, so it costs as little as
@@ -40,27 +83,55 @@ export function useWallpaperUri(source: WallpaperSource): string | null {
  * behind a conversation's messages.
  */
 export function Backdrop({ reading = false }: { reading?: boolean }) {
-  const wallpaper = useWallpaper();
-  const uri = useWallpaperUri(wallpaper.source);
-  const colors = useColors();
-  const scheme = useScheme();
-  if (!uri) return null;
-  const dim = Math.min(
-    0.95,
-    (scheme === "dark" ? wallpaper.dimDark : wallpaper.dimLight) + (reading ? READING_DIM : 0),
-  );
+  const layer = useBackdrop(reading);
+  if (!layer) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Image
-        source={{ uri }}
-        contentFit="cover"
-        blurRadius={wallpaper.blur}
-        cachePolicy="memory-disk"
-        transition={0}
-        style={StyleSheet.absoluteFill}
-        accessible={false}
-      />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.background, dim) }]} />
+      <BackdropImage layer={layer} />
     </View>
   );
 }
+
+/**
+ * The screen's wallpaper again, over content scrolling under a header or
+ * composer: solid from the edge, fading out over `fade`. Drawn at the full
+ * app's size from that edge, so it lines up with the Backdrop beneath and
+ * the band can't be told from the page; content just fades away under it.
+ */
+export function BackdropEdge({
+  layer,
+  edge,
+  height,
+  fade,
+}: {
+  layer: BackdropLayer;
+  edge: "top" | "bottom";
+  height: number;
+  fade: number;
+}) {
+  const frame = useSafeAreaFrame();
+  const fromTop = edge === "top";
+  const solid = height > 0 ? Math.max(0, (height - fade) / height) : 0;
+  return (
+    <MaskedView
+      style={StyleSheet.absoluteFill}
+      maskElement={
+        <LinearGradient
+          colors={fromTop ? ["black", "black", "transparent"] : ["transparent", "black", "black"]}
+          locations={fromTop ? [0, solid, 1] : [0, 1 - solid, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      }
+    >
+      <View style={[styles.full, { height: frame.height }, fromTop ? styles.top : styles.bottom]}>
+        <BackdropImage layer={layer} />
+      </View>
+    </MaskedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  full: { position: "absolute", left: 0, right: 0 },
+  top: { top: 0 },
+  bottom: { bottom: 0 },
+});

@@ -1,7 +1,8 @@
 import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Fragment, useState } from "react";
-import { ActivityIndicator, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { AccentSwitch } from "@/ui/AccentSwitch";
 
 import {
   effortSetting,
@@ -102,10 +103,9 @@ export default function ModelsScreen() {
                   icon="automation"
                   label="Fast mode"
                   accessory={
-                    <Switch
+                    <AccentSwitch
                       value={settingValue(current, fast.setting) === fast.on}
                       onValueChange={(on) => setSetting(fast.setting.id, on ? fast.on : fast.off)}
-                      trackColor={{ true: colors.accent }}
                     />
                   }
                 />

@@ -35,7 +35,9 @@ import { useLayoutChanging, useMonoOnlyLayout } from "@/features/settings/monoOn
 import { DitherLoading } from "@/ui/DitherLoading";
 import { useState, type ReactElement } from "react";
 import { ScenePagerHost } from "@/ui/ScenePager";
-import { Backdrop } from "@/features/wallpaper/Backdrop";
+import { Backdrop, BackdropReading } from "@/features/wallpaper/Backdrop";
+import { isReadingRoute } from "@/features/wallpaper/reading";
+import { useNavigationButtons } from "@/ui/systemBars";
 import {
   paletteFor,
   useLook,
@@ -143,6 +145,7 @@ function useNavigationLook(): NavigationLook {
 
 export default function RootLayout() {
   const scheme = useScheme();
+  useNavigationButtons(scheme);
   return (
     <KeyboardProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -248,12 +251,6 @@ const SOLID_ROUTES = new Set([
   "notes",
   "mono-profile/[monoId]",
 ]);
-// A conversation's messages, over a stronger dim.
-const READING_ROUTES = new Set([
-  "project/[projectId]/session/[sessionId]",
-  "session",
-  "mono/[monoId]",
-]);
 
 /**
  * Fork (Hari, L-245): each screen over its own copy of the wallpaper, so a
@@ -269,10 +266,11 @@ function WallpaperLayout({
   children: ReactElement;
 }) {
   if (SOLID_ROUTES.has(route.name)) return children;
+  const reading = isReadingRoute(route.name);
   return (
-    <>
-      <Backdrop reading={READING_ROUTES.has(route.name)} />
+    <BackdropReading value={reading}>
+      <Backdrop reading={reading} />
       {children}
-    </>
+    </BackdropReading>
   );
 }

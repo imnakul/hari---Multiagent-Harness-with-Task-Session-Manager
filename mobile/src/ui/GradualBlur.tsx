@@ -1,8 +1,10 @@
 import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { memo, type RefObject } from "react";
+import { memo, use, type RefObject } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+
+import { BackdropEdge, BackdropReading, useBackdrop } from "@/features/wallpaper/Backdrop";
 
 import { useLook, useScheme, withAlpha } from "./theme";
 
@@ -40,6 +42,8 @@ export const GradualBlur = memo(function GradualBlur({
   const scheme = useScheme();
   // Over a wallpaper (glass on), the band lets a little of it through.
   const glassy = useLook().glass !== null;
+  // Fork (L-245): the wallpaper itself, where there is one to draw.
+  const backdrop = useBackdrop(use(BackdropReading) ?? false);
 
   if (Platform.OS === "android") {
     // Fork (Hari, L-235): a solid band that fades out, not a blur. Android's
@@ -47,6 +51,18 @@ export const GradualBlur = memo(function GradualBlur({
     // dark grey bars; without a target it was see-through. Solid is reliable
     // and cheaper to draw while scrolling.
     const fade = Math.min(36, height / 2);
+    if (glassy && backdrop) {
+      // Fork (L-245): over a wallpaper, the band is the wallpaper, so it
+      // shows edge to edge with no strip of page colour.
+      return (
+        <View
+          pointerEvents="none"
+          style={[styles.container, { height }, fromTop ? styles.top : styles.bottom]}
+        >
+          <BackdropEdge layer={backdrop} edge={edge} height={height} fade={fade} />
+        </View>
+      );
+    }
     const band = glassy ? withAlpha(color, 0.85) : color;
     return (
       <View

@@ -25,6 +25,7 @@ vi.mock("@/features/background/dither", () => ({ encodePng: vi.fn() }));
 
 const { accentColor, lookFromTheme, paletteFor, parseLook, withAlpha } = await import("@/ui/theme");
 const { parseWallpaper } = await import("@/features/wallpaper/wallpaper");
+const { isReadingPath, isReadingRoute } = await import("@/features/wallpaper/reading");
 
 describe("look", () => {
   it("carries an old theme over as its accent with a light tint", () => {
@@ -87,5 +88,18 @@ describe("wallpaper", () => {
     const wallpaper = parseWallpaper('{"source":{"kind":"preset","id":"dusk"},"dimDark":5,"blur":-1,"glass":"x"}');
     expect(wallpaper).toMatchObject({ source: { kind: "preset", id: "dusk" }, dimDark: 0.9, blur: 0, glass: 0.6 });
     expect(parseWallpaper('{"source":{"kind":"preset","id":"nope"}}').source).toEqual({ kind: "none" });
+  });
+
+  it("raises an older record's dims to the readable defaults once", () => {
+    expect(parseWallpaper('{"dimDark":0.3,"dimLight":0.45}')).toMatchObject({ dimDark: 0.6, dimLight: 0.7 });
+    expect(parseWallpaper('{"dimDark":0.3,"dimLight":0.45,"v":2}')).toMatchObject({ dimDark: 0.3, dimLight: 0.45 });
+  });
+
+  it("dims for reading under a conversation only", () => {
+    expect(isReadingRoute("project/[projectId]/session/[sessionId]")).toBe(true);
+    expect(isReadingPath("/project/a/session/b")).toBe(true);
+    expect(isReadingPath("/mono/m1")).toBe(true);
+    expect(isReadingPath("/project/a")).toBe(false);
+    expect(isReadingPath("/")).toBe(false);
   });
 });

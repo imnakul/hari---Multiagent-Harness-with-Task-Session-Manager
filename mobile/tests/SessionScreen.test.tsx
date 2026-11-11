@@ -75,6 +75,10 @@ vi.mock("react-native-safe-area-context", () => ({
 }));
 vi.mock("@/ui/CircleButton", () => ({ CircleButton: () => null }));
 vi.mock("@/ui/GradualBlur", () => ({ GradualBlur: () => null }));
+vi.mock("@/features/wallpaper/Backdrop", async () => {
+  const { createContext } = await import("react");
+  return { BackdropReading: createContext<boolean | undefined>(undefined) };
+});
 // The drawer's pager and its loading cover reach native modules; here the
 // drawer is shut and no screen switch is under way.
 vi.mock("@/ui/ScenePager", () => ({

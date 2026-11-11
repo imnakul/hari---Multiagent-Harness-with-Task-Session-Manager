@@ -53,7 +53,7 @@ module.exports = ({ config }) => {
       },
       permissions: [...(config.android?.permissions ?? []), "android.permission.REQUEST_INSTALL_PACKAGES"],
     },
-    plugins: [...plugins, "./plugins/with-hari-signing"],
+    plugins: [...plugins, "./plugins/with-hari-signing", "./plugins/with-system-bars"],
     // Updates come as whole APKs from GitHub releases, not Expo's update service.
     updates: { enabled: false },
     extra: {

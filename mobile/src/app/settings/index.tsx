@@ -1,7 +1,8 @@
 import * as Notifications from "expo-notifications";
 import { router, useLocalSearchParams, useNavigationContainerRef } from "expo-router";
 import { Fragment, useState } from "react";
-import { Alert, Linking, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Linking, StyleSheet, Text, View } from "react-native";
+import { AccentSwitch } from "@/ui/AccentSwitch";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { MONOS_ENABLED } from "@/features/connection/selection";
@@ -128,12 +129,11 @@ export default function SettingsScreen() {
                 )
               }
               accessory={
-                <Switch
+                <AccentSwitch
                   value={notifications.enabled(category.id)}
                   onValueChange={(on) =>
                     notifications.setEnabled(category.id, on)
                   }
-                  trackColor={{ true: colors.accent }}
                 />
               }
             />
@@ -188,11 +188,10 @@ export default function SettingsScreen() {
           label="Open after starting"
           onPress={() => setOpenAfterStarting(!openAfterStarting)}
           accessory={
-            <Switch
+            <AccentSwitch
               accessibilityLabel="Open sessions after starting"
               value={openAfterStarting}
               onValueChange={setOpenAfterStarting}
-              trackColor={{ true: colors.accent }}
             />
           }
         />
@@ -210,11 +209,10 @@ export default function SettingsScreen() {
               label="Monos only"
               onPress={() => changeLayout(!(picked ?? monoOnly))}
               accessory={
-                <Switch
+                <AccentSwitch
                   accessibilityLabel="Monos only"
                   value={picked ?? monoOnly}
                   onValueChange={changeLayout}
-                  trackColor={{ true: colors.accent }}
                 />
               }
             />
@@ -295,11 +293,10 @@ function LiveUpdateSettings() {
           label="Show running sessions"
           onPress={() => turn(!enabled)}
           accessory={
-            <Switch
+            <AccentSwitch
               accessibilityLabel="Show running sessions as a Live Update"
               value={enabled}
               onValueChange={turn}
-              trackColor={{ true: colors.accent }}
             />
           }
         />
@@ -311,11 +308,10 @@ function LiveUpdateSettings() {
               label="One card per session"
               onPress={() => setLive({ mode: each ? "combined" : "each" })}
               accessory={
-                <Switch
+                <AccentSwitch
                   accessibilityLabel="One card per session"
                   value={each}
                   onValueChange={(on) => setLive({ mode: on ? "each" : "combined" })}
-                  trackColor={{ true: colors.accent }}
                 />
               }
             />

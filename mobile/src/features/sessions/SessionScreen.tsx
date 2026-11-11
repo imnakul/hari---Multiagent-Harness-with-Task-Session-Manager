@@ -39,6 +39,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BackdropReading } from "@/features/wallpaper/Backdrop";
+import { isReadingPath } from "@/features/wallpaper/reading";
 import { CircleButton } from "@/ui/CircleButton";
 import { GradualBlur } from "@/ui/GradualBlur";
 import { Icon, type IconName } from "@/ui/Icon";
@@ -338,6 +340,10 @@ export function SessionFrame({
   // going the moment the route changes while it is still on screen.
   const holding = swapping && !native && !hasNativeHeader(scene);
   if (scene !== pathname && !isModalRoute(pathname) && !holding) setScene(pathname);
+  // Fork (L-245): the wallpaper the header and composer fade into is the
+  // scene's, dimmed for reading under a conversation (a screen's own frame
+  // takes its screen's).
+  const reading = use(BackdropReading) ?? isReadingPath(scene);
   // Android's modals are screens in the same stack, under this frame's
   // header and composer rather than over them, so those stand aside too.
   const covered =
@@ -568,179 +574,181 @@ export function SessionFrame({
   };
 
   return (
-    <ChromeContext value={setChrome}>
-      <JumpToEndContext value={jump}>
-        <SessionLayoutContext value={layout}>
-          {/* No textInputNativeID: with it, iOS gives the focused composer an
-              invisible accessory view and defers its blur a frame. A Mono's
-              chat popped mid-edit then keeps the keyboard over the list, and
-              the next chat's field can't take focus. It only carries an
-              offset, which nothing here sets. */}
-          <KeyboardGestureArea interpolator="ios" style={styles.scene}>
-            {/* First, unwrapped: the screens' scroll views lead each view's
-                first-child chain, where iOS looks for what to blur under a
-                native header, and nothing fades their native glass away. */}
-            <ContentBlurTarget value={androidBlur ? blurTarget : undefined}>
-              <ContentBlurReady value={onBlurTargetLayout}>
-                <GlassBlurTarget value={androidBlur && blurTargetReady ? blurTarget : undefined}>
-                  {children}
-                </GlassBlurTarget>
-              </ContentBlurReady>
-            </ContentBlurTarget>
+    <BackdropReading value={reading}>
+      <ChromeContext value={setChrome}>
+        <JumpToEndContext value={jump}>
+          <SessionLayoutContext value={layout}>
+            {/* No textInputNativeID: with it, iOS gives the focused composer an
+                invisible accessory view and defers its blur a frame. A Mono's
+                chat popped mid-edit then keeps the keyboard over the list, and
+                the next chat's field can't take focus. It only carries an
+                offset, which nothing here sets. */}
+            <KeyboardGestureArea interpolator="ios" style={styles.scene}>
+              {/* First, unwrapped: the screens' scroll views lead each view's
+                  first-child chain, where iOS looks for what to blur under a
+                  native header, and nothing fades their native glass away. */}
+              <ContentBlurTarget value={androidBlur ? blurTarget : undefined}>
+                <ContentBlurReady value={onBlurTargetLayout}>
+                  <GlassBlurTarget value={androidBlur && blurTargetReady ? blurTarget : undefined}>
+                    {children}
+                  </GlassBlurTarget>
+                </ContentBlurReady>
+              </ContentBlurTarget>
 
-            {/* While the drawer switches screens: over the content only, so the
-                header and composer stay, the frame's own or the native one.
-                A frame standing aside for a native header's leaves it to that
-                screen's own frame. */}
-            {coverShown ? (
-              <DitherLoading leaving={!covering} onGone={coverGone} />
-            ) : null}
+              {/* While the drawer switches screens: over the content only, so the
+                  header and composer stay, the frame's own or the native one.
+                  A frame standing aside for a native header's leaves it to that
+                  screen's own frame. */}
+              {coverShown ? (
+                <DitherLoading leaving={!covering} onGone={coverGone} />
+              ) : null}
 
-            {/* Under the native header too, which is transparent over it. */}
-            {covered ? null : (
-              <GradualBlur
-                edge="top"
-                height={frameBottom + TOP_FADE}
-                color={colors.background}
-                blurTarget={androidBlur && blurTargetReady ? blurTarget : undefined}
-              />
-            )}
-            {/* Under a native header the line has no push of its own:
-                the screen it belongs to slides in with it. Hidden until the
-                header has its height, so it doesn't show at the top first. */}
-            {native && chrome?.below ? (
-              <View
-                onLayout={measureBelow ? (event) => {
-                  setBelowHeight(Math.ceil(event.nativeEvent.layout.height));
-                } : undefined}
-                style={[
-                  styles.below,
-                  measureBelow && { height: undefined, minHeight: BELOW_HEIGHT },
-                  { top: belowTop },
-                  nativeHeaderHeight === 0 && styles.unplaced,
-                ]}
-              >
-                {chrome.below}
-              </View>
-            ) : null}
-            {native || covered ? null : (
-              <>
-                {centerLayers.map((layer) =>
-                  layer.chrome.below ? (
-                    <HeaderPiece
-                      push={push}
-                      key={layer.key}
-                      // The worktree line follows the header's centre up.
-                      stage={layer.incoming ? 1 : 0}
-                      incoming={layer.incoming}
-                      started={started}
-                      still={layer.still}
-                      style={[styles.below, { top: belowTop }]}
-                    >
-                      {layer.chrome.below}
-                    </HeaderPiece>
-                  ) : null,
-              )}
-              <View style={[styles.header, { top: headerTop }]}>
-                <View>
-                  <CircleButton
-                    icon="sidebar"
-                    label={unread ? "Projects and monos, new replies" : "Projects and monos"}
-                    onPress={drawer.open}
-                  />
-                  {unread ? <UnreadDot /> : null}
-                </View>
-                <View style={styles.titleBlock}>
-                  {centerLayers.map((layer) => (
-                    <HeaderPiece
-                      push={push}
-                      key={layer.key}
-                      stage={0}
-                      incoming={layer.incoming}
-                      started={started}
-                      still={layer.still}
-                      glass
-                      style={[styles.titlePiece, !layer.incoming && styles.leaving]}
-                    >
-                      <HeaderTitle chrome={layer.chrome} />
-                    </HeaderPiece>
-                  ))}
-                </View>
-                <View>
-                  {trailingLayers.map((layer) => (
-                    <HeaderPiece
-                      push={push}
-                      key={layer.key}
-                      stage={0}
-                      incoming={layer.incoming}
-                      started={started}
-                      still={layer.still}
-                      glass
-                      style={!layer.incoming && styles.leaving}
-                    >
-                      <HeaderTrailing chrome={layer.chrome} />
-                    </HeaderPiece>
-                  ))}
-                </View>
-              </View>
-              </>
-            )}
-
-            {/* Hidden rather than unmounted without a composer, so its measured
-              height is still there when the next screen brings one back.
-              Full-height, so the composer stays inside it when the keyboard
-              lifts it: Fabric drops touches outside a view's laid-out bounds,
-              and the lift is a transform that never re-lays the dock out. */}
-            <Animated.View
-              pointerEvents="box-none"
-              style={[
-                styles.composerDock,
-                (!chrome?.composer || covered) && styles.hidden,
-                chrome?.dockStyle,
-              ]}
-            >
-              {/* Its own view, since its lift and a screen's dockStyle each set a transform. */}
-              <Animated.View style={keyboardLift}>
+              {/* Under the native header too, which is transparent over it. */}
+              {covered ? null : (
                 <GradualBlur
-                  edge="bottom"
-                  height={composerHeight + composerBottom + FADE}
+                  edge="top"
+                  height={frameBottom + TOP_FADE}
                   color={colors.background}
+                  blurTarget={androidBlur && blurTargetReady ? blurTarget : undefined}
                 />
-                <View style={{ paddingBottom: composerBottom }}>
-                  <View onLayout={onComposerLayout}>
-                    <GlassBlurTarget
-                      value={androidBlur && blurTargetReady ? blurTarget : undefined}
-                    >
-                      {chrome?.composer}
-                    </GlassBlurTarget>
+              )}
+              {/* Under a native header the line has no push of its own:
+                  the screen it belongs to slides in with it. Hidden until the
+                  header has its height, so it doesn't show at the top first. */}
+              {native && chrome?.below ? (
+                <View
+                  onLayout={measureBelow ? (event) => {
+                    setBelowHeight(Math.ceil(event.nativeEvent.layout.height));
+                  } : undefined}
+                  style={[
+                    styles.below,
+                    measureBelow && { height: undefined, minHeight: BELOW_HEIGHT },
+                    { top: belowTop },
+                    nativeHeaderHeight === 0 && styles.unplaced,
+                  ]}
+                >
+                  {chrome.below}
+                </View>
+              ) : null}
+              {native || covered ? null : (
+                <>
+                  {centerLayers.map((layer) =>
+                    layer.chrome.below ? (
+                      <HeaderPiece
+                        push={push}
+                        key={layer.key}
+                        // The worktree line follows the header's centre up.
+                        stage={layer.incoming ? 1 : 0}
+                        incoming={layer.incoming}
+                        started={started}
+                        still={layer.still}
+                        style={[styles.below, { top: belowTop }]}
+                      >
+                        {layer.chrome.below}
+                      </HeaderPiece>
+                    ) : null,
+                )}
+                <View style={[styles.header, { top: headerTop }]}>
+                  <View>
+                    <CircleButton
+                      icon="sidebar"
+                      label={unread ? "Projects and monos, new replies" : "Projects and monos"}
+                      onPress={drawer.open}
+                    />
+                    {unread ? <UnreadDot /> : null}
+                  </View>
+                  <View style={styles.titleBlock}>
+                    {centerLayers.map((layer) => (
+                      <HeaderPiece
+                        push={push}
+                        key={layer.key}
+                        stage={0}
+                        incoming={layer.incoming}
+                        started={started}
+                        still={layer.still}
+                        glass
+                        style={[styles.titlePiece, !layer.incoming && styles.leaving]}
+                      >
+                        <HeaderTitle chrome={layer.chrome} />
+                      </HeaderPiece>
+                    ))}
+                  </View>
+                  <View>
+                    {trailingLayers.map((layer) => (
+                      <HeaderPiece
+                        push={push}
+                        key={layer.key}
+                        stage={0}
+                        incoming={layer.incoming}
+                        started={started}
+                        still={layer.still}
+                        glass
+                        style={!layer.incoming && styles.leaving}
+                      >
+                        <HeaderTrailing chrome={layer.chrome} />
+                      </HeaderPiece>
+                    ))}
                   </View>
                 </View>
-                {/* Only a transcript needs this glass surface. Empty sessions
-                    have no scroll target, so keep it out of the native tree. */}
-                {hasJumpTarget ? (
-                  <Animated.View
-                    style={[
-                      styles.jump,
-                      { bottom: composerHeight + composerBottom + 10 },
-                      jumpStyle,
-                    ]}
-                  >
-                    <LiquidView
-                      onPress={() => jumpTarget.current?.()}
-                      accessibilityLabel="Scroll to bottom"
-                      borderRadius={JUMP / 2}
-                      innerStyle={styles.jumpButton}
+                </>
+              )}
+
+              {/* Hidden rather than unmounted without a composer, so its measured
+                height is still there when the next screen brings one back.
+                Full-height, so the composer stays inside it when the keyboard
+                lifts it: Fabric drops touches outside a view's laid-out bounds,
+                and the lift is a transform that never re-lays the dock out. */}
+              <Animated.View
+                pointerEvents="box-none"
+                style={[
+                  styles.composerDock,
+                  (!chrome?.composer || covered) && styles.hidden,
+                  chrome?.dockStyle,
+                ]}
+              >
+                {/* Its own view, since its lift and a screen's dockStyle each set a transform. */}
+                <Animated.View style={keyboardLift}>
+                  <GradualBlur
+                    edge="bottom"
+                    height={composerHeight + composerGrowth + composerBottom + FADE}
+                    color={colors.background}
+                  />
+                  <View style={{ paddingBottom: composerBottom }}>
+                    <View onLayout={onComposerLayout}>
+                      <GlassBlurTarget
+                        value={androidBlur && blurTargetReady ? blurTarget : undefined}
+                      >
+                        {chrome?.composer}
+                      </GlassBlurTarget>
+                    </View>
+                  </View>
+                  {/* Only a transcript needs this glass surface. Empty sessions
+                      have no scroll target, so keep it out of the native tree. */}
+                  {hasJumpTarget ? (
+                    <Animated.View
+                      style={[
+                        styles.jump,
+                        { bottom: composerHeight + composerBottom + 10 },
+                        jumpStyle,
+                      ]}
                     >
-                      <Icon name="chevronDown" size={20} />
-                    </LiquidView>
-                  </Animated.View>
-                ) : null}
+                      <LiquidView
+                        onPress={() => jumpTarget.current?.()}
+                        accessibilityLabel="Scroll to bottom"
+                        borderRadius={JUMP / 2}
+                        innerStyle={styles.jumpButton}
+                      >
+                        <Icon name="chevronDown" size={20} />
+                      </LiquidView>
+                    </Animated.View>
+                  ) : null}
+                </Animated.View>
               </Animated.View>
-            </Animated.View>
-          </KeyboardGestureArea>
-        </SessionLayoutContext>
-      </JumpToEndContext>
-    </ChromeContext>
+            </KeyboardGestureArea>
+          </SessionLayoutContext>
+        </JumpToEndContext>
+      </ChromeContext>
+    </BackdropReading>
   );
 }
 
