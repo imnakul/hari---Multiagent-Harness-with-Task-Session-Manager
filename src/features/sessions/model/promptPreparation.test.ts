@@ -75,9 +75,22 @@ describe("preparePrompt", () => {
     files.resolve("with files");
     await expect(preparation).resolves.toBe("prepared");
     expect(mocks.applyNotesToTurn).toHaveBeenCalledWith("with files");
-    expect(mocks.applySkillsToTurn).toHaveBeenCalledWith("with files", {
-      harness: "pi",
-      cwd: "/repo",
-    });
+    expect(mocks.applySkillsToTurn).toHaveBeenCalledWith(
+      "with files",
+      { harness: "pi", cwd: "/repo" },
+      undefined,
+    );
+  });
+
+  it("passes Interactive Claude's skill option to skill injection", async () => {
+    mocks.applyFileMentionsToTurn.mockResolvedValue("hello");
+    mocks.applySkillsToTurn.mockResolvedValue("prepared");
+    const options = { claudeLoadsSkills: true };
+    await preparePrompt("hello", { harness: "claude", cwd: "/repo" }, options);
+    expect(mocks.applySkillsToTurn).toHaveBeenCalledWith(
+      "hello",
+      { harness: "claude", cwd: "/repo" },
+      options,
+    );
   });
 });

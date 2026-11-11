@@ -4,6 +4,7 @@ import {
   applySkillsToTurn,
   warmNativeSkills,
   isNativeCommandPrompt,
+  type SkillTurnOptions,
   type SkillCatalogContext,
 } from "../../skills/model/skills";
 import { nativeCommandPrompt } from "../../../integrations/harness/core/nativeCommands";
@@ -11,11 +12,12 @@ import { nativeCommandPrompt } from "../../../integrations/harness/core/nativeCo
 export async function preparePrompt(
   text: string,
   context: SkillCatalogContext,
+  options?: SkillTurnOptions,
 ): Promise<string> {
   warmNativeSkills(context);
   if (isNativeCommandPrompt(text, context.harness))
     return nativeCommandPrompt(context.harness, text);
   const withFiles = await applyFileMentionsToTurn(text, context.cwd);
   const withNotes = await applyNotesToTurn(withFiles);
-  return applySkillsToTurn(withNotes, context);
+  return applySkillsToTurn(withNotes, context, options);
 }

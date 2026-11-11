@@ -9607,11 +9607,15 @@ function Workspace({
             if (latest) await upsertSession(latest);
             return {
               attachments: await prepareAttachments(attachments),
-              text: await preparePrompt(harnessText, {
-                harness: current.harness,
-                sessionId,
-                cwd: initialWorkCwd,
-              }),
+              text: await preparePrompt(
+                harnessText,
+                {
+                  harness: current.harness,
+                  sessionId,
+                  cwd: initialWorkCwd,
+                },
+                { claudeLoadsSkills: isInteractiveClaudeSession(current) },
+              ),
             };
           },
           steer: (prepared) =>
@@ -9796,11 +9800,15 @@ function Workspace({
         void (async () => {
           try {
             const prepared = await prepareAttachments(attachments);
-            const prompt = await preparePrompt(harnessText, {
-              harness: current.harness,
-              sessionId,
-              cwd: initialWorkCwd,
-            });
+            const prompt = await preparePrompt(
+              harnessText,
+              {
+                harness: current.harness,
+                sessionId,
+                cwd: initialWorkCwd,
+              },
+              { claudeLoadsSkills: isInteractiveClaudeSession(current) },
+            );
             await steerHarnessTurn({
               harness: current.harness,
               sessionId,
@@ -10455,11 +10463,15 @@ function Workspace({
           const prompt =
             intent === "build" && approvedPlan
               ? buildPlanPrompt(approvedPlan.text)
-              : await preparePrompt(harnessText, {
-                  harness: current.harness,
-                  sessionId,
-                  cwd: sessionWorkCwd(current),
-                });
+              : await preparePrompt(
+                  harnessText,
+                  {
+                    harness: current.harness,
+                    sessionId,
+                    cwd: sessionWorkCwd(current),
+                  },
+                  { claudeLoadsSkills: isInteractiveClaudeSession(current) },
+                );
           const turnPrompt = proposalDraft
             ? options?.orchestrationRetry?.response
               ? orchestrationRepairPrompt({

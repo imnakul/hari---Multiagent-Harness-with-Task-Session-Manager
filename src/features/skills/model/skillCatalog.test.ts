@@ -553,3 +553,51 @@ describe("readSkillBody", () => {
     expect(body).toBe("# Skill\n\nStep one\nStep two\n");
   });
 });
+
+describe("Interactive Claude skills", () => {
+  /**
+   * Regression (L-251): Interactive Claude got every invoked skill's whole
+   * body pasted into the message, though Claude Code loads its own skills.
+   */
+  it("points Claude Code at a skill it loads itself instead of pasting the body", async (): Promise<void> => {
+    const claudePath = "C:/Users/me/.claude/skills/frontend-ui/SKILL.md";
+    const agentsPath = "/repo/.agents/skills/review/SKILL.md";
+    mocks.listSkills.mockResolvedValue([
+      {
+        name: "frontend-ui",
+        description: "UI",
+        path: claudePath,
+        scope: "user",
+        source: "claude",
+      },
+      {
+        name: "review",
+        description: "Review",
+        path: agentsPath,
+        scope: "project",
+        source: "agents",
+      },
+    ]);
+    mocks.readTextFile.mockReset();
+    mocks.readTextFile.mockResolvedValue("# Body\n\nLong instructions.");
+    const context = { harness: "claude", cwd: "/repo" } satisfies Parameters<
+      typeof applySkillsToTurn
+    >[1];
+    const text = "/frontend-ui fix the header, then /review";
+
+    const turn = await applySkillsToTurn(text, context, {
+      claudeLoadsSkills: true,
+    });
+    expect(mocks.readTextFile).toHaveBeenCalledTimes(1);
+    expect(mocks.readTextFile).toHaveBeenCalledWith(agentsPath);
+    expect(turn).toContain('Load it with your Skill tool ("frontend-ui")');
+    expect(turn).toContain(claudePath);
+    expect(turn.match(/Long instructions\./g)).toHaveLength(1);
+    expect(turn.startsWith("/")).toBe(false);
+    expect(turn.endsWith(text)).toBe(true);
+
+    const structured = await applySkillsToTurn(text, context);
+    expect(structured.match(/Long instructions\./g)).toHaveLength(2);
+    expect(structured).not.toContain("Skill tool");
+  });
+});

@@ -437,9 +437,25 @@ export function injectSkillPrompt(
   ].join("\n");
 }
 
+export type SkillTurnOptions = {
+  /**
+   * The turn goes to the real Claude Code (Interactive Claude), which already
+   * loads `.claude/skills` and plugin skills. Those get a pointer to its Skill
+   * tool instead of their whole body, which was resent on every use and
+   * filled the context (fork, L-251). The text still cannot start with "/":
+   * Interactive Claude refuses slash commands from the composer.
+   */
+  claudeLoadsSkills?: boolean;
+};
+
+function claudeSkillPointer(skill: FileSkill): string {
+  return `Claude Code already has this skill. Load it with your Skill tool ("${skill.name}") and follow it. If the tool can't load it, read ${skill.path}.`;
+}
+
 export async function applySkillsToTurn(
   text: string,
   context: SkillCatalogContext,
+  options: SkillTurnOptions = {},
 ): Promise<string> {
   if (hasNativeCommands(context.harness)) return text;
   const names = skillNamesInText(text);
@@ -456,7 +472,12 @@ export async function applySkillsToTurn(
   const bodies: Record<string, string> = {};
   await Promise.all(
     picked.map(async (skill) => {
-      bodies[skill.name] = await readSkillBody(skill);
+      bodies[skill.name] =
+        options.claudeLoadsSkills &&
+        skill.kind === "file" &&
+        skill.source === "claude"
+          ? claudeSkillPointer(skill)
+          : await readSkillBody(skill);
     }),
   );
   return injectSkillPrompt(text, picked, bodies);
