@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-12 01:12 IST — Hari: Live Updates can start; the APK keeps the foreground-service permission (L-254)
+- Type: fix
+- What: Turning on Live Updates in Hari showed "Live Updates turned off … requires android.permission.FOREGROUND_SERVICE" and the running-session card never appeared. The phone app was built without the permission Android needs for that card. It now has it, so the card can show on the status bar and lock screen.
+- Why: The user sent the phone notice and asked what it meant. Upstream's phone app blocks that permission (it plays no background audio), and the block also removed the one Hari's Live Update module asks for.
+- Files: [app.config.js (blockedPermissions, permissions, plugin)](mobile/app.config.js:36), [with-live-update-permissions.js](mobile/plugins/with-live-update-permissions.js), [nativePermissions.test.ts (Live Update test)](mobile/tests/nativePermissions.test.ts:86)
+- Commit: uncommitted
+- Verified: mobile typecheck ✅ lint ✅ nativePermissions tests 5/5 ✅ (the introspected manifest has both permissions, no remove); APK build in CI; phone check manual
+
+## 2026-11-12 00:18 IST — Hari release 0.16.0-local38 (Improve prompt, Interactive Claude fixes)
+- Type: chore
+- What: Published `hari-v0.16.0-local38` (run 43079131813) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160038), `latest.json`, `hari-android.json`.
+- Why: Ships Improve prompt with the rewrite animation and Stop (L-252), multi-line Interactive Claude messages no longer folding into "[Pasted text]" (L-250), and skills no longer pasted in full (L-251). The user asked to commit and push so GitHub builds it.
+- Files: version bump in `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`
+- Commit: 6af6a56b
+- Verified: CI ✅ (desktop 6m2s, APK 12m18s, first try); `latest.json` and `hari-android.json` served from releases/latest with 0.16.0-local38 ✅; desktop and phone checks manual
+
+## 2026-11-12 00:07 IST — Activity: notes and log scroll in place; a day can show only its notes (L-253)
+- Type: feature
+- What: In Activity, the Week/Month "Notes by day" list and the Day log no longer stretch the page: the right column is as tall as the left one (at least 320px, at most the visible Activity area, like the task panel) and the list scrolls inside it. On a narrow window, where the columns stack, the list stops at the visible height. The Day log has an **All | Notes** switch with the number of notes, and each day in "Notes by day" has **View notes**, which opens that day showing only its notes.
+- Why: The user asked: the notes list ran far below everything else, and they wanted to read one day's notes on their own.
+- Files: [ActivityLogFeed.tsx (SCROLL_LIST, filter)](src/features/activity/ui/ActivityLogFeed.tsx:190), [PeriodSummary.tsx (PeriodNotes)](src/features/activity/ui/PeriodSummary.tsx:131), [ActivityView.tsx (logFilter, openDayNotes, MatchLeftColumn)](src/features/activity/ui/ActivityView.tsx:72), [ActivityLogFeed.test.ts](src/features/activity/ui/ActivityLogFeed.test.ts)
+- Commit: uncommitted
+- Verified: tsc ✅ · vitest activity ✅ 26/26 · desktop check manual
+
 ## 2026-11-12 00:03 IST — Improve prompt: rewrite animation and a Stop button (L-252)
 - Type: feature
 - What: The rewrite now appears with the same animation as a changed chat title: the new text sweeps in from left to right while your draft breaks into particles (skipped with reduced motion). While a rewrite runs, a **Stop** button shows in the strip above the text and the ✨ button shows a stop square; either one (or Esc) ends it and keeps your text.
