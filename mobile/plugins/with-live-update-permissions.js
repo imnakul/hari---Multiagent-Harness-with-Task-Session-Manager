@@ -5,10 +5,7 @@ const { withAndroidManifest } = require("expo/config-plugins");
 // by an earlier `expo prebuild` can still carry tools:node="remove" for it,
 // which strips the hari-live module's own declaration at build time. Android
 // then refuses startForeground and Live Updates turn themselves off.
-const LIVE_UPDATE_PERMISSIONS = [
-  "android.permission.FOREGROUND_SERVICE",
-  "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
-];
+const LIVE_UPDATE_PERMISSIONS = require("./live-update-permissions");
 
 module.exports = function withLiveUpdatePermissions(config) {
   return withAndroidManifest(config, (config) => {
@@ -23,5 +20,3 @@ module.exports = function withLiveUpdatePermissions(config) {
     return config;
   });
 };
-
-module.exports.LIVE_UPDATE_PERMISSIONS = LIVE_UPDATE_PERMISSIONS;

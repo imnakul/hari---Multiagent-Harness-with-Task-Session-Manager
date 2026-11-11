@@ -95,3 +95,18 @@ it("keeps the foreground-service permissions Hari's Live Update needs", () => {
     });
   }
 });
+
+// Fork (Hari, L-254): the release workflow's Version job runs
+// `node -e "require('./mobile/app.config.js')"` before npm install; a package
+// import there failed the local39 release before it built anything.
+it("loads app.config.js without any installed package", () => {
+  const loaded = execFileSync(
+    process.execPath,
+    [
+      "-e",
+      "require('./app.config.js'); process.stdout.write(Object.keys(require.cache).filter((path) => path.includes('node_modules')).join(','))",
+    ],
+    { cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8", timeout: 10_000 },
+  );
+  expect(loaded).toBe("");
+});

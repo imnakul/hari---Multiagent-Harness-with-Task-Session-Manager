@@ -3,7 +3,8 @@
 // layers the fork's name, icons, version, signing and update check on top.
 const { version } = require("../package.json");
 
-const { LIVE_UPDATE_PERMISSIONS } = require("./plugins/with-live-update-permissions");
+// No package imports here: the release workflow loads this file before npm install.
+const LIVE_UPDATE_PERMISSIONS = require("./plugins/live-update-permissions");
 
 const HARI_REPO = "imnakul/hari---Multiagent-Harness-with-Task-Session-Manager";
 
