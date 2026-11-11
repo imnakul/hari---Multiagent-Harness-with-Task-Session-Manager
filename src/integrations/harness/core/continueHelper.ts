@@ -21,7 +21,6 @@ import {
   supportsProviderAccounts,
 } from "../../../features/providers/model/providerAccounts";
 import { isHarnessAvailable } from "./availability";
-import { isPickerProviderVisible } from "../../../features/sessions/model/models";
 import { runHelperPipeline, type HelperFailureKind } from "./helperPipeline";
 import { runHarnessHelperPrompt } from "./registry";
 
@@ -72,17 +71,8 @@ export function continueHelperTargets(input: {
   });
 }
 
-/** Antigravity is allowed here: a strict prompt plus the stop-on-tool guard, then the next helper. */
-/**
- * Fork (L-208): hiding Antigravity ACP in Providers turns it off for helpers, so
- * no automatic helper call starts the shared ACP runtime (and its MCP servers).
- */
-export function helperProviderOff(provider: HarnessId): boolean {
-  return provider === "antigravity" && !isPickerProviderVisible("antigravity");
-}
-
 export function continueHelperAvailable(target: AiHelperTarget): boolean {
-  if (!isHarnessAvailable(target.provider) || helperProviderOff(target.provider)) return false;
+  if (!isHarnessAvailable(target.provider)) return false;
   if (target.accountId === undefined) return true;
   return (
     supportsProviderAccounts(target.provider) &&

@@ -36,7 +36,6 @@ const CLI: Record<HarnessId, { name: string; install?: string }> = {
   pi: { name: "Pi CLI", install: "npm i -g @earendil-works/pi-coding-agent" },
   omp: { name: "omp CLI", install: "curl -fsSL https://omp.sh/install | sh" },
   fx: { name: "fx CLI", install: "curl -fsSL https://fx.sh/setup.sh | bash" },
-  antigravity: { name: "Antigravity ACP server (agy_acp_server.par)" },
   "antigravity-cli": { name: "Antigravity CLI (agy)", install: "Install agy from antigravity.google/docs/cli/install/" },
   cline: { name: "Cline CLI", install: "npm i -g cline" },
   hermes: {
@@ -51,12 +50,6 @@ const CLI: Record<HarnessId, { name: string; install?: string }> = {
   },
 };
 
-/**
- * Probing Antigravity directly performs a slow ACP handshake. Catalog discovery
- * on the shared local runtime is authoritative and avoids racing a second
- * process, so callers can defer that one provider until discovery completes.
- */
-let antigravityProbeError: string | null = null;
 let inflight: Promise<void> | null = null;
 let probeGeneration = 0;
 
@@ -69,39 +62,20 @@ let probeGeneration = 0;
 const PROBE_TTL_MS = 30_000;
 
 export function harnessUnavailableHint(id: HarnessId): string {
-  if (id === "antigravity") {
-    return (
-      antigravityProbeError ??
-      "Antigravity ACP runtime not found. Download the official ACP executable and matching helper, then choose the ACP binary in Providers."
-    );
-  }
   const { name, install } = CLI[id];
   const how = install ? ` (\`${install}\`)` : "";
   return `${name} not found${how}. Install it, or restart MonoCode if it is already installed.`;
-}
-
-/** Record catalog evidence without running a second ACP handshake. */
-export function noteHarnessEvidence(
-  id: HarnessId,
-  ok: boolean,
-  error?: string,
-): void {
-  setHarnessAvailability({ [id]: ok });
-  if (id === "antigravity") {
-    antigravityProbeError = ok ? null : (error ?? antigravityProbeError);
-  }
 }
 
 /** Test seam. */
 export function resetHarnessAvailability(): void {
   probeGeneration += 1;
   inflight = null;
-  antigravityProbeError = null;
   resetHarnessAvailabilityState();
 }
 
 export function probeHarnessAvailability(
-  options?: { force?: boolean; exclude?: HarnessId[] },
+  options?: { force?: boolean },
 ): Promise<void> {
   if (inflight) return inflight;
   const lastProbe = harnessAvailabilityProbedAt();
@@ -109,37 +83,22 @@ export function probeHarnessAvailability(
     return Promise.resolve();
   }
 
-  // Excluded harnesses keep their current status and evidence. This is used
-  // for Antigravity while the shared ACP catalog is still being discovered.
-  const excluded = new Set(options?.exclude ?? []);
   const generation = probeGeneration;
   const pending = Promise.all(
     HARNESSES.map(async (id) => {
-      if (excluded.has(id)) return null;
       if (!isLiveHarness(id)) return [id, false] as const;
       try {
         await probeHarnessBinary(id);
         return [id, true] as const;
-      } catch (error: unknown) {
-        return [
-          id,
-          false,
-          error instanceof Error ? error.message : String(error),
-        ] as const;
+      } catch {
+        return [id, false] as const;
       }
     }),
   )
     .then((entries) => {
       if (generation !== probeGeneration) return;
       const updates: Partial<HarnessAvailability> = {};
-      for (const entry of entries) {
-        if (!entry) continue;
-        const [id, ok, error] = entry;
-        updates[id] = ok;
-        if (id === "antigravity") {
-          antigravityProbeError = ok ? null : (error ?? antigravityProbeError);
-        }
-      }
+      for (const [id, ok] of entries) updates[id] = ok;
       setHarnessAvailability(updates);
     })
     .finally(() => {

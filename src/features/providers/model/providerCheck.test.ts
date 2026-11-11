@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { probeHarnessAvailability } from "../../../integrations/harness/core/availability";
-import { recheckAntigravityCatalog } from "../../../integrations/harness/core/antigravityCatalog";
 import { refreshHarnessCatalogs } from "../../../integrations/harness/core/registry";
 import { savePickerProviderVisible } from "../../sessions/model/models";
 import { HARNESSES } from "../../sessions/model/session";
@@ -24,19 +23,12 @@ vi.mock("../../../integrations/harness/core/registry", async (importOriginal) =>
   >()),
   refreshHarnessCatalogs: vi.fn(),
 }));
-vi.mock("../../../integrations/harness/core/antigravityCatalog", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../../integrations/harness/core/antigravityCatalog")
-  >()),
-  recheckAntigravityCatalog: vi.fn(),
-}));
 
 beforeEach(() => {
   localStorage.clear();
   resetProviderCheck();
   vi.mocked(probeHarnessAvailability).mockResolvedValue();
   vi.mocked(refreshHarnessCatalogs).mockResolvedValue();
-  vi.mocked(recheckAntigravityCatalog).mockResolvedValue();
 });
 
 afterEach(() => {
@@ -44,7 +36,7 @@ afterEach(() => {
 });
 
 describe("provider check store", () => {
-  it("goes idle → checking → ready and never touches Antigravity", async () => {
+  it("goes idle → checking → ready", async () => {
     const phases: string[] = [];
     const unsubscribe = subscribeProviderCheck(() =>
       phases.push(getProviderCheckSnapshot().phase),
@@ -54,13 +46,7 @@ describe("provider check store", () => {
 
     expect(phases).toEqual(["checking", "ready"]);
     expect(getProviderCheckSnapshot().completedAt).toBeTypeOf("number");
-    expect(probeHarnessAvailability).toHaveBeenCalledWith({
-      force: false,
-      exclude: ["antigravity"],
-    });
-    const ids = vi.mocked(refreshHarnessCatalogs).mock.calls[0]?.[0] ?? [];
-    expect(ids).not.toContain("antigravity");
-    expect(recheckAntigravityCatalog).not.toHaveBeenCalled();
+    expect(probeHarnessAvailability).toHaveBeenCalledWith({ force: false });
   });
 
   it("leaves hidden providers alone", async () => {
@@ -83,23 +69,19 @@ describe("provider check store", () => {
     expect(probeHarnessAvailability).toHaveBeenCalledTimes(1);
   });
 
-  it("a forced run during a check waits for it, then runs again with Antigravity", async () => {
+  it("a forced run during a check waits for it, then runs again", async () => {
     let finish: (() => void) | undefined;
     vi.mocked(probeHarnessAvailability).mockImplementationOnce(
       () => new Promise<void>((resolve) => (finish = resolve)),
     );
     const startup = runProviderCheck();
-    const manual = runProviderCheck({ force: true, includeAntigravity: true });
+    const manual = runProviderCheck({ force: true });
     expect(probeHarnessAvailability).toHaveBeenCalledTimes(1);
     finish?.();
     await Promise.all([startup, manual]);
 
     expect(probeHarnessAvailability).toHaveBeenCalledTimes(2);
-    expect(probeHarnessAvailability).toHaveBeenLastCalledWith({
-      force: true,
-      exclude: ["antigravity"],
-    });
-    expect(recheckAntigravityCatalog).toHaveBeenCalledTimes(1);
+    expect(probeHarnessAvailability).toHaveBeenLastCalledWith({ force: true });
     expect(getProviderCheckSnapshot().phase).toBe("ready");
   });
 

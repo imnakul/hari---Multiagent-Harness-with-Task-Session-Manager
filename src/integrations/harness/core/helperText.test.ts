@@ -88,10 +88,10 @@ afterEach(() => {
 });
 
 describe("unverified helper providers (L-193)", () => {
-  it("runs an installed Antigravity helper; its runner stops tool use", async () => {
+  it("runs an installed Antigravity CLI helper; its runner stops tool use", async () => {
     saveAiHelperSettings({
       mode: "custom",
-      primary: { provider: "antigravity" },
+      primary: { provider: "antigravity-cli" },
       fallback: null,
     });
     mocks.runHarnessHelperPrompt.mockResolvedValue(
@@ -101,7 +101,7 @@ describe("unverified helper providers (L-193)", () => {
       "feat: antigravity helper",
     );
     expect(mocks.runHarnessHelperPrompt).toHaveBeenCalledWith(
-      "antigravity",
+      "antigravity-cli",
       expect.objectContaining({ cwd: "/repo" }),
     );
   });
@@ -252,11 +252,11 @@ describe("helper task wrappers", () => {
 
   it("does not call an unavailable primary or fall back after authentication errors", async () => {
     mocks.isHarnessAvailable.mockImplementation(
-      (provider) => provider !== "antigravity",
+      (provider) => provider !== "antigravity-cli",
     );
     saveAiHelperSettings({
       mode: "custom",
-      primary: { provider: "antigravity" },
+      primary: { provider: "antigravity-cli" },
       fallback: null,
     });
     expect(

@@ -2537,8 +2537,8 @@ function Workspace({
   }, [resumed, readProjectReturnMemory, harnessEvents]);
 
   // Cold boot deliberately starts ZERO provider processes and rewrites no
-  // saved model/settings. Live catalog discovery (and the expensive
-  // Antigravity ACP handshake) begins only on explicit provider interaction
+  // saved model/settings. Live catalog discovery begins only on
+  // explicit provider interaction
   // — opening the model picker or a provider row, manual Recheck, or
   // executing a provider operation — so idle saved conversations never boot
   // unused runtimes. Saved sessions keep their persisted model until a live

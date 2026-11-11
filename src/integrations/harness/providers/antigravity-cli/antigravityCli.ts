@@ -109,7 +109,7 @@ export function sendCliTurn(input: SendTurnInput): Promise<void> {
   if (input.intent === "plan" || input.intent === "orchestrate")
     return Promise.reject(
       new Error(
-        "Antigravity CLI does not expose a verified headless Plan mode. Use Antigravity ACP for this workflow, or turn Plan off explicitly.",
+        "Antigravity CLI does not expose a verified headless Plan mode. Turn Plan off for this turn.",
       ),
     );
   if (input.fork)

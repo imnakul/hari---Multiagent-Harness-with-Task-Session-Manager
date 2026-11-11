@@ -52,12 +52,10 @@ import {
 } from "../src/integrations/harness/providers/pi/piCatalog";
 import { discoverFxModels } from "../src/integrations/harness/providers/fx/fxCatalog";
 import { discoverHermesModels } from "../src/integrations/harness/providers/hermes/hermesCatalog";
-import { discoverAntigravityModels } from "./antigravity";
 import { discoverClineModels } from "../src/integrations/harness/core/clineCatalog";
 import { discoverDevinModels } from "../src/integrations/harness/providers/devin/devinCatalog";
 import { setHarnessModels, type AgentModel } from "../src/features/sessions/model/models";
 import {
-  resolveAntigravityBinary,
   resolveClineBinary,
   resolveClaudeBinary,
   resolveCodexBinary,
@@ -84,7 +82,6 @@ const resolveBinary: Record<RemoteProvider, () => Promise<{ path: string }>> = {
   omp: () => resolveOmpBinary(),
   fx: () => resolveFxBinary(),
   hermes: () => resolveHermesBinary(),
-  antigravity: () => resolveAntigravityBinary(),
   cline: () => resolveClineBinary(),
   devin: () => resolveDevinBinary(),
 };
@@ -104,7 +101,6 @@ const discoverModels: Record<
   omp: discoverOmpModels,
   fx: discoverFxModels,
   hermes: discoverHermesModels,
-  antigravity: discoverAntigravityModels,
   cline: discoverClineModels,
   devin: discoverDevinModels,
 };

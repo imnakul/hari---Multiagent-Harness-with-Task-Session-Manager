@@ -24,7 +24,6 @@ export const HARNESS_ICONS: Record<HarnessId, string> = {
   omp,
   fx,
   hermes,
-  antigravity,
   "antigravity-cli": antigravity,
   devin,
 };
@@ -37,7 +36,6 @@ export const MONOCHROME_HARNESSES = new Set<HarnessId>([
   "opencode",
   "pi",
   "fx",
-  "antigravity",
   "antigravity-cli",
   "hermes",
   "devin",
@@ -154,7 +152,7 @@ export function HarnessIcon({
       </MonoIcon>
     );
   }
-  if (harness === "antigravity" || harness === "antigravity-cli") {
+  if (harness === "antigravity-cli") {
     return (
       <MonoIcon className={className} viewBox="0 0 24 24">
         <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />

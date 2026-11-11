@@ -144,14 +144,6 @@ pub struct HarnessProbe {
     pub version: Option<String>,
 }
 
-fn antigravity_args() -> Vec<String> {
-    if cfg!(target_os = "linux") {
-        vec!["--uid=".into()]
-    } else {
-        Vec::new()
-    }
-}
-
 #[cfg(windows)]
 struct WindowsJob {
     handle: usize,
@@ -523,7 +515,7 @@ pub fn harness_resolve_configured(
 ) -> Result<ConfiguredBinary, String> {
     resolve_harness_binary_override(&provider, &binary_path).map(|path| ConfiguredBinary {
         path: path.to_string_lossy().into_owned(),
-        args: (provider == "antigravity").then(antigravity_args),
+        args: None,
     })
 }
 
@@ -971,36 +963,6 @@ pub fn harness_resolve_antigravity_cli(
     resolve_requested_binary(override_path, resolve_antigravity_cli, "Antigravity CLI not found. Install the official agy CLI and sign in with agy in a terminal.").map(cursor_binary)
 }
 
-/// Resolve the official ACP runtime and matching helper; agy is a separate provider.
-#[tauri::command(async)]
-pub fn harness_resolve_antigravity(override_path: Option<String>) -> Result<CursorBinary, String> {
-    resolve_antigravity_acp(override_path).map(cursor_binary)
-}
-
-/// Shared by the resolve command and the availability probe: an override may
-/// point at any launchable file, but only a complete official ACP runtime is
-/// accepted, so a stored legacy `agy.exe` path fails with install guidance.
-fn resolve_antigravity_acp(override_path: Option<String>) -> Result<PathBuf, String> {
-    let path = match override_path.map(|raw| raw.trim().to_string()) {
-        Some(raw) if !raw.is_empty() => {
-            let path = expand_home(&raw);
-            if !is_executable_file(&path) {
-                return Err(format!(
-                    "Selected Antigravity binary is not a launchable file: {}. {}",
-                    path.display(),
-                    crate::antigravity_acp::INSTALL_HELP
-                ));
-            }
-            path
-        }
-        _ => {
-            resolve_antigravity().ok_or_else(|| crate::antigravity_acp::INSTALL_HELP.to_string())?
-        }
-    };
-    crate::antigravity_acp::validate_runtime(&path)?;
-    Ok(path)
-}
-
 /// Resolve the Cline CLI (`cline`, installed via `npm i -g cline`).
 #[tauri::command(async)]
 pub fn harness_resolve_cline(override_path: Option<String>) -> Result<CursorBinary, String> {
@@ -1031,7 +993,6 @@ fn resolve_provider_binary(
         "omp" => resolve_requested_binary(override_path, resolve_omp, "omp CLI not found"),
         "fx" => resolve_requested_binary(override_path, resolve_fx, "fx CLI not found"),
         "grok" => resolve_requested_binary(override_path, resolve_grok, "Grok Build CLI not found"),
-        "antigravity" => resolve_antigravity_acp(override_path),
         "antigravity-cli" => resolve_requested_binary(
             override_path,
             resolve_antigravity_cli,
@@ -1810,16 +1771,9 @@ fn require_probe_markers(path: &Path, args: &[&str], markers: &[&str]) -> Result
 fn probe_provider_binary(provider: &str, path: &Path) -> Result<Option<String>, String> {
     if !matches!(
         provider,
-        "codex" | "claude" | "opencode" | "antigravity" | "antigravity-cli" | "cline"
+        "codex" | "claude" | "opencode" | "antigravity-cli" | "cline"
     ) {
         return Ok(None);
-    }
-    // The ACP runtime has no meaningful `--version`; a real initialize
-    // handshake is the health check. A runtime that is healthy but not yet
-    // signed in still probes as installed — account access is surfaced by
-    // catalog discovery and chat startup, mirroring Claude's login handling.
-    if provider == "antigravity" {
-        return probe_antigravity_acp(path);
     }
     let version_output = probe_command_output(path, &["--version"], Duration::from_secs(8))?;
     match provider {
@@ -1850,128 +1804,6 @@ fn probe_provider_binary(provider: &str, path: &Path) -> Result<Option<String>, 
         _ => unreachable!(),
     }
     Ok(first_probe_line(&version_output))
-}
-
-/// Health probe for the official ACP runtime: spawn it, send a single
-/// `initialize` request, and validate the response without authenticating or
-/// opening a session, so a probe never starts a login or boots MCP servers.
-/// `prepare_child` applies the isolated profile and the browser-helper
-/// `BROWSER` override, so a stray startup login attempt is intercepted by the
-/// MonoCode helper instead of opening a real browser.
-fn probe_antigravity_acp(path: &Path) -> Result<Option<String>, String> {
-    use std::io::{BufRead, Write};
-
-    const INITIALIZE_REQUEST: &[u8] = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"monocode","version":"0.1.37"}}}"#;
-    // The runtime is a PyInstaller onefile binary: it extracts itself before
-    // it can answer, which alone can take longer than 10s on a cold cache.
-    const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
-    const MAX_STDERR_BYTES: usize = 64 * 1024;
-
-    let command = path.to_string_lossy().into_owned();
-    let mut cmd = new_provider_command(path, &[])?;
-    cmd.stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    prepare_child(&mut cmd, &command)?;
-    let mut child = cmd
-        .spawn()
-        .map_err(|error| format!("Failed to run {}: {error}", path.display()))?;
-    let pid = child.id();
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "Failed to open ACP probe stdin".to_string())?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "Failed to open ACP probe stdout".to_string())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "Failed to open ACP probe stderr".to_string())?;
-
-    // Bounded stderr drain; startup diagnostics and intercepted login URLs
-    // must never block the response reader or buffer without limit. The text
-    // goes over a channel instead of a join: the runtime tree can hold the
-    // stderr pipe open long after the direct child is gone, and an unbounded
-    // join here hung Recheck indefinitely.
-    let (stderr_tx, stderr_rx) = mpsc::channel();
-    thread::spawn(move || {
-        let mut collected = Vec::new();
-        let mut reader = BufReader::new(stderr);
-        let mut line = Vec::new();
-        while collected.len() < MAX_STDERR_BYTES {
-            line.clear();
-            match reader.read_until(b'\n', &mut line) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => collected.extend_from_slice(&line),
-            }
-        }
-        let _ = stderr_tx.send(String::from_utf8_lossy(&collected).into_owned());
-    });
-
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let written = stdin
-            .write_all(INITIALIZE_REQUEST)
-            .and_then(|_| stdin.write_all(b"\n"))
-            .and_then(|_| stdin.flush());
-        drop(stdin);
-        let outcome = if written.is_err() {
-            Err("Could not send the ACP initialize request.".to_string())
-        } else {
-            // Returns as soon as the initialize response line is seen; the
-            // server intentionally keeps running afterwards.
-            crate::antigravity_acp::read_initialize_response(BufReader::new(stdout))
-        };
-        let _ = tx.send(outcome);
-        // Give the runtime a short grace to exit on its own (a clean exit lets
-        // the PyInstaller onefile bootloader delete its extraction), then kill
-        // the whole tree. `terminate` is required: the process we spawned is
-        // only the onefile parent, and a plain kill strands the real server,
-        // which then holds this probe's pipes open forever.
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => return,
-                Ok(None) if std::time::Instant::now() < deadline => {
-                    thread::sleep(Duration::from_millis(100));
-                }
-                _ => break,
-            }
-        }
-        terminate(pid);
-        let _ = child.wait();
-    });
-    let response = match rx.recv_timeout(PROBE_TIMEOUT) {
-        Ok(response) => response,
-        Err(_) => {
-            terminate(pid);
-            return Err(format!(
-                "{} did not answer the ACP initialize handshake within 30s",
-                path.display()
-            ));
-        }
-    };
-    // Bounded wait: if a stray grandchild still holds stderr open, the probe
-    // must not wait on it — the stderr text is only a fallback signal.
-    let stderr_text = stderr_rx
-        .recv_timeout(Duration::from_secs(5))
-        .unwrap_or_default();
-    match response {
-        Ok(version) => Ok(version),
-        Err(error) if error == crate::antigravity_acp::SIGN_IN_REQUIRED => {
-            Ok(Some("Google sign-in required".to_string()))
-        }
-        Err(error) => {
-            // Some runtimes print the authorization prompt on stderr before
-            // answering; treat that as signed-out rather than broken.
-            if crate::antigravity_acp::is_auth_output(&stderr_text) {
-                return Ok(Some("Google sign-in required".to_string()));
-            }
-            Err(error)
-        }
-    }
 }
 
 fn exec_capture(command: &str, args: &[String], cwd: Option<&str>) -> Result<String, String> {
@@ -2527,7 +2359,7 @@ mod windows_spawn_tests {
     #[test]
     #[ignore]
     fn live_probe_reports_installed_providers() {
-        for provider in ["codex", "claude", "opencode", "antigravity", "cline"] {
+        for provider in ["codex", "claude", "opencode", "antigravity-cli", "cline"] {
             match resolve_provider_binary(provider, None)
                 .and_then(|path| probe_provider_binary(provider, &path).map(|v| (path, v)))
             {
@@ -2839,7 +2671,6 @@ fn is_harness_argv_token(part: &str) -> bool {
             | "fx"
             | "hermes"
             | "devin"
-            | "agy_acp_server.par"
             | "pi"
             | "worker-server"
             | "app-server"
@@ -3079,7 +2910,6 @@ fn resolve_harness_binary_default(provider: &str) -> Option<PathBuf> {
         "omp" => resolve_omp(),
         "fx" => resolve_fx(),
         "hermes" => resolve_hermes(),
-        "antigravity" => resolve_antigravity(),
         "antigravity-cli" => resolve_antigravity_cli(),
         "cline" => resolve_cline(),
         "devin" => resolve_devin(),
@@ -3114,11 +2944,6 @@ fn configured_binary_fingerprint(path: &Path) -> Option<String> {
 }
 
 fn resolve_harness_binary_override(provider: &str, binary_path: &str) -> Result<PathBuf, String> {
-    // Local Antigravity validates the complete shared ACP runtime on all
-    // platforms; its health check is initialize, not a CLI version command.
-    if provider == "antigravity" {
-        return resolve_antigravity_acp(Some(binary_path.to_string()));
-    }
     let names: &[&str] = match provider {
         "claude" => &["claude"],
         "codex" => &["codex"],
@@ -3194,9 +3019,6 @@ fn is_supported_harness_version(version: &str) -> bool {
 }
 
 fn validate_harness_binary_version(provider: &str, path: &Path) -> Result<(), String> {
-    if provider == "antigravity" {
-        return Ok(());
-    }
     let version = exec_capture(&path.to_string_lossy(), &["--version".to_string()], None)?;
     let lower = version.to_ascii_lowercase();
     let has_version = is_supported_harness_version(&version);
@@ -3561,75 +3383,6 @@ fn resolve_grok() -> Option<PathBuf> {
     first_binary_matching(candidates, is_grok_agent)
 }
 
-#[cfg(test)]
-mod antigravity_acp_tests {
-    use super::*;
-
-    fn fixture(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("monocode-acp-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&root).unwrap();
-        root
-    }
-
-    fn executable(path: &Path) {
-        std::fs::write(path, b"fixture").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
-    }
-
-    // Legacy overrides must not sneak through generic executable validation.
-    #[test]
-    fn antigravity_acp_rejects_legacy_override() {
-        let root = fixture("legacy");
-        let path = root.join(if cfg!(windows) { "agy.exe" } else { "agy" });
-        executable(&path);
-        let result = harness_resolve_antigravity(Some(path.to_string_lossy().into_owned()));
-        assert!(result.is_err(), "legacy agy must not resolve as ACP");
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    // An ACP executable alone cannot start a functional runtime.
-    #[test]
-    fn antigravity_acp_requires_sibling_helper() {
-        let root = fixture("missing-helper");
-        let path = root.join(if cfg!(windows) {
-            "agy_acp_server.exe"
-        } else {
-            "agy_acp_server.par"
-        });
-        executable(&path);
-        let result = harness_resolve_antigravity(Some(path.to_string_lossy().into_owned()));
-        assert!(
-            result.is_err(),
-            "missing localharness_external must fail resolution"
-        );
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn antigravity_acp_accepts_complete_runtime() {
-        let root = fixture("complete runtime");
-        let path = root.join(if cfg!(windows) {
-            "AGY_ACP_SERVER.EXE"
-        } else {
-            "agy_acp_server.par"
-        });
-        executable(&path);
-        executable(&root.join(if cfg!(windows) {
-            "LOCALHARNESS_EXTERNAL.EXE"
-        } else {
-            "localharness_external"
-        }));
-        let result =
-            harness_resolve_antigravity(Some(path.to_string_lossy().into_owned())).unwrap();
-        assert!(resolved_binary_matches(Path::new(&result.path), &path));
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
-
 fn antigravity_cli_candidates(home: Option<&Path>, local_app_data: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Some(home) = home {
@@ -3744,75 +3497,10 @@ mod antigravity_cli_tests {
         assert!(
             resolve_harness_binary_override("antigravity-cli", &path.to_string_lossy()).is_ok()
         );
-        assert!(resolve_antigravity_acp(Some(path.to_string_lossy().into_owned())).is_err());
         std::fs::write(&path, "#!/bin/sh\necho 'Antigravity CLI 1.0.0'\n").unwrap();
         assert!(probe_provider_binary("antigravity-cli", &path).is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
-}
-
-fn resolve_antigravity() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    // PATH first so a manual ACP install resolves dynamically per user instead
-    // of via a hardcoded username. `which_in_path` applies PATHEXT on Windows,
-    // so "agy_acp_server" finds `agy_acp_server.exe`. Unix has no extension
-    // resolution: the supported file is literally `agy_acp_server.par`, and the
-    // validator rejects the extensionless name, so search for that exact name.
-    #[cfg(windows)]
-    if let Some(found) = which_in_path(&gui_search_path(), "agy_acp_server") {
-        candidates.push(found);
-    }
-    #[cfg(not(windows))]
-    if let Some(found) = which_in_path(&gui_search_path(), "agy_acp_server.par") {
-        candidates.push(found);
-    }
-
-    let home = dirs_home().map(PathBuf::from);
-    if let Some(home) = &home {
-        candidates.push(home.join(".local").join("bin").join("agy_acp_server.par"));
-        #[cfg(windows)]
-        {
-            candidates.push(home.join(".local").join("bin").join("agy_acp_server.exe"));
-
-            // The official Windows ACP archive is normally downloaded and
-            // extracted in Downloads. Dev builds can appear to work because
-            // their localhost WebView origin remembers a manually selected
-            // binary in localStorage, while an installed build has a separate
-            // packaged origin. Discover common extracted archive folders so
-            // the installed app can resolve the same runtime without relying
-            // on origin-specific frontend state.
-            let downloads = home.join("Downloads");
-            candidates.push(downloads.join("agy_acp_server.exe"));
-            if let Ok(entries) = std::fs::read_dir(&downloads) {
-                let mut extracted: Vec<PathBuf> = entries
-                    .filter_map(Result::ok)
-                    .filter_map(|entry| {
-                        let is_dir = entry.file_type().ok()?.is_dir();
-                        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-                        (is_dir && name.starts_with("agy-acp-server"))
-                            .then(|| entry.path().join("agy_acp_server.exe"))
-                    })
-                    .collect();
-                extracted.sort_by(|a, b| b.cmp(a));
-                candidates.extend(extracted);
-            }
-        }
-    }
-
-    candidates.push(PathBuf::from("/usr/local/bin/agy_acp_server.par"));
-    candidates.push(PathBuf::from("/usr/bin/agy_acp_server.par"));
-
-    #[cfg(not(windows))]
-    if let Some(from_shell) = which_via_login_shell("agy_acp_server.par") {
-        candidates.push(from_shell);
-    }
-    #[cfg(windows)]
-    if let Some(from_shell) = which_via_login_shell("agy_acp_server") {
-        candidates.push(from_shell);
-    }
-
-    candidates.into_iter().find(|path| is_executable_file(path))
 }
 
 fn resolve_cline() -> Option<PathBuf> {
@@ -4636,22 +4324,10 @@ pub(crate) fn prepare_child(cmd: &mut Command, command: &str) -> Result<(), Stri
             ],
         ),
         "codex" => apply_login_shell_keys(cmd, &["OPENAI_API_KEY", "CODEX_HOME"]),
-        "agy_acp_server" => apply_antigravity_acp_env(cmd, command)?,
         _ => {}
     }
     isolate_child(cmd);
     Ok(())
-}
-
-/// The official ACP runtime launches with an isolated MonoCode profile, the
-/// matching sibling helper, and the MonoCode browser-interception helper, so
-/// ambient Google credentials never leak in and no spawn can open a browser.
-fn apply_antigravity_acp_env(cmd: &mut Command, command: &str) -> Result<(), String> {
-    let profile = crate::antigravity_acp::profile_directory()?;
-    let browser = std::env::current_exe().map_err(|_| {
-        "Could not locate the MonoCode executable for the Antigravity browser helper.".to_string()
-    })?;
-    crate::antigravity_acp::configure(cmd, Path::new(command), Path::new(&profile), &browser)
 }
 
 fn apply_login_shell_keys(cmd: &mut Command, keys: &[&str]) {
@@ -5312,26 +4988,16 @@ mod tests {
         let opencode = dir.join("opencode");
         let cursor_agent = dir.join("cursor-agent");
         let decoy = dir.join("codex.sh");
-        let antigravity = dir.join("agy_acp_server");
-        let antigravity_wrapper = dir.join("agy_acp_server.par");
-        for path in [
-            &codex,
-            &opencode,
-            &cursor_agent,
-            &decoy,
-            &antigravity,
-            &antigravity_wrapper,
-        ] {
-            let script: &[u8] =
-                if path == &decoy || path == &antigravity || path == &antigravity_wrapper {
-                    b"#!/bin/sh\n"
-                } else if path == &codex {
-                    b"#!/bin/sh\necho 'codex-cli 0.156.1'\n"
-                } else if path == &cursor_agent {
-                    b"#!/bin/sh\necho '2026.09.23-86fc751'\n"
-                } else {
-                    b"#!/bin/sh\necho '1.18.32-beta'\n"
-                };
+        for path in [&codex, &opencode, &cursor_agent, &decoy] {
+            let script: &[u8] = if path == &decoy {
+                b"#!/bin/sh\n"
+            } else if path == &codex {
+                b"#!/bin/sh\necho 'codex-cli 0.156.1'\n"
+            } else if path == &cursor_agent {
+                b"#!/bin/sh\necho '2026.09.23-86fc751'\n"
+            } else {
+                b"#!/bin/sh\necho '1.18.32-beta'\n"
+            };
             std::fs::write(path, script).unwrap();
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
@@ -5397,21 +5063,6 @@ mod tests {
         .is_err());
         assert!(resolve_harness_binary_override("codex", "codex").is_err());
         assert!(resolve_harness_binary_override("codex", &decoy.to_string_lossy()).is_err());
-        assert!(
-            resolve_harness_binary_override("antigravity", &antigravity.to_string_lossy()).is_err()
-        );
-        assert!(
-            resolve_harness_binary_override("antigravity", &antigravity_wrapper.to_string_lossy(),)
-                .is_err(),
-            "the official runtime requires its matching helper"
-        );
-        let helper = dir.join("localharness_external");
-        std::fs::write(&helper, "#!/bin/sh\nexit 0\n").unwrap();
-        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert_eq!(
-            resolve_harness_binary_override("antigravity", &antigravity_wrapper.to_string_lossy()),
-            Ok(antigravity_wrapper.clone())
-        );
 
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -5683,37 +5334,6 @@ mod tests {
 
         assert!(!is_grok_agent(&dir.join("missing")));
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn antigravity_resolver_prefers_executable_wrapper_and_tracks_orphans() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("monocode-agy-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("bin")).unwrap();
-        let wrapper = dir.join("bin/agy_acp_server.par");
-        let server = dir.join("agy_acp_server.par");
-        std::fs::write(&wrapper, b"#!/bin/sh\nexit 0\n").unwrap();
-        std::fs::write(&server, b"#!/bin/sh\nexit 0\n").unwrap();
-        std::fs::set_permissions(&server, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let candidates = vec![wrapper.clone(), server.clone()];
-        assert_eq!(first_binary(candidates.clone()), Some(server));
-        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert_eq!(first_binary(candidates), Some(wrapper));
-        assert!(looks_like_harness_argv(
-            "/home/user/.local/share/agy-acp/agy_acp_server.par"
-        ));
-        assert!(!looks_like_harness_argv("agy --help"));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn antigravity_launch_args_match_the_platform_registry() {
-        if cfg!(target_os = "linux") {
-            assert_eq!(antigravity_args(), vec!["--uid="]);
-        } else {
-            assert!(antigravity_args().is_empty());
-        }
     }
 
     #[test]

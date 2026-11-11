@@ -12,7 +12,6 @@ import type { ContinueChoice } from "../../../features/sessions/model/continueCa
 import type { Block } from "../../../features/sessions/model/session";
 import type { AiHelperTarget } from "../../../features/settings/model/settings";
 import { HelperToolAttemptError } from "./helperIsolation";
-import { savePickerProviderVisible } from "../../../features/sessions/model/models";
 import {
   continueHelperAvailable,
   continueHelperTargets,
@@ -34,16 +33,15 @@ const all = () => true;
 describe("continueHelperTargets (L-189)", () => {
   it("puts the chosen helper first, then Settings, source, target and the rest", () => {
     const targets = continueHelperTargets({
-      choice: choice({ helper: { provider: "antigravity", model: "g" } }),
+      choice: choice({ helper: { provider: "antigravity-cli", model: "g" } }),
       sourceHarness: "claude",
       settings: { mode: "custom", primary: { provider: "opencode" }, fallback: null },
     });
     expect(targets.map((target) => target.provider)).toEqual([
-      "antigravity",
+      "antigravity-cli",
       "opencode",
       "claude",
       "codex",
-      "antigravity-cli",
     ]);
   });
 
@@ -58,24 +56,13 @@ describe("continueHelperTargets (L-189)", () => {
       "codex",
       "opencode",
       "antigravity-cli",
-      "antigravity",
     ]);
   });
 
-  it("allows Antigravity when it is installed", () => {
-    expect(continueHelperAvailable({ provider: "antigravity" })).toBe(true);
+  it("allows Antigravity CLI when it is installed", () => {
+    expect(continueHelperAvailable({ provider: "antigravity-cli" })).toBe(true);
     mocks.isHarnessAvailable.mockReturnValueOnce(false);
-    expect(continueHelperAvailable({ provider: "antigravity" })).toBe(false);
-  });
-
-  it("skips Antigravity ACP while it is hidden in Providers (L-208)", () => {
-    savePickerProviderVisible("antigravity", false);
-    try {
-      expect(continueHelperAvailable({ provider: "antigravity" })).toBe(false);
-      expect(continueHelperAvailable({ provider: "antigravity-cli" })).toBe(true);
-    } finally {
-      savePickerProviderVisible("antigravity", true);
-    }
+    expect(continueHelperAvailable({ provider: "antigravity-cli" })).toBe(false);
   });
 });
 
@@ -95,9 +82,10 @@ describe("prepareContinueCard (L-189)", () => {
   });
 
   it("falls back to the next helper when one tries a tool", async () => {
-    const targets: AiHelperTarget[] = [{ provider: "antigravity" }, { provider: "claude" }];
+    const targets: AiHelperTarget[] = [{ provider: "antigravity-cli" }, { provider: "claude" }];
     const run = vi.fn(async (target: AiHelperTarget, _prompt: string) => {
-      if (target.provider === "antigravity") throw new HelperToolAttemptError("antigravity", "read");
+      if (target.provider === "antigravity-cli")
+        throw new HelperToolAttemptError("antigravity-cli", "read");
       return CARD;
     });
     const result = await prepareContinueCard({
@@ -112,7 +100,7 @@ describe("prepareContinueCard (L-189)", () => {
     expect(run).toHaveBeenCalledTimes(2);
     expect(run.mock.calls[0]![1]).toContain("Do not use any tools.");
     expect(result.helper).toEqual({ provider: "claude" });
-    expect(result.note).toBe("Written by Claude Code · Antigravity ACP tried a tool");
+    expect(result.note).toBe("Written by Claude Code · Antigravity CLI tried a tool");
     expect(result.card.startsWith(CARD)).toBe(true);
     expect(result.card).toContain("## User rules (verbatim)");
   });

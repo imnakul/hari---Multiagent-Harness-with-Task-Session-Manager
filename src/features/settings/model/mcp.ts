@@ -1,7 +1,7 @@
 export type McpServer = { name: string; status: string };
 
 export type McpConnection = {
-  provider: "claude" | "claude_desktop" | "codex" | "cursor" | "opencode" | "antigravity-cli" | "antigravity";
+  provider: "claude" | "claude_desktop" | "codex" | "cursor" | "opencode" | "antigravity-cli";
   name: string;
   scope: "local" | "project" | "user";
   configPath: string;
@@ -16,7 +16,6 @@ export const MCP_PROVIDER_LABELS: Record<McpConnection["provider"], string> = {
   cursor: "Cursor",
   opencode: "OpenCode",
   "antigravity-cli": "Antigravity CLI",
-  antigravity: "Antigravity ACP",
 };
 
 /** Claude's list output is for humans; keep only names and health text. */

@@ -559,10 +559,7 @@ export function ModelPicker({
 
   useEffect(() => {
     if (!open) return;
-    // Blanket probes skip the Antigravity ACP handshake: opening this picker
-    // is explicit discovery, and the catalog run below reports Antigravity
-    // evidence from the shared runtime instead of launching both at once.
-    void probeHarnessAvailability({ exclude: ["antigravity"] });
+    void probeHarnessAvailability();
     void refreshHarnessCatalogs([current.harness]);
     source.refresh([current.harness]);
     setTab(

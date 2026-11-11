@@ -266,7 +266,7 @@ it("does not borrow a model family's quota for the configured default and does n
     root.render(
       createElement(UsageFooter, {
         providers: [],
-        session: { harness: "antigravity" },
+        session: { harness: "codex" },
       }),
     ),
   );

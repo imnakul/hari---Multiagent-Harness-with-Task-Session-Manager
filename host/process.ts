@@ -5,7 +5,6 @@ import { homedir } from "node:os";
 import { delimiter, dirname, extname, join, basename } from "node:path";
 import type { RemoteProvider } from "../src/features/connections/model/protocol";
 
-import { antigravityHelper } from "./antigravity";
 
 const npmEntries: Record<string, string> = {
   codex: "node_modules/@openai/codex/bin/codex.js",
@@ -22,8 +21,6 @@ const binaryNames: Record<RemoteProvider, string[]> = {
   omp: ["omp"],
   fx: ["fx"],
   hermes: ["hermes"],
-  antigravity:
-    process.platform === "win32" ? ["agy_acp_server"] : ["agy_acp_server.par"],
   cline: ["cline"],
   devin: ["devin"],
 };
@@ -42,7 +39,6 @@ const providerDirectories = (provider: RemoteProvider): string[] => {
       join(home, ".hermes", "hermes-agent", "venv", "bin"),
       join(home, ".hermes", "hermes-agent", ".venv", "bin"),
     ],
-    antigravity: [join(home, ".local", "share", "agy-acp")],
     devin: [
       process.platform === "win32"
         ? join(
@@ -190,7 +186,6 @@ export async function resolveProvider(
           if (!(await stat(candidate)).isFile()) continue;
           await providerLaunch(candidate, []);
           if (!(await matchesProvider(candidate, provider, name))) continue;
-          if (provider === "antigravity") await antigravityHelper(candidate);
           return candidate;
         } catch {
           /* try the next installed launcher */

@@ -102,15 +102,6 @@ export {
   forgetHermesSession,
   bindHermesSession,
 } from "./providers/hermes/hermes";
-export {
-  sendAntigravityTurn,
-  steerAntigravityTurn,
-  cancelAntigravityTurn,
-  stopAntigravitySession,
-  forgetAntigravitySession,
-  respondAntigravityApproval,
-  bindAntigravitySession,
-} from "./core/antigravity";
 export { generateCursorSessionTitle } from "./providers/cursor/cursorTitle";
 export { generateCodexSessionTitle } from "./providers/codex/codexTitle";
 export { generateOpenCodeSessionTitle } from "./providers/opencode/opencodeTitle";
@@ -160,7 +151,6 @@ export { refreshPiCatalog, refreshOmpCatalog } from "./providers/pi/piCatalog";
 export { refreshFxCatalog } from "./providers/fx/fxCatalog";
 export { refreshGrokCatalog } from "./providers/grok/grokCatalog";
 export { refreshHermesCatalog } from "./providers/hermes/hermesCatalog";
-export { refreshAntigravityCatalog } from "./core/antigravityCatalog";
 export { registerBuiltinHarnesses } from "./core/register";
 export {
   getHarnessAvailabilitySnapshot,

@@ -9,7 +9,6 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { antigravityLaunch } from "./antigravity";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import type { ChildBackend } from "../src/integrations/harness/core/child";
@@ -108,7 +107,6 @@ export class HostChildBackend implements ChildBackend {
 
   constructor(
     private readonly binaries: Partial<Record<RemoteProvider, string>> = {},
-    private readonly antigravityProfile?: string,
   ) {
     this.events.setMaxListeners(0);
   }
@@ -143,9 +141,6 @@ export class HostChildBackend implements ChildBackend {
         throw new Error(`Unsupported provider: ${provider}`);
       return {
         path: await this.resolve(provider),
-        ...(provider === "antigravity"
-          ? { args: process.platform === "linux" ? ["--uid="] : [] }
-          : {}),
       } as T;
     }
     switch (command) {
@@ -377,29 +372,20 @@ export class HostChildBackend implements ChildBackend {
       commandArgs = [...(await devinAskEditsArgs()), ...commandArgs];
     }
     const launch = await providerLaunch(command, commandArgs);
-    const acpLaunch =
-      id === "monocode-antigravity-runtime"
-        ? await antigravityLaunch(
-            command,
-            launch.args,
-            process.env,
-            this.antigravityProfile,
-          )
-        : undefined;
     if (this.closing) throw new Error("Host is stopping");
     const child = spawn(
       process.execPath,
       [
         fileURLToPath(new URL("./provider-guard.mjs", import.meta.url)),
         launch.command,
-        ...(acpLaunch?.args ?? launch.args),
+        ...launch.args,
       ],
       {
         cwd: String(args.cwd),
         stdio: ["pipe", "pipe", "pipe", "pipe"],
         detached: process.platform !== "win32",
         windowsHide: true,
-        env: { ...(acpLaunch?.env ?? process.env), MONOCODE_HOST: "1" },
+        env: { ...process.env, MONOCODE_HOST: "1" },
       },
     );
     this.children.set(id, child);

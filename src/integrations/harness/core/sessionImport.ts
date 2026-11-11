@@ -59,7 +59,8 @@ export const NATIVE_HARNESS: Partial<Record<ExternalSource, HarnessId>> = {
   codex: "codex",
   opencode: "opencode",
   cline: "cline",
-  antigravity: "antigravity",
+  // Fork (L-244): Antigravity ACP is gone; its conversations resume in the CLI.
+  antigravity: "antigravity-cli",
 };
 
 /** Sources with a transcript reader (everything but Antigravity). */

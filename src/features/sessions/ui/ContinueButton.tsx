@@ -335,11 +335,6 @@ export function ContinueButton({
                     />
                   </div>
                 ) : null}
-                {helper?.provider === "antigravity" ? (
-                  <p className="text-[11px] leading-4 text-content/50">
-                    Stops if it tries a tool, then the next helper runs.
-                  </p>
-                ) : null}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-content/60">Passes</span>
                   <SegmentedSwitch<"1" | "2">

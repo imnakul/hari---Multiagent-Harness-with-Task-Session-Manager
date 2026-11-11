@@ -16,7 +16,6 @@ const CONFIGURABLE_PROVIDERS: ConfigurableBinaryProvider[] = [
   "pi",
   "omp",
   "fx",
-  "antigravity",
   "antigravity-cli",
   "cline",
   "hermes",

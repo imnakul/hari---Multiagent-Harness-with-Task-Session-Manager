@@ -213,7 +213,7 @@ describe("sessionImport native resume", () => {
     ).toBe("cline");
     expect(
       nativeHarnessFor({ ...codexInfo(), source: "antigravity" }),
-    ).toBe("antigravity");
+    ).toBe("antigravity-cli");
     expect(
       nativeHarnessFor({ ...codexInfo(), source: "zcode" }),
     ).toBeUndefined();
@@ -225,13 +225,13 @@ describe("sessionImport native resume", () => {
     expect(canReplay({ ...codexInfo(), source: "antigravity" })).toBe(false);
   });
 
-  it("creates a bound antigravity session", () => {
+  it("creates an Antigravity CLI session for an imported Antigravity conversation", () => {
     const session = createNativeResumeSession({
       ...codexInfo(),
       source: "antigravity",
-      id: "conv-abc-123",
+      id: "0f8fad5b-d9cb-469f-a165-70867728950e",
     });
-    expect(session.harness).toBe("antigravity");
+    expect(session.harness).toBe("antigravity-cli");
   });
 
   it("passes --resume with the native id to the claude CLI", async () => {

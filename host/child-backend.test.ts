@@ -37,10 +37,6 @@ it("resolves every provider and runs only allowed provider commands", async () =
         `harness_resolve_${provider}`,
       );
       expect(resolved.path).toBe(file);
-      if (provider === "antigravity")
-        expect(resolved.args).toEqual(
-          process.platform === "linux" ? ["--uid="] : [],
-        );
     }
     const output = await backend.invoke<string>("harness_exec", {
       command: file,

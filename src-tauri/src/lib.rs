@@ -2,7 +2,6 @@ use tauri::Manager;
 
 mod account_identity;
 mod activity;
-pub mod antigravity_acp;
 mod antigravity_cli;
 mod artifacts;
 mod automations;
@@ -474,7 +473,7 @@ pub fn run() {
             control::app_cli_path,
             default_cwd,
             home_dir,
-            antigravity_acp::antigravity_helper_directory,
+            antigravity_cli::antigravity_helper_directory,
             notifications::notification_permission,
             notifications::request_notification_permission,
             notifications::show_notification,
@@ -652,7 +651,6 @@ pub fn run() {
             harness::harness_resolve_fx,
             harness::harness_resolve_grok,
             harness::harness_resolve_devin,
-            harness::harness_resolve_antigravity,
             harness::harness_resolve_antigravity_cli,
             harness::harness_resolve_cline,
             harness::harness_probe_provider,

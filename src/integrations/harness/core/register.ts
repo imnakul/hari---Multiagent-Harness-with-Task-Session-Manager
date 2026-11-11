@@ -8,7 +8,6 @@ import { ensureOpenCodeRegistered } from "../providers/opencode/opencodeAdapter"
 import { ensureOmpRegistered } from "../providers/omp/ompAdapter";
 import { ensurePiRegistered } from "../providers/pi/piAdapter";
 import { ensureAntigravityCliRegistered } from "../providers/antigravity-cli/antigravityCliAdapter";
-import { ensureAntigravityRegistered } from "./antigravityAdapter";
 import { ensureClineRegistered } from "./clineAdapter";
 import { ensureDevinRegistered } from "../providers/devin/devinAdapter";
 
@@ -23,7 +22,6 @@ export function registerBuiltinHarnesses(): void {
   ensureOmpRegistered();
   ensureFxRegistered();
   ensureHermesRegistered();
-  ensureAntigravityRegistered();
   ensureAntigravityCliRegistered();
   ensureClineRegistered();
   ensureDevinRegistered();

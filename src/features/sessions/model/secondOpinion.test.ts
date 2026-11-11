@@ -132,7 +132,7 @@ describe("secondOpinionTargets", () => {
     "omp",
     "fx",
     "grok",
-    "antigravity",
+    "antigravity-cli",
     "cline",
   ];
   const installed = (id: HarnessId) => id === "claude" || id === "codex";
@@ -173,9 +173,9 @@ describe("secondOpinionTargets", () => {
       secondOpinionTargets("claude", {
         installed: () => false,
         visible,
-        probed: (id) => id !== "antigravity",
+        probed: (id) => id !== "antigravity-cli",
       }),
-    ).toEqual(["antigravity"]);
+    ).toEqual(["antigravity-cli"]);
   });
 
   it("can include the current provider for choosing another model", () => {

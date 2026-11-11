@@ -16,11 +16,6 @@ export const HELPER_ISOLATION: Record<
     reason:
       "Antigravity CLI's built-in tools can't be switched off. If it tries to use one, MonoCode stops it and the reply fails.",
   },
-  antigravity: {
-    verified: false,
-    reason:
-      "Antigravity's built-in tools can't be switched off. If it tries to use one, MonoCode stops it and the reply fails.",
-  },
 };
 
 /**

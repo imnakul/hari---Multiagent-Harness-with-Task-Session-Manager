@@ -14,7 +14,3 @@ await build({
 });
 await copyFile("host/provider-guard.mjs", "build/host/provider-guard.mjs");
 
-await copyFile(
-  "host/antigravity-browser.mjs",
-  "build/host/antigravity-browser.mjs",
-);

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HARNESSES } from "../model/session";
 import { probeHarnessAvailability } from "../../../integrations/harness/core/availability";
 import { refreshHarnessCatalogs } from "../../../integrations/harness/core/registry";
-import { recheckAntigravityCatalog } from "../../../integrations/harness/core/antigravityCatalog";
 import {
   getProviderCheckSnapshot,
   resetProviderCheck,
@@ -24,17 +23,6 @@ vi.mock("../../../integrations/harness/core/registry", async (importOriginal) =>
     await importOriginal<typeof import("../../../integrations/harness/core/registry")>();
   return { ...actual, refreshHarnessCatalogs: vi.fn() };
 });
-
-vi.mock(
-  "../../../integrations/harness/core/antigravityCatalog",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("../../../integrations/harness/core/antigravityCatalog")
-      >();
-    return { ...actual, recheckAntigravityCatalog: vi.fn() };
-  },
-);
 
 let container: HTMLDivElement;
 let root: Root;
@@ -87,10 +75,7 @@ describe("Providers initial discovery", () => {
     expect(recheckButtons().every((button) => button.disabled)).toBe(true);
     recheckButtons()[0]?.click();
     expect(probeHarnessAvailability).toHaveBeenCalledTimes(1);
-    expect(probeHarnessAvailability).toHaveBeenCalledWith({
-      force: false,
-      exclude: ["antigravity"],
-    });
+    expect(probeHarnessAvailability).toHaveBeenCalledWith({ force: false });
     expect(refreshHarnessCatalogs).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -136,17 +121,17 @@ describe("Providers initial discovery", () => {
     expect(recheckButtons().every((button) => !button.disabled)).toBe(true);
   });
 
-  it("Refresh all forces a check including Antigravity and is disabled while it runs", async () => {
+  it("Refresh all forces a check and is disabled while it runs", async () => {
     vi.mocked(probeHarnessAvailability).mockResolvedValue();
     vi.mocked(refreshHarnessCatalogs).mockResolvedValue();
     await runProviderCheck();
     await act(async () => root.render(createElement(ProvidersPage)));
     vi.mocked(probeHarnessAvailability).mockClear();
-    let finishAntigravity: (() => void) | undefined;
-    vi.mocked(recheckAntigravityCatalog).mockImplementation(
+    let finishCatalogs: (() => void) | undefined;
+    vi.mocked(refreshHarnessCatalogs).mockImplementation(
       () =>
         new Promise<void>((resolve) => {
-          finishAntigravity = resolve;
+          finishCatalogs = resolve;
         }),
     );
     const refreshAll = (): HTMLButtonElement => {
@@ -162,13 +147,9 @@ describe("Providers initial discovery", () => {
 
     expect(getProviderCheckSnapshot().phase).toBe("checking");
     expect(refreshAll().disabled).toBe(true);
-    expect(probeHarnessAvailability).toHaveBeenCalledWith({
-      force: true,
-      exclude: ["antigravity"],
-    });
-    expect(recheckAntigravityCatalog).toHaveBeenCalledTimes(1);
+    expect(probeHarnessAvailability).toHaveBeenCalledWith({ force: true });
 
-    await act(async () => finishAntigravity?.());
+    await act(async () => finishCatalogs?.());
     expect(refreshAll().disabled).toBe(false);
   });
 });

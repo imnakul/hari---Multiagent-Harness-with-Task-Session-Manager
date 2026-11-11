@@ -1,5 +1,5 @@
 import { promptBlocks, type PromptContentBlock } from "../../../../features/sessions/model/attachments";
-import type { AgentModel, ModelSetting, ModelSettingChoice } from "../../../../features/sessions/model/models";
+import type { ModelSettingChoice } from "../../../../features/sessions/model/models";
 import type { Attachment, RuntimeMode, ToolPreview } from "../../../../features/sessions/model/session";
 import { normalizeTaskListStatus } from "../../../../features/sessions/model/taskList";
 import type { ApprovalDecision, HarnessEvent } from "../../core/types";
@@ -242,46 +242,6 @@ export function eventsFromAcpUpdate(params: unknown): HarnessEvent[] {
   }
 
   return usageFromUpdate(update);
-}
-
-/** Discover models and reasoning controls from standard ACP session config. */
-export function modelsFromSessionNew(raw: unknown): AgentModel[] {
-  const rec = asRecord(raw);
-  const options = Array.isArray(rec?.configOptions) ? rec.configOptions : [];
-  const modelId = extractModelConfigId(readConfigOptions(options));
-  const modelOption = options.map(asRecord).find((item) => item?.id === modelId);
-  const choices = configChoices(modelOption?.options);
-  const settings: ModelSetting[] = [];
-  for (const item of options) {
-    const option = asRecord(item);
-    if (option?.category !== "thought_level") continue;
-    const values = configChoices(option.options);
-    if (values.length < 2) continue;
-    const current = String(option.currentValue ?? "");
-    settings.push({
-      id: "effort",
-      label: "Effort",
-      kind: "select",
-      value: values.some((choice) => choice.value === current)
-        ? current : values[0].value,
-      options: values,
-    });
-  }
-  const legacy = asRecord(rec?.models);
-  const available = Array.isArray(legacy?.availableModels)
-    ? legacy.availableModels : [];
-  const models = choices.length > 0 ? choices : available.flatMap((item) => {
-    const model = asRecord(item);
-    const value = stringField(model ?? {}, "modelId");
-    return value ? [{ value, label: String(model?.name ?? value) }] : [];
-  });
-  return [...new Map(models.map(({ value, label }) => [value, {
-    id: `antigravity:${value}`,
-    harness: "antigravity" as const,
-    name: label,
-    nativeId: value,
-    ...(settings.length > 0 ? { settings } : {}),
-  }])).values()];
 }
 
 function configChoices(raw: unknown): ModelSettingChoice[] {

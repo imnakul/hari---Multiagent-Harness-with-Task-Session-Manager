@@ -877,12 +877,12 @@ describe("legacy encoded drive-colon snapshot repair", () => {
     const stub = {
       id: "agy-1",
       cwd: "/home/me/app",
-      harness: "antigravity",
-      model: "agy-acp:v1:gemini-3-pro",
+      harness: "antigravity-cli",
+      model: "antigravity-cli:gemini-3-pro",
       modelSettings: { effort: "high" },
       runtimeMode: "supervised",
       title: "Saved chat",
-      providerSessionId: "agy-acp:v1:native-1",
+      providerSessionId: "0f8fad5b-d9cb-469f-a165-70867728950e",
     };
     const workspace = hydrateWorkspaceSnapshot(
       {
@@ -898,9 +898,9 @@ describe("legacy encoded drive-colon snapshot repair", () => {
       (session) => session.id === "agy-1",
     );
     // Deferred catalog loading must never rewrite these against a fallback.
-    expect(restored?.model).toBe("agy-acp:v1:gemini-3-pro");
+    expect(restored?.model).toBe("antigravity-cli:gemini-3-pro");
     expect(restored?.modelSettings).toEqual({ effort: "high" });
-    expect(restored?.providerSessionId).toBe("agy-acp:v1:native-1");
+    expect(restored?.providerSessionId).toBe("0f8fad5b-d9cb-469f-a165-70867728950e");
   });
 });
 

@@ -31,7 +31,6 @@ describe("sessionMetadataHelperTargets (L-190)", () => {
       { provider: "opencode" },
       { provider: "claude" },
       { provider: "antigravity-cli" },
-      { provider: "antigravity" },
     ]);
   });
 });

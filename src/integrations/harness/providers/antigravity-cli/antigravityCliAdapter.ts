@@ -20,7 +20,7 @@ export const antigravityCliAdapter: HarnessAdapter = {
   },
   respondApproval: (): never => {
     throw new Error(
-      "Antigravity CLI headless mode cannot answer interactive approvals. Use Antigravity ACP for them.",
+      "Antigravity CLI headless mode cannot answer interactive approvals.",
     );
   },
   cancelTurn: stopCliSession,

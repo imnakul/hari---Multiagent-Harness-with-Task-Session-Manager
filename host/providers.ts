@@ -7,7 +7,6 @@ import * as pi from "../src/integrations/harness/providers/pi/pi";
 import * as omp from "../src/integrations/harness/providers/omp/omp";
 import * as fx from "../src/integrations/harness/providers/fx/fx";
 import * as hermes from "../src/integrations/harness/providers/hermes/hermes";
-import * as antigravity from "../src/integrations/harness/core/antigravity";
 import * as cline from "../src/integrations/harness/core/cline";
 import * as devin from "../src/integrations/harness/providers/devin/devin";
 import type {
@@ -140,14 +139,6 @@ export const hostProviders: Record<RemoteProvider, HostProvider> = {
     bind: hermes.bindHermesSession,
     approve: hermes.respondHermesApproval,
     answer: unsupportedQuestion,
-  },
-  antigravity: {
-    send: antigravity.sendAntigravityTurn,
-    cancel: antigravity.cancelAntigravityTurn,
-    stop: antigravity.forgetAntigravitySession,
-    bind: antigravity.bindAntigravitySession,
-    approve: antigravity.respondAntigravityApproval,
-    answer: antigravity.respondAntigravityQuestion,
   },
   cline: {
     send: cline.sendClineTurn,

@@ -195,12 +195,6 @@ export const MODELS: AgentModel[] = [
     nativeId: "",
   },
   {
-    id: "antigravity:default",
-    harness: "antigravity",
-    name: "Default",
-    nativeId: "",
-  },
-  {
     id: "cline:anthropic/claude-sonnet-5",
     harness: "cline",
     name: "Claude Sonnet 5",
@@ -237,12 +231,6 @@ export const MODELS: AgentModel[] = [
     nativeId: "",
   },
   {
-    id: "antigravity:gemini-3.8-flash-high",
-    harness: "antigravity",
-    name: "Gemini 3.8 Flash (High)",
-    nativeId: "gemini-3.8-flash-high",
-  },
-  {
     id: "devin:adaptive",
     harness: "devin",
     name: "Adaptive",
@@ -259,7 +247,6 @@ export const DEFAULT_MODEL_ID: Record<HarnessId, string> = {
   pi: "pi:default",
   omp: "omp:default",
   fx: "fx:zai/glm-5.2-fast",
-  antigravity: "antigravity:gemini-3.8-flash-high",
   "antigravity-cli": "antigravity-cli:default",
   cline: "cline:anthropic/claude-sonnet-5",
   hermes: "hermes:default",
@@ -291,7 +278,6 @@ const HARNESS_ORDER: HarnessId[] = [
   "pi",
   "omp",
   "fx",
-  "antigravity",
   "antigravity-cli",
   "cline",
   "hermes",

@@ -163,7 +163,7 @@ describe("child bridge", () => {
               omp: "/opt/omp/bin/omp",
               fx: "/opt/fx/bin/fx",
               hermes: "/opt/hermes/bin/hermes",
-              antigravity: "/opt/antigravity/bin/agy_acp_server.par",
+              "antigravity-cli": "/opt/antigravity/bin/agy",
             })
           : null,
     });
@@ -185,9 +185,9 @@ describe("child bridge", () => {
       ["fx", "/opt/fx/bin/fx", child.resolveFxBinary],
       ["hermes", "/opt/hermes/bin/hermes", child.resolveHermesBinary],
       [
-        "antigravity",
-        "/opt/antigravity/bin/agy_acp_server.par",
-        child.resolveAntigravityBinary,
+        "antigravity-cli",
+        "/opt/antigravity/bin/agy",
+        child.resolveAntigravityCliBinary,
       ],
     ] as const) {
       await resolve();
@@ -348,7 +348,7 @@ describe("child bridge", () => {
   });
 });
 
-it.each(["antigravity", "cline"] as const)(
+it.each(["antigravity-cli", "cline"] as const)(
   "passes %s identity and its configured Windows runtime through the native guard",
   async (provider) => {
     const executable = `C:/ACP/${provider}.exe`;

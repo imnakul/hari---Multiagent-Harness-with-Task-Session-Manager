@@ -139,7 +139,6 @@ describe("harness registry", () => {
       "omp",
       "fx",
       "hermes",
-      "antigravity",
     ];
 
     expect(
@@ -154,7 +153,6 @@ describe("harness registry", () => {
       omp: true,
       fx: false,
       hermes: false,
-      antigravity: false,
     });
   });
 
@@ -169,7 +167,6 @@ describe("harness registry", () => {
       "pi",
       "omp",
       "fx",
-      "antigravity",
     ];
 
     expect(
@@ -183,7 +180,6 @@ describe("harness registry", () => {
       pi: true,
       omp: true,
       fx: false,
-      antigravity: false,
     });
   });
   it("advertises and dispatches compaction only when an adapter supports it", async () => {
@@ -285,19 +281,6 @@ describe("harness registry", () => {
       omp: true,
       fx: false,
     });
-  });
-
-  it("registers Antigravity as a live fx-tier harness", () => {
-    registerBuiltinHarnesses();
-    expect(isLiveHarness("antigravity")).toBe(true);
-    const adapter = listHarnesses().find(
-      (adapter) => adapter.id === "antigravity",
-    )!;
-    expect(adapter.canSteer).toBe(false);
-    expect(adapter.bindSession).toBeTypeOf("function");
-    expect(adapter.refreshCatalog).toBeTypeOf("function");
-    expect(adapter.generateTitle).toBeUndefined();
-    expect(adapter.generateCommitMessage).toBeUndefined();
   });
 
   it("refreshes only the requested catalogs", async () => {

@@ -26,7 +26,6 @@ import {
   type TitleInput,
 } from "./registry";
 import { isHarnessAvailable } from "./availability";
-import { helperProviderOff } from "./continueHelper";
 import {
   providerAccountExists,
   supportsProviderAccounts,
@@ -76,7 +75,7 @@ function configuredTargets(
 
 function isAvailable(target: AiHelperTarget): boolean {
   // Unverified providers are allowed; their runner stops on tool use (L-193).
-  if (!isHarnessAvailable(target.provider) || helperProviderOff(target.provider)) return false;
+  if (!isHarnessAvailable(target.provider)) return false;
   if (target.accountId === undefined) return true;
   return (
     supportsProviderAccounts(target.provider) &&

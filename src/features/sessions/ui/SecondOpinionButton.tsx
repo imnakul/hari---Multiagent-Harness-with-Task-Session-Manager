@@ -207,7 +207,7 @@ export function SecondOpinionButton({
 
   useEffect(() => {
     if (!open) return;
-    void probeHarnessAvailability({ exclude: ["antigravity"] });
+    void probeHarnessAvailability();
   }, [open]);
 
   useEffect(() => {

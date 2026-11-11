@@ -331,10 +331,12 @@ describe("model picker tabs", () => {
     ]);
   });
 
-  it("lists ACP and CLI as separate providers with distinct native model identities", () => {
+  it("lists Antigravity CLI with distinct native model identities", () => {
     expect(
-      modelPickerTabs((id) => id === "antigravity" || id === "antigravity-cli"),
-    ).toEqual(["favorites", "antigravity", "antigravity-cli"]);
+      modelPickerTabs((id) => id === "antigravity-cli")).toEqual([
+      "favorites",
+      "antigravity-cli",
+    ]);
     const antigravityModels = allModels().filter((model) =>
       model.harness.startsWith("antigravity"),
     );

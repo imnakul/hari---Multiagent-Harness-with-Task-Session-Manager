@@ -29,7 +29,6 @@ export type HarnessId =
   | "pi"
   | "omp"
   | "fx"
-  | "antigravity"
   | "antigravity-cli"
   | "cline"
   | "hermes"
@@ -44,7 +43,6 @@ export const HARNESSES: HarnessId[] = [
   "pi",
   "omp",
   "fx",
-  "antigravity",
   "antigravity-cli",
   "cline",
   "hermes",
@@ -648,7 +646,6 @@ export const HARNESS_LABEL: Record<HarnessId, string> = {
   pi: "pi",
   omp: "omp",
   fx: "fx",
-  antigravity: "antigravity",
   "antigravity-cli": "antigravity-cli",
   cline: "cline",
   hermes: "hermes",
@@ -664,7 +661,6 @@ export const HARNESS_TITLE: Record<HarnessId, string> = {
   pi: "Pi",
   omp: "omp",
   fx: "fx",
-  antigravity: "Antigravity ACP",
   "antigravity-cli": "Antigravity CLI",
   cline: "Cline",
   hermes: "Hermes Agent",

@@ -122,31 +122,22 @@ describe("existing providers over headless process I/O", () => {
     );
     const binary = join(directory, "provider.cjs");
     writeFileSync(binary, fixture, { mode: 0o700 });
-    const antigravityBinary = join(directory, "agy_acp_server.par");
-    writeFileSync(antigravityBinary, fixture, { mode: 0o700 });
-    writeFileSync(join(directory, "localharness_external"), "fixture", {
-      mode: 0o700,
-    });
     writeFileSync(
       join(directory, "credentials.toml"),
       'windsurf_api_key = "fixture-devin-key"\n',
     );
-    backend = new HostChildBackend(
-      {
-        codex: binary,
-        claude: binary,
-        pi: binary,
-        omp: binary,
-        cursor: binary,
-        grok: binary,
-        fx: binary,
-        hermes: binary,
-        antigravity: antigravityBinary,
-        cline: binary,
-        devin: binary,
-      },
-      join(directory, "acp-profile"),
-    );
+    backend = new HostChildBackend({
+      codex: binary,
+      claude: binary,
+      pi: binary,
+      omp: binary,
+      cursor: binary,
+      grok: binary,
+      fx: binary,
+      hermes: binary,
+      cline: binary,
+      devin: binary,
+    });
     configureChildBackend(backend);
     setLocalCommandRunner((command, args) => backend.invoke(command, args));
     release = await acquireHarnessBridge();
@@ -257,7 +248,6 @@ describe("existing providers over headless process I/O", () => {
     "fx",
     "hermes",
     "cline",
-    ...(process.platform !== "win32" ? (["antigravity"] as const) : []),
     "devin",
   ] as const)(
     "completes a %s turn over the headless ACP transport",
@@ -283,9 +273,7 @@ describe("existing providers over headless process I/O", () => {
       );
       const state = store.session(sessionId).session;
       expect(state.blocks.at(-1)?.text).toContain("Headless ACP completed");
-      expect(state.providerSessionId).toBe(
-        harness === "antigravity" ? "agy-acp:v1:fixture_acp" : "fixture_acp",
-      );
+      expect(state.providerSessionId).toBe("fixture_acp");
       if (harness === "devin") {
         // The host reuses the key `devin auth login` left on its own disk.
         const log = readFileSync(join(directory, "calls.log"), "utf8");

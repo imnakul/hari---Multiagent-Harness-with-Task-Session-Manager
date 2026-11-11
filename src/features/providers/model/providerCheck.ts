@@ -3,7 +3,6 @@ import {
   isHarnessAvailable,
   probeHarnessAvailability,
 } from "../../../integrations/harness/core/availability";
-import { recheckAntigravityCatalog } from "../../../integrations/harness/core/antigravityCatalog";
 import { refreshHarnessCatalogs } from "../../../integrations/harness/core/registry";
 import {
   hasLiveCatalog,
@@ -18,8 +17,7 @@ import { HARNESSES, type HarnessId } from "../../sessions/model/session";
  *
  * Lazy-startup policy: this is the only provider work that may run at launch,
  * and only 2 s after mount and only when the user hasn't turned it off. It
- * never runs the Antigravity handshake unless a manual Refresh all asks for
- * it, never touches hidden providers, and never touches saved sessions.
+ * never touches hidden providers, and never touches saved sessions.
  */
 export type ProviderCheckSnapshot = {
   phase: "idle" | "checking" | "ready" | "error";
@@ -59,10 +57,7 @@ export function resetProviderCheck(): void {
   publish(IDLE);
 }
 
-async function execute(
-  force: boolean,
-  includeAntigravity: boolean,
-): Promise<void> {
+async function execute(force: boolean): Promise<void> {
   publish({
     phase: "checking",
     failed: [],
@@ -73,25 +68,22 @@ async function execute(
   const hidden = new Set(loadHiddenPickerProviders());
   const ids = HARNESSES.filter(
     (id) =>
-      id !== "antigravity" &&
       !hidden.has(id) &&
       (force ||
         (!hasLiveCatalog(id) &&
           (isHarnessAvailable(id) || !hasHarnessEvidence(id)))),
   );
   const tasks: Promise<unknown>[] = [
-    probeHarnessAvailability({ force, exclude: ["antigravity"] }),
+    probeHarnessAvailability({ force }),
     refreshHarnessCatalogs(ids, force ? { force: true } : undefined),
   ];
-  if (includeAntigravity) tasks.push(recheckAntigravityCatalog());
   const results = await Promise.allSettled(tasks);
   const rejected = results.map((result) => result.status === "rejected");
   // A CLI that simply isn't installed is not a failure: its row says so on the
   // Providers page. Only a check that threw counts, and it can't be attributed
-  // to one provider, except Antigravity's own recheck.
+  // to one provider.
   const failed: HarnessId[] = [];
   if (rejected[0] || rejected[1]) failed.push(...ids);
-  if (includeAntigravity && rejected[2]) failed.push("antigravity");
   publish({
     phase: failed.length > 0 ? "error" : "ready",
     completedAt: Date.now(),
@@ -102,18 +94,17 @@ async function execute(
 /**
  * Runs the light provider check. A run already in flight is shared; with
  * `force` the caller waits for it and then starts a fresh run, so two checks
- * never overlap. `force` re-reads loaded catalogs; `includeAntigravity` also
- * rechecks Antigravity (slow, so only a manual Refresh all asks for it).
+ * never overlap. `force` re-reads loaded catalogs.
  */
 export async function runProviderCheck(
-  options: { force?: boolean; includeAntigravity?: boolean } = {},
+  options: { force?: boolean } = {},
 ): Promise<void> {
-  const { force = false, includeAntigravity = false } = options;
+  const { force = false } = options;
   if (inflight) {
     if (!force) return inflight;
     while (inflight) await inflight.catch(() => undefined);
   }
-  const run = execute(force, includeAntigravity)
+  const run = execute(force)
     .catch(() => {
       // Never leave the indicator stuck on "checking" if setup itself threw.
       publish({ phase: "error", completedAt: Date.now(), failed: [] });

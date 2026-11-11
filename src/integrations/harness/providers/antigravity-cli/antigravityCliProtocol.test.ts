@@ -97,7 +97,6 @@ describe("official agy headless protocol", () => {
     expect(() => cliSpawnArgs(input, "agy-acp:v1:one")).toThrow();
     expect(harnessSupportsAttachments("antigravity-cli")).toBe(true);
     expect(harnessSupportsAttachments("fx")).toBe(false);
-    expect(harnessSupportsAttachments("antigravity")).toBe(true);
     expect(runtimeModesForHarness("antigravity-cli")).toEqual([
       "supervised",
       "full-access",

@@ -295,21 +295,10 @@ import { getCliCatalogSnapshot, subscribeCliCatalog } from "../../../integration
 import { HELPER_ISOLATION } from "../../../integrations/harness/core/helperIsolation";
 import { loginHarness } from "../../../integrations/harness/core/auth";
 import {
-  getAntigravityCatalogSnapshot,
-  recheckAntigravityCatalog,
-  subscribeAntigravityCatalog,
-  type AntigravityCatalogSnapshot,
-} from "../../../integrations/harness/core/antigravityCatalog";
-import {
-  cancelAntigravitySignIn,
-  signInAntigravity,
-} from "../../../integrations/harness/core/antigravitySetup";
-import {
   defaultModelId,
   firstEnabledHarness,
   getModelSnapshot,
   hasLiveCatalog,
-  isPickerProviderVisible,
   loadDefaultModels,
   loadHiddenPickerProviders,
   loadLastModelChoice,
@@ -613,7 +602,6 @@ import type { Session } from "../../sessions/model/session";
 import { getCustomBinary } from "../../../integrations/harness/core/customBinary";
 import { clearManagedWallpaper, pickImage } from "../../../platform/tauri/fs";
 import { IS_WINDOWS } from "../../../platform/tauri/platform";
-import { AntigravitySetupPanel } from "../../sessions/ui/AntigravitySetupPanel";
 import { MigrationView } from "../../sessions/ui/MigrationView";
 import { SelectMenu } from "../../sessions/ui/SelectMenu";
 import { SharedHoverHighlight } from "../../sessions/ui/SharedHoverHighlight";
@@ -2183,9 +2171,6 @@ function AiHelperTargetEditor({
   const warnings: string[] = [];
   if (hasHarnessEvidence(target.provider) && !isHarnessAvailable(target.provider)) {
     warnings.push("Not installed. MonoCode will skip it.");
-  }
-  if (target.provider === "antigravity" && !isPickerProviderVisible("antigravity")) {
-    warnings.push("Hidden in Providers. MonoCode will skip it.");
   }
   if (
     target.accountId !== undefined &&
@@ -5006,7 +4991,7 @@ export function ProvidersPage({
     void runUpdateCheck();
   }, [check.phase, runUpdateCheck]);
   const onRefreshAll = (): void => {
-    void runProviderCheck({ force: true, includeAntigravity: true }).then(
+    void runProviderCheck({ force: true }).then(
       () => runUpdateCheck(),
     );
   };
@@ -5642,7 +5627,6 @@ function ProviderRow({
 }): ReactElement {
   const models = modelsFor(harness);
   const available = isHarnessAvailable(harness);
-  const catalog = useAntigravityCatalogSnapshot();
   const cliCatalog = useSyncExternalStore(subscribeCliCatalog, getCliCatalogSnapshot, getCliCatalogSnapshot);
   const current = models.length > 0 ? resolveModel(harness, selectedModel) : null;
   const [rechecking, setRechecking] = useState(false);
@@ -5666,11 +5650,7 @@ function ProviderRow({
     setRechecking(true);
     try {
       await probeHarnessAvailability({ force: true });
-      if (harness === "antigravity") {
-        await recheckAntigravityCatalog();
-      } else {
-        await refreshHarnessCatalogs([harness], { force: true });
-      }
+      await refreshHarnessCatalogs([harness], { force: true });
       void onCatalogRefreshed?.();
     } finally {
       setRechecking(false);
@@ -5679,9 +5659,6 @@ function ProviderRow({
 
   return (
     <>
-      {harness === "antigravity" ? (
-        <AntigravityProviderSetup available={available} catalog={catalog} />
-      ) : null}
       <Row
         label={
           <div className="flex flex-col gap-1">
@@ -5703,9 +5680,7 @@ function ProviderRow({
               ? `CLI model discovery failed: ${cliCatalog.error}. Sign in with agy in a terminal, then Recheck. The configured CLI model remains available.`
               : cliCatalog.phase === "loading"
                 ? "Reading Antigravity CLI models…"
-                : "Official agy CLI: text streaming and native resume. Sign in with agy in a terminal. CLI policy denies requests needing approval; Full access is explicit. Use /usage in chat for quotas. Attachments and interactive controls use ACP."
-            : harness === "antigravity" && catalog.phase === "error"
-            ? "Antigravity setup needs attention — see the note above."
+                : "Official agy CLI: text streaming and native resume. Sign in with agy in a terminal. CLI policy denies requests needing approval; Full access is explicit. Use /usage in chat for quotas."
             : available
               ? models.length + (models.length === 1 ? " model" : " models") + " available."
               : !hasHarnessEvidence(harness)
@@ -5772,80 +5747,6 @@ function ProviderRow({
         ) : null}
       </Row>
     </>
-  );
-}
-
-/** Live ACP catalog snapshot for the Antigravity provider row (no-op others). */
-function useAntigravityCatalogSnapshot(): AntigravityCatalogSnapshot {
-  const [snapshot, setSnapshot] = useState<AntigravityCatalogSnapshot>(
-    getAntigravityCatalogSnapshot,
-  );
-  useEffect(
-    () =>
-      subscribeAntigravityCatalog(() =>
-        setSnapshot(getAntigravityCatalogSnapshot()),
-      ),
-    [],
-  );
-  return snapshot;
-}
-
-/**
- * Explicit Google sign-in for the separate Antigravity ACP runtime. Sign-in
- * success is the account connection only; model readiness comes from real
- * catalog discovery, never from the browser having opened.
- */
-function AntigravityProviderSetup({
-  available,
-  catalog,
-}: {
-  available: boolean;
-  catalog: AntigravityCatalogSnapshot;
-}): ReactElement {
-  const [signingIn, setSigningIn] = useState(false);
-  const [message, setMessage] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-
-  const handleSignIn = async () => {
-    if (signingIn) return;
-    setError(undefined);
-    setMessage(undefined);
-    setSigningIn(true);
-    try {
-      await signInAntigravity();
-      setMessage("Google account connected. Loading models…");
-      await recheckAntigravityCatalog();
-      if (getAntigravityCatalogSnapshot().phase === "ready") {
-        setMessage("Google account connected and models loaded.");
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSigningIn(false);
-    }
-  };
-
-  // Sign-in-required is a pre-state, not a failure: the runtime is healthy and
-  // the sign-in button sits in this very panel, so show calm guidance instead
-  // of the chat-startup error text (which self-references Settings).
-  const catalogError = catalog.phase === "error" && !catalog.signInRequired ? catalog.error : undefined;
-  const signInHint = catalog.signInRequired
-    ? "Runtime connected. Sign in with Google to load your models."
-    : undefined;
-  const displayMessage =
-    catalog.phase === "loading"
-      ? "Loading Antigravity models…"
-      : (message ?? signInHint);
-
-  return (
-    <AntigravitySetupPanel
-      available={available}
-      signingIn={signingIn}
-      message={displayMessage}
-      error={error ?? catalogError}
-      onSignIn={() => void handleSignIn()}
-      onCancel={() => void cancelAntigravitySignIn().catch(() => undefined)}
-    />
   );
 }
 

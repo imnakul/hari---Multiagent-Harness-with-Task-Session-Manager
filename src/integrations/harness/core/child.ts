@@ -487,7 +487,6 @@ async function resolveHarnessBinary(
     fx: "harness_resolve_fx",
     cline: "harness_resolve_cline",
     hermes: "harness_resolve_hermes",
-    antigravity: "harness_resolve_antigravity",
     "antigravity-cli": "harness_resolve_antigravity_cli",
     devin: "harness_resolve_devin",
   };
@@ -560,15 +559,6 @@ export function resolveDevinBinary(
   return resolveHarnessBinary("devin", binaryPath);
 }
 
-export function resolveAntigravityBinary(
-  binaryPath?: string | null,
-): Promise<{ path: string; args: string[] }> {
-  return resolveHarnessBinary("antigravity", binaryPath) as Promise<{
-    path: string;
-    args: string[];
-  }>;
-}
-
 export function resolveAntigravityCliBinary(binaryPath?: string | null): Promise<{ path: string }> {
   return resolveHarnessBinary("antigravity-cli", binaryPath);
 }
@@ -612,9 +602,6 @@ export function inspectHarnessBinary(
   binaryPath?: string | null,
 ): Promise<HarnessBinaryInspection> {
   return resolveHarnessBinary(provider, binaryPath).then(async (resolved) => {
-    if (provider === "antigravity") {
-      return { path: resolved.path, version: "ACP server" };
-    }
     try {
       const version = (
         await execChild(
