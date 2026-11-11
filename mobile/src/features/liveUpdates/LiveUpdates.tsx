@@ -108,7 +108,10 @@ export function LiveUpdates() {
         void Notifications.scheduleNotificationAsync({
           content: {
             title: "Live Updates turned off",
-            body: "This phone couldn't show the running-session card. You can turn it on again in Settings.",
+            // Fork (L-247): Android's reason, so a report can say what failed.
+            body: `This phone couldn't show the running-session card${
+              event.message ? ` (${event.message})` : ""
+            }. You can turn it on again in Settings.`,
           },
           trigger: { channelId: "sessions" },
         });

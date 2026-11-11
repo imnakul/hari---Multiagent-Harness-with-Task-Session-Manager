@@ -1,5 +1,6 @@
 package expo.modules.harilive
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -53,27 +54,27 @@ class HariLiveService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     HariLive.serviceStarted(this)
+    // Started plainly (see HariLive.start), so Android expects nothing of it:
+    // with no card left, or none it may show, it just stops.
+    if (HariLive.cards.isEmpty()) {
+      finish()
+      return START_NOT_STICKY
+    }
     try {
-      val first = HariLive.cards.firstOrNull()
-      if (first == null) {
-        // The last session ended while this was starting; Android still needs
-        // it to show a notification before it may stop.
-        foreground(HariLive.id("all"), placeholder())
+      HariLive.render(this)
+    } catch (error: Exception) {
+      if (Build.VERSION.SDK_INT >= 31 && error is ForegroundServiceStartNotAllowedException) {
+        // Hari left the screen before this ran. The cards stay and refresh
+        // while the app is open; the next open starts this again.
+        Log.w(TAG, "Live Update service may not run now", error)
         finish()
       } else {
-        HariLive.render(this)
+        // A rejected card must not close the app: Live Updates turn off
+        // and the app says why.
+        Log.e(TAG, "Live Update service could not show its card", error)
+        HariLive.fail(applicationContext, error)
+        finish()
       }
-    } catch (error: Exception) {
-      // A rejected card must not close the app. Android still expects this
-      // service in the foreground, so show the plain placeholder, then stop.
-      Log.e(TAG, "Live Update service could not show its card", error)
-      try {
-        foreground(HariLive.id("all"), placeholder())
-      } catch (placeholderError: Exception) {
-        Log.e(TAG, "Live Update placeholder failed too", placeholderError)
-      }
-      HariLive.fail(applicationContext, error)
-      finish()
     }
     return START_NOT_STICKY
   }
@@ -89,17 +90,6 @@ class HariLiveService : Service() {
     if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
     else @Suppress("DEPRECATION") stopForeground(true)
     stopSelf()
-  }
-
-  private fun placeholder(): Notification {
-    val builder =
-      if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, HariLive.CHANNEL)
-      else @Suppress("DEPRECATION") Notification.Builder(this)
-    return builder
-      .setSmallIcon(R.drawable.hari_live_icon)
-      .setContentTitle("Hari")
-      .setContentText("Sessions finished")
-      .build()
   }
 
   override fun onDestroy() {

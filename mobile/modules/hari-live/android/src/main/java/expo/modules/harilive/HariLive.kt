@@ -213,11 +213,17 @@ internal object HariLive {
   private fun start(context: Context) {
     starting = true
     try {
-      val intent = Intent(context, HariLiveService::class.java)
-      if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
-      else context.startService(intent)
+      // Fork (Hari, L-247): a plain start, not startForegroundService. That
+      // one promises Android the service goes to the foreground within
+      // seconds, and if it doesn't (startForeground refused, or the service
+      // not run in time), Android closes the whole app with
+      // ForegroundServiceDidNotStartInTimeException: a throw no try/catch here
+      // can stop, so the app closed on every launch while a session ran. The
+      // app is open whenever this is called, so a plain start is allowed, and
+      // the service goes to the foreground itself, or stops if it can't.
+      context.startService(Intent(context, HariLiveService::class.java))
     } catch (error: Exception) {
-      // Android won't start one from the background (Android 12 and later).
+      // Android won't start one from the background (Android 8 and later).
       // The cards still show; they refresh once the app is open again.
       starting = false
       Log.w(TAG, "Could not start the Live Update service", error)
