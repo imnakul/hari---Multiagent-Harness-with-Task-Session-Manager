@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-11 11:18 IST — Hari release 0.16.0-local36 (look fixes, no blank chat)
+- Type: chore
+- What: Published `hari-v0.16.0-local36` (run 42966015450) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160036), `latest.json`, `hari-android.json`.
+- Why: Ships the local35 look fixes (L-245 follow-up) and the blank-chat fix with its loading spinner (L-246).
+- Files: GitHub release only.
+- Commit: 8b118ffe, 451f7e45 (fixes), 213ab706 (version)
+- Verified: CI ✅ (desktop 6m08s, APK 18m45s, first try; new `hari-system-bars` Kotlin module compiled); `hari-android.json` served from releases/latest with 0.16.0-local36 ✅; phone and desktop checks manual
+
 ## 2026-11-11 10:49 IST — Hari: no blank chat after quick scrolls (L-246)
 - Type: fix
 - What: A chat that got shorter right after opening could leave the phone on empty space, with the scroll-down button showing and a long scroll up to the messages. The chat now notices every scroll on Android, so it sees when you are past the end and brings the end back. And while a reopened chat is still placing the messages it already has, a spinner shows instead of only the wallpaper, so a wait no longer looks like an empty chat.
