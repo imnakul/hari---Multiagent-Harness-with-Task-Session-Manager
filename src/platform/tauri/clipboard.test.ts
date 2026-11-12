@@ -41,7 +41,7 @@ it("falls back to Markdown text when rich clipboard write is unavailable", async
   expect(writeText).toHaveBeenCalledWith("| A |\n| --- |");
 });
 
-it("copies fresh disk images but leaves their restored placeholders alone", async () => {
+it("copies fresh disk images and their restored copies (L-260)", async () => {
   vi.mocked(invoke).mockResolvedValue(btoa("<svg></svg>"));
   const write = vi.spyOn(navigator.clipboard, "write").mockResolvedValue();
   const files = displayAttachments([
@@ -63,10 +63,17 @@ it("copies fresh disk images but leaves their restored placeholders alone", asyn
   expect(await pasted![0].text()).toBe("<svg></svg>");
   write.mockClear();
   vi.mocked(invoke).mockClear();
+  // Fork (L-260): upstream left the restored copy out; it reads from disk now.
   await copyMessage("Diagram", files.map(persistableAttachment));
-  expect(write).not.toHaveBeenCalled();
-  expect(invoke).not.toHaveBeenCalled();
-  expect(await navigator.clipboard.readText()).toBe("Diagram");
+  expect(invoke).toHaveBeenCalledWith("read_file_base64", {
+    path: "/diagram.svg",
+  });
+  const restored = await (
+    await write.mock.calls[0][0][0].getType("text/html")
+  ).text();
+  expect(
+    await messageFilesFromClipboard({ getData: () => restored })![0].text(),
+  ).toBe("<svg></svg>");
 });
 
 it("copies a message with multiple attachments and preserves names and bytes on paste", async () => {
@@ -131,11 +138,13 @@ it("rejects clipboard files whose decoded bytes exceed the attachment limit", ()
   ).toBeNull();
 });
 
-it("skips restored images without live content while keeping the text", async () => {
+// Fork (L-260): upstream skipped these; a reopened chat's images now copy.
+it("copies a restored image from its path", async () => {
   vi.mocked(invoke).mockImplementation(async (_command, args) => {
     if ((args as { path: string }).path === "/old.png") return "YWJj";
     throw new Error("File no longer exists");
   });
+  const write = vi.spyOn(navigator.clipboard, "write").mockResolvedValue();
   await copyMessage("Old message", [
     {
       id: "1",
@@ -146,10 +155,27 @@ it("skips restored images without live content while keeping the text", async ()
       path: "/old.png",
     },
   ]);
-  expect(await navigator.clipboard.readText()).toBe("Old message");
-  expect(invoke).not.toHaveBeenCalledWith("read_file_base64", {
+  expect(invoke).toHaveBeenCalledWith("read_file_base64", {
     path: "/old.png",
   });
+  const item = write.mock.calls[0][0][0];
+  expect(item.types).toContain("image/png");
+  expect(await (await item.getType("text/plain")).text()).toBe("Old message");
+});
+
+it("skips a restored image whose file is gone while keeping the text", async () => {
+  vi.mocked(invoke).mockRejectedValue(new Error("File no longer exists"));
+  await copyMessage("Old message", [
+    {
+      id: "1",
+      name: "old.png",
+      mimeType: "image/png",
+      kind: "image",
+      size: 3,
+      path: "/gone.png",
+    },
+  ]);
+  expect(await navigator.clipboard.readText()).toBe("Old message");
 });
 
 it("keeps the existing clipboard when a message has no copyable content", async () => {

@@ -256,16 +256,47 @@ const PREVIEW_URL_CACHE = 50;
 const previewUrls = new Map<string, string>();
 const projectPreviewUrls = new Map<string, string>();
 
+/**
+ * Fork (L-257): how many mounted images show each cached path. Eviction used
+ * to revoke the oldest URL even while an image still showed it, so a chat with
+ * more than 50 images (or several image chats in one run) lost its older
+ * images: a broken thumbnail and an empty full-screen view.
+ */
+const previewUrlHolders = new Map<string, number>();
+
+function trimPreviewUrls(): void {
+  if (previewUrls.size <= PREVIEW_URL_CACHE) return;
+  for (const [path, url] of previewUrls) {
+    if (previewUrls.size <= PREVIEW_URL_CACHE) break;
+    if (previewUrlHolders.has(path)) continue;
+    previewUrls.delete(path);
+    URL.revokeObjectURL(url);
+  }
+}
+
 function cachePreviewUrl(path: string, url: string): void {
   if (previewUrls.has(path)) return;
   previewUrls.set(path, url);
-  while (previewUrls.size > PREVIEW_URL_CACHE) {
-    const oldest = previewUrls.keys().next();
-    if (oldest.done) break;
-    const evicted = previewUrls.get(oldest.value);
-    previewUrls.delete(oldest.value);
-    if (evicted) URL.revokeObjectURL(evicted);
-  }
+  trimPreviewUrls();
+}
+
+/**
+ * Keeps the cached preview URL for `path` alive while an image shows it. Call
+ * before `loadAttachmentPreviewUrl` and run the returned release when the
+ * image unmounts or changes path; the cache may then go over its size only by
+ * the number of images on screen.
+ */
+export function holdAttachmentPreviewUrl(path: string): () => void {
+  previewUrlHolders.set(path, (previewUrlHolders.get(path) ?? 0) + 1);
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    const count = (previewUrlHolders.get(path) ?? 1) - 1;
+    if (count > 0) previewUrlHolders.set(path, count);
+    else previewUrlHolders.delete(path);
+    trimPreviewUrls();
+  };
 }
 
 /**

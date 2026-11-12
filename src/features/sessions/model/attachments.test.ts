@@ -3,6 +3,7 @@ import {
   attachmentPathText,
   attachmentsFromFiles,
   filesFromClipboard,
+  holdAttachmentPreviewUrl,
   loadAttachmentPreviewUrl,
   loadProjectImagePreviewUrl,
   mergeAttachments,
@@ -283,5 +284,42 @@ describe("attachmentsFromFiles", () => {
     const [attached] = await attachmentsFromFiles([png]);
     expect(attached?.data).toBeTruthy();
     expect(attached?.path).toBeUndefined();
+  });
+});
+
+describe("attachment preview cache (L-257)", () => {
+  const png = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ]);
+
+  it("never revokes a preview an image still shows, even past the cache size", async () => {
+    mockInvoke.mockReset();
+    mockInvoke.mockImplementation((command: string) =>
+      command === "read_binary_file"
+        ? Promise.resolve(png.buffer)
+        : Promise.reject(new Error(`unexpected invoke: ${command}`)),
+    );
+    let next = 0;
+    vi.spyOn(URL, "createObjectURL").mockImplementation(
+      (() => `blob:cache-${next++}`) as typeof URL.createObjectURL,
+    );
+    const revoked: string[] = [];
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation((url: string) => {
+      revoked.push(url);
+    });
+
+    // 60 images on screen, as in a long chat: none may be revoked.
+    const paths = Array.from({ length: 60 }, (_, index) => `/l257/shown-${index}.png`);
+    const releases = paths.map((path) => holdAttachmentPreviewUrl(path));
+    const urls = [];
+    for (const path of paths) urls.push(await loadAttachmentPreviewUrl(path));
+    expect(revoked.filter((url) => urls.includes(url))).toEqual([]);
+    // The first image still gets its original URL from the cache.
+    expect(await loadAttachmentPreviewUrl(paths[0]!)).toBe(urls[0]);
+
+    // Once they scroll away, the cache trims back down by revoking the oldest.
+    for (const release of releases) release();
+    expect(revoked).toContain(urls[0]);
+    expect(revoked).not.toContain(urls[59]);
   });
 });

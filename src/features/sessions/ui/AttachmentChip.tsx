@@ -5,12 +5,16 @@ import {
   isAttachmentFolder,
   type PendingAttachment,
 } from "../model/attachments";
+import { usePathPointerDrag } from "../hooks/usePathPointerDrag";
 import type { Attachment } from "../model/session";
 import { FileTypeIcon } from "../../files/ui/FileTypeIcon";
 import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
 import { Modal } from "../../../shared/ui/Modal";
 import { useEffect } from "react";
-import { loadAttachmentPreviewUrl } from "../model/attachments";
+import {
+  holdAttachmentPreviewUrl,
+  loadAttachmentPreviewUrl,
+} from "../model/attachments";
 
 type Props = {
   attachment: Attachment;
@@ -35,11 +39,13 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
       return;
     }
     let cancelled = false;
+    const release = holdAttachmentPreviewUrl(loadPath);
     void loadAttachmentPreviewUrl(loadPath).then((url) => {
       if (!cancelled) setLoadedUrl(url);
     });
     return () => {
       cancelled = true;
+      release();
     };
   }, [loadPath]);
 
@@ -47,6 +53,10 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
   const image = attachment.kind === "image" && src;
   // Fork (L-207): an inline note (Browser picks, a console row) opens as text.
   const note = attachment.text != null;
+  // Fork (L-261): a sent file can be dragged onto any composer to attach it
+  // again. Composer chips (removable) stay put.
+  const dragPath = !onRemove && !note ? attachment.path : undefined;
+  const drag = usePathPointerDrag(dragPath, attachment.name);
 
   return (
     <>
@@ -55,6 +65,8 @@ export function AttachmentChip({ attachment, onRemove, photo = false }: Props) {
           image ? "" : "bg-content/10 py-0.5 pl-1 pr-1"
         }`}
         title={note ? undefined : (attachment.path ?? attachment.name)}
+        onPointerDown={dragPath ? drag.onPointerDown : undefined}
+        onClickCapture={dragPath ? drag.onClickCapture : undefined}
       >
         {image && src ? (
           <button

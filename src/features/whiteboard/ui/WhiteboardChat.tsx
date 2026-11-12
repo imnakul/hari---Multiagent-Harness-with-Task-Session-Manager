@@ -15,10 +15,12 @@ import {
 import {
   attachmentsFromFiles,
   filesFromClipboard,
+  holdAttachmentPreviewUrl,
   isVisionImage,
   loadAttachmentPreviewUrl,
   revokeAttachment,
 } from "../../sessions/model/attachments";
+import { usePathPointerDrag } from "../../sessions/hooks/usePathPointerDrag";
 import {
   providerAccounts,
   subscribeProviderAccounts,
@@ -96,6 +98,7 @@ function SentImage({ image }: { image: WhiteboardImageRef }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
+    const release = image.path ? holdAttachmentPreviewUrl(image.path) : null;
     if (image.path) {
       void loadAttachmentPreviewUrl(image.path).then((url) => {
         if (live) setSrc(url);
@@ -103,19 +106,24 @@ function SentImage({ image }: { image: WhiteboardImageRef }) {
     }
     return () => {
       live = false;
+      release?.();
     };
   }, [image.path]);
+  // Fork (L-261): drag a sent image onto a chat composer to attach it there.
+  const drag = usePathPointerDrag(image.path, image.name);
   return src ? (
     <img
       src={src}
       alt={image.name}
       title={image.name}
       draggable={false}
+      onPointerDown={drag.onPointerDown}
       className="size-16 rounded-lg object-cover outline outline-1 -outline-offset-1 outline-content/10"
     />
   ) : (
     <span
       title={image.name}
+      onPointerDown={drag.onPointerDown}
       className="flex h-6 max-w-40 items-center gap-1 truncate rounded-md bg-content/10 px-1.5 text-[11px] text-content/55"
     >
       <Paperclip aria-hidden className="size-3 shrink-0" />

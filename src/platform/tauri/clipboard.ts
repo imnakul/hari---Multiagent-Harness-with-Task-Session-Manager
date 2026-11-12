@@ -45,13 +45,29 @@ export async function copyMessage(
       if (path) folderPaths.push(path);
       continue;
     }
-    if (
+    // Fork (L-260): an image from a reopened chat keeps only its path. Read
+    // it from disk; if the file is gone, copy the rest instead of failing.
+    const restoredImage =
       attachment.kind === "image" &&
       !attachment.data &&
       !attachment.previewUrl &&
-      !attachment.copyFromPath
-    )
+      !attachment.copyFromPath;
+    if (restoredImage) {
+      const path = attachment.path?.trim();
+      if (!path) continue;
+      try {
+        const data: unknown = await invoke("read_file_base64", { path });
+        if (typeof data !== "string" || !data) continue;
+        files.push({
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          data,
+        });
+      } catch {
+        // Deleted or moved since the chat ran: skip only this image.
+      }
       continue;
+    }
     try {
       let data = attachment.data;
       if (data === undefined && attachment.path) {
