@@ -215,7 +215,8 @@ impl Drop for WindowsJob {
 struct LiveChild {
     activity: Mutex<std::time::Instant>,
     cwd: PathBuf,
-    stdin: Mutex<ChildStdin>,
+    /// `None` once a one-shot CLI has been sent EOF (L-258).
+    stdin: Mutex<Option<ChildStdin>>,
     pid: u32,
     #[cfg(windows)]
     _job: Option<WindowsJob>,
@@ -999,6 +1000,12 @@ fn resolve_provider_binary(
             "Antigravity CLI (agy) not found",
         ),
         "cline" => resolve_requested_binary(override_path, resolve_cline, "Cline CLI not found"),
+        // Fork (L-255): without this the Providers pane said "not found" though chats worked.
+        "command-code" => resolve_requested_binary(
+            override_path,
+            resolve_command_code,
+            "Command Code CLI (cmdc) not found",
+        ),
         _ => Err(format!("Unknown harness provider: {provider}")),
     }
 }
@@ -1166,7 +1173,7 @@ pub fn harness_spawn(
     let live = Arc::new(LiveChild {
         activity: Mutex::new(std::time::Instant::now()),
         cwd: workdir.clone(),
-        stdin: Mutex::new(stdin),
+        stdin: Mutex::new(Some(stdin)),
         pid,
         #[cfg(windows)]
         _job: job,
@@ -1380,26 +1387,45 @@ fn apply_provider_account(
 /// A child that stops draining stdin can block `write_all` for minutes, so the
 /// write runs on the blocking pool — never on an async worker or the IPC path,
 /// where it would starve `harness_kill` and make the wedged child unrecoverable.
+///
+/// Fork (L-258): `close` drops stdin after the line, so a one-shot CLI that
+/// reads its prompt until EOF (`cmdc -p`) starts. Later writes then fail.
 #[tauri::command]
 pub async fn harness_write(
     host: State<'_, HarnessHost>,
     session_id: String,
     line: String,
+    close: Option<bool>,
 ) -> Result<(), String> {
     let live = host
         .get(&session_id)
         .ok_or_else(|| "Harness process is not running".to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
         *live.activity.lock().unwrap_or_else(|e| e.into_inner()) = std::time::Instant::now();
-        let mut stdin = live.stdin.lock().unwrap_or_else(|e| e.into_inner());
-        stdin
-            .write_all(line.as_bytes())
-            .and_then(|_| stdin.write_all(b"\n"))
-            .and_then(|_| stdin.flush())
-            .map_err(|e| format!("Failed to write to harness: {e}"))
+        let mut guard = live.stdin.lock().unwrap_or_else(|e| e.into_inner());
+        write_stdin_line(&mut guard, &line, close.unwrap_or(false))
     })
     .await
     .map_err(|e| format!("Harness write task failed: {e}"))?
+}
+
+fn write_stdin_line<W: Write>(
+    stdin: &mut Option<W>,
+    line: &str,
+    close: bool,
+) -> Result<(), String> {
+    let pipe = stdin
+        .as_mut()
+        .ok_or_else(|| "Harness input is already closed".to_string())?;
+    pipe.write_all(line.as_bytes())
+        .and_then(|_| pipe.write_all(b"\n"))
+        .and_then(|_| pipe.flush())
+        .map_err(|e| format!("Failed to write to harness: {e}"))?;
+    if close {
+        // Dropping the pipe is the EOF the child is waiting for.
+        stdin.take();
+    }
+    Ok(())
 }
 
 /// `async` dispatch keeps kill executable while a sibling `harness_write` is
@@ -2292,6 +2318,42 @@ mod windows_spawn_tests {
     }
 
     #[test]
+    fn stdin_line_can_close_the_pipe_for_one_shot_clis() {
+        let mut pipe: Option<Vec<u8>> = Some(Vec::new());
+        write_stdin_line(&mut pipe, "first", false).unwrap();
+        assert_eq!(pipe.as_deref(), Some(&b"first\n"[..]));
+        write_stdin_line(&mut pipe, "last", true).unwrap();
+        assert!(
+            pipe.is_none(),
+            "close must drop stdin so the child sees EOF"
+        );
+        assert_eq!(
+            write_stdin_line(&mut pipe, "late", false).unwrap_err(),
+            "Harness input is already closed"
+        );
+    }
+
+    #[test]
+    fn provider_probe_knows_command_code() {
+        // L-255 regression: the availability probe used to reject the id outright.
+        let root = std::env::temp_dir().join(format!("monocode-cmdc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let exe = root.join(if cfg!(windows) { "cmdc.exe" } else { "cmdc" });
+        std::fs::write(&exe, b"MZ").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let resolved =
+            resolve_provider_binary("command-code", Some(exe.to_string_lossy().into_owned()))
+                .expect("command-code is a known provider");
+        assert_eq!(resolved, exe);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn known_cli_dirs_are_derived_from_environment() {
         let dirs = windows_known_cli_dirs();
         assert!(!dirs.is_empty());
@@ -2373,7 +2435,14 @@ mod windows_spawn_tests {
     #[test]
     #[ignore]
     fn live_probe_reports_installed_providers() {
-        for provider in ["codex", "claude", "opencode", "antigravity-cli", "cline"] {
+        for provider in [
+            "codex",
+            "claude",
+            "opencode",
+            "antigravity-cli",
+            "cline",
+            "command-code",
+        ] {
             match resolve_provider_binary(provider, None)
                 .and_then(|path| probe_provider_binary(provider, &path).map(|v| (path, v)))
             {
@@ -4618,7 +4687,7 @@ mod tests {
             Arc::new(LiveChild {
                 activity: Mutex::new(std::time::Instant::now()),
                 cwd: PathBuf::from("/test"),
-                stdin: Mutex::new(stdin),
+                stdin: Mutex::new(Some(stdin)),
                 pid,
                 identity: crate::resources::identity(pid),
                 account: None,
@@ -4723,7 +4792,7 @@ mod tests {
         let writer = thread::spawn(move || {
             let payload = vec![b'x'; 8 * 1024 * 1024];
             let mut stdin = live.stdin.lock().unwrap_or_else(|e| e.into_inner());
-            let _ = stdin.write_all(&payload);
+            let _ = stdin.as_mut().expect("open stdin").write_all(&payload);
         });
         thread::sleep(Duration::from_millis(200));
         // Kill needs neither the stdin mutex nor the writer's thread.
@@ -4781,7 +4850,7 @@ mod tests {
             Arc::new(LiveChild {
                 activity: Mutex::new(std::time::Instant::now()),
                 cwd: PathBuf::from("/test"),
-                stdin: Mutex::new(stdin),
+                stdin: Mutex::new(Some(stdin)),
                 pid,
                 identity: crate::resources::identity(pid),
                 account: None,

@@ -678,13 +678,23 @@ export function harnessSupportsAttachments(id: HarnessId): boolean {
 }
 
 /** CLI headless policy has no interactive approval channel. */
+// Fork (L-258): Command Code's print mode is all or nothing, so it offers
+// Read only and Full access; a saved editing mode runs as Full access.
 export function runtimeModesForHarness(harness?: HarnessId): RuntimeMode[] {
-  return harness === "antigravity-cli" ? ["supervised", "full-access"] : RUNTIME_MODES;
+  return harness === "antigravity-cli" || harness === "command-code"
+    ? ["supervised", "full-access"]
+    : RUNTIME_MODES;
 }
 export function runtimeModeLabel(mode: RuntimeMode, harness?: HarnessId): string {
+  if (harness === "command-code")
+    return mode === "supervised" ? "Read only" : RUNTIME_MODE_LABEL["full-access"];
   return harness === "antigravity-cli" && mode !== "full-access" ? "CLI policy" : RUNTIME_MODE_LABEL[mode];
 }
 export function runtimeModeHint(mode: RuntimeMode, harness?: HarnessId): string {
+  if (harness === "command-code")
+    return mode === "supervised"
+      ? "Command Code can read and search, but can't edit files or run commands. It has no approval prompts."
+      : "Command Code edits files and runs commands without asking.";
   return harness === "antigravity-cli" && mode !== "full-access"
     ? "Use agy's saved permissions. Requests needing confirmation are denied; workspace edits may be allowed."
     : RUNTIME_MODE_HINT[mode];

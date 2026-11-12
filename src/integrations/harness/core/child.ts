@@ -420,8 +420,13 @@ export async function spawnChild(
   diagnosticProcesses.delete(sessionId);
 }
 
-export function writeChild(sessionId: string, line: string): Promise<void> {
-  return invoke("harness_write", { sessionId, line });
+/** `close` sends EOF after the line, for one-shot CLIs that read until it (L-258). */
+export function writeChild(
+  sessionId: string,
+  line: string,
+  close = false,
+): Promise<void> {
+  return invoke("harness_write", close ? { sessionId, line, close } : { sessionId, line });
 }
 
 export function killChild(sessionId: string): Promise<void> {

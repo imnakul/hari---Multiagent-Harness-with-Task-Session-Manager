@@ -1,160 +1,202 @@
 import { describe, expect, it } from "vitest";
 import {
   COMMAND_CODE_AUTH_HELP,
-  commandCodeConfigOptions,
-  commandCodeCurrentModeId,
-  commandCodeEffortSetting,
-  commandCodeModeId,
-  commandCodeSessionId,
-  commandCodeStartupError,
-  commandCodeTurnError,
-  modelsFromCommandCodeSession,
+  commandCodeExitError,
+  commandCodePrintArgs,
+  commandCodePromptText,
+  commandCodeToolKind,
+  commandCodeToolOutput,
+  commandCodeToolPreview,
+  commandCodeToolTitle,
+  commandCodeUsage,
+  isCommandCodeMissingResume,
+  isCommandCodePermissionBlock,
+  parseCommandCodeLine,
 } from "./commandCodeProtocol";
+import type { Attachment } from "../../../../features/sessions/model/session";
 
-/** Trimmed `session/new` result recorded from cmdc 1.88.5. */
-const SESSION_NEW = {
-  sessionId: "146ce358-d5d1-4b59-996e-0ac9fdca9203",
-  modes: {
-    currentModeId: "default",
-    availableModes: [
-      { id: "default", name: "Standard" },
-      { id: "auto-accept", name: "Accept Edits" },
-      { id: "plan", name: "Plan" },
-      { id: "dont-ask", name: "Don't Ask" },
-      { id: "bypass", name: "Bypass Permissions" },
-    ],
-  },
-  configOptions: [
-    {
-      id: "model",
-      name: "Model",
-      category: "model",
-      type: "select",
-      currentValue: "stealth/glyph-cluster:free",
-      options: [{ value: "claude-sonnet-5-5", name: "Claude Sonnet 5.5" }],
-    },
-    {
-      id: "effort",
-      name: "Effort",
-      category: "thought_level",
-      type: "select",
-      currentValue: "low",
-      options: [
-        { value: "low", name: "Low" },
-        { value: "medium", name: "Medium" },
-        { value: "high", name: "High" },
-        { value: "xhigh", name: "Xhigh" },
-      ],
-    },
-  ],
-  models: {
-    currentModelId: "stealth/glyph-cluster:free",
-    availableModels: [
-      { modelId: "claude-sonnet-5-5", name: "Claude Sonnet 5.5" },
-      { modelId: "gpt-6-astra", name: "GPT-6 Astra" },
-      { modelId: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash" },
-      { modelId: "deepseek/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" },
-      { modelId: "stealth/glyph-cluster:free", name: "Glyph Cluster (free)" },
-      { modelId: "claude-sonnet-5-5", name: "Duplicate row" },
-    ],
-  },
-};
+const BASE = [
+  "-p",
+  "--output-format",
+  "json",
+  "--skip-onboarding",
+  "--trust",
+  "--no-auto-update",
+];
 
-describe("commandCodeModeId", () => {
-  it("maps each access level to a Command Code mode", () => {
-    expect(commandCodeModeId("supervised")).toBe("default");
-    expect(commandCodeModeId("auto-accept-edits")).toBe("auto-accept");
-    expect(commandCodeModeId("auto")).toBe("dont-ask");
-    expect(commandCodeModeId("full-access")).toBe("bypass");
+describe("commandCodePrintArgs", () => {
+  it("runs Full access turns with --yolo and the chosen model and effort", () => {
+    expect(
+      commandCodePrintArgs({
+        model: "meta/muse-ember",
+        effort: "high",
+        runtimeMode: "full-access",
+        planning: false,
+      }),
+    ).toEqual([...BASE, "--model", "meta/muse-ember", "--effort", "high", "--yolo"]);
+  });
+
+  it("keeps Read only turns without --yolo so edits are refused", () => {
+    expect(
+      commandCodePrintArgs({ runtimeMode: "supervised", planning: false }),
+    ).toEqual(BASE);
   });
 
   it("uses plan mode for plan turns at any access level", () => {
-    expect(commandCodeModeId("full-access", true)).toBe("plan");
-    expect(commandCodeModeId("supervised", true)).toBe("plan");
+    const args = commandCodePrintArgs({ runtimeMode: "full-access", planning: true });
+    expect(args).toContain("plan");
+    expect(args).not.toContain("--yolo");
+  });
+
+  it("resumes, forks and skips saving when asked", () => {
+    expect(
+      commandCodePrintArgs({
+        resume: "8f1c-a",
+        fork: true,
+        ephemeral: true,
+        runtimeMode: "supervised",
+        planning: true,
+      }),
+    ).toEqual([
+      ...BASE,
+      "--resume",
+      "8f1c-a",
+      "--fork-session",
+      "--no-session",
+      "--permission-mode",
+      "plan",
+    ]);
+  });
+
+  it("rejects ids that cmd.exe would expand or split", () => {
+    expect(() =>
+      commandCodePrintArgs({ model: "a&b", runtimeMode: "supervised", planning: false }),
+    ).toThrow(/unsupported characters/);
+    expect(() =>
+      commandCodePrintArgs({ resume: "%PATH%", runtimeMode: "supervised", planning: false }),
+    ).toThrow(/unsupported characters/);
   });
 });
 
-describe("session setup parsing", () => {
-  it("reads the session id and current mode", () => {
-    expect(commandCodeSessionId(SESSION_NEW)).toBe(SESSION_NEW.sessionId);
-    expect(commandCodeSessionId({})).toBeUndefined();
-    expect(commandCodeCurrentModeId(SESSION_NEW)).toBe("default");
+describe("commandCodePromptText", () => {
+  it("asks Command Code to open attached images by path", () => {
+    const image = {
+      kind: "image",
+      name: "shot.png",
+      path: "C:\\shots\\shot.png",
+    } as Attachment;
+    const text = commandCodePromptText("What is this?", [image]);
+    expect(text).toContain("What is this?");
+    expect(text).toContain("read_file");
+    expect(text).toContain(JSON.stringify("C:\\shots\\shot.png"));
   });
+});
 
-  it("reads select config options with their choices", () => {
-    expect(commandCodeConfigOptions(SESSION_NEW)).toEqual([
-      {
-        id: "model",
-        currentValue: "stealth/glyph-cluster:free",
-        choices: ["claude-sonnet-5-5"],
-      },
-      {
-        id: "effort",
-        currentValue: "low",
-        choices: ["low", "medium", "high", "xhigh"],
-      },
-    ]);
-    expect(commandCodeConfigOptions({ sessionUpdate: "config_option_update", configOptions: [] })).toEqual([]);
-  });
-
-  it("offers the effort select as a model setting", () => {
-    expect(commandCodeEffortSetting(SESSION_NEW.configOptions)).toEqual({
-      id: "effort",
-      label: "Effort",
-      kind: "select",
-      value: "low",
-      options: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High" },
-        { value: "xhigh", label: "Extra high" },
-      ],
+describe("parseCommandCodeLine", () => {
+  it("reads stream events", () => {
+    expect(
+      parseCommandCodeLine(
+        JSON.stringify({ type: "event", event: { type: "text_delta", delta: "Hi" } }),
+      ),
+    ).toEqual({
+      kind: "event",
+      type: "text_delta",
+      event: { type: "text_delta", delta: "Hi" },
     });
-    expect(commandCodeEffortSetting([])).toBeUndefined();
   });
 
-  it("lists models once, current model first, grouped by vendor", () => {
-    const models = modelsFromCommandCodeSession(SESSION_NEW);
-    expect(models.map((model) => model.nativeId)).toEqual([
-      "stealth/glyph-cluster:free",
-      "claude-sonnet-5-5",
-      "gpt-6-astra",
-      "google/gemini-3.8-flash",
-      "deepseek/deepseek-v4.1-flash",
-    ]);
-    expect(models[0]).toMatchObject({
-      id: "command-code:stealth/glyph-cluster:free",
-      harness: "command-code",
-      name: "Glyph Cluster (free)",
-      provider: { id: "stealth", name: "Stealth" },
+  it("reads the final result with usage", () => {
+    const line = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      sessionId: "s-1",
+      stopReason: "end_turn",
+      finalText: "Done",
+      usage: { inputTokens: 120, outputTokens: 30, cacheReadTokens: 100 },
     });
-    expect(models.map((model) => model.provider?.name)).toEqual([
-      "Stealth",
-      "Anthropic",
-      "OpenAI",
-      "Google",
-      "DeepSeek",
-    ]);
-    expect(models.every((model) => model.settings?.[0]?.id === "effort")).toBe(true);
+    expect(parseCommandCodeLine(line)).toEqual({
+      kind: "result",
+      result: {
+        ok: true,
+        sessionId: "s-1",
+        stopReason: "end_turn",
+        finalText: "Done",
+        usage: { total: 150, input: 120, output: 30, cachedInput: 100, cacheWrite: 0 },
+      },
+    });
   });
 
-  it("returns no models when the session has no model list", () => {
-    expect(modelsFromCommandCodeSession({ sessionId: "x" })).toEqual([]);
+  it("reports a failed result with its error", () => {
+    const parsed = parseCommandCodeLine(
+      JSON.stringify({ type: "result", subtype: "error", error: { message: "boom" } }),
+    );
+    expect(parsed).toMatchObject({ kind: "result", result: { ok: false, error: "boom" } });
+  });
+
+  it("ignores banners and broken lines", () => {
+    expect(parseCommandCodeLine("Command Code v1.88")).toBeNull();
+    expect(parseCommandCodeLine("{not json")).toBeNull();
+    expect(parseCommandCodeLine(JSON.stringify({ type: "event" }))).toBeNull();
+  });
+
+  it("returns no usage when the counts are missing", () => {
+    expect(commandCodeUsage({})).toBeUndefined();
+  });
+});
+
+describe("tools", () => {
+  it("maps tool names to MonoCode kinds and titles", () => {
+    expect(commandCodeToolKind("read_file")).toBe("read");
+    expect(commandCodeToolKind("edit_file")).toBe("edit");
+    expect(commandCodeToolKind("powershell")).toBe("execute");
+    expect(commandCodeToolKind("grep")).toBe("search");
+    expect(commandCodeToolKind("mystery")).toBe("other");
+    expect(commandCodeToolTitle("shell_command", { command: "npm test\nmore" })).toBe(
+      "Run npm test",
+    );
+    expect(commandCodeToolTitle("read_file", {})).toBe("Read");
+  });
+
+  it("previews edits as a diff and reads tool output text", () => {
+    expect(
+      commandCodeToolPreview("edit_file", {
+        file_path: "a.ts",
+        old_string: "x",
+        new_string: "y\nz",
+      }),
+    ).toMatchObject({ kind: "write", path: "a.ts", additions: 2, deletions: 1 });
+    expect(
+      commandCodeToolOutput([
+        { type: "text", text: "one" },
+        { type: "image" },
+        { type: "text", text: "two" },
+      ]),
+    ).toBe("one\ntwo");
   });
 });
 
 describe("errors", () => {
-  it("adds the cmdc sign-in hint to login failures", () => {
-    const error = commandCodeStartupError(new Error("Authentication required"));
-    expect(error.message).toContain(COMMAND_CODE_AUTH_HELP);
-    expect(error.message).toContain("cmdc login");
-    expect(commandCodeTurnError(new Error("Not logged in"))).toContain("cmdc login");
+  it("turns documented exit codes into actionable messages", () => {
+    expect(commandCodeExitError(3).message).toContain(COMMAND_CODE_AUTH_HELP);
+    expect(commandCodeExitError(5).message).toMatch(/rate limited/);
+    expect(commandCodeExitError(10).message).toMatch(/out of credits/);
   });
 
-  it("leaves unrelated failures alone", () => {
-    expect(commandCodeTurnError(new Error("Rate limit reached"))).toBe("Rate limit reached");
-    expect(commandCodeStartupError(new Error("spawn failed")).message).toBe(
-      "Command Code did not start. spawn failed",
+  it("adds the sign-in hint to auth failures and keeps other details", () => {
+    expect(commandCodeExitError(1, "Not authenticated").message).toContain(
+      COMMAND_CODE_AUTH_HELP,
     );
+    expect(commandCodeExitError(1, "disk full").message).toBe(
+      "Command Code stopped: disk full",
+    );
+    expect(commandCodeExitError(1).message).toMatch(/code 1/);
+  });
+
+  it("spots permission blocks and missing sessions", () => {
+    expect(isCommandCodePermissionBlock("This tool requires permissions; use --yolo")).toBe(
+      true,
+    );
+    expect(isCommandCodeMissingResume("No session abc found to resume")).toBe(true);
+    expect(isCommandCodeMissingResume("network down")).toBe(false);
   });
 });

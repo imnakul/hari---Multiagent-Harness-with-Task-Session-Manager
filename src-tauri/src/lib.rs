@@ -476,6 +476,7 @@ pub fn run() {
             home_dir,
             antigravity_cli::antigravity_helper_directory,
             command_code::command_code_helper_directory,
+            command_code::command_code_model_catalog,
             notifications::notification_permission,
             notifications::request_notification_permission,
             notifications::show_notification,

@@ -57,6 +57,7 @@ import { HARNESSES, HARNESS_TITLE, type HarnessId } from "../model/session";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import { LAYER } from "../../../shared/lib/layers";
 import { HarnessIcon } from "./HarnessIcon";
+import { ModelBadges } from "./ModelBadges";
 import { Popover } from "../../../shared/ui/Popover";
 import { MOD } from "../../../platform/tauri/platform";
 import { keybindingPressed } from "../../settings/model/settings";
@@ -661,7 +662,7 @@ export function ModelPicker({
   };
 
   const pickModel = (item: AgentModel) => {
-    if (!source.available(item.harness)) return;
+    if (!source.available(item.harness) || item.locked) return;
     onChange(item.harness, item.id);
     dismiss(true);
   };
@@ -1203,7 +1204,7 @@ export function ModelPicker({
           {recentMenu.models.map((item, index) => {
             const selected = item.id === current.id;
             const highlighted = index === recentActive;
-            const disabled = !source.available(item.harness);
+            const disabled = !source.available(item.harness) || !!item.locked;
             return (
               <button
                 key={item.id}
@@ -1212,7 +1213,13 @@ export function ModelPicker({
                 role="menuitemradio"
                 aria-checked={selected}
                 disabled={disabled}
-                title={disabled ? providerRowTitle(item.harness) : undefined}
+                title={
+                  item.locked
+                    ? item.locked.reason
+                    : disabled
+                      ? providerRowTitle(item.harness)
+                      : undefined
+                }
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setRecentActive(index)}
                 onClick={() => pickModel(item)}
@@ -1235,8 +1242,10 @@ export function ModelPicker({
                   <span className="block truncate text-[11px] leading-4 text-content/45">
                     {HARNESS_TITLE[item.harness]}
                     {item.provider ? ` · ${item.provider.name}` : ""}
+                    {item.locked ? ` · ${item.locked.reason}` : ""}
                   </span>
                 </span>
+                <ModelBadges model={item} />
                 {selected ? (
                   <Check
                     className="size-3.5 shrink-0 text-content/55"
@@ -1936,7 +1945,8 @@ function ModelFlyout({
                   const selected = item.id === currentId;
                   const highlighted = index === active;
                   const favorited = favorites.includes(item.id);
-                  const disabled = !source.available(item.harness);
+                  const unavailable = !source.available(item.harness);
+                  const disabled = unavailable || !!item.locked;
                   // Favorites mix harnesses, so every row names its source.
                   // Provider first (OpenCode Go vs OpenCode), else harness.
                   const provenance =
@@ -1974,12 +1984,12 @@ function ModelFlyout({
                         type="button"
                         role="option"
                         aria-selected={selected}
-                        aria-label={`${item.name}, ${provenance}`}
+                        aria-label={`${item.name}, ${provenance}${item.badge === "free" ? ", free" : ""}${item.locked ? `, locked: ${item.locked.reason}` : ""}`}
                         disabled={disabled}
                         title={
-                          disabled
+                          unavailable
                             ? harnessUnavailableHint(item.harness)
-                            : undefined
+                            : item.locked?.reason
                         }
                         onMouseDown={(event) => event.preventDefault()}
                         className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-1.5 text-left text-[13px] disabled:cursor-not-allowed"
@@ -1987,6 +1997,7 @@ function ModelFlyout({
                         <span className="min-w-0 flex-1 truncate">
                           {item.name}
                         </span>
+                        <ModelBadges model={item} />
                       </button>
                       {tab === "favorites" ? (
                         <span className="max-w-24 shrink-0 truncate text-[10px] text-content/40">
@@ -2076,3 +2087,4 @@ function ProviderTabButton({
     </button>
   );
 }
+

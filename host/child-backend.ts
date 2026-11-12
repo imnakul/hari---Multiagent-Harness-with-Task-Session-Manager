@@ -271,6 +271,8 @@ export class HostChildBackend implements ChildBackend {
             else resolve();
           });
         });
+        // Fork (L-258): one-shot CLIs (`cmdc -p`) start reading at EOF.
+        if (args.close === true) child.stdin.end();
         return undefined as T;
       }
       case "harness_kill":

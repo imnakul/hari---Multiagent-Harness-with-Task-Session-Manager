@@ -1,221 +1,371 @@
-import { promptBlocks, type PromptContentBlock } from "../../../../features/sessions/model/attachments";
-import type { AgentModel, ModelSetting } from "../../../../features/sessions/model/models";
-import type { Attachment, RuntimeMode } from "../../../../features/sessions/model/session";
-import { upstreamProviderName } from "../../core/providerNames";
+import {
+  attachmentPath,
+  attachmentPathText,
+  isAttachmentFolder,
+} from "../../../../features/sessions/model/attachments";
+import type {
+  Attachment,
+  RuntimeMode,
+  ToolPreview,
+} from "../../../../features/sessions/model/session";
+import type { ProcessedUsage } from "../../../../features/sessions/model/tokenAccounting";
 
 /** Fork (L-255). The Windows launcher is `cmdc`; `cmd` is the system shell. */
 export const COMMAND_CODE_AUTH_HELP =
   "Sign in with `cmdc login` in a terminal, then try again.";
 
-export type CommandCodeModeId =
-  | "default"
-  | "auto-accept"
-  | "plan"
-  | "dont-ask"
-  | "bypass";
+/** Shown when a read-only turn tried to edit or run something (L-258). */
+export const COMMAND_CODE_READ_ONLY_HELP =
+  "Command Code is in Read only mode, so it can't edit files or run commands. Switch the chat to Full access to allow that.";
 
-/** One `select` config option the session advertised, such as `effort`. */
-export type CommandCodeConfigOption = {
-  id: string;
-  currentValue: string;
-  choices: string[];
+export type CommandCodeRun = {
+  model?: string;
+  effort?: string;
+  /** Command Code session to continue. */
+  resume?: string;
+  /** With `resume`, copy that session into a new one instead. */
+  fork?: boolean;
+  runtimeMode: RuntimeMode;
+  planning: boolean;
+  /** Keep nothing on disk: AI helper replies. */
+  ephemeral?: boolean;
 };
 
 /**
- * Map MonoCode access levels to Command Code's ACP modes. Plan always wins so
- * a plan turn can never edit, whatever the access level.
+ * Fork (L-258): one `cmdc -p` run per turn. The prompt goes over stdin (the
+ * Windows `.cmd` shim mangles `%` and newlines in arguments), so it is not
+ * part of these arguments.
+ *
+ * Print mode has no approval prompts. Without `--yolo` Command Code refuses
+ * edits and shell commands outright; with it, everything runs. Plan always
+ * wins so a plan turn can never edit, whatever the access level.
  */
-export function commandCodeModeId(
-  runtimeMode: RuntimeMode,
-  planning = false,
-): CommandCodeModeId {
-  if (planning) return "plan";
-  if (runtimeMode === "supervised") return "default";
-  if (runtimeMode === "auto-accept-edits") return "auto-accept";
-  if (runtimeMode === "auto") return "dont-ask";
-  return "bypass";
+export function commandCodePrintArgs(run: CommandCodeRun): string[] {
+  const args = [
+    "-p",
+    "--output-format",
+    "json",
+    "--skip-onboarding",
+    "--trust",
+    "--no-auto-update",
+  ];
+  if (run.model) args.push("--model", safeArg(run.model, "model"));
+  if (run.effort) args.push("--effort", safeArg(run.effort, "effort"));
+  if (run.resume) {
+    args.push("--resume", safeArg(run.resume, "session id"));
+    if (run.fork) args.push("--fork-session");
+  }
+  if (run.ephemeral) args.push("--no-session");
+  if (run.planning) args.push("--permission-mode", "plan");
+  else if (commandCodeCanEdit(run.runtimeMode)) args.push("--yolo");
+  return args;
 }
 
-/** Command Code accepts the standard ACP text, image, and resource blocks. */
-export function commandCodePromptBlocks(
+/**
+ * On Windows the `.cmd` launcher runs through `cmd.exe`, which expands `%`
+ * and splits on `&`; ids and efforts never need either.
+ */
+function safeArg(value: string, label: string): string {
+  if (!/^[A-Za-z0-9._:/@+-]+$/.test(value))
+    throw new Error(`Command Code ${label} "${value}" has unsupported characters.`);
+  return value;
+}
+
+/** Only Read only (`supervised`) keeps Command Code from editing. */
+export function commandCodeCanEdit(runtimeMode: RuntimeMode): boolean {
+  return runtimeMode !== "supervised";
+}
+
+/**
+ * Command Code has no image flag; its `read_file` tool opens images for the
+ * model, so attachments travel as saved paths it is asked to read.
+ */
+export function commandCodePromptText(
   text: string,
   attachments: Attachment[] = [],
-): PromptContentBlock[] {
-  return promptBlocks(text, attachments);
-}
-
-export function commandCodeSessionId(result: unknown): string | undefined {
-  const rec = asRecord(result);
-  const id = rec?.sessionId ?? rec?.session_id;
-  return typeof id === "string" && id.trim() ? id.trim() : undefined;
-}
-
-export function commandCodeCurrentModelId(result: unknown): string | undefined {
-  const models = asRecord(asRecord(result)?.models);
-  const value = models?.currentModelId ?? models?.current_model_id;
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-export function commandCodeCurrentModeId(result: unknown): string | undefined {
-  const modes = asRecord(asRecord(result)?.modes);
-  const value = modes?.currentModeId ?? modes?.current_mode_id;
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-/** Read the `select` config options (model, effort) from session setup. */
-export function commandCodeConfigOptions(
-  value: unknown,
-): CommandCodeConfigOption[] {
-  const raw = Array.isArray(value) ? value : asRecord(value)?.configOptions;
-  if (!Array.isArray(raw)) return [];
-  const options: CommandCodeConfigOption[] = [];
-  for (const item of raw) {
-    const rec = asRecord(item);
-    const id = typeof rec?.id === "string" ? rec.id.trim() : "";
-    if (!rec || !id || rec.type !== "select") continue;
-    const choices = Array.isArray(rec.options)
-      ? rec.options
-          .map((choice) => asRecord(choice)?.value)
-          .filter((choice): choice is string => typeof choice === "string")
-      : [];
-    options.push({
-      id,
-      currentValue: String(rec.currentValue ?? rec.current_value ?? ""),
-      choices,
-    });
+): string {
+  const parts = [text];
+  for (const file of attachments) {
+    if (file.kind === "image" && !isAttachmentFolder(file) && file.text == null)
+      parts.push(
+        `Attached image (open it with read_file to see it): ${JSON.stringify(attachmentPath(file))}`,
+      );
+    else parts.push(attachmentPathText(file));
   }
-  return options;
+  return parts.filter((part) => part.trim()).join("\n\n");
 }
 
-/**
- * The reasoning effort select, offered on every model. Command Code reports
- * it per session for the current model; a saved value the next model lacks is
- * skipped at send time instead of failing the turn.
- */
-export function commandCodeEffortSetting(
-  configOptions: unknown,
-): ModelSetting | undefined {
-  const raw = Array.isArray(configOptions)
-    ? configOptions
-    : asRecord(configOptions)?.configOptions;
-  if (!Array.isArray(raw)) return undefined;
-  for (const item of raw) {
-    const rec = asRecord(item);
-    if (!rec || rec.id !== "effort" || rec.type !== "select") continue;
-    if (!Array.isArray(rec.options)) return undefined;
-    const options = rec.options.flatMap((choice) => {
-      const option = asRecord(choice);
-      const value = option?.value;
-      if (typeof value !== "string" || !value) return [];
-      const name = typeof option?.name === "string" ? option.name : value;
-      return [{ value, label: effortLabel(value, name) }];
-    });
-    if (options.length === 0) return undefined;
-    const current = String(rec.currentValue ?? "");
+export type CommandCodeResult = {
+  ok: boolean;
+  sessionId?: string;
+  stopReason?: string;
+  finalText: string;
+  error?: string;
+  usage?: ProcessedUsage;
+};
+
+export type CommandCodeLine =
+  | { kind: "event"; type: string; event: Record<string, unknown> }
+  | { kind: "result"; result: CommandCodeResult };
+
+/** One NDJSON line of `--output-format json`; anything else is ignored. */
+export function parseCommandCodeLine(line: string): CommandCodeLine | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("{")) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  const rec = asRecord(value);
+  if (rec?.type === "event") {
+    const event = asRecord(rec.event);
+    if (!event || typeof event.type !== "string") return null;
+    return { kind: "event", type: event.type, event };
+  }
+  if (rec?.type === "result") {
+    const sessionId = text(rec.sessionId);
+    const stopReason = text(rec.stopReason);
+    const error = errorText(rec.error);
+    const usage = commandCodeUsage(rec.usage);
     return {
-      id: "effort",
-      label: "Effort",
-      kind: "select",
-      value: options.some((option) => option.value === current)
-        ? current
-        : (options[0]?.value ?? ""),
-      options,
+      kind: "result",
+      result: {
+        ok: rec.subtype === "success",
+        ...(sessionId ? { sessionId } : {}),
+        ...(stopReason ? { stopReason } : {}),
+        finalText: typeof rec.finalText === "string" ? rec.finalText : "",
+        ...(error ? { error } : {}),
+        ...(usage ? { usage } : {}),
+      },
     };
   }
-  return undefined;
+  return null;
 }
 
-/** Read the standard ACP model list from `session/new`, current model first. */
-export function modelsFromCommandCodeSession(result: unknown): AgentModel[] {
-  const state = asRecord(asRecord(result)?.models);
-  const raw = state?.availableModels ?? state?.available_models;
-  if (!Array.isArray(raw)) return [];
-
-  const effort = commandCodeEffortSetting(asRecord(result)?.configOptions);
-  const seen = new Set<string>();
-  const models: AgentModel[] = [];
-  for (const item of raw) {
-    const model = asRecord(item);
-    if (!model) continue;
-    const nativeId = String(model.modelId ?? model.model_id ?? "").trim();
-    if (!nativeId || seen.has(nativeId)) continue;
-    seen.add(nativeId);
-    const name = String(model.name ?? nativeId).trim() || nativeId;
-    models.push({
-      id: `command-code:${nativeId}`,
-      harness: "command-code",
-      name,
-      nativeId,
-      provider: commandCodeModelProvider(nativeId),
-      ...(effort ? { settings: [effort] } : {}),
-    });
-  }
-
-  // The account's current model is the right default for a new chat;
-  // setHarnessModels picks the first model of a generic catalog.
-  const current = commandCodeCurrentModelId(result);
-  if (current) {
-    const index = models.findIndex((model) => model.nativeId === current);
-    if (index > 0) models.unshift(...models.splice(index, 1));
-  }
-  return models;
-}
-
-/**
- * Hosted models are `vendor/model`; first-party Anthropic and OpenAI models
- * carry no vendor prefix, so group them by their family name instead.
- */
-function commandCodeModelProvider(
-  nativeId: string,
-): NonNullable<AgentModel["provider"]> {
-  const slash = nativeId.indexOf("/");
-  const id =
-    slash > 0
-      ? nativeId.slice(0, slash).toLowerCase()
-      : nativeId.startsWith("claude-")
-        ? "anthropic"
-        : nativeId.startsWith("gpt-")
-          ? "openai"
-          : "command-code";
+/** Command Code reports cache reads inside `inputTokens`, like Codex. */
+export function commandCodeUsage(value: unknown): ProcessedUsage | undefined {
+  const usage = asRecord(value);
+  if (
+    !usage ||
+    (typeof usage.inputTokens !== "number" &&
+      typeof usage.outputTokens !== "number")
+  )
+    return undefined;
+  const input = count(usage.inputTokens);
+  const output = count(usage.outputTokens);
   return {
-    id,
-    name: id === "command-code" ? "Command Code" : upstreamProviderName(id),
+    total: input + output,
+    input,
+    output,
+    cachedInput: count(usage.cacheReadTokens),
+    cacheWrite: count(usage.cacheWriteTokens),
   };
 }
 
-function effortLabel(value: string, name: string): string {
-  if (value === "xhigh") return "Extra high";
-  return name || value.charAt(0).toUpperCase() + value.slice(1);
+/** MonoCode tool kinds (ACP names), so rows get the right icon and preview. */
+export function commandCodeToolKind(name: string): string {
+  switch (name) {
+    case "read_file":
+    case "list_directory":
+    case "list_dir":
+      return "read";
+    case "write_file":
+    case "edit_file":
+    case "multi_edit":
+      return "edit";
+    case "shell_command":
+    case "powershell":
+    case "bash":
+    case "monitor_command":
+    case "kill_shell":
+      return "execute";
+    case "grep":
+    case "glob":
+    case "web_search":
+      return "search";
+    case "web_fetch":
+      return "fetch";
+    case "todo_write":
+      return "think";
+    default:
+      return "other";
+  }
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  read_file: "Read",
+  write_file: "Write",
+  edit_file: "Edit",
+  shell_command: "Run",
+  powershell: "Run",
+  bash: "Run",
+  grep: "Search",
+  glob: "Find files",
+  web_fetch: "Fetch",
+  web_search: "Web search",
+  todo_write: "Update tasks",
+  agent: "Agent",
+};
+
+/** A short title such as `Read src/app.ts` or `Run npm test`. */
+export function commandCodeToolTitle(name: string, input: unknown): string {
+  const label = TOOL_LABELS[name] ?? name;
+  const args = asRecord(input);
+  const target =
+    text(args?.file_path) ??
+    text(args?.path) ??
+    text(args?.command) ??
+    text(args?.pattern) ??
+    text(args?.query) ??
+    text(args?.url) ??
+    text(args?.description);
+  if (!target) return label;
+  const line = target.split(/\r?\n/, 1)[0] ?? target;
+  return `${label} ${line.length > 120 ? `${line.slice(0, 117)}…` : line}`;
+}
+
+export function commandCodeToolPreview(
+  name: string,
+  input: unknown,
+): ToolPreview | undefined {
+  const args = asRecord(input);
+  if (!args) return undefined;
+  const path = text(args.file_path) ?? text(args.path);
+  if (name === "read_file" && path) return { kind: "read", path };
+  if (name === "write_file" && path) {
+    const content = typeof args.content === "string" ? args.content : "";
+    return {
+      kind: "write",
+      path,
+      contentOnly: true,
+      additions: content ? content.split(/\r?\n/).length : 0,
+      lines: content
+        .split(/\r?\n/)
+        .slice(0, 200)
+        .map((line) => ({ kind: "add" as const, text: line })),
+    };
+  }
+  if (name === "edit_file" && path) {
+    const before = typeof args.old_string === "string" ? args.old_string : "";
+    const after = typeof args.new_string === "string" ? args.new_string : "";
+    const removed = before ? before.split(/\r?\n/) : [];
+    const added = after ? after.split(/\r?\n/) : [];
+    return {
+      kind: "write",
+      path,
+      additions: added.length,
+      deletions: removed.length,
+      lines: [
+        ...removed.map((line) => ({ kind: "del" as const, text: line })),
+        ...added.map((line) => ({ kind: "add" as const, text: line })),
+      ].slice(0, 400),
+    };
+  }
+  const command = text(args.command);
+  if (commandCodeToolKind(name) === "execute" && command)
+    return { kind: "shell", title: command };
+  const query = text(args.pattern) ?? text(args.query);
+  if (commandCodeToolKind(name) === "search" && query)
+    return { kind: "search", query, ...(path ? { path } : {}) };
+  return undefined;
+}
+
+/** The text of a `tool_completed` result list. */
+export function commandCodeToolOutput(result: unknown): string | undefined {
+  if (typeof result === "string") return result;
+  if (!Array.isArray(result)) return undefined;
+  const parts = result.flatMap((item) => {
+    const rec = asRecord(item);
+    return rec?.type === "text" && typeof rec.text === "string"
+      ? [rec.text]
+      : [];
+  });
+  return parts.length ? parts.join("\n") : undefined;
+}
+
+/** Print mode refused a tool because the run had no `--yolo`. */
+export function isCommandCodePermissionBlock(detail: string): boolean {
+  return /requires permissions|use --yolo|permission denied|not allowed in plan/i.test(
+    detail,
+  );
+}
+
+/** A resumed session that never saved a step is unknown to Command Code. */
+export function isCommandCodeMissingResume(detail: string): boolean {
+  return /no session .* found to resume/i.test(detail);
 }
 
 /**
- * Turn a startup failure into an actionable message. Command Code reports a
- * missing login as an ACP auth error; the CLI's own hint names `cmd login`,
- * which on Windows opens the system shell instead.
+ * Documented `cmd -p` exit codes, turned into messages a user can act on.
+ * `detail` is the result or stderr text, when there was any.
  */
-export function commandCodeStartupError(error: unknown): Error {
-  const detail = error instanceof Error ? error.message : String(error);
-  if (isAuthFailure(detail)) {
-    return new Error(`${detail.trim()}\n\n${COMMAND_CODE_AUTH_HELP}`);
+export function commandCodeExitError(
+  code: number | null | undefined,
+  detail?: string,
+): Error {
+  const reason = detail?.trim();
+  switch (code) {
+    case 3:
+      return new Error(
+        `Command Code is not signed in. ${COMMAND_CODE_AUTH_HELP}`,
+      );
+    case 5:
+      return new Error(
+        "Command Code is rate limited right now. Wait a moment, then try again.",
+      );
+    case 6:
+      return new Error(
+        "Command Code could not reach its servers. Check your connection, then try again.",
+      );
+    case 7:
+      return new Error(
+        "Command Code's servers returned an error. Try again in a moment.",
+      );
+    case 8:
+      return new Error(
+        "Command Code stopped after reaching its turn limit for one message. Send a follow-up to continue.",
+      );
+    case 10:
+      return new Error(
+        "Your Command Code plan is out of credits for this model. Pick another model or top up, then try again.",
+      );
+    default:
+      if (reason && isAuthFailure(reason))
+        return new Error(`${reason}\n\n${COMMAND_CODE_AUTH_HELP}`);
+      return new Error(
+        reason
+          ? `Command Code stopped: ${reason}`
+          : `Command Code exited before finishing (code ${String(code)}).`,
+      );
   }
-  if (/timed out/i.test(detail)) {
-    return new Error(`Command Code did not start. ${COMMAND_CODE_AUTH_HELP}`);
-  }
-  return new Error(`Command Code did not start. ${detail}`);
-}
-
-/** Add the sign-in hint to a turn error only when it is about the login. */
-export function commandCodeTurnError(error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-  return isAuthFailure(detail)
-    ? `${detail.trim()}\n\n${COMMAND_CODE_AUTH_HELP}`
-    : detail;
 }
 
 function isAuthFailure(detail: string): boolean {
-  return /auth(?:entication|orization)? (?:required|failed)|not (?:signed|logged) in|unauthori[sz]ed|sign in|log ?in|(?:invalid|expired|missing) (?:api key|token|credential)/i.test(
+  return /auth(?:entication|orization)? (?:required|failed)|not (?:signed|logged) in|not authenticated|unauthori[sz]ed|(?:invalid|expired|missing) (?:api key|token|credential)/i.test(
     detail,
   );
+}
+
+function errorText(value: unknown): string | undefined {
+  if (typeof value === "string") return value.trim() || undefined;
+  const rec = asRecord(value);
+  return text(rec?.message);
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function count(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : 0;
+}
+
+export function commandCodeErrorText(value: unknown): string | undefined {
+  return errorText(value);
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

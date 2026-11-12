@@ -1,533 +1,462 @@
-import { nativeModelId } from "../../../../features/sessions/model/models";
-import type { RuntimeMode } from "../../../../features/sessions/model/session";
-import { AcpClient, type AcpHandlers } from "../../core/acp";
-import { AcpSubagents } from "../../core/acpSubagents";
+import {
+  findModel,
+  modelEffortSetting,
+  nativeModelId,
+} from "../../../../features/sessions/model/models";
 import {
   killChild,
   resolveCommandCodeBinary,
   spawnChild,
   unwatchChild,
   watchChild,
+  writeChild,
 } from "../../core/child";
-import {
-  asRecord,
-  commandCodeConfigOptions,
-  commandCodeCurrentModeId,
-  commandCodeCurrentModelId,
-  commandCodeModeId,
-  commandCodePromptBlocks,
-  commandCodeSessionId,
-  commandCodeStartupError,
-  commandCodeTurnError,
-  type CommandCodeConfigOption,
-} from "./commandCodeProtocol";
-import {
-  eventsFromAcpUpdate,
-  permissionOptionId,
-  permissionRequestFromAcp,
-  pickAutoOption,
-} from "../grok/grokProtocol";
 import type {
   ApprovalDecision,
   HarnessEvent,
-  HarnessSessionInput,
   SendTurnInput,
   SteerTurnInput,
 } from "../../core/types";
+import { NativeForkError } from "../../core/types";
+import {
+  COMMAND_CODE_READ_ONLY_HELP,
+  asRecord,
+  commandCodeCanEdit,
+  commandCodeErrorText,
+  commandCodeExitError,
+  commandCodePrintArgs,
+  commandCodePromptText,
+  commandCodeToolKind,
+  commandCodeToolOutput,
+  commandCodeToolPreview,
+  commandCodeToolTitle,
+  isCommandCodeMissingResume,
+  isCommandCodePermissionBlock,
+  parseCommandCodeLine,
+  type CommandCodeResult,
+  type CommandCodeRun,
+} from "./commandCodeProtocol";
 
-type Live = {
-  subagents: AcpSubagents;
-  acp: AcpClient;
-  acpSessionId: string;
-  cwd: string;
-  modelId: string;
-  modeId: string;
-  configOptions: CommandCodeConfigOption[];
-  /** A model id Command Code rejected, so the warning is shown once. */
-  staleModel: string;
-  muteUpdates: boolean;
-  cancelled: boolean;
-  runtimeMode: RuntimeMode;
-  planning: boolean;
-  onEvent: (event: HarnessEvent) => void;
-  approvals: Map<number, (decision: ApprovalDecision) => void>;
-  turns: Promise<void>;
+/** The Command Code session a chat continues, and the folder it lives in. */
+type Bound = { id: string; cwd: string };
+
+type Active = {
+  finish: (error?: Error) => void;
 };
 
-type Resume = { acpSessionId: string; cwd: string };
+const TURN_TIMEOUT_MS = 30 * 60_000;
+const MAX_TOOL_DETAIL = 20_000;
 
-const INIT_TIMEOUT_MS = 20_000;
-const SESSION_TIMEOUT_MS = 45_000;
-const CONTROL_TIMEOUT_MS = 20_000;
-const PROMPT_TIMEOUT_MS = 30 * 60_000;
+const boundByThread = new Map<string, Bound>();
+const activeByThread = new Map<string, Active>();
+const epochs = new Map<string, number>();
+const serial = new Map<string, Promise<void>>();
 
-const CLIENT_CAPABILITIES = {
-  fs: { readTextFile: false, writeTextFile: false },
-  terminal: false,
-};
+class MissingResumeError extends Error {}
 
-const liveByThread = new Map<string, Live>();
-const resumeByThread = new Map<string, Resume>();
-const cancelledThreads = new Set<string>();
-
-/**
- * Fork (L-255): live Command Code adapter. Spawns `cmdc acp` and talks
- * standard ACP; the CLI keeps its own sessions, so a chat resumes with
- * `session/load` after a restart.
- */
-export async function sendCommandCodeTurn(input: SendTurnInput): Promise<void> {
-  let live: Live;
-  try {
-    live = await ensureLive(input);
-  } catch (error) {
-    cancelledThreads.delete(input.sessionId);
-    throw error;
-  }
-  if (cancelledThreads.delete(input.sessionId)) return;
-
-  live.onEvent = input.onEvent;
-  live.runtimeMode = input.runtimeMode;
-  live.planning = input.intent === "plan";
-  live.turns = live.turns
-    .catch(() => undefined)
-    .then(async () => {
-      live.cancelled = false;
-      live.muteUpdates = false;
-      try {
-        await applyModelSelection(live, input);
-        if (live.cancelled) return;
-        await applyRuntimeMode(live, input.runtimeMode, live.planning);
-        if (live.cancelled) return;
-        await prompt(live, input);
-      } catch (error) {
-        if (live.cancelled) return;
-        throw error;
-      }
-    });
-
-  try {
-    await live.turns;
-  } catch (error) {
-    if (liveByThread.get(input.sessionId) === live) {
-      await stopCommandCodeSession(input.sessionId);
-    }
-    throw error;
-  }
+function epoch(id: string): number {
+  return epochs.get(id) ?? 0;
 }
 
 /**
- * ACP allows one prompt at a time and Command Code does not document
- * mid-turn steering, so follow-ups wait for the turn like Cline and Devin.
+ * Fork (L-258): Command Code runs headless, one `cmdc -p` process per turn.
+ * `--output-format json` streams NDJSON events; the next turn passes
+ * `--resume <session>` so the CLI keeps the conversation. Print mode has no
+ * approval prompts, so access is Read only or Full access (see
+ * `commandCodePrintArgs`). This replaced the `cmdc acp` runtime (L-255),
+ * which offered fewer models than the CLI.
  */
+export function sendCommandCodeTurn(input: SendTurnInput): Promise<void> {
+  if (input.fork?.forkPoint)
+    return Promise.reject(
+      new NativeForkError(
+        "Command Code can copy a whole conversation, not part of one; the original chat was not changed.",
+      ),
+    );
+  if (input.nativeResume)
+    bindCommandCodeSession(
+      input.sessionId,
+      input.nativeResume.providerSessionId,
+      input.cwd,
+    );
+  const startedAt = epoch(input.sessionId);
+  const next = (serial.get(input.sessionId) ?? Promise.resolve())
+    .catch((): void => {})
+    .then(async (): Promise<void> => {
+      if (epoch(input.sessionId) !== startedAt) return;
+      const bound = boundByThread.get(input.sessionId);
+      const forkFrom = input.fork?.sourceProviderSessionId.trim();
+      let resume: string | undefined = forkFrom || undefined;
+      if (!resume && bound) {
+        if (bound.cwd === input.cwd) resume = bound.id;
+        else {
+          boundByThread.delete(input.sessionId);
+          input.onEvent({
+            type: "status",
+            text: "This chat moved to another folder, so Command Code starts a new conversation here.",
+          });
+        }
+      }
+      const run = runSettings(input, resume, !!forkFrom);
+      try {
+        await runOnce(input, run, startedAt);
+      } catch (error) {
+        if (!(error instanceof MissingResumeError) || forkFrom) throw error;
+        if (epoch(input.sessionId) !== startedAt) return;
+        // A turn stopped before Command Code saved a step leaves nothing to
+        // resume; keep the chat usable instead of failing every send.
+        boundByThread.delete(input.sessionId);
+        input.onEvent({
+          type: "status",
+          text: "Command Code had not saved this conversation yet, so it starts fresh. It won't remember earlier messages in this chat.",
+        });
+        await runOnce(input, { ...run, resume: undefined, fork: false }, startedAt);
+      }
+    });
+  serial.set(input.sessionId, next);
+  void next
+    .finally((): void => {
+      if (serial.get(input.sessionId) === next) serial.delete(input.sessionId);
+    })
+    .catch((): void => {});
+  return next;
+}
+
+function runSettings(
+  input: SendTurnInput,
+  resume: string | undefined,
+  fork: boolean,
+): CommandCodeRun {
+  const model = nativeModelId(input.model).trim();
+  const effort = input.modelSettings?.effort?.trim();
+  // Efforts differ per model; one this model lacks would fail the run.
+  const known = findModel(input.model);
+  // A chat saved before the plan changed can still name a locked model.
+  if (known?.locked)
+    throw new Error(
+      `${known.name} isn't available on your Command Code plan (${known.locked.reason}). Pick another model.`,
+    );
+  const effortSetting = known ? modelEffortSetting(known) : undefined;
+  const effortOk =
+    !!effort &&
+    !!effortSetting?.options.some((option) => option.value === effort);
+  return {
+    ...(model && model !== "default" ? { model } : {}),
+    ...(effortOk ? { effort } : {}),
+    ...(resume ? { resume, fork } : {}),
+    runtimeMode: input.runtimeMode,
+    planning: input.intent === "plan",
+    ...(input.ephemeral ? { ephemeral: true } : {}),
+  };
+}
+
+async function runOnce(
+  input: SendTurnInput,
+  run: CommandCodeRun,
+  startedAt: number,
+): Promise<void> {
+  const prompt = commandCodePromptText(input.text, input.attachments);
+  if (!prompt.trim()) return;
+  const { path } = await resolveCommandCodeBinary();
+  if (epoch(input.sessionId) !== startedAt) return;
+  const id = input.sessionId;
+  const emit = (event: HarnessEvent): void => {
+    if (epoch(id) === startedAt) input.onEvent(event);
+  };
+  const stream = new TurnStream(emit, run, (sessionId) => {
+    if (input.ephemeral) return;
+    const current = boundByThread.get(id);
+    if (current?.id === sessionId && current.cwd === input.cwd) return;
+    boundByThread.set(id, { id: sessionId, cwd: input.cwd });
+    emit({ type: "session.providerBound", providerSessionId: sessionId });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(
+      (): void => {
+        finish(new Error("Command Code turn timed out."));
+        void killChild(id).catch((): void => {});
+      },
+      TURN_TIMEOUT_MS,
+    );
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (activeByThread.get(id) === active) activeByThread.delete(id);
+      unwatchChild(id);
+      if (error) reject(error);
+      else resolve();
+    };
+    const active: Active = { finish };
+    activeByThread.set(id, active);
+
+    watchChild(
+      id,
+      (line): void => {
+        if (epoch(id) === startedAt) stream.line(line);
+      },
+      (code): void => {
+        if (epoch(id) !== startedAt) return finish();
+        try {
+          stream.exit(code);
+          finish();
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+      (line): void => stream.stderr(line),
+    );
+
+    void (async (): Promise<void> => {
+      try {
+        await spawnChild(
+          id,
+          path,
+          commandCodePrintArgs(run),
+          input.cwd,
+          undefined,
+          "command-code",
+        );
+        if (epoch(id) !== startedAt) {
+          await killChild(id).catch((): void => {});
+          return finish();
+        }
+        emit({ type: "session.started" });
+        // EOF starts the run: `-p` reads the whole prompt from stdin.
+        await writeChild(id, prompt, true);
+        if (epoch(id) === startedAt) input.onAccepted?.();
+      } catch (error) {
+        await killChild(id).catch((): void => {});
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
+    })();
+  });
+}
+
+/** Turns one run's NDJSON into MonoCode events. Exported for tests. */
+export class TurnStream {
+  private text = "";
+  private thinking = false;
+  private blocked = false;
+  private result?: CommandCodeResult;
+  private runError?: string;
+  private readonly errors: string[] = [];
+  private readonly tools = new Map<string, string>();
+
+  constructor(
+    private readonly emit: (event: HarnessEvent) => void,
+    private readonly run: CommandCodeRun,
+    private readonly bind: (sessionId: string) => void,
+  ) {}
+
+  line(raw: string): void {
+    const parsed = parseCommandCodeLine(raw);
+    if (!parsed) return;
+    if (parsed.kind === "result") {
+      this.result = parsed.result;
+      if (parsed.result.sessionId && parsed.result.ok)
+        this.bind(parsed.result.sessionId);
+      return;
+    }
+    const { type, event } = parsed;
+    switch (type) {
+      case "run_start": {
+        const sessionId = event.sessionId;
+        if (typeof sessionId === "string" && sessionId.trim())
+          this.bind(sessionId.trim());
+        return;
+      }
+      case "text_delta":
+        if (typeof event.delta !== "string" || !event.delta) return;
+        this.endThinking();
+        this.text += event.delta;
+        this.emit({ type: "message.delta", text: event.delta });
+        return;
+      case "thinking_delta":
+        if (typeof event.delta !== "string" || !event.delta) return;
+        this.thinking = true;
+        this.emit({ type: "reasoning.delta", text: event.delta });
+        return;
+      case "thinking_end":
+        this.endThinking();
+        return;
+      case "tool_queued":
+      case "tool_running":
+        this.toolStarted(event);
+        return;
+      case "tool_completed": {
+        const callId = this.toolStarted(event);
+        if (!callId) return;
+        const output = commandCodeToolOutput(event.result);
+        this.emit({
+          type: "tool.updated",
+          callId,
+          status: "completed",
+          ...(output ? { detail: clip(output) } : {}),
+        });
+        return;
+      }
+      case "tool_errored":
+      case "tool_denied":
+      case "tool_hook_blocked": {
+        const callId = this.toolStarted(event);
+        if (!callId) return;
+        const detail =
+          commandCodeErrorText(event.error) ??
+          commandCodeErrorText(event.reason) ??
+          commandCodeErrorText(event.hookOutput) ??
+          (type === "tool_denied" ? "Not allowed" : "Failed");
+        if (type === "tool_denied" || isCommandCodePermissionBlock(detail))
+          this.blocked = true;
+        this.emit({
+          type: "tool.updated",
+          callId,
+          status: "failed",
+          detail: clip(detail),
+        });
+        return;
+      }
+      case "model_request_end": {
+        const usage = asRecord(event.usage);
+        const input = usage?.inputTokens;
+        const output = usage?.outputTokens;
+        if (typeof input === "number" && input > 0)
+          this.emit({
+            type: "context",
+            used: input + (typeof output === "number" ? output : 0),
+          });
+        return;
+      }
+      case "compaction_start":
+        this.emit({
+          type: "status",
+          text: "Command Code is compacting the conversation.",
+          key: "command-code-compaction",
+        });
+        return;
+      case "run_error":
+        this.runError = commandCodeErrorText(event.error) ?? this.runError;
+        return;
+      default:
+        return;
+    }
+  }
+
+  stderr(line: string): void {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    this.errors.push(trimmed.replace(/^error:\s*/i, ""));
+    if (this.errors.length > 20) this.errors.shift();
+  }
+
+  /** Settles the turn when the process exits; throws when it failed. */
+  exit(code: number | null | undefined): void {
+    this.endThinking();
+    const result = this.result;
+    if (result?.ok) {
+      if (!this.text && result.finalText)
+        this.emit({ type: "message.delta", text: result.finalText });
+      this.emit({ type: "message.completed" });
+      if (result.usage) this.emit({ type: "usage", turn: result.usage });
+      if (result.stopReason === "max_tokens")
+        this.emit({
+          type: "status",
+          text: "Command Code stopped: the reply hit the model's length limit.",
+        });
+      if (this.blocked && !this.run.planning && !commandCodeCanEdit(this.run.runtimeMode))
+        this.emit({ type: "status", text: COMMAND_CODE_READ_ONLY_HELP, key: "command-code-access" });
+      return;
+    }
+    const detail =
+      result?.error ?? this.runError ?? this.errors.slice(-3).join("\n");
+    if (this.run.resume && isCommandCodeMissingResume(detail))
+      throw new MissingResumeError(detail);
+    if (this.text) this.emit({ type: "message.completed" });
+    if (result?.usage) this.emit({ type: "usage", turn: result.usage });
+    throw commandCodeExitError(code === 0 ? null : code, detail);
+  }
+
+  private endThinking(): void {
+    if (!this.thinking) return;
+    this.thinking = false;
+    this.emit({ type: "reasoning.completed" });
+  }
+
+  /** Emits `tool.started` once per call; returns its call id. */
+  private toolStarted(event: Record<string, unknown>): string | undefined {
+    const callId =
+      typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+    if (!callId) return undefined;
+    const name =
+      typeof event.toolName === "string" ? event.toolName : this.tools.get(callId);
+    if (this.tools.has(callId)) {
+      if (event.type === "tool_running")
+        this.emit({ type: "tool.updated", callId, status: "in_progress" });
+      return callId;
+    }
+    const tool = name ?? "tool";
+    this.tools.set(callId, tool);
+    this.endThinking();
+    const preview = commandCodeToolPreview(tool, event.input);
+    this.emit({
+      type: "tool.started",
+      callId,
+      title: commandCodeToolTitle(tool, event.input),
+      kind: commandCodeToolKind(tool),
+      status: event.type === "tool_running" ? "in_progress" : "pending",
+      ...(preview ? { preview } : {}),
+    });
+    return callId;
+  }
+}
+
+function clip(text: string): string {
+  return text.length > MAX_TOOL_DETAIL
+    ? `${text.slice(0, MAX_TOOL_DETAIL)}\n…`
+    : text;
+}
+
+/** Print mode takes the whole prompt up front; a follow-up waits its turn. */
 export async function steerCommandCodeTurn(_input: SteerTurnInput): Promise<void> {
   throw new Error("Command Code does not support steering an in-flight turn");
 }
 
+/** Print mode never asks for approval; access is set per run. */
 export function respondCommandCodeApproval(
-  sessionId: string,
-  requestId: number,
-  decision: ApprovalDecision,
-): void {
-  liveByThread.get(sessionId)?.approvals.get(requestId)?.(decision);
-}
+  _sessionId: string,
+  _requestId: number,
+  _decision: ApprovalDecision,
+): void {}
 
+/**
+ * Stop ends this turn's process. The conversation stays bound: Command Code
+ * saves each finished step, so the next turn resumes from there.
+ */
 export async function cancelCommandCodeTurn(sessionId: string): Promise<void> {
-  const live = liveByThread.get(sessionId);
-  if (!live) {
-    cancelledThreads.add(sessionId);
-    return;
-  }
-  live.cancelled = true;
-  live.muteUpdates = true;
-  resolveApprovals(live);
-  await live.acp
-    .notify("session/cancel", { sessionId: live.acpSessionId })
-    .catch(() => undefined);
-  live.acp.rejectPending(new Error("cancelled"));
+  await stopCommandCodeSession(sessionId);
 }
 
 export async function stopCommandCodeSession(sessionId: string): Promise<void> {
-  cancelledThreads.delete(sessionId);
-  const live = liveByThread.get(sessionId);
-  liveByThread.delete(sessionId);
-  if (live) {
-    live.muteUpdates = true;
-    live.cancelled = true;
-    resolveApprovals(live);
-  }
-  live?.acp.close();
+  epochs.set(sessionId, epoch(sessionId) + 1);
+  activeByThread.get(sessionId)?.finish();
   unwatchChild(sessionId);
-  await killChild(sessionId).catch(() => undefined);
+  await killChild(sessionId).catch((): void => {});
 }
 
 export async function forgetCommandCodeSession(sessionId: string): Promise<void> {
-  resumeByThread.delete(sessionId);
   await stopCommandCodeSession(sessionId);
+  boundByThread.delete(sessionId);
+  serial.delete(sessionId);
 }
 
 export function bindCommandCodeSession(
   threadId: string,
-  acpSessionId: string,
+  providerSessionId: string,
   cwd: string,
 ): void {
-  const sessionId = acpSessionId.trim();
-  if (!threadId || !sessionId || !cwd.trim()) return;
-  resumeByThread.set(threadId, { acpSessionId: sessionId, cwd });
-}
-
-async function ensureLive(input: HarnessSessionInput): Promise<Live> {
-  const existing = liveByThread.get(input.sessionId);
-  if (existing && existing.cwd === input.cwd) {
-    existing.onEvent = input.onEvent;
-    existing.runtimeMode = input.runtimeMode;
-    existing.planning = input.intent === "plan";
-    return existing;
-  }
-  if (existing) {
-    resumeByThread.delete(input.sessionId);
-    await stopCommandCodeSession(input.sessionId);
-  }
-
-  const resume = resumeByThread.get(input.sessionId);
-  const canLoad = resume != null && resume.cwd === input.cwd;
-  if (resume && resume.cwd !== input.cwd) resumeByThread.delete(input.sessionId);
-
-  const { path } = await resolveCommandCodeBinary();
-  const handlers: AcpHandlers = {};
-  const acp = new AcpClient(input.sessionId, handlers);
-  const liveRef: { current: Live | null } = { current: null };
-  const muteGate = { current: false };
-
-  handlers.onNotification = (method, params) => {
-    const live = liveRef.current;
-    if (!live) return;
-    // Config changes stay tracked while muted so a replayed history cannot
-    // leave a stale effort or mode behind.
-    if (method === "session/update" && trackSessionState(live, params)) return;
-    if (muteGate.current || live.muteUpdates) return;
-    handleNotification(live, method, params);
-  };
-  handlers.onRequest = (id, method, params) => {
-    const live = liveRef.current;
-    if (!live) {
-      void acp
-        .respondError(id, {
-          code: -32601,
-          message: `Method not found: ${method}`,
-        })
-        .catch(() => undefined);
-      return;
-    }
-    void handleRequest(live, id, method, params);
-  };
-
-  const emit = (event: HarnessEvent) => {
-    (liveRef.current?.onEvent ?? input.onEvent)(event);
-  };
-  watchChild(
-    input.sessionId,
-    (line) => acp.pushLine(line),
-    (code) => {
-      const live = liveRef.current;
-      if (live) live.cancelled = true;
-      acp.close(new Error("Command Code exited"));
-      liveByThread.delete(input.sessionId);
-      emit({ type: "session.ended", code });
-    },
-    (line) => {
-      // `[acp] …` progress lines; failures arrive as JSON-RPC errors.
-      console.debug("[monocode] command-code stderr", line);
-    },
-  );
-
-  await spawnChild(
-    input.sessionId,
-    path,
-    ["acp"],
-    input.cwd,
-    undefined,
-    "command-code",
-  );
-
-  try {
-    try {
-      await acp.request(
-        "initialize",
-        {
-          protocolVersion: 1,
-          clientCapabilities: CLIENT_CAPABILITIES,
-          clientInfo: { name: "monocode", version: "0.1.0" },
-        },
-        INIT_TIMEOUT_MS,
-      );
-    } catch (error) {
-      throw commandCodeStartupError(error);
-    }
-
-    let setup: unknown;
-    let acpSessionId: string | undefined;
-    let didLoad = false;
-    if (canLoad && resume) {
-      // History replay would duplicate the transcript MonoCode already shows.
-      muteGate.current = true;
-      try {
-        setup = await acp.request(
-          "session/load",
-          { sessionId: resume.acpSessionId, cwd: input.cwd, mcpServers: [] },
-          SESSION_TIMEOUT_MS,
-        );
-        acpSessionId = commandCodeSessionId(setup) ?? resume.acpSessionId;
-        didLoad = true;
-      } catch {
-        setup = undefined;
-        acpSessionId = undefined;
-      } finally {
-        muteGate.current = false;
-      }
-    }
-
-    if (!acpSessionId) {
-      try {
-        setup = await acp.request(
-          "session/new",
-          { cwd: input.cwd, mcpServers: [] },
-          SESSION_TIMEOUT_MS,
-        );
-      } catch (error) {
-        throw commandCodeStartupError(error);
-      }
-      acpSessionId = commandCodeSessionId(setup);
-    }
-    if (!acpSessionId) throw new Error("Command Code did not return a session id");
-
-    const live: Live = {
-      subagents: new AcpSubagents(),
-      acp,
-      acpSessionId,
-      cwd: input.cwd,
-      modelId: commandCodeCurrentModelId(setup) ?? "",
-      modeId: commandCodeCurrentModeId(setup) ?? "",
-      configOptions: commandCodeConfigOptions(setup),
-      staleModel: "",
-      muteUpdates: didLoad,
-      cancelled: false,
-      runtimeMode: input.runtimeMode,
-      planning: input.intent === "plan",
-      onEvent: input.onEvent,
-      approvals: new Map(),
-      turns: Promise.resolve(),
-    };
-    liveRef.current = live;
-    liveByThread.set(input.sessionId, live);
-    if (!input.ephemeral) {
-      resumeByThread.set(input.sessionId, { acpSessionId, cwd: input.cwd });
-      live.onEvent({
-        type: "session.providerBound",
-        providerSessionId: acpSessionId,
-      });
-    }
-    live.onEvent({ type: "session.started" });
-    return live;
-  } catch (error) {
-    acp.close(error instanceof Error ? error : new Error(String(error)));
-    await stopCommandCodeSession(input.sessionId);
-    throw error;
-  }
-}
-
-async function applyModelSelection(
-  live: Live,
-  input: HarnessSessionInput,
-): Promise<void> {
-  const modelId = nativeModelId(input.model).trim();
-  if (modelId && modelId !== "default" && modelId !== live.modelId) {
-    try {
-      const result = await live.acp.request(
-        "session/set_model",
-        { sessionId: live.acpSessionId, modelId },
-        CONTROL_TIMEOUT_MS,
-      );
-      live.modelId = modelId;
-      refreshConfigOptions(live, result);
-    } catch (error) {
-      if (live.cancelled) throw error;
-      // A model the account lost (plan change, CLI update) must not fail
-      // every turn of a saved chat; keep the session's model and say so.
-      if (live.staleModel !== modelId) {
-        live.staleModel = modelId;
-        live.onEvent({
-          type: "status",
-          text: `Command Code did not accept the model "${modelId}"; using its current model. Pick another model to change it.`,
-        });
-      }
-    }
-  }
-
-  const effort = input.modelSettings?.effort?.trim();
-  if (!effort) return;
-  const option = live.configOptions.find((entry) => entry.id === "effort");
-  // Efforts differ per model; a value this model lacks keeps its own.
-  if (!option || option.currentValue === effort) return;
-  if (option.choices.length > 0 && !option.choices.includes(effort)) return;
-  const result = await live.acp.request(
-    "session/set_config_option",
-    { sessionId: live.acpSessionId, configId: "effort", value: effort },
-    CONTROL_TIMEOUT_MS,
-  );
-  option.currentValue = effort;
-  refreshConfigOptions(live, result);
-}
-
-function refreshConfigOptions(live: Live, result: unknown): void {
-  const options = commandCodeConfigOptions(result);
-  if (options.length > 0) live.configOptions = options;
-}
-
-async function applyRuntimeMode(
-  live: Live,
-  runtimeMode: RuntimeMode,
-  planning: boolean,
-): Promise<void> {
-  const modeId = commandCodeModeId(runtimeMode, planning);
-  if (modeId === live.modeId) return;
-  // Fail closed: a rejected downgrade must not leave bypass active.
-  await live.acp.request(
-    "session/set_mode",
-    { sessionId: live.acpSessionId, modeId },
-    CONTROL_TIMEOUT_MS,
-  );
-  live.modeId = modeId;
-}
-
-async function prompt(live: Live, input: SendTurnInput): Promise<void> {
-  const blocks = commandCodePromptBlocks(input.text, input.attachments);
-  if (blocks.length === 0) return;
-  try {
-    const pending = live.acp.request(
-      "session/prompt",
-      { sessionId: live.acpSessionId, prompt: blocks },
-      PROMPT_TIMEOUT_MS,
-    );
-    input.onAccepted?.();
-    const result = await pending;
-    if (live.cancelled) return;
-    const stopReason = asRecord(result)?.stopReason;
-    if (stopReason === "cancelled") return;
-    if (stopReason === "refusal" || stopReason === "max_tokens") {
-      live.onEvent({
-        type: "session.error",
-        message:
-          stopReason === "refusal"
-            ? "Command Code's model declined this request."
-            : "Command Code stopped: the reply hit the model's length limit.",
-      });
-    }
-    live.onEvent({ type: "message.completed" });
-    live.onEvent({ type: "reasoning.completed" });
-  } catch (error) {
-    if (live.cancelled) return;
-    live.onEvent({ type: "session.error", message: commandCodeTurnError(error) });
-    throw error;
-  }
-}
-
-/** Keep mode and config state current; true when the update is consumed. */
-function trackSessionState(live: Live, params: unknown): boolean {
-  const update = asRecord(asRecord(params)?.update);
-  if (update?.sessionUpdate === "config_option_update") {
-    refreshConfigOptions(live, update);
-    return true;
-  }
-  if (update?.sessionUpdate === "current_mode_update") {
-    const mode = update.currentModeId;
-    if (typeof mode === "string") live.modeId = mode;
-    return true;
-  }
-  return update?.sessionUpdate === "available_commands_update";
-}
-
-function handleNotification(live: Live, method: string, params: unknown): void {
-  if (method !== "session/update") return;
-  const events = eventsFromAcpUpdate(params);
-  for (const event of live.subagents.route(params, events)) {
-    live.onEvent(event);
-  }
-}
-
-async function handleRequest(
-  live: Live,
-  id: number,
-  method: string,
-  params: unknown,
-): Promise<void> {
-  if (method === "session/request_permission") {
-    await handlePermission(live, id, params);
-    return;
-  }
-  await live.acp
-    .respondError(id, { code: -32601, message: `Method not found: ${method}` })
-    .catch(() => undefined);
-}
-
-async function handlePermission(
-  live: Live,
-  id: number,
-  params: unknown,
-): Promise<void> {
-  const request = permissionRequestFromAcp(params);
-  if (request.callId) {
-    live.onEvent({
-      type: "tool.updated",
-      callId: request.callId,
-      title: request.title,
-      kind: request.kind,
-      preview: request.preview,
-    });
-  }
-
-  if (live.planning) {
-    const readOnly = request.kind === "read" || request.kind === "search";
-    await respondPermission(
-      live,
-      id,
-      permissionOptionId(readOnly ? "allow" : "deny", request.optionIds),
-    );
-    return;
-  }
-
-  const automatic = pickAutoOption(live.runtimeMode, request.kind, request.optionIds);
-  if (automatic) {
-    await respondPermission(live, id, automatic);
-    return;
-  }
-
-  live.onEvent({
-    type: "approval.requested",
-    requestId: id,
-    title: request.title,
-    kind: request.kind,
-    callId: request.callId,
-    preview: request.preview,
-  });
-  const decision = await new Promise<ApprovalDecision>((resolve) => {
-    live.approvals.set(id, resolve);
-  });
-  live.approvals.delete(id);
-  live.onEvent({ type: "approval.resolved", requestId: id, decision });
-  await respondPermission(live, id, permissionOptionId(decision, request.optionIds));
-}
-
-async function respondPermission(
-  live: Live,
-  id: number,
-  optionId: string,
-): Promise<void> {
-  await live.acp.respond(id, {
-    outcome: { outcome: "selected", optionId },
-  });
-}
-
-function resolveApprovals(live: Live): void {
-  for (const resolve of live.approvals.values()) resolve("deny");
-  live.approvals.clear();
+  const id = providerSessionId.trim();
+  if (!threadId || !id || !cwd.trim()) return;
+  boundByThread.set(threadId, { id, cwd });
 }

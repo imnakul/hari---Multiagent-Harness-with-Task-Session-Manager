@@ -35,6 +35,13 @@ export type AgentModel = {
   settings?: ModelSetting[];
   /** Context window, when the harness catalog reports one. */
   contextWindow?: number;
+  /**
+   * Fork (L-259): listed but not usable on the account's plan. Pickers show
+   * it greyed with `reason` and never select it.
+   */
+  locked?: { reason: string };
+  /** Fork (L-259): the provider marks this model as costing nothing. */
+  badge?: "free";
 };
 
 export const MODELS: AgentModel[] = [

@@ -30,6 +30,7 @@ import {
   type HarnessId,
 } from "../../sessions/model/session";
 import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
+import { ModelBadges } from "../../sessions/ui/ModelBadges";
 import {
   filterQuickModels,
   QUICK_COMPOSER_CATALOG_REQUEST_EVENT,
@@ -127,7 +128,7 @@ export function QuickModelSelector({
     });
   };
   const enabled = (item: AgentModel) =>
-    availableHarnesses?.includes(item.harness) ?? false;
+    !item.locked && (availableHarnesses?.includes(item.harness) ?? false);
 
   useEffect(() => {
     searchRef.current?.focus({ preventScroll: true });
@@ -283,6 +284,7 @@ export function QuickModelSelector({
                   role="option"
                   aria-selected={item.id === model.id}
                   disabled={!enabled(item)}
+                  title={item.locked?.reason}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => pick(item)}
                   className="flex min-w-0 flex-1 items-center gap-2 px-2 text-left text-[13px] text-content disabled:opacity-35"
@@ -294,6 +296,7 @@ export function QuickModelSelector({
                     />
                   ) : null}
                   <span className="truncate">{item.name}</span>
+                  <ModelBadges model={item} />
                   {item.provider ? (
                     <span className="ml-auto truncate text-[11px] text-content/40">
                       {item.provider.name}

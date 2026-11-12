@@ -1,202 +1,217 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { HarnessEvent, SendTurnInput } from "../../core/types";
 
-const sent: string[] = [];
-let onLine: ((line: string) => void) | undefined;
+type Spawn = { id: string; args: string[]; cwd: string };
 
-vi.mock("../../core/child", () => ({
-  resolveCommandCodeBinary: async () => ({ path: "/fake/cmdc" }),
-  spawnChild: async () => undefined,
-  killChild: async () => undefined,
-  unwatchChild: () => undefined,
-  watchChild: (_id: string, line: (value: string) => void) => {
-    onLine = line;
-  },
-  writeChild: async (_id: string, line: string) => {
-    sent.push(line);
+const { spawns, writes, handlers } = vi.hoisted(() => ({
+  spawns: [] as Spawn[],
+  writes: [] as { line: string; close: boolean }[],
+  handlers: {} as {
+    line?: (value: string) => void;
+    exit?: (code: number | null) => void;
+    stderr?: (value: string) => void;
   },
 }));
 
-const { sendCommandCodeTurn, stopCommandCodeSession } = await import("./commandCode");
-import type { HarnessEvent } from "../../core/types";
+vi.mock("../../core/child", () => ({
+  resolveCommandCodeBinary: async () => ({ path: "/fake/cmdc" }),
+  spawnChild: async (id: string, _path: string, args: string[], cwd: string) => {
+    spawns.push({ id, args, cwd });
+  },
+  killChild: async () => undefined,
+  unwatchChild: () => undefined,
+  watchChild: (
+    _id: string,
+    line: (value: string) => void,
+    exit: (code: number | null) => void,
+    stderr?: (value: string) => void,
+  ) => {
+    handlers.line = line;
+    handlers.exit = exit;
+    handlers.stderr = stderr;
+  },
+  writeChild: async (_id: string, line: string, close = false) => {
+    writes.push({ line, close });
+  },
+}));
 
-type Sent = {
-  id?: number;
-  method?: string;
-  params?: Record<string, unknown>;
-  result?: unknown;
-};
+const { forgetCommandCodeSession, sendCommandCodeTurn } = await import(
+  "./commandCode"
+);
+const { setHarnessModels } = await import(
+  "../../../../features/sessions/model/models"
+);
 
-const parse = (): Sent[] => sent.map((line) => JSON.parse(line) as Sent);
-const requests = (method: string) => parse().filter((message) => message.method === method);
-
-function reply(id: number | undefined, result: unknown) {
-  onLine!(JSON.stringify({ jsonrpc: "2.0", id, result }));
-}
-
-function replyError(id: number | undefined, message: string) {
-  onLine!(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32602, message } }));
-}
-
-function notify(update: Record<string, unknown>) {
-  onLine!(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "session/update",
-      params: { sessionId: "cc-1", update },
-    }),
-  );
-}
+const event = (value: Record<string, unknown>) =>
+  handlers.line!(JSON.stringify({ type: "event", event: value }));
+const result = (value: Record<string, unknown>) =>
+  handlers.line!(JSON.stringify({ type: "result", ...value }));
 
 async function waitFor(predicate: () => boolean, label: string) {
   for (let index = 0; index < 200; index += 1) {
     if (predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  throw new Error(
-    `timed out waiting for ${label}; sent=${JSON.stringify(parse().map((message) => message.method ?? `reply:${message.id}`))}`,
-  );
+  throw new Error(`timed out waiting for ${label}`);
 }
 
-async function next(method: string, count = 1): Promise<Sent> {
-  await waitFor(() => requests(method).length >= count, method);
-  return requests(method)[count - 1]!;
-}
-
-async function start() {
-  reply((await next("initialize")).id, { protocolVersion: 1 });
-  reply((await next("session/new")).id, {
-    sessionId: "cc-1",
-    modes: { currentModeId: "default" },
-    models: { currentModelId: "stealth/glyph-cluster:free" },
-    configOptions: [
-      {
-        id: "effort",
-        type: "select",
-        currentValue: "low",
-        options: [{ value: "low" }, { value: "medium" }, { value: "high" }],
-      },
-    ],
-  });
-}
-
-describe("Command Code live ACP sequence", () => {
-  beforeEach(() => {
-    sent.length = 0;
-    onLine = undefined;
-  });
-
-  it("selects model, effort and mode, then streams the reply", async () => {
-    const events: HarnessEvent[] = [];
-    const turn = sendCommandCodeTurn({
-      sessionId: "cc-live-new",
-      cwd: "/repo",
-      model: "command-code:claude-sonnet-5-5",
-      modelSettings: { effort: "high" },
-      runtimeMode: "auto-accept-edits",
-      text: "inspect this",
-      onEvent: (event) => events.push(event),
-    });
-    await start();
-
-    const setModel = await next("session/set_model");
-    expect(setModel.params).toEqual({ sessionId: "cc-1", modelId: "claude-sonnet-5-5" });
-    reply(setModel.id, {});
-
-    const setEffort = await next("session/set_config_option");
-    expect(setEffort.params).toEqual({ sessionId: "cc-1", configId: "effort", value: "high" });
-    reply(setEffort.id, {});
-
-    const setMode = await next("session/set_mode");
-    expect(setMode.params?.modeId).toBe("auto-accept");
-    reply(setMode.id, {});
-
-    const prompt = await next("session/prompt");
-    expect(prompt.params?.prompt).toEqual([{ type: "text", text: "inspect this" }]);
-    notify({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "pong" } });
-    reply(prompt.id, { stopReason: "end_turn" });
-    await turn;
-
-    expect(events).toContainEqual({ type: "session.providerBound", providerSessionId: "cc-1" });
-    expect(events.some((event) => event.type === "message.delta")).toBe(true);
-    expect(events).toContainEqual({ type: "message.completed" });
-    await stopCommandCodeSession("cc-live-new");
-  });
-
-  it("keeps the session's model when Command Code rejects a saved one", async () => {
-    const events: HarnessEvent[] = [];
-    const turn = sendCommandCodeTurn({
-      sessionId: "cc-live-stale",
-      cwd: "/repo",
-      model: "command-code:retired/model",
-      // Not offered by this model: skipped instead of failing the turn.
-      modelSettings: { effort: "xhigh" },
-      runtimeMode: "supervised",
-      text: "hi",
-      onEvent: (event) => events.push(event),
-    });
-    await start();
-
-    replyError((await next("session/set_model")).id, "Unknown model");
-    const prompt = await next("session/prompt");
-    expect(requests("session/set_config_option")).toHaveLength(0);
-    // Supervised maps to Command Code's own default mode, so no switch.
-    expect(requests("session/set_mode")).toHaveLength(0);
-    reply(prompt.id, { stopReason: "end_turn" });
-    await turn;
-
-    expect(
-      events.some(
-        (event) => event.type === "status" && event.text.includes("retired/model"),
-      ),
-    ).toBe(true);
-    await stopCommandCodeSession("cc-live-stale");
-  });
-
-  it("runs plan turns in plan mode, denies edits, and stays unbound when ephemeral", async () => {
-    const events: HarnessEvent[] = [];
-    const turn = sendCommandCodeTurn({
-      sessionId: "cc-live-plan",
+function turn(
+  overrides: Partial<SendTurnInput> = {},
+): { input: SendTurnInput; events: HarnessEvent[] } {
+  const events: HarnessEvent[] = [];
+  return {
+    events,
+    input: {
+      sessionId: "chat-1",
       cwd: "/repo",
       model: "command-code:default",
       runtimeMode: "full-access",
-      intent: "plan",
-      ephemeral: true,
-      text: "plan it",
-      onEvent: (event) => events.push(event),
+      text: "Fix the bug",
+      onEvent: (value) => events.push(value),
+      ...overrides,
+    },
+  };
+}
+
+/**
+ * Starts a turn and waits until its prompt went over stdin. The turn is
+ * wrapped so awaiting this helper doesn't also await the whole turn.
+ */
+async function start(input: SendTurnInput): Promise<{ running: Promise<void> }> {
+  const before = writes.length;
+  const running = sendCommandCodeTurn(input);
+  running.catch(() => undefined);
+  await waitFor(() => writes.length > before, "prompt write");
+  return { running };
+}
+
+beforeEach(async () => {
+  await forgetCommandCodeSession("chat-1");
+  spawns.length = 0;
+  writes.length = 0;
+});
+
+describe("Command Code headless turns", () => {
+  it("sends the prompt over stdin, streams the reply and binds the session", async () => {
+    const { input, events } = turn();
+    const { running } = await start(input);
+    expect(spawns[0]!.args).toContain("--yolo");
+    expect(spawns[0]!.args).not.toContain("--resume");
+    expect(writes[0]).toEqual({ line: "Fix the bug", close: true });
+
+    event({ type: "run_start", sessionId: "cc-1" });
+    event({ type: "thinking_delta", delta: "Looking" });
+    event({
+      type: "tool_running",
+      toolCallId: "t1",
+      toolName: "read_file",
+      input: { file_path: "src/a.ts" },
     });
-    await start();
+    event({
+      type: "tool_completed",
+      toolCallId: "t1",
+      result: [{ type: "text", text: "contents" }],
+    });
+    event({ type: "text_delta", delta: "Fixed." });
+    result({
+      subtype: "success",
+      sessionId: "cc-1",
+      finalText: "Fixed.",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    });
+    handlers.exit!(0);
+    await running;
 
-    const setMode = await next("session/set_mode");
-    expect(setMode.params?.modeId).toBe("plan");
-    reply(setMode.id, {});
-    const prompt = await next("session/prompt");
-    expect(requests("session/set_model")).toHaveLength(0);
-
-    onLine!(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        id: 900,
-        method: "session/request_permission",
-        params: {
-          sessionId: "cc-1",
-          toolCall: { toolCallId: "edit-1", title: "Edit src/a.ts", kind: "edit" },
-          options: [
-            { optionId: "allow-once", kind: "allow_once", name: "Allow" },
-            { optionId: "reject-once", kind: "reject_once", name: "Reject" },
-          ],
-        },
+    expect(events).toContainEqual({
+      type: "session.providerBound",
+      providerSessionId: "cc-1",
+    });
+    expect(events).toContainEqual({ type: "reasoning.completed" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.started",
+        callId: "t1",
+        title: "Read src/a.ts",
+        kind: "read",
       }),
     );
-    await waitFor(() => parse().some((message) => message.id === 900), "permission reply");
-    const answer = parse().find((message) => message.id === 900)!;
-    expect(answer.result).toEqual({
-      outcome: { outcome: "selected", optionId: "reject-once" },
+    expect(events).toContainEqual({
+      type: "tool.updated",
+      callId: "t1",
+      status: "completed",
+      detail: "contents",
     });
+    expect(events.filter((value) => value.type === "message.delta")).toEqual([
+      { type: "message.delta", text: "Fixed." },
+    ]);
+    expect(events).toContainEqual({ type: "message.completed" });
+    expect(events).toContainEqual(expect.objectContaining({ type: "usage" }));
 
-    reply(prompt.id, { stopReason: "end_turn" });
-    await turn;
-    expect(events.some((event) => event.type === "session.providerBound")).toBe(false);
-    expect(events.some((event) => event.type === "approval.requested")).toBe(false);
-    await stopCommandCodeSession("cc-live-plan");
+    // The next turn continues the same Command Code conversation.
+    const { running: second } = await start(turn({ text: "Thanks" }).input);
+    expect(spawns[1]!.args).toEqual(expect.arrayContaining(["--resume", "cc-1"]));
+    result({ subtype: "success", sessionId: "cc-1", finalText: "Welcome" });
+    handlers.exit!(0);
+    await second;
+  });
+
+  it("starts fresh when Command Code never saved the session", async () => {
+    const { input, events } = turn({
+      nativeResume: { providerSessionId: "gone" },
+    } as Partial<SendTurnInput>);
+    const running = sendCommandCodeTurn(input);
+    await waitFor(() => writes.length === 1, "first write");
+    expect(spawns[0]!.args).toEqual(expect.arrayContaining(["--resume", "gone"]));
+    handlers.stderr!("error: No session gone found to resume");
+    handlers.exit!(1);
+    await waitFor(() => writes.length === 2, "retry write");
+    expect(spawns[1]!.args).not.toContain("--resume");
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "status", text: expect.stringMatching(/starts fresh/) }),
+    );
+    result({ subtype: "success", sessionId: "cc-2", finalText: "Hi" });
+    handlers.exit!(0);
+    await running;
+  });
+
+  it("explains Read only blocks instead of failing the turn", async () => {
+    const { input, events } = turn({ runtimeMode: "supervised" });
+    const { running } = await start(input);
+    expect(spawns[0]!.args).not.toContain("--yolo");
+    event({
+      type: "tool_errored",
+      toolCallId: "t1",
+      toolName: "edit_file",
+      error: "This tool requires permissions. Use --yolo to allow it.",
+    });
+    result({ subtype: "success", sessionId: "cc-3", finalText: "I can't edit." });
+    handlers.exit!(0);
+    await running;
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "status", key: "command-code-access" }),
+    );
+  });
+
+  it("fails with a readable message when the run errors", async () => {
+    const { running } = await start(turn().input);
+    handlers.exit!(5);
+    await expect(running).rejects.toThrow(/rate limited/);
+  });
+
+  it("refuses a model the plan can't run before starting Command Code", async () => {
+    setHarnessModels("command-code", [
+      { id: "command-code:default", harness: "command-code", name: "Account default", nativeId: "" },
+      {
+        id: "command-code:claude-opus-5-5",
+        harness: "command-code",
+        name: "Claude Opus 5.5",
+        nativeId: "claude-opus-5-5",
+        locked: { reason: "Pay per use" },
+      },
+    ]);
+    await expect(
+      sendCommandCodeTurn(turn({ model: "command-code:claude-opus-5-5" }).input),
+    ).rejects.toThrow(/Pay per use/);
+    expect(spawns).toHaveLength(0);
   });
 });
