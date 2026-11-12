@@ -100,3 +100,33 @@ discovery, session import, Activity notes (stay on agy), Hari phone UI changes.
 
 ## Done
 - 2026-11-12 10:02 (IST): code, tests and records complete; uncommitted. Desktop check is the open item (checklist in the changelog entry).
+
+## Headless rewrite, plan locks, copy and drag (L-258 to L-261)
+
+Added 2026-11-12 16:40 (IST). User decisions: "we are on Go plan, other ones, u can show greyed and locked, and show Free badge, whereever possible"; "Hide/Lock pay per use ones also"; "we dont use supervised mode at all"; Muse Ember must be usable; "Dragg - do inside monocode only, and fix the bug, leave to other apps". Reply "go" to the plan.
+
+- Goal: Command Code chats can use every model the CLI offers on the Go plan (ACP listed fewer, so Muse Ember was missing), locked models are visible but can't be picked, sent images can be copied after a restart and dragged onto a composer.
+- User story: As a Go-plan Command Code user, I want the full model list with clear Free and locked marks so that I pick a model that will run.
+- Acceptance criteria:
+  - Each turn runs `cmdc -p --output-format json` with the prompt on stdin (closed after writing), `--resume <id>` for follow-ups, `--fork-session` for a fork, `--no-session` for helpers. Full access adds `--yolo`; Read only (`supervised`) doesn't; Plan adds `--permission-mode plan` and never `--yolo`.
+  - Text, reasoning, tool rows (title, kind, preview, output), context use and usage stream into the chat. A Read only turn that hit a blocked tool shows how to switch to Full access.
+  - A resume Command Code doesn't know (it saved no step) restarts fresh once, with a status line.
+  - Exit codes 3/5/6/7/8/10 give an actionable message.
+  - The picker reads Command Code's cached catalog: hidden models skipped, "Account default (<model>)" first, provider groups, efforts, context window. Go-plan models are usable; other plans show greyed with a lock and "Needs <Plan> plan"; pay-per-use ones show "Pay per use". Free models get a Free pill. Locked models sit after usable ones and can't be picked by click or Enter; a chat saved with one fails before starting `cmdc`.
+  - Copy on a sent message copies its images even after a restart (read from the saved path); a missing file is skipped and the text still copies.
+  - A sent image or file chip (not a composer chip) can be dragged onto any chat composer in MonoCode, which attaches it; Escape cancels; the drag doesn't open the lightbox.
+- States: no catalog cache yet (only Account default); locked model selected in an old chat (error before run); file gone (copy skips it); drop outside a composer (nothing).
+- Out of scope: approval prompts (print mode has none, so the access choices are Read only and Full access), steering a running turn, reading the account's real plan (fixed to Go, `TODO(nakul)`), dragging out to other apps.
+- Open questions: none.
+
+### Learnings (headless)
+- `cmdc -p` reads the whole prompt from stdin and starts at EOF, so `harness_write` gained `close` (drops the child's stdin).
+- The catalog cache `~/.commandcode/cache/model-catalog/v1/catalog-*.json` has `minimumPlan` (`individual-go`, `-pro`, `-goat`, `-max`, `-provider` = pay per use), `display.badge` (`free`), `display.group`, `reasoningEfforts` and `hidden`. Most `:free` variants are hidden; Command Code's own picker hides them too.
+- Windows: the `.cmd` shim runs through `cmd.exe`, so ids passed as arguments are limited to `[A-Za-z0-9._:/@+-]`.
+
+### Todos (headless)
+- [x] Runtime, protocol, stdin close (Rust + host), access modes
+- [x] Catalog command, parser, locks, Free pill, picker and quick composer selector
+- [x] Copy after restart (L-260), drag chips onto a composer (L-261)
+- [x] Tests, tsc, vitest, cargo test, rustfmt
+- [ ] Desktop check (manual, Nakul)

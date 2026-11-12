@@ -1,5 +1,45 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-12 16:33 IST — Command Code headless with every model; Free and locked models; copy and drag of sent images (L-258 to L-261)
+- Type: feature
+- What: Command Code chats now run the CLI directly for each message and continue the same conversation, so the model picker lists every model the Go plan can use (Muse Ember included). Models from other plans show greyed with a lock and a reason ("Needs Pro plan", "Pay per use") and can't be picked; free models carry a Free pill. Access is Read only or Full access; Plan never edits. Copying a sent message now includes its images after a restart, and a sent image or file can be dragged onto any chat's composer to attach it again.
+- Why: The user is on Command Code's Go plan and wanted every usable model (the old ACP connection listed fewer), locked plan and pay-per-use models, Free badges, a fix for copying images after a restart, and dragging images inside MonoCode. Supervised approvals are not used, so print mode's lack of approval prompts is fine.
+- Files: [commandCode.ts](src/integrations/harness/providers/command-code/commandCode.ts), [commandCodeProtocol.ts](src/integrations/harness/providers/command-code/commandCodeProtocol.ts), [commandCodeCatalog.ts](src/integrations/harness/providers/command-code/commandCodeCatalog.ts), [command_code.rs](src-tauri/src/command_code.rs), [harness.rs](src-tauri/src/harness.rs), [lib.rs](src-tauri/src/lib.rs), [child-backend.ts](host/child-backend.ts), [child.ts](src/integrations/harness/core/child.ts), [models.ts](src/features/sessions/model/models.ts), [session.ts](src/features/sessions/model/session.ts), [ModelBadges.tsx](src/features/sessions/ui/ModelBadges.tsx), [ModelPicker.tsx](src/features/sessions/ui/ModelPicker.tsx), [QuickModelSelector.tsx](src/features/quick-composer/ui/QuickModelSelector.tsx), [clipboard.ts](src/platform/tauri/clipboard.ts), [usePathPointerDrag.ts](src/features/sessions/hooks/usePathPointerDrag.ts), [AttachmentChip.tsx](src/features/sessions/ui/AttachmentChip.tsx), [WhiteboardChat.tsx](src/features/whiteboard/ui/WhiteboardChat.tsx); tests `commandCodeProtocol.test.ts`, `commandCodeLive.test.ts`, `commandCodeCatalog.test.ts`, `clipboard.test.ts`; spec [command-code-plan.md](docs/specs/command-code-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (full suite 8143 passed; iconCatalog timed out under load, passes alone) cargo test (targeted) ✅ rustfmt ✅ lint — (no config); desktop check manual
+
+## 2026-11-12 11:26 IST — Fix older images going blank in long chats (L-257)
+- Type: fix
+- What: In a chat with many images, the older ones showed as broken thumbnails and opened to an empty full-screen view, though the files were still on disk. They now stay visible.
+- Why: The user asked why past images in an Interactive Claude chat could not be seen. Images saved only as a path are loaded into a short-lived link, and at most 50 are kept; past 50 the oldest link was thrown away even while its image was still on screen. That chat had 60 images. Images now keep their link while they are shown. Every chat type had the bug, not only Interactive Claude.
+- Files: [attachments.ts (lines 255–299)](src/features/sessions/model/attachments.ts:255), [AttachmentChip.tsx (lines 13–16, 34–46)](src/features/sessions/ui/AttachmentChip.tsx:13), [WhiteboardChat.tsx (lines 15–22, 96–108)](src/features/whiteboard/ui/WhiteboardChat.tsx:96), [attachments.test.ts (lines 290–325)](src/features/sessions/model/attachments.test.ts:290)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (sessions + whiteboard 2079/2079; the new test fails without the fix) lint — (no config) desktop check manual
+
+## 2026-11-12 11:21 IST — Fix Command Code shown as "not found" in Settings
+- Type: fix
+- What: Settings → Providers said Command Code CLI (cmdc) was not found, though it was installed and logged in and chats with it worked. The availability check now finds `cmdc` like every other provider.
+- Why: The check (`harness_probe_provider`) had its own list of providers and Command Code was missing from it, so it answered "Unknown harness provider" and the pane showed the install hint. Chats used a different lookup, which is why they worked. Part of L-255.
+- Files: [harness.rs (lines 1002–1007, test 2300–2318)](src-tauri/src/harness.rs:1002)
+- Commit: uncommitted
+- Verified: cargo check ✅ rustfmt ✅ `provider_probe_knows_command_code` ✅ live probe finds `cmdc.cmd` ✅ lint — (no config) desktop check manual
+
+## 2026-11-12 10:39 IST — Hari release 0.16.0-local41 (Command Code provider)
+- Type: chore
+- What: Published `hari-v0.16.0-local41` (run 43157267463) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160041), `latest.json`, `hari-android.json`.
+- Why: Ships Command Code as a chat provider and AI helper (L-255). The user asked to push so GitHub builds a version to update to and check.
+- Files: version bump in `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`
+- Commit: 928bf3b8
+- Verified: CI ✅ (all four jobs); `latest.json` and `hari-android.json` served from releases/latest with 0.16.0-local41 ✅; desktop and phone checks manual
+
+## 2026-11-12 10:32 IST — Zen: the chat dropdown shows the open chat first (L-256)
+- Type: feature
+- What: In Zen, a pane's chat dropdown now lists the chat that's open in that pane at the top, outlined in your accent colour with a "Current" tag and a line under it. Choosing it just closes the dropdown. Before, the open chat was missing from the list.
+- Why: User request: show the current session at the top of the dropdown, with a border, so it's clear which one is active.
+- Files: [ZenView.tsx (lines 230–266, 829)](src/features/zen/ui/ZenView.tsx:230), [FocusPicker.tsx (lines 72, 714, 736)](src/features/focus/ui/FocusPicker.tsx:72), [FocusPicker.test.ts (line 162)](src/features/focus/ui/FocusPicker.test.ts:162)
+- Commit: uncommitted
+- Verified: typecheck ✅ vitest focus + zen 121/121 ✅ lint — (no ESLint config in the repo); desktop check manual
+
 ## 2026-11-12 10:02 IST — Command Code as a provider and AI helper (L-255)
 - Type: feature
 - What: Command Code (`cmdc`) is a new provider. In the model picker it lists the account's models (its current one first), Effort, and works with every access level and Plan, approvals, cancel and resume after a restart. Settings → AI helper can use it for Session overview, Improve prompt and Continue; those replies run in Plan mode in an empty folder and fail if it tries to use a tool. If `cmdc` isn't installed, the message says how to install it and sign in. Chats and helper tasks on Command Code send their text to Command Code's servers.
