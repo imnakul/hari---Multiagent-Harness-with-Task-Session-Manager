@@ -1,5 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-12 10:02 IST — Command Code as a provider and AI helper (L-255)
+- Type: feature
+- What: Command Code (`cmdc`) is a new provider. In the model picker it lists the account's models (its current one first), Effort, and works with every access level and Plan, approvals, cancel and resume after a restart. Settings → AI helper can use it for Session overview, Improve prompt and Continue; those replies run in Plan mode in an empty folder and fail if it tries to use a tool. If `cmdc` isn't installed, the message says how to install it and sign in. Chats and helper tasks on Command Code send their text to Command Code's servers.
+- Why: The user bought a Command Code subscription and asked to use it like the other providers and as the AI helper.
+- Files: [commandCode.ts (line 78)](src/integrations/harness/providers/command-code/commandCode.ts:78), [commandCodeProtocol.ts](src/integrations/harness/providers/command-code/commandCodeProtocol.ts), [commandCodeCatalog.ts](src/integrations/harness/providers/command-code/commandCodeCatalog.ts), [commandCodeHelper.ts](src/integrations/harness/providers/command-code/commandCodeHelper.ts), [commandCodeAdapter.ts](src/integrations/harness/providers/command-code/commandCodeAdapter.ts), [session.ts (line 36)](src/features/sessions/model/session.ts:36), [settings.ts (line 1122)](src/features/settings/model/settings.ts:1122), [helperIsolation.ts (line 20)](src/integrations/harness/core/helperIsolation.ts:20), [HarnessIcon.tsx (line 165)](src/features/sessions/ui/HarnessIcon.tsx:165), [command-code.svg](src/assets/providers/command-code.svg), [harness.rs (lines 1036, 3598)](src-tauri/src/harness.rs:1036), [command_code.rs](src-tauri/src/command_code.rs), plus `models.ts`, `availability.ts`, `availabilityState.ts`, `child.ts`, `cliVersions.ts`, `register.ts`, `providerBinaryPaths.ts`, `lib.rs`; spec [command-code-plan.md](docs/specs/command-code-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ vitest ✅ (18 new tests; 5 list/height expectations updated for the extra provider; full run otherwise green) cargo check ✅ cargo test command_code ✅ rustfmt (new code) ✅ lint — (no ESLint config in the repo); desktop check manual
+
+## 2026-11-12 08:45 IST — Hari release 0.16.0-local40 (Activity scroll, Live Updates permission)
+- Type: chore
+- What: Published `hari-v0.16.0-local40` (run 43091495606) as the latest release: desktop installer with updater signature, Hari APK (versionCode 160040), `latest.json`, `hari-android.json`. local39 has a tag but no release (its run failed at Version; see the 01:23 entry).
+- Why: Ships Activity notes and log scrolling in place with an All | Notes switch (L-253) and the foreground-service permission Live Updates need (L-254). The user asked to push a new release including the Activity changes.
+- Files: version bump in `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`
+- Commit: b05b2192
+- Verified: CI ✅ (all four jobs); `latest.json` and `hari-android.json` served from releases/latest with 0.16.0-local40 ✅; desktop and phone checks manual
+
 ## 2026-11-12 01:23 IST — Hari release run failed on local39; config fix, release as local40 (L-254)
 - Type: fix
 - What: The local39 release stopped at its first step (run 43091034448), before building anything, so nothing was published. That step reads the phone app's settings file before any package is installed, and the L-254 change made the file load an Expo package. The list of Live Update permissions now sits in a small file of its own, and a test checks that the settings file loads without any package. The release goes out as 0.16.0-local40; the `hari-v0.16.0-local39` tag stays on GitHub without a release.
