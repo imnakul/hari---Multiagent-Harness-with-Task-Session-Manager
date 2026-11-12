@@ -1030,6 +1030,20 @@ pub fn harness_resolve_hermes() -> Result<CursorBinary, String> {
         })
 }
 
+/// Fork (L-255): resolve the Command Code CLI. On Windows `cmd` is the system
+/// shell, so the npm package installs its launcher as `cmdc`.
+#[tauri::command(async)]
+pub fn harness_resolve_command_code() -> Result<CursorBinary, String> {
+    resolve_command_code()
+        .map(|path| CursorBinary {
+            path: path.to_string_lossy().into_owned(),
+        })
+        .ok_or_else(|| {
+            "Command Code CLI not found. Install it with `npm i -g command-code`, run `cmdc login`, then retry."
+                .into()
+        })
+}
+
 /// Resolve Cognition's Devin CLI (`devin`).
 #[tauri::command(async)]
 pub fn harness_resolve_devin() -> Result<CursorBinary, String> {
@@ -2671,6 +2685,7 @@ fn is_harness_argv_token(part: &str) -> bool {
             | "fx"
             | "hermes"
             | "devin"
+            | "cmdc"
             | "pi"
             | "worker-server"
             | "app-server"
@@ -2913,6 +2928,7 @@ fn resolve_harness_binary_default(provider: &str) -> Option<PathBuf> {
         "antigravity-cli" => resolve_antigravity_cli(),
         "cline" => resolve_cline(),
         "devin" => resolve_devin(),
+        "command-code" => resolve_command_code(),
         _ => None,
     }
 }
@@ -2957,6 +2973,7 @@ fn resolve_harness_binary_override(provider: &str, binary_path: &str) -> Result<
         "cline" => &["cline"],
         "antigravity-cli" => &["agy"],
         "devin" => &["devin"],
+        "command-code" => &["cmdc", "commandcode", "command-code"],
         _ => {
             return Err(format!(
                 "Unsupported configured harness provider: {provider}"
@@ -3572,6 +3589,38 @@ fn resolve_hermes() -> Option<PathBuf> {
     candidates.push(PathBuf::from("/usr/bin/hermes"));
     candidates.push(PathBuf::from("/snap/bin/hermes"));
     if let Some(from_shell) = which_via_login_shell("hermes") {
+        candidates.push(from_shell);
+    }
+
+    first_binary(candidates)
+}
+
+fn resolve_command_code() -> Option<PathBuf> {
+    let home = dirs_home().map(PathBuf::from);
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // PATH first so the npm shim (`%APPDATA%\npm\cmdc.cmd`) resolves per user;
+    // the explicit npm folders cover GUI launches with a stale PATH.
+    #[cfg(windows)]
+    if let Some(found) = which_in_path(&gui_search_path(), "cmdc") {
+        candidates.push(found);
+    }
+    if let Some(home) = &home {
+        candidates.push(home.join(".local/bin/cmdc"));
+        candidates.push(home.join(".npm-global/bin/cmdc"));
+        candidates.push(home.join("n/bin/cmdc"));
+        #[cfg(windows)]
+        {
+            let npm = home.join("AppData").join("Roaming").join("npm");
+            candidates.push(npm.join("cmdc.cmd"));
+            candidates.push(npm.join("cmdc.exe"));
+        }
+    }
+    #[cfg(target_os = "macos")]
+    candidates.push(PathBuf::from("/opt/homebrew/bin/cmdc"));
+    candidates.push(PathBuf::from("/usr/local/bin/cmdc"));
+    candidates.push(PathBuf::from("/usr/bin/cmdc"));
+    if let Some(from_shell) = which_via_login_shell("cmdc") {
         candidates.push(from_shell);
     }
 

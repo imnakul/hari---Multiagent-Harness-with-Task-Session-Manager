@@ -42,6 +42,7 @@ describe("continueHelperTargets (L-189)", () => {
       "opencode",
       "claude",
       "codex",
+      "command-code",
     ]);
   });
 
@@ -56,6 +57,7 @@ describe("continueHelperTargets (L-189)", () => {
       "codex",
       "opencode",
       "antigravity-cli",
+      "command-code",
     ]);
   });
 

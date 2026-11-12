@@ -21,6 +21,7 @@ function emptyAvailability(): HarnessAvailability {
     cline: false,
     hermes: false,
     devin: false,
+    "command-code": false,
   };
 }
 

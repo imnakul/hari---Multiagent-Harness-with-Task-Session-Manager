@@ -21,6 +21,11 @@ export const CLI_UPDATE_CHANNELS: Partial<
     packageName: "@earendil-works/pi-coding-agent",
     updateCommand: "npm i -g @earendil-works/pi-coding-agent",
   },
+  // Fork (L-255): Command Code ships on npm as `command-code` (binary `cmdc`).
+  "command-code": {
+    packageName: "command-code",
+    updateCommand: "npm i -g command-code",
+  },
   cline: {
     packageName: "cline",
     updateCommand: "npm i -g cline",

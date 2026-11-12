@@ -16,6 +16,12 @@ export const HELPER_ISOLATION: Record<
     reason:
       "Antigravity CLI's built-in tools can't be switched off. If it tries to use one, MonoCode stops it and the reply fails.",
   },
+  // Fork (L-255): plan mode in an empty folder; a tool call fails the reply.
+  "command-code": {
+    verified: false,
+    reason:
+      "Command Code's built-in tools can't be switched off. If it tries to use one, MonoCode stops it and the reply fails.",
+  },
 };
 
 /**

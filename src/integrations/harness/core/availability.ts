@@ -38,6 +38,11 @@ const CLI: Record<HarnessId, { name: string; install?: string }> = {
   fx: { name: "fx CLI", install: "curl -fsSL https://fx.sh/setup.sh | bash" },
   "antigravity-cli": { name: "Antigravity CLI (agy)", install: "Install agy from antigravity.google/docs/cli/install/" },
   cline: { name: "Cline CLI", install: "npm i -g cline" },
+  // Fork (L-255): on Windows `cmd` is the system shell, so the CLI is `cmdc`.
+  "command-code": {
+    name: "Command Code CLI (cmdc)",
+    install: "npm i -g command-code, then run cmdc login",
+  },
   hermes: {
     name: "Hermes Agent CLI",
     install: "Install from hermes-agent.nousresearch.com, then run hermes model",

@@ -489,8 +489,16 @@ async function resolveHarnessBinary(
     hermes: "harness_resolve_hermes",
     "antigravity-cli": "harness_resolve_antigravity_cli",
     devin: "harness_resolve_devin",
+    "command-code": "harness_resolve_command_code",
   };
   return invoke(command[provider]);
+}
+
+/** Fork (L-255): Command Code's `cmdc` (never `cmd`, the Windows shell). */
+export function resolveCommandCodeBinary(
+  binaryPath?: string | null,
+): Promise<{ path: string }> {
+  return resolveHarnessBinary("command-code", binaryPath);
 }
 
 export function resolveCursorBinary(

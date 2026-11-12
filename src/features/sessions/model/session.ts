@@ -32,7 +32,8 @@ export type HarnessId =
   | "antigravity-cli"
   | "cline"
   | "hermes"
-  | "devin";
+  | "devin"
+  | "command-code";
 
 export const HARNESSES: HarnessId[] = [
   "claude",
@@ -47,6 +48,7 @@ export const HARNESSES: HarnessId[] = [
   "cline",
   "hermes",
   "devin",
+  "command-code",
 ];
 
 export type BlockRole =
@@ -650,6 +652,7 @@ export const HARNESS_LABEL: Record<HarnessId, string> = {
   cline: "cline",
   hermes: "hermes",
   devin: "devin",
+  "command-code": "command-code",
 };
 
 export const HARNESS_TITLE: Record<HarnessId, string> = {
@@ -665,6 +668,7 @@ export const HARNESS_TITLE: Record<HarnessId, string> = {
   cline: "Cline",
   hermes: "Hermes Agent",
   devin: "Devin",
+  "command-code": "Command Code",
 };
 
 /** These headless transports cannot receive attachment prompt blocks. */

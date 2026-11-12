@@ -30,6 +30,7 @@ describe("cliVersions", () => {
       "claude",
       "cline",
       "codex",
+      "command-code",
       "pi",
     ]);
     for (const channel of Object.values(CLI_UPDATE_CHANNELS)) {

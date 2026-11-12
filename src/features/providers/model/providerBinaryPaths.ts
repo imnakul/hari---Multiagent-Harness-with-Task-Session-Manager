@@ -19,6 +19,7 @@ const CONFIGURABLE_PROVIDERS: ConfigurableBinaryProvider[] = [
   "antigravity-cli",
   "cline",
   "hermes",
+  "command-code",
 ];
 
 function readProviderBinaryPaths(): StoredBinaryPaths {

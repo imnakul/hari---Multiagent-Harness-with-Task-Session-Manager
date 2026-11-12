@@ -236,6 +236,12 @@ export const MODELS: AgentModel[] = [
     name: "Adaptive",
     nativeId: "adaptive",
   },
+  {
+    id: "command-code:default",
+    harness: "command-code",
+    name: "Account default",
+    nativeId: "",
+  },
 ];
 
 export const DEFAULT_MODEL_ID: Record<HarnessId, string> = {
@@ -251,6 +257,7 @@ export const DEFAULT_MODEL_ID: Record<HarnessId, string> = {
   cline: "cline:anthropic/claude-sonnet-5",
   hermes: "hermes:default",
   devin: "devin:adaptive",
+  "command-code": "command-code:default",
 };
 
 const FAVORITES_KEY = "monocode.favoriteModels";
@@ -282,6 +289,7 @@ const HARNESS_ORDER: HarnessId[] = [
   "cline",
   "hermes",
   "devin",
+  "command-code",
 ];
 
 const EMPTY_MODELS: AgentModel[] = [];

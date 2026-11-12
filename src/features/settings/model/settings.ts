@@ -688,7 +688,7 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     section: "providers",
     label: "Agent CLIs",
     keywords:
-      "codex opencode cursor grok pi omp fx hermes antigravity devin binary path",
+      "codex opencode cursor grok pi omp fx hermes antigravity devin command code cmdc binary path",
   },
   {
     id: "provider-accounts",
@@ -1119,6 +1119,7 @@ export const AI_HELPER_PROVIDERS = [
   "codex",
   "opencode",
   "antigravity-cli",
+  "command-code",
 ] as const satisfies readonly HarnessId[];
 
 export type AiHelperProvider = (typeof AI_HELPER_PROVIDERS)[number];

@@ -10,6 +10,7 @@ import { ensurePiRegistered } from "../providers/pi/piAdapter";
 import { ensureAntigravityCliRegistered } from "../providers/antigravity-cli/antigravityCliAdapter";
 import { ensureClineRegistered } from "./clineAdapter";
 import { ensureDevinRegistered } from "../providers/devin/devinAdapter";
+import { ensureCommandCodeRegistered } from "../providers/command-code/commandCodeAdapter";
 
 /** Register all known live harness adapters. Idempotent. */
 export function registerBuiltinHarnesses(): void {
@@ -25,4 +26,5 @@ export function registerBuiltinHarnesses(): void {
   ensureAntigravityCliRegistered();
   ensureClineRegistered();
   ensureDevinRegistered();
+  ensureCommandCodeRegistered();
 }

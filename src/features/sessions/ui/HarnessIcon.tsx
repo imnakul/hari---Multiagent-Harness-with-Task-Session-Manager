@@ -11,6 +11,7 @@ import opencode from "../../../assets/providers/opencode.svg";
 import pi from "../../../assets/providers/pi.svg";
 import antigravity from "../../../assets/providers/antigravity.svg";
 import cline from "../../../assets/providers/cline.svg";
+import commandCode from "../../../assets/providers/command-code.svg";
 import type { HarnessId } from "../model/session";
 
 export const HARNESS_ICONS: Record<HarnessId, string> = {
@@ -26,6 +27,7 @@ export const HARNESS_ICONS: Record<HarnessId, string> = {
   hermes,
   "antigravity-cli": antigravity,
   devin,
+  "command-code": commandCode,
 };
 
 /** White marks that must follow `currentColor` so they stay visible in light mode. */
@@ -39,6 +41,7 @@ export const MONOCHROME_HARNESSES = new Set<HarnessId>([
   "antigravity-cli",
   "hermes",
   "devin",
+  "command-code",
 ]);
 
 function MonoIcon({
@@ -157,6 +160,22 @@ export function HarnessIcon({
       <MonoIcon className={className} viewBox="0 0 24 24">
         <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
       </MonoIcon>
+    );
+  }
+  if (harness === "command-code") {
+    // Fork (L-255): stroked mark, drawn inline so it follows the text color.
+    return (
+      <svg
+        viewBox="-4 -4 37 37"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        aria-hidden
+        className={`block ${className}`}
+      >
+        <path d="M22.5 8.2A9 9 0 1 0 22.5 20.8" strokeWidth="3.2" />
+        <path d="M12.5 11L16 14.5L12.5 18" strokeWidth="2.6" strokeLinejoin="round" />
+      </svg>
     );
   }
   return (

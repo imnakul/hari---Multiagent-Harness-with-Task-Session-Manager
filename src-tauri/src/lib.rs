@@ -14,6 +14,7 @@ mod checkpoint;
 mod claude_folder_trust;
 mod claude_interactive;
 mod codex_mono_store;
+mod command_code;
 mod control;
 pub mod control_cli;
 mod cursor_store;
@@ -474,6 +475,7 @@ pub fn run() {
             default_cwd,
             home_dir,
             antigravity_cli::antigravity_helper_directory,
+            command_code::command_code_helper_directory,
             notifications::notification_permission,
             notifications::request_notification_permission,
             notifications::show_notification,
@@ -655,6 +657,7 @@ pub fn run() {
             harness::harness_resolve_cline,
             harness::harness_probe_provider,
             harness::harness_resolve_hermes,
+            harness::harness_resolve_command_code,
             harness::harness_free_port,
             harness::harness_spawn,
             codex_mono_store::codex_mono_store_prepare,
