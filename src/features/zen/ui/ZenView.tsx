@@ -153,8 +153,8 @@ function ZenGroupToggle(): ReactNode {
 }
 
 /**
- * A dropdown's chats (L-230), without the pane's own, newest first. By
- * project: projects by their newest chat under headings, "Other" last;
+ * A dropdown's chats (L-230), newest first, after the pane's own chat
+ * (marked current, L-256). By project: projects by their newest chat under headings, "Other" last;
  * else one list with the project on each card's second line. A chat in
  * another pane is marked so.
  */
@@ -226,9 +226,43 @@ function zenChatItems(
     const at = new Map(list.map((chat, index) => [chat.id, index]));
     return items.sort((a, b) => at.get(a.id)! - at.get(b.id)!);
   };
+  // L-256: the pane's own chat leads the list, marked, outside any group.
+  const own = except ? zenOwnChat(chats, byId, except) : undefined;
+  const ownItem = own
+    ? toItems([own]).map(
+        (item): FocusPickItem => ({
+          ...item,
+          detail: item.project ? projectName(item.project.cwd) : undefined,
+          group: undefined,
+          groupIcon: undefined,
+          current: true,
+        }),
+      )
+    : [];
   return {
-    all: inOrder(listed),
-    recent: inOrder(listed.slice(0, ZEN_RECENT_LIMIT)),
+    all: [...ownItem, ...inOrder(listed)],
+    recent: [...ownItem, ...inOrder(listed.slice(0, ZEN_RECENT_LIMIT))],
+  };
+}
+
+/** The pane's chat from the list, or from its open session (a new chat isn't listed yet). */
+function zenOwnChat(
+  chats: readonly ZenChat[],
+  byId: ReadonlyMap<string, Session>,
+  id: string,
+): ZenChat | undefined {
+  const listed = chats.find((chat) => chat.id === id);
+  if (listed) return listed;
+  const session = byId.get(id);
+  if (!session) return undefined;
+  return {
+    id,
+    cwd: session.cwd,
+    title: session.title,
+    harness: session.harness,
+    model: session.model,
+    updatedAt: 0,
+    providerAccountId: session.providerAccountId,
   };
 }
 
@@ -791,8 +825,9 @@ function ZenPaneHeader({
               }
               onChatPointerDown={dragOut}
               onPick={(next) => {
-                close(false);
-                onPick(next);
+                // The pane's own chat (L-256): already showing, just close.
+                close(next === id);
+                if (next !== id) onPick(next);
               }}
               actions={
                 <>

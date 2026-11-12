@@ -65,6 +65,11 @@ export type FocusPickItem = {
   lower?: boolean;
   /** Shown before the group's heading, e.g. its project's icon (L-230). */
   groupIcon?: ReactNode;
+  /**
+   * The chat already open where the list was opened (L-256): listed first,
+   * outlined and tagged "Current", with a divider below it.
+   */
+  current?: boolean;
 };
 
 /** What a chat card shows besides its title (L-230). */
@@ -553,9 +558,10 @@ export function FocusSearchList({
                 ? item.group
                 : null;
             const divided =
-              item.lower === true &&
-              index > 0 &&
-              filtered[index - 1]?.lower !== true;
+              (item.lower === true &&
+                index > 0 &&
+                filtered[index - 1]?.lower !== true) ||
+              (filtered[index - 1]?.current === true && !item.current);
             return (
               <div key={item.id} role="presentation">
                 {divided || (groupDividers && heading && index > 0) ? (
@@ -584,7 +590,7 @@ export function FocusSearchList({
                     onHover={() => setActive(index)}
                     onPick={() => onPick(item.id)}
                     onPress={
-                      onChatPointerDown
+                      onChatPointerDown && !item.current
                         ? (event) => onChatPointerDown(item, event)
                         : undefined
                     }
@@ -705,10 +711,17 @@ function FocusChatOption({
         }}
         onPointerLeave={hover.anchorProps.onPointerLeave}
         onClick={onPick}
+        aria-current={item.current ? "true" : undefined}
         className={`flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left transition-colors duration-100 ${
           highlighted
             ? "bg-selection text-content"
-            : "text-content/80 hover:bg-content/5 hover:text-content"
+            : item.current
+              ? "bg-[color-mix(in_srgb,var(--user-accent-color,var(--color-accent))_8%,transparent)] text-content"
+              : "text-content/80 hover:bg-content/5 hover:text-content"
+        } ${
+          item.current
+            ? "shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--user-accent-color,var(--color-accent))_55%,transparent)]"
+            : ""
         }`}
       >
         <span className="flex w-full min-w-0 items-center gap-2">
@@ -720,6 +733,11 @@ function FocusChatOption({
           >
             {label ?? item.label}
           </span>
+          {item.current ? (
+            <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--user-accent-color,var(--color-accent))_18%,transparent)] px-1.5 py-px text-[10px] font-medium leading-tight text-content/85">
+              Current
+            </span>
+          ) : null}
           {chat.status === "working" ? (
             <Loader
               aria-label="Working"

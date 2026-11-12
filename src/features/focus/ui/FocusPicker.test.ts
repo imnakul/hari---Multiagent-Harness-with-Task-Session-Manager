@@ -159,6 +159,20 @@ describe("Chat cards (L-230)", () => {
     expect(html).toContain(">alpha · Opus 5.5<");
   });
 
+  it("marks the current chat and divides it from the rest (L-256)", () => {
+    const html = render([
+      { ...chat("own", "Open here", 1), current: true },
+      chat("c1", "Another", 2),
+    ]);
+    expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+    expect(html).toContain(">Current<");
+    expect(html.indexOf(">Open here<")).toBeLessThan(html.indexOf(">Current<"));
+    const divider = html.indexOf('class="mx-2 my-1 h-px bg-stroke"');
+    expect(divider).toBeGreaterThan(html.indexOf(">Open here<"));
+    expect(divider).toBeLessThan(html.indexOf(">Another<"));
+    expect(render([chat("c1", "Another", 2)])).not.toContain(">Current<");
+  });
+
   it("offers no Model toggle when only chat cards have models", () => {
     const html = render([{ ...chat("c1", "One", 1), model: "Opus 5.5" }]);
     expect(html).not.toContain("Show each chat");
