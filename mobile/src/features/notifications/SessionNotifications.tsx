@@ -36,6 +36,8 @@ type Target = Partial<Data> & {
   monoId?: string;
   /** Fork (L-275): an entry of the desktop bell's history. */
   feedId?: string;
+  /** Fork (L-279): something shared from the computer. */
+  share?: boolean;
 };
 const SESSION_CHANNEL = "sessions";
 
@@ -217,6 +219,10 @@ export function SessionNotifications() {
     const data = response.notification.request.content.data as
       Target | undefined;
     void Notifications.clearLastNotificationResponseAsync();
+    if (data?.share) {
+      router.push("/share");
+      return;
+    }
     // Fork (Hari, L-275): read on the desktop too; an automation's opens
     // the Notifications screen.
     if (data?.feedId) {

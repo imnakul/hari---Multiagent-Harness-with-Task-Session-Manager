@@ -313,6 +313,25 @@ pub fn mobile_cancel_invite(host: State<'_, MobileHost>) {
     }
     inner.invitations.clear();
 }
+/// Fork (Hari, L-279): the paired phones as (link fingerprint, name), for
+/// sending to every phone. Empty while mobile access is off.
+pub(crate) fn paired_phones(app: &AppHandle) -> Vec<(String, String)> {
+    let Some(host) = app.try_state::<MobileHost>() else {
+        return Vec::new();
+    };
+    let Ok(inner) = host.inner.lock() else {
+        return Vec::new();
+    };
+    if !inner.config.enabled {
+        return Vec::new();
+    }
+    inner
+        .config
+        .devices
+        .iter()
+        .map(|device| (device.fingerprint.clone(), device.name.clone()))
+        .collect()
+}
 #[tauri::command]
 pub fn mobile_revoke(host: State<'_, MobileHost>, device_id: String) -> Result<(), String> {
     let mut inner = host
@@ -766,6 +785,10 @@ async fn handle(
             let catalog = merged_catalog(app, &mut inner);
             return Ok(session_page(&catalog["sessions"], &params));
         }
+        // Fork (Hari, L-279): Share's file pieces, read and written off the lock.
+        if crate::mobile_share::handles(method) {
+            break 'locked Err(std::mem::take(&mut params));
+        }
         if crate::mobile_tools::handles(method) {
             break 'locked Err(std::mem::take(&mut params));
         }
@@ -877,6 +900,9 @@ async fn handle(
     };
     let receiver = match receiver {
         Ok(receiver) => receiver,
+        Err(params) if crate::mobile_share::handles(method) => {
+            return crate::mobile_share::handle(app, peer, method, params).await
+        }
         Err(params) => return crate::mobile_tools::handle(app, method, params).await,
     };
     let response = tokio::time::timeout(Duration::from_secs(25), receiver.1).await;

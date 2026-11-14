@@ -328,6 +328,15 @@ export function MonoHome() {
               size={FOOTER_HEIGHT}
             />
           ) : null}
+          {/* Fork (Hari, L-279): text, links and files with the computer. */}
+          {pairing ? (
+            <CircleButton
+              icon="share"
+              label="Share"
+              onPress={() => router.push("/share")}
+              size={FOOTER_HEIGHT}
+            />
+          ) : null}
           <LiquidView
             borderRadius={FOOTER_HEIGHT / 2}
             style={styles.searchFrame}

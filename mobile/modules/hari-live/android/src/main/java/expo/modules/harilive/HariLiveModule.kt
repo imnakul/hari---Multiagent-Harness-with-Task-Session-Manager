@@ -44,6 +44,17 @@ class HariLiveModule : Module() {
       HariLive.setStreamLive(on)
     }
 
+    /** Fork (L-279): what the share sheet and the tile left for the app (JSON); emptied. */
+    Function("takeShared") { HariShare.take(context) }
+
+    /** Fork (L-279): moves a file from Hari's cache into Download/Hari; its content URI. */
+    AsyncFunction("saveToDownloads") { source: String, name: String, mimeType: String ->
+      HariShare.saveToDownloads(context, source, name, mimeType)
+    }
+
+    /** Fork (L-279): opens a saved file in the app the user picks. */
+    Function("openFile") { uri: String, mimeType: String -> HariShare.open(context, uri, mimeType) }
+
     /** Whether this Android draws Live Updates at all (Android 16 and later). */
     Function("supported") { Build.VERSION.SDK_INT >= 36 }
 

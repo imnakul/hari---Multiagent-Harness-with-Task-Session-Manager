@@ -4,7 +4,7 @@ Branch: `nakul/windows-support-upstream-0.16.0`
 Base: `62a2a762` (plus uncommitted L-265 to L-276)
 Created: 2026-11-14 15:36 (IST) · Updated: 2026-11-14 (scope added, Share choices answered)
 Tier: Large (protocol change on the phone link, new phone and desktop screens, Android service change)
-Status: Progress — Phases 1–2 built (L-277, L-278); Phases 3–5 next.
+Status: Progress — Phases 1–3 built (L-277, L-278, L-279); Phases 4–5 next.
 
 ## Idea
 Today the phone asks the computer on a timer (every 5 s in view, every 15 s in the background
@@ -184,12 +184,56 @@ Manual check (phone + computer; not for an agent inside MonoCode):
 7. Answer an approval on the computer first, then tap Approve on the phone → a "Couldn't approve" note, nothing else happens.
 8. Tap a notification's body (not a button) → it still opens the chat as before.
 
+## Phase 3 — Share (L-279)
+- **Text, links, clipboard** travel as outbox items of kind `share`, both ways:
+  `{type:"text"|"link"|"clipboard", text}` (≤ 30,000 characters). A `clipboard` item goes on
+  the receiving device's clipboard and shows a notification there; `text` and `link` only
+  join the history and notify.
+- **Files, PC → phone:** the computer queues `{type:"file", fileId, name, mimeType, size}`
+  for each paired phone. The phone fetches it with `share.download {fileId, offset}` in 1 MB
+  pieces (`{data, size}`, base64), writes it to its cache, then saves it to `Download/Hari`
+  through Android's MediaStore (Hari's own module). The computer reads the file from where
+  the user picked it, for 7 days.
+- **Files, phone → PC:** `share.upload {fileId, name, mimeType, size, offset, data}` in 1 MB
+  pieces, in order (a piece at the wrong offset is refused; offset 0 starts over). The last
+  piece moves the file into `Downloads\Hari` under a free name. Not through the outbox:
+  the phone keeps a failed send in its history with Retry.
+- **Limits:** 100 MB per file, 100 history items per side, 20 files per send.
+- **Computer:** `share-history.json` in app data; a phone icon beside the bell opens Share:
+  a box (Send / Send to clipboard), Send clipboard, Send files…, and the history (copy,
+  open, show in folder, remove, clear). Off with no paired phone. A toast on arrival;
+  clicking it opens Share.
+- **Phone:** a Share screen (Home footer): the same box, Send clipboard, Photos, Files
+  (expo-file-system's picker), and the history (copy, open, share again, retry, remove).
+  Android's share sheet lists "Hari" for text and files; a Quick Settings tile
+  "Send clipboard" opens a see-through screen for a moment, reads the clipboard and queues
+  it. Both wait in Hari's module until the app's code takes them (at once when running).
+- **No new dependency.** Not now: live clipboard sync, folders, iOS share target.
+
+## Phase 3 — built (L-279)
+- Computer: `src-tauri/src/mobile_share.rs` (history, offers, `share.upload` / `share.download`, toast); a phone icon beside the bell (`ShareButton.tsx`) with the box, Send clipboard, Files…, To clipboard and the history (copy, open link, open, show in folder, remove, clear; a dot for unseen arrivals).
+- Phone: Share screen from the Home footer (`src/app/share`), `ShareSync` takes `share` items off the stream and sends what the share sheet or the tile left; files move one at a time (`shareTransfers.ts`); history of 100 on the phone (`shareStore.ts`).
+- Android (`HariShare.kt`): "Hari: send to computer" in the share sheet (any text or files, up to 20 and 100 MB each, copied into Hari's cache), the "Send clipboard" Quick Settings tile, saving into `Download/Hari` through MediaStore (Android 10 and later), opening a saved file.
+- Changed from the plan: no separate Photos button (the file picker shows photos too) and no "share again"; a failed row is tapped to try again. A file restarts from the beginning when tried again.
+
+Manual check (phone + computer; not for an agent inside MonoCode):
+1. Computer: click the phone icon beside the bell, type text, Send → the phone shows a "Text from your computer" notification; Hari → Share lists it; tap it → copied.
+2. Computer: copy something, "Send clipboard" → it is on the phone's clipboard with a "Copied from your computer" notification.
+3. Computer: Files… → pick a PDF and a photo → both arrive in the phone's `Download/Hari` with a notification; tapping the row opens the file.
+4. Phone: Share screen → type a link, Send → the computer shows a toast; the popover lists it as a link; Open link works.
+5. Phone: Files → pick two files → progress shows, then both are in `Downloads\Hari` on the computer; "Show in folder" opens them.
+6. Phone: in another app, Share → "Hari: send to computer" with text, then with a photo → both reach the computer (with Hari closed, Hari's Share screen opens and sends them).
+7. Phone: add the "Send clipboard" Quick Settings tile, copy text, tap the tile → it reaches the computer's clipboard.
+8. Turn the computer's app off, send a text from the phone → "waiting"; open the app → it arrives and the row turns done. Send a file while off → failed; tap it after the app is back → it goes.
+9. Remove a row by swiping, then Clear all on both sides; saved files stay.
+
 ## Todos
 - [x] Share choices answered
 - [x] Phase 1 full spec, build, records (L-277)
 - [ ] Phase 1 manual check (list in "Phase 1 — built")
 - [x] Phase 2 build, records (L-278)
 - [ ] Phase 2 manual check (list in "Phase 2 — built")
-- [ ] Phase 3
+- [x] Phase 3 build, records (L-279)
+- [ ] Phase 3 manual check (list in "Phase 3 — built")
 - [ ] Phase 4
 - [ ] Phase 5

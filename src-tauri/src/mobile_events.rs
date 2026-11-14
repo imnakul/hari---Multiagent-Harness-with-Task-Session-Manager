@@ -88,14 +88,17 @@ impl Outbox {
             self.items.pop_front();
         }
     }
-    /// Drops what the phone confirmed. False when the epoch is not this one.
-    fn ack(&mut self, epoch: &str, seq: u64) -> bool {
+    /// Drops what the phone confirmed and returns it. None dropped when the
+    /// epoch is not this one.
+    fn ack(&mut self, epoch: &str, seq: u64) -> Vec<Item> {
         if epoch != self.epoch {
-            return false;
+            return Vec::new();
         }
-        let before = self.items.len();
-        self.items.retain(|item| item.seq > seq);
-        before != self.items.len()
+        let (done, kept) = std::mem::take(&mut self.items)
+            .into_iter()
+            .partition(|item| item.seq <= seq);
+        self.items = kept;
+        done.into()
     }
     /// Whether this id is new; remembers it.
     fn take(&mut self, id: &str) -> bool {
@@ -194,8 +197,6 @@ fn save(events: &Events) {
 
 /// Queues an item for one phone; it goes now if the phone is connected, else
 /// on its next connect.
-// TODO(nakul): first used by Share (L-279); remove this allow then.
-#[allow(dead_code)]
 pub(crate) fn push(peer: &str, kind: &str, payload: Value) -> Result<Item, String> {
     if serde_json::to_vec(&payload).map_or(true, |bytes| bytes.len() > MAX_PAYLOAD_BYTES) {
         return Err("Item too large".into());
@@ -251,15 +252,24 @@ pub(crate) fn handle(
         "events.ack" => {
             let epoch = params["epoch"].as_str().ok_or("Missing epoch")?;
             let seq = params["seq"].as_u64().ok_or("Missing sequence")?;
-            with(|events| {
-                let changed = events
+            let done = with(|events| {
+                let done = events
                     .outboxes
                     .get_mut(peer)
-                    .is_some_and(|outbox| outbox.ack(epoch, seq));
-                if changed {
+                    .map(|outbox| outbox.ack(epoch, seq))
+                    .unwrap_or_default();
+                if !done.is_empty() {
                     save(events);
                 }
+                done
             })?;
+            // Fork (L-279): text the phone took is marked arrived in Share.
+            let shared: Vec<Value> = done
+                .into_iter()
+                .filter(|item| item.kind == "share")
+                .map(|item| item.payload)
+                .collect();
+            crate::mobile_share::acked(app, &shared);
             Ok(json!({ "ok": true }))
         }
         "events.send" => {
@@ -309,9 +319,13 @@ pub(crate) fn handle(
     }
 }
 
-/// Runs one item the phone sent. Kinds arrive with later phases.
-fn receive(_app: &AppHandle, _peer: &str, _kind: &str, _payload: &Value) -> Result<(), String> {
-    Err("Unsupported item".into())
+/// Runs one item the phone sent.
+fn receive(app: &AppHandle, peer: &str, kind: &str, payload: &Value) -> Result<(), String> {
+    match kind {
+        // Fork (L-279): text, links and clipboard from the phone.
+        "share" => crate::mobile_share::receive(app, peer, payload),
+        _ => Err("Unsupported item".into()),
+    }
 }
 
 /// The phone opens its stream. The newest stream per phone replaces the old.
@@ -491,11 +505,15 @@ mod tests {
             outbox.push("share", Value::Null, 1_000);
         }
         let epoch = outbox.epoch.clone();
-        assert!(!outbox.ack("other", 4));
+        assert!(outbox.ack("other", 4).is_empty());
         assert_eq!(outbox.items.len(), 4);
-        assert!(outbox.ack(&epoch, 2));
+        let done = outbox.ack(&epoch, 2);
+        assert_eq!(
+            done.iter().map(|item| item.seq).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
         assert_eq!(outbox.items.front().map(|item| item.seq), Some(3));
-        assert!(!outbox.ack(&epoch, 2));
+        assert!(outbox.ack(&epoch, 2).is_empty());
     }
 
     #[test]

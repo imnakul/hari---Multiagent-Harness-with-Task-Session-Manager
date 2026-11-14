@@ -13,13 +13,19 @@ export type LiveEvent =
   | { action: "approve" | "deny"; sessionId: string; requestId: number }
   | { action: "dismiss"; sessionIds?: string[] }
   /** Android or the phone maker rejected a card; none show for this run. */
-  | { action: "failed"; message?: string };
+  | { action: "failed"; message?: string }
+  /** Fork (L-279): the share sheet or the tile left something to send. */
+  | { action: "shared" };
 
 type HariLiveModule = {
   update(cards: string): void;
   setWatching(on: boolean): void;
   /** Fork (L-277); missing in builds before it. */
   setStreamLive?(on: boolean): void;
+  /** Fork (L-279); missing in builds before it. */
+  takeShared?(): string;
+  saveToDownloads?(source: string, name: string, mimeType: string): Promise<string>;
+  openFile?(uri: string, mimeType: string): boolean;
   supported(): boolean;
   canPostPromoted(): boolean;
   openPromotedSettings(): boolean;
@@ -91,6 +97,34 @@ export function onLiveEvent(listener: (event: LiveEvent) => void) {
 }
 
 export const openPromotedSettings = () => native?.openPromotedSettings();
+
+/** Fork (L-279): what the share sheet and the tile left (JSON text), emptied; null without the module. */
+export function takeNativeShared(): string | null {
+  try {
+    return native?.takeShared?.() ?? null;
+  } catch (error) {
+    console.warn("Share: could not read what was shared to Hari", error);
+    return null;
+  }
+}
+
+/** Fork (L-279): whether this build can save to Downloads (Android with the new module). */
+export const canSaveToDownloads = typeof native?.saveToDownloads === "function";
+
+/** Fork (L-279): moves a file from Hari's cache into Download/Hari; the saved file's URI. */
+export async function saveToDownloads(source: string, name: string, mimeType: string): Promise<string> {
+  if (!native?.saveToDownloads) throw new Error("Update Hari to save files to Downloads");
+  return native.saveToDownloads(source, name, mimeType);
+}
+
+/** Fork (L-279): opens a saved file in the app the user picks. */
+export function openNativeFile(uri: string, mimeType: string): boolean {
+  try {
+    return native?.openFile?.(uri, mimeType) ?? false;
+  } catch {
+    return false;
+  }
+}
 export const openBatterySettings = () => native?.openBatterySettings();
 
 /** Whether Android lets Hari show Live Updates; checked again on returning

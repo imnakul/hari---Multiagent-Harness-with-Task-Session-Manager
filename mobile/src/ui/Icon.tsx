@@ -53,6 +53,11 @@ import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
 import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
 import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
 import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
+import Attachment01Icon from "@hugeicons/core-free-icons/Attachment01Icon";
+import ClipboardIcon from "@hugeicons/core-free-icons/ClipboardIcon";
+import ComputerPhoneSyncIcon from "@hugeicons/core-free-icons/ComputerPhoneSyncIcon";
+import Download04Icon from "@hugeicons/core-free-icons/Download04Icon";
+import LinkSquare02Icon from "@hugeicons/core-free-icons/LinkSquare02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import type { ColorValue } from "react-native";
 
@@ -118,6 +123,12 @@ const icons = {
   tasks: TaskDone01Icon,
   taskAdd: TaskAdd01Icon,
   noteAdd: NoteAddIcon,
+  // Fork (Hari, L-279): Share.
+  share: ComputerPhoneSyncIcon,
+  attachment: Attachment01Icon,
+  clipboard: ClipboardIcon,
+  download: Download04Icon,
+  openLink: LinkSquare02Icon,
 };
 
 export type IconName = keyof typeof icons;

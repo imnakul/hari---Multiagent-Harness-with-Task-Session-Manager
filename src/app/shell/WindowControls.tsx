@@ -2,6 +2,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "../../shared/ui/icons";
 import { useEffect, useState } from "react";
 import { NotificationBell } from "../../features/notifications/ui/NotificationBell";
+// Fork (Hari, L-279): Share with the paired phone.
+import { ShareButton } from "../../features/mobile/ui/ShareButton";
 
 export function WindowControls() {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -57,6 +59,7 @@ export function WindowControls() {
       className="flex h-full shrink-0 items-stretch border-l border-stroke"
       data-tauri-drag-region="false"
     >
+      <ShareButton />
       <NotificationBell />
       <button
         type="button"

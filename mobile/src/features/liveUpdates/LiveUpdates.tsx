@@ -122,6 +122,8 @@ export function LiveUpdates() {
         setNow(Date.now());
         return;
       }
+      // Fork (L-279): Share's, handled by ShareSync.
+      if (event.action === "shared") return;
       const session = catalog.sessions.find((entry) => entry.id === event.sessionId);
       if (!session) return;
       const stop = event.action === "stop";
