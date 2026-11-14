@@ -216,6 +216,7 @@ vi.mock("@/features/sessions/NativeTranscript", () => ({
   NativeTranscript: () => null,
 }));
 vi.mock("@/features/sessions/Markdown", () => ({ FileOpener: () => null }));
+vi.mock("@/features/share/openLink", () => ({ chooseLinkOpen: vi.fn() }));
 vi.mock("@/features/sessions/activityStore", () => ({
   markStartedHere: () => {},
   markViewing: () => () => {},

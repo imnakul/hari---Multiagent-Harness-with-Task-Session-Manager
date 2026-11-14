@@ -4,7 +4,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 import { makeCommandId } from "@/features/connection/nativeLink";
-import { sendLinkItem } from "@/features/link/linkStream";
+import { linkStreamLive, sendLinkItem } from "@/features/link/linkStream";
 import type { SendAnswer } from "@/features/link/linkProtocol";
 import {
   canSaveToDownloads,
@@ -168,6 +168,21 @@ export function sendShareText(text: string, clipboard: boolean) {
   } catch (reason) {
     recordShare({ id: makeCommandId(), direction: "out", kind, text: body, at, status: "failed", error: why(reason) });
   }
+}
+
+/**
+ * Fork (Hari, L-286): asks the computer to open a link in its default
+ * browser, as a Share link that says so. Only while connected: an open that
+ * waited in the outbox would surprise the computer's user hours later.
+ * Recorded in Share like any link sent.
+ * @throws when the computer isn't connected, or the text isn't a web link.
+ */
+export function openOnComputer(url: string) {
+  const link = url.trim();
+  if (kindForText(link) !== "link") throw new Error("Only web links open on the computer.");
+  if (!linkStreamLive()) throw new Error("Your computer isn’t connected right now.");
+  const outboxId = sendLinkItem("share", { type: "link", text: link, open: true });
+  recordShare({ id: outboxId, direction: "out", kind: "link", text: link, outboxId, at: Date.now(), status: "queued" });
 }
 
 /** The computer took or refused texts the phone sent. */

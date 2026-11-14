@@ -1,7 +1,8 @@
 import { createContext, use, useEffect, useState } from "react";
-import { Image, Linking, Pressable, Text, View, type ImageStyle, type ViewStyle } from "react-native";
+import { Image, Pressable, Text, View, type ImageStyle, type ViewStyle } from "react-native";
 
 import type { MarkdownBlock } from "@/features/sessions/markdownParser";
+import { chooseLinkOpen } from "@/features/share/openLink";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
 import { hostOf, linkPreview, webLinks, type Command, type LinkCardStyle, type LinkPreview } from "./tools";
@@ -81,7 +82,8 @@ export function LinkCard({ url, style, command }: { url: string; style: LinkCard
     <Pressable
       accessibilityRole="link"
       accessibilityLabel={`${title}, ${hostOf(url)}`}
-      onPress={() => void Linking.openURL(url)}
+      // Fork (Hari, L-286): on the phone or on the computer.
+      onPress={() => chooseLinkOpen(url)}
       style={({ pressed }) => [styles.card, look.card, pressed && styles.pressed]}
     >
       {large ? image : null}

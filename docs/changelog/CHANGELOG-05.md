@@ -1,5 +1,28 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 21:41 IST — Hari: open a chat link on the phone or the computer (L-286)
+- Type: feature
+- What: Tapping a web link (or a link card) in a Hari chat now asks "On phone" or "On computer". On computer, the link opens in the computer's default browser and a toast says so. If the computer isn't connected, Hari says so instead.
+- Why: User request: open links from chats in the desktop browser (a `localhost` page only opens there).
+- Files: [openLink.ts](../../mobile/src/features/share/openLink.ts), [shareTransfers.ts](../../mobile/src/features/share/shareTransfers.ts), [Markdown.tsx](../../mobile/src/features/sessions/Markdown.tsx), [LinkCard.tsx](../../mobile/src/features/tools/LinkCard.tsx), [mobile_share.rs](../../src-tauri/src/mobile_share.rs), [ProjectScreen.test.tsx](../../mobile/tests/ProjectScreen.test.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ (mobile) lint ✅ (mobile changed files) tests ✅ (Rust mobile_share 8 incl. 1 new; phone 298) rustfmt ✅; phone + desktop checks manual (needs a new desktop build)
+
+## 2026-11-14 21:41 IST — Hari: Camera in the + menu (L-285)
+- Type: feature
+- What: The + menu in a Hari chat now has Camera next to Photos and Files. The photo is attached like any picked photo. If the camera is off for Hari, a prompt explains and offers Open Settings.
+- Why: User request.
+- Files: [attachments.ts](../../mobile/src/features/sessions/attachments.ts), [Composer.tsx](../../mobile/src/features/sessions/Composer.tsx), [Icon.tsx](../../mobile/src/ui/Icon.tsx), [app.json](../../mobile/app.json), [Composer.test.tsx](../../mobile/tests/Composer.test.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ (mobile) lint ✅ (changed source files; `tests/Composer.test.tsx:73` display-name error is older) tests ✅ (Composer); phone check manual (permission text needs a new build)
+
+## 2026-11-14 21:41 IST — Hari: quicker composer and lighter chat scrolling (L-284)
+- Type: fix
+- What: Tapping the message box no longer drags: the box lifts with the keyboard and the chat moves with it instead of trailing. Long chats keep fewer rows ready off screen, so scrolling and flinging feel lighter.
+- Why: User report: the composer rose very slowly on tap and scrolling felt heavy. Cause: the box's height change re-rendered the whole chat on every animation frame and restarted the list's padding animation each frame.
+- Files: [SessionScreen.tsx](../../mobile/src/features/sessions/SessionScreen.tsx), [Composer.tsx](../../mobile/src/features/sessions/Composer.tsx), [Transcript.tsx](../../mobile/src/features/sessions/Transcript.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ (mobile) lint ✅ tests ✅ (Transcript, Composer, ProjectScreen); feel on device is a manual check
 ## 2026-11-14 19:53 IST — Aside link: clear names, Claude accounts, no session floods (L-283)
 - Type: fix
 - What: Aside's model picker now shows `hari-claude-interactive`, `hari-command-code` and `hari-antigravity` instead of `monocode-…`. With more than one Claude account in MonoCode, each account is its own entry (`hari-claude-interactive-<account name>`) and its chats run on that account. "Add models to Aside" replaces the old `monocode-…` entries. When an agent in an Aside chat ran `aside exec` without `-m`, Aside sent that request back to Hari, which started another session each time (Command Code made several and then timed out after 30 minutes); such a request now gets a short answer telling the agent to use `repl` or `aside exec -m <Aside model>`, and the CLI project's guide says the same. Aside's background memory "dreaming" pass is answered locally instead of starting a session. Aside now sends its chat ID, which keeps two chats that start alike apart.

@@ -5,6 +5,7 @@ import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
 import ArrowUp02Icon from "@hugeicons/core-free-icons/ArrowUp02Icon";
 import BotIcon from "@hugeicons/core-free-icons/BotIcon";
 import BubbleChatIcon from "@hugeicons/core-free-icons/BubbleChatIcon";
+import Camera01Icon from "@hugeicons/core-free-icons/Camera01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CircleIcon from "@hugeicons/core-free-icons/CircleIcon";
 import CheckmarkCircle02Icon from "@hugeicons/core-free-icons/CheckmarkCircle02Icon";
@@ -103,6 +104,8 @@ const icons = {
   metrics: ChartBreakoutSquareIcon,
   inbox: InboxIcon,
   image: Image01Icon,
+  // Fork (Hari, L-285): the composer's Camera.
+  camera: Camera01Icon,
   notifications: Notification01Icon,
   note: Note01Icon,
   automation: FlashIcon,

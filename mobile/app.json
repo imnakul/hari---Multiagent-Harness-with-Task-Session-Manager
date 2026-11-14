@@ -74,7 +74,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Scan the pairing code from your Monocode desktop.",
+          "cameraPermission": "Scan the pairing code from your Monocode desktop, or take a photo to attach to a message.",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
@@ -83,7 +83,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose photos to attach to messages, or as the background of new sessions.",
-          "cameraPermission": "Scan the pairing code from your Monocode desktop."
+          "cameraPermission": "Scan the pairing code from your Monocode desktop, or take a photo to attach to a message."
         }
       ],
       [

@@ -68,6 +68,8 @@ export const HEADER_GAP = 0;
 const JUMP = 36;
 /** Gap between the composer and the keyboard while it is open. */
 const KEYBOARD_GAP = 8;
+/** How long the composer's height must hold before the frame re-renders for it. */
+const GROWTH_SETTLE_MS = 60;
 /** How far past the header and composer the blur keeps fading. Content rests
  *  clear of it (see `top` and `bottom`), so it only dims once scrolled underneath. */
 const FADE = 16;
@@ -465,6 +467,10 @@ export function SessionFrame({
   const restingHeight = useRef<number | null>(null);
   const [composerHeight, setComposerHeight] = useState(lastRestingHeight);
   const [composerGrowth, setComposerGrowth] = useState(0);
+  const growthTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (growthTimer.current !== null) clearTimeout(growthTimer.current);
+  }, []);
   const jumpVisible = useSharedValue(0);
   const jumpTarget = useRef<(() => void) | null>(null);
   const [hasJumpTarget, setHasJumpTarget] = useState(false);
@@ -564,13 +570,18 @@ export function SessionFrame({
       return;
     }
     const growth = Math.max(0, height - restingHeight.current);
-    setComposerGrowth(growth);
-    extraContentPadding.set(
-      withTiming(growth, {
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-      }),
-    );
+    // Fork (Hari, L-284): the composer's morph on focus lays it out again
+    // every frame. Each layout used to set React state (re-rendering this
+    // screen and the transcript every frame) and restart a 180ms ease on the
+    // list's padding, so the list trailed the composer and the frames the
+    // keyboard rise needed went to JS. The padding now follows each layout as
+    // is, and the state (the blur band's height) waits for the layout to rest.
+    extraContentPadding.set(growth);
+    if (growthTimer.current !== null) clearTimeout(growthTimer.current);
+    growthTimer.current = setTimeout(() => {
+      growthTimer.current = null;
+      setComposerGrowth(growth);
+    }, GROWTH_SETTLE_MS);
   };
 
   return (

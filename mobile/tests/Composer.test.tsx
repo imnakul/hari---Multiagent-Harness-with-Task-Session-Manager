@@ -15,6 +15,7 @@ const runtime = vi.hoisted(() => ({
   values: [] as { get: () => unknown; set: (value: unknown) => void }[],
   photos: vi.fn(async () => []),
   files: vi.fn(async () => []),
+  camera: vi.fn(async () => []),
 }));
 vi.mock("react-native", async () => {
   const { MockModal } = await import("./modalMock");
@@ -190,6 +191,8 @@ vi.mock("@/features/sessions/attachments", () => ({
   MAX_ATTACHMENTS: 10,
   pickPhotos: runtime.photos,
   pickFiles: runtime.files,
+  takePhoto: runtime.camera,
+  CameraDenied: class CameraDenied extends Error {},
   merge: vi.fn(),
   settle: vi.fn(),
   sendProblem: () => null,
@@ -312,7 +315,7 @@ it("keeps the iOS hit-testing styles unchanged", () => {
   expect(modelTouches()).toBe("");
 });
 
-it("opens a content-sized attachment menu with safe-area padding and retains both actions", async () => {
+it("opens a content-sized attachment menu with safe-area padding and retains its actions", async () => {
   render();
   await act(async () => button("Add photos or files").click());
   const scroll = container.querySelector<HTMLElement>("[data-scroll]")!;
@@ -335,6 +338,14 @@ it("opens a content-sized attachment menu with safe-area padding and retains bot
       .click(),
   );
   expect(runtime.files).toHaveBeenCalledWith(10);
+  // Fork (Hari, L-285): a photo taken now.
+  await act(async () => button("Add photos or files").click());
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((item) => item.textContent === "Camera")!
+      .click(),
+  );
+  expect(runtime.camera).toHaveBeenCalledWith(10);
 });
 
 // The native observer handles posture transitions; the composer focuses its

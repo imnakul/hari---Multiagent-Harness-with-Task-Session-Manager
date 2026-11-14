@@ -323,6 +323,13 @@ pub(crate) fn receive(app: &AppHandle, peer: &str, payload: &Value) -> Result<()
             .and_then(|mut clipboard| clipboard.set_text(text.clone()))
             .map_err(|_| "Couldn't set the computer's clipboard")?;
     }
+    // Fork (Hari, L-286): "Open on computer" from a chat's link. Only a web
+    // link (`kind_for_text` checked the scheme), in the default browser.
+    let opened = wants_open(payload, kind);
+    if opened {
+        open::that_detached(text.trim())
+            .map_err(|_| "Couldn't open the link in the computer's browser")?;
+    }
     let device = phone_name(app, peer);
     let id = uuid::Uuid::new_v4().to_string();
     with(|share| {
@@ -347,11 +354,17 @@ pub(crate) fn receive(app: &AppHandle, peer: &str, payload: &Value) -> Result<()
     let from = device.unwrap_or_else(|| "your phone".into());
     let title = match kind {
         Kind::Clipboard => format!("Clipboard from {from}"),
+        Kind::Link if opened => format!("Opened a link from {from}"),
         Kind::Link => format!("Link from {from}"),
         _ => format!("Text from {from}"),
     };
     toast(app, &id, title, preview(&text));
     Ok(())
+}
+
+/// Whether a phone's share asks to open its link here (`open: true`, a web link).
+fn wants_open(payload: &Value, kind: Kind) -> bool {
+    kind == Kind::Link && payload["open"].as_bool() == Some(true)
 }
 
 /// The phone took these `share` items from its outbox: text arrived.
@@ -862,6 +875,18 @@ fn upload(app: &AppHandle, peer: &str, params: &Value) -> Result<Value, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opens_only_web_links_that_ask() {
+        let asks = json!({ "type": "link", "text": "http://localhost:3000", "open": true });
+        assert!(wants_open(&asks, kind_for_text("http://localhost:3000")));
+        let plain = json!({ "type": "link", "text": "https://example.com" });
+        assert!(!wants_open(&plain, kind_for_text("https://example.com")));
+        let not_web = json!({ "type": "link", "text": "file:///C:/x", "open": true });
+        assert!(!wants_open(&not_web, kind_for_text("file:///C:/x")));
+        let clipboard = json!({ "type": "clipboard", "text": "https://example.com", "open": true });
+        assert!(!wants_open(&clipboard, Kind::Clipboard));
+    }
 
     #[test]
     fn one_web_address_is_a_link_and_anything_else_is_text() {

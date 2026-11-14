@@ -3,7 +3,7 @@ import { Button, Host, HStack, Menu, Spacer } from "@expo/ui/swift-ui";
 import { useNavigation } from "expo-router";
 import { accessibilityLabel, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -22,6 +22,7 @@ import { LiquidView } from "@/ui/LiquidView";
 import { themedStyles, useColors, useScheme } from "@/ui/theme";
 
 import {
+  CameraDenied,
   isImage,
   MAX_ATTACHMENTS,
   merge,
@@ -29,6 +30,7 @@ import {
   pickPhotos,
   sendProblem,
   settle,
+  takePhoto,
   type Attachment,
   type Picked,
 } from "./attachments";
@@ -66,7 +68,9 @@ const INPUT_MAX = 160;
 /** Inset from the screen edges: roomier as a pill, wider as a card. */
 const MARGIN_COLLAPSED = 20;
 const MARGIN_EXPANDED = 12;
-const MORPH = { duration: 280, easing: Easing.out(Easing.cubic) };
+// Fork (Hari, L-284): 220ms (was 280), inside Android's keyboard rise, so the
+// card has opened by the time the keyboard is up rather than after it.
+const MORPH = { duration: 220, easing: Easing.out(Easing.cubic) };
 const DICTATION_FADE = { duration: 180, easing: Easing.out(Easing.cubic) };
 
 /**
@@ -298,6 +302,22 @@ export function Composer({
         );
       }
     } catch (reason) {
+      if (reason instanceof CameraDenied) {
+        // Fork (Hari, L-285): refused for good, the system won't ask again.
+        Alert.alert(
+          "Camera is off for Hari",
+          reason.canAskAgain
+            ? "Allow the camera to take a photo for this message."
+            : "Turn on Camera for Hari in Settings to take a photo for this message.",
+          reason.canAskAgain
+            ? [{ text: "OK" }]
+            : [
+                { text: "Not now", style: "cancel" },
+                { text: "Open Settings", onPress: () => void Linking.openSettings() },
+              ],
+        );
+        return;
+      }
       Alert.alert("Could not attach", reason instanceof Error ? reason.message : String(reason));
     }
   };
@@ -457,6 +477,7 @@ export function Composer({
       >
         <AddMenu
           onPhotos={() => void attach(pickPhotos)}
+          onCamera={() => void attach(takePhoto)}
           onFiles={() => void attach(pickFiles)}
         />
       </Animated.View>
@@ -536,16 +557,26 @@ export function Composer({
 }
 
 /**
- * The add button: a native menu to attach photos or files. The menu lies
+ * The add button: a native menu to attach photos, a new camera shot (fork,
+ * Hari, L-285) or files. The menu lies
  * over the button, its label an invisible box of the button's size, as in
  * SessionFilterMenu.
  */
-function AddMenu({ onPhotos, onFiles }: { onPhotos: () => void; onFiles: () => void }) {
+function AddMenu({
+  onPhotos,
+  onCamera,
+  onFiles,
+}: {
+  onPhotos: () => void;
+  onCamera: () => void;
+  onFiles: () => void;
+}) {
   const styles = useStyles();
   const colors = useColors();
   if (Platform.OS === "android") return (
     <ChoiceMenu label="Add photos or files" actions={[
       { label: "Photo Library", icon: "image", onPress: onPhotos },
+      { label: "Camera", icon: "camera", onPress: onCamera },
       { label: "Files", icon: "folder", onPress: onFiles },
     ]}>
       <View style={styles.round}><Icon name="add" size={18} color={colors.content} /></View>
@@ -571,6 +602,7 @@ function AddMenu({ onPhotos, onFiles }: { onPhotos: () => void; onFiles: () => v
           }
         >
           <Button label="Photo Library" systemImage="photo.on.rectangle" onPress={onPhotos} />
+          <Button label="Camera" systemImage="camera" onPress={onCamera} />
           <Button label="Files" systemImage="folder" onPress={onFiles} />
         </Menu>
       </Host>

@@ -7,9 +7,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FileTypeIcon } from "@/features/files/FileTypeIcon";
+import { chooseLinkOpen } from "@/features/share/openLink";
 import { BlockLinkCards } from "@/features/tools/LinkCard";
 import { withAlpha, themedStyles, useColors } from "@/ui/theme";
 
@@ -308,9 +309,8 @@ function inline(
       return (
         <Text
           style={styles.link}
-          onPress={
-            /^https?:\/\//.test(node.href) ? () => void Linking.openURL(node.href) : undefined
-          }
+          // Fork (Hari, L-286): on the phone or on the computer.
+          onPress={/^https?:\/\//.test(node.href) ? () => chooseLinkOpen(node.href) : undefined}
         >
           <Inlines nodes={node.children} fade={fade} />
         </Text>

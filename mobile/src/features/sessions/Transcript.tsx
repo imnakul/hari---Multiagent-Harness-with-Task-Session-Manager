@@ -429,6 +429,13 @@ export function Transcript({
           showsVerticalScrollIndicator={false}
           // The whole window the desktop sends, in one pass.
           initialNumToRender={INITIAL_ROWS}
+          // Fork (Hari, L-284): rows are heavy (markdown, tool steps). The
+          // defaults keep 10 screens drawn each way and add rows 10 at a
+          // time, each batch holding the JS thread for frames mid-scroll.
+          // Five screens each way, in small batches, keeps a fling smooth.
+          windowSize={11}
+          maxToRenderPerBatch={5}
+          updateCellsBatchingPeriod={30}
           onStartReached={pageOlder}
           onStartReachedThreshold={1}
           // Keep the reader's place as earlier turns land above it.

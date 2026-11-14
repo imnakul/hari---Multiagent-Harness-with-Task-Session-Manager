@@ -1,6 +1,11 @@
 import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import { launchImageLibraryAsync, type ImagePickerAsset } from "expo-image-picker";
+import {
+  launchCameraAsync,
+  launchImageLibraryAsync,
+  requestCameraPermissionsAsync,
+  type ImagePickerAsset,
+} from "expo-image-picker";
 
 /** A file or photo held in the composer until it's sent. */
 export type Attachment = {
@@ -64,22 +69,57 @@ export async function pickPhotos(room: number): Promise<Picked[]> {
     quality: 1,
   });
   if (result.canceled) return [];
-  return result.assets.slice(0, room).map((asset) => {
-    const id = makeId();
-    const mimeType = asset.mimeType ?? mimeFor(asset.fileName ?? "", null);
-    return {
-      placeholder: {
-        id,
-        name: asset.fileName ?? "photo",
-        mimeType: mimeType.startsWith("image/") ? mimeType : "image/jpeg",
-        size: asset.fileSize ?? 0,
-        uri: asset.uri,
-        data: "",
-        preparing: true,
-      },
-      ready: fromPhoto(asset, id),
-    };
-  });
+  return result.assets.slice(0, room).map((asset) => pickedPhoto(asset));
+}
+
+/**
+ * Fork (Hari, L-285): the camera was refused. `canAskAgain` false means the
+ * system won't ask again, so the way back is the app's settings.
+ */
+export class CameraDenied extends Error {
+  constructor(readonly canAskAgain: boolean) {
+    super("Hari needs the camera to take a photo.");
+    this.name = "CameraDenied";
+  }
+}
+
+/**
+ * Fork (Hari, L-285): one photo taken now, prepared as a library photo is.
+ * Asks for the camera first; throws CameraDenied when it is refused.
+ */
+export async function takePhoto(room: number): Promise<Picked[]> {
+  if (room <= 0) return [];
+  const permission = await requestCameraPermissionsAsync();
+  if (!permission.granted) throw new CameraDenied(permission.canAskAgain);
+  const result = await launchCameraAsync({ mediaTypes: ["images"], quality: 1 });
+  if (result.canceled) return [];
+  // The camera names its shots by a temp file; a dated name reads better on the desktop.
+  return result.assets.slice(0, 1).map((asset) => pickedPhoto(asset, cameraName()));
+}
+
+/** A picked photo shown at once; `name`, when given, replaces its file name. */
+function pickedPhoto(asset: ImagePickerAsset, name?: string): Picked {
+  const id = makeId();
+  const named = name ? { ...asset, fileName: name } : asset;
+  const mimeType = named.mimeType ?? mimeFor(named.fileName ?? "", null);
+  return {
+    placeholder: {
+      id,
+      name: named.fileName ?? "photo",
+      mimeType: mimeType.startsWith("image/") ? mimeType : "image/jpeg",
+      size: named.fileSize ?? 0,
+      uri: named.uri,
+      data: "",
+      preparing: true,
+    },
+    ready: fromPhoto(named, id),
+  };
+}
+
+/** `camera-2026-11-14-2105.jpg`, in the phone's local time. */
+export function cameraName(now = new Date()): string {
+  const two = (value: number) => String(value).padStart(2, "0");
+  return `camera-${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}.jpg`;
 }
 
 /** Any files, from Files and its providers. */
