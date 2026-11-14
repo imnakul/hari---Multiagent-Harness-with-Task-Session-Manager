@@ -18,6 +18,7 @@ import { WorkspaceGate } from "@/features/connection/WorkspaceGate";
 import { SessionNotifications } from "@/features/notifications/SessionNotifications";
 import { LinkStreamSync } from "@/features/link/LinkStreamSync";
 import { NotificationFeedSync } from "@/features/notifications/NotificationFeedSync";
+import { PanelActions } from "@/features/notifications/PanelActions";
 import { LiveUpdates } from "@/features/liveUpdates/LiveUpdates";
 import { HariUpdatePrompt } from "@/features/updates/HariUpdatePrompt";
 import { SessionActivity } from "@/features/sessions/SessionActivity";
@@ -181,6 +182,8 @@ function LinkedWorkspace() {
       <SessionNotifications />
       {/* Fork (Hari, L-275): the desktop bell's history. */}
       <NotificationFeedSync />
+      {/* Fork (Hari, L-278): Approve, Deny and Reply on those notifications. */}
+      <PanelActions />
       {/* Fork (Hari, L-277): the always-open event stream to the computer. */}
       <LinkStreamSync />
       <LiveUpdates />

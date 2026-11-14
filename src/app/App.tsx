@@ -11768,6 +11768,14 @@ function Workspace({
         if (remoteProjectFor(live.cwd) && !remoteSessionActions(live.id))
           throw new Error("Open this session on the desktop to answer it");
         const reply = mobileQuestionReply(params.reply, question);
+        // Fork (Hari, L-278): a typed answer from the phone's notification.
+        const typed =
+          typeof params.reply === "object" &&
+          params.reply !== null &&
+          Reflect.get(params.reply, "kind") === "text";
+        if (!reply && typed && question.questions.length !== 1)
+          throw new Error("Open the chat to answer these questions");
+        if (!reply && typed) throw new Error("This question needs one of its choices: open the chat to answer it");
         if (!reply) throw new Error("Choose an answer or skip the question");
         onQuestionReply(live.id, question.requestId, reply);
         return { sessionId: live.id };

@@ -21,6 +21,8 @@ import {
   setFeedState,
   type FeedItem,
 } from "./notificationFeed";
+import { categoryFor, panelData } from "./notificationActions";
+import { ensurePanelCategories } from "./PanelActions";
 
 /** How often the list is asked for while Hari is on screen. */
 const POLL_MS = 5_000;
@@ -82,20 +84,19 @@ export function NotificationFeedSync() {
     saveFeedRecord(desktop, plan.record);
     for (const id of plan.withdraw)
       void Notifications.dismissNotificationAsync(panelId(id)).catch(() => {});
+    if (plan.post.length) await ensurePanelCategories();
     // Oldest first, so the newest lands on top of the panel.
     for (const item of [...plan.post].reverse()) {
+      // Fork (L-278): Approve/Deny or a reply box, where the entry takes one.
+      const buttons = categoryFor(item);
       await Notifications.scheduleNotificationAsync({
         identifier: panelId(item.id),
         content: {
           title: item.title || "MonoCode",
           ...(item.projectName ? { subtitle: item.projectName } : {}),
           body: item.body,
-          data: {
-            feedId: item.id,
-            ...(item.projectId && item.sessionId
-              ? { projectId: item.projectId, sessionId: item.sessionId }
-              : {}),
-          },
+          data: panelData(item),
+          ...(buttons ? { categoryIdentifier: buttons } : {}),
         },
         trigger: { channelId: SESSION_CHANNEL },
       });

@@ -31,6 +31,8 @@ export type FeedItem = {
   projectName?: string;
   /** Recorded while the chat was open on the computer. */
   seenOnDesktop?: boolean;
+  /** Fork (L-278): the approval or question it asks, for the panel's buttons. */
+  requestId?: number;
 };
 
 export type FeedState =
@@ -108,6 +110,7 @@ function parseItem(value: unknown): FeedItem | null {
   const sessionId = optional("sessionId");
   const projectId = optional("projectId");
   const projectName = optional("projectName");
+  const requestId = field("requestId");
   return {
     id,
     kind,
@@ -119,6 +122,9 @@ function parseItem(value: unknown): FeedItem | null {
     ...(projectId ? { projectId } : {}),
     ...(projectName ? { projectName } : {}),
     ...(field("seenOnDesktop") === true ? { seenOnDesktop: true } : {}),
+    ...(typeof requestId === "number" && Number.isSafeInteger(requestId) && requestId >= 0
+      ? { requestId }
+      : {}),
   };
 }
 

@@ -125,6 +125,12 @@ fn sanitize(items: &Value) -> Result<Vec<Value>, String> {
             if item["seenOnDesktop"] == true {
                 entry.insert("seenOnDesktop".into(), json!(true));
             }
+            // Fork (Hari, L-278): the request the phone's buttons answer.
+            if kind == "approval" || kind == "question" {
+                if let Some(request) = item["requestId"].as_u64() {
+                    entry.insert("requestId".into(), json!(request));
+                }
+            }
             Some(Value::Object(entry))
         })
         .take(MAX_ITEMS)
@@ -210,6 +216,21 @@ mod tests {
             .collect();
         assert_eq!(sanitize(&json!(many)).unwrap().len(), MAX_ITEMS);
         assert!(sanitize(&json!({})).is_err());
+    }
+
+    #[test]
+    fn sanitize_keeps_request_ids_for_approvals_and_questions_only() {
+        let items = json!([
+            { "id": "s:approval:7", "kind": "approval", "title": "T", "body": "B", "at": 1, "read": false, "requestId": 7 },
+            { "id": "s:question:8", "kind": "question", "title": "T", "body": "B", "at": 1, "read": false, "requestId": 8 },
+            { "id": "s:finished", "kind": "finished", "title": "T", "body": "B", "at": 1, "read": false, "requestId": 9 },
+            { "id": "s:approval:x", "kind": "approval", "title": "T", "body": "B", "at": 1, "read": false, "requestId": "x" },
+        ]);
+        let kept = sanitize(&items).unwrap();
+        assert_eq!(kept[0]["requestId"], 7);
+        assert_eq!(kept[1]["requestId"], 8);
+        assert!(kept[2].get("requestId").is_none());
+        assert!(kept[3].get("requestId").is_none());
     }
 
     #[test]

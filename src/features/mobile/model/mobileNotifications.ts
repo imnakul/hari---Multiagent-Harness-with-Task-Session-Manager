@@ -28,6 +28,9 @@ export type MobileNotification = {
   projectName?: string;
   /** Recorded while the chat was open on the computer (hidden from the bell). */
   seenOnDesktop?: boolean;
+  /** Fork (Hari, L-278): the approval or question it asks, so the phone's
+   *  notification can answer it. */
+  requestId?: number;
 };
 
 export type MobileNotificationAction =
@@ -51,7 +54,17 @@ export function mobileNotificationFeed(
       ? { projectId: mobileProjectId(item.cwd), projectName: projectName(item.cwd) }
       : {}),
     ...(item.seenOnDesktop ? { seenOnDesktop: true } : {}),
+    ...requestOf(item),
   }));
+}
+
+/** The request an approval or question entry asks: its key ends in it
+ *  (`<session>:approval:<request>`, see `recordSessionNotification`). */
+function requestOf(item: CenterNotification): { requestId?: number } {
+  if (item.kind !== "approval" && item.kind !== "question") return {};
+  const match = new RegExp(`:${item.kind}:(\\d+)$`).exec(item.id);
+  const requestId = match ? Number(match[1]) : NaN;
+  return Number.isSafeInteger(requestId) ? { requestId } : {};
 }
 
 function ids(value: unknown): string[] | null {

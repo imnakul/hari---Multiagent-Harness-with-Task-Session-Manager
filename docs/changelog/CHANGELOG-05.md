@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 16:27 IST — Answer from Hari's notifications (L-278)
+- Type: feature
+- What: The computer's notifications in the phone's panel now have buttons. Approvals get Approve and Deny; questions get an Answer box; a finished chat gets a Reply box. The tap goes straight to the computer without opening Hari. A sent one leaves the panel and is read on the computer; a failed one stays with the reason and its buttons. A typed answer picks the choice it names, or is the typed answer where the question allows one.
+- Why: Phase 2 of the Hari link plan: act on a notification without opening the app.
+- Files: [mobile_notifications.rs](../../src-tauri/src/mobile_notifications.rs), [mobileNotifications.ts](../../src/features/mobile/model/mobileNotifications.ts), [mobileWorkspace.ts](../../src/features/mobile/model/mobileWorkspace.ts), [App.tsx](../../src/app/App.tsx), [notificationActions.ts](../../mobile/src/features/notifications/notificationActions.ts), [PanelActions.tsx](../../mobile/src/features/notifications/PanelActions.tsx), [NotificationFeedSync.tsx](../../mobile/src/features/notifications/NotificationFeedSync.tsx), [notificationFeed.ts](../../mobile/src/features/notifications/notificationFeed.ts), [_layout.tsx](../../mobile/src/app/_layout.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ (root, mobile) lint ✅ (mobile changed files; root has no ESLint config) tests ✅ (desktop mobile model 9, src-tauri mobile_ 17, phone 266 — `tests/mobile/watchFrames.test.ts` can't load from the phone config on Windows, as before) rustfmt ✅; phone checks manual
+
 ## 2026-11-14 16:16 IST — Hari keeps one link open to the computer (L-277)
 - Type: feature
 - What: While paired, Hari now keeps one encrypted link open to the computer instead of only asking every few seconds. In view it uses the normal connection; in the background (Android, with "Keep watching in the background" on) it uses a quiet one that checks in every 20 s. The computer's notification list arrives on it within about a second, and Hari polls only once a minute while the link is open. Both sides now keep an outbox that the next phases use (sharing, notification actions). With an older computer, Hari keeps polling as before.

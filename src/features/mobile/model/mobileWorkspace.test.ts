@@ -55,6 +55,39 @@ describe("mobile question replies", () => {
     expect(mobileQuestionReply({ kind: "maybe" }, prompt)).toBeUndefined();
     expect(mobileQuestionReply(null, prompt)).toBeUndefined();
   });
+
+  it("reads a reply typed in the phone's notification (L-278)", () => {
+    const one = { requestId: 2, questions: [prompt.questions[0]!] };
+    expect(mobileQuestionReply({ kind: "text", text: " blue " }, one)).toEqual({
+      kind: "answered",
+      answers: { colour: ["blue"] },
+    });
+    expect(mobileQuestionReply({ kind: "text", text: "Teal" }, one)).toEqual({
+      kind: "answered",
+      answers: { colour: ["__custom__"] },
+      custom: { colour: "Teal" },
+    });
+    const sizes = { requestId: 3, questions: [prompt.questions[1]!] };
+    expect(mobileQuestionReply({ kind: "text", text: "large" }, sizes)).toEqual({
+      kind: "answered",
+      answers: { size: ["l"] },
+    });
+    expect(mobileQuestionReply({ kind: "text", text: "Huge" }, sizes)).toBeUndefined();
+    const withOther = {
+      requestId: 4,
+      questions: [
+        { ...prompt.questions[1]!, options: [...prompt.questions[1]!.options, { id: "o", label: "Other" }] },
+      ],
+    };
+    expect(mobileQuestionReply({ kind: "text", text: "Huge" }, withOther)).toEqual({
+      kind: "answered",
+      answers: { size: ["o"] },
+      custom: { size: "Huge" },
+    });
+    expect(mobileQuestionReply({ kind: "text", text: "Red" }, prompt)).toBeUndefined();
+    expect(mobileQuestionReply({ kind: "text", text: "  " }, one)).toBeUndefined();
+    expect(mobileQuestionReply({ kind: "text", text: "x".repeat(10_001) }, one)).toBeUndefined();
+  });
 });
 
 describe("phone model settings (fork L-235)", () => {

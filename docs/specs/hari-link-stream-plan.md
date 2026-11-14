@@ -4,7 +4,7 @@ Branch: `nakul/windows-support-upstream-0.16.0`
 Base: `62a2a762` (plus uncommitted L-265 to L-276)
 Created: 2026-11-14 15:36 (IST) · Updated: 2026-11-14 (scope added, Share choices answered)
 Tier: Large (protocol change on the phone link, new phone and desktop screens, Android service change)
-Status: Progress — Phase 1 built (L-277); Phases 2–5 next.
+Status: Progress — Phases 1–2 built (L-277, L-278); Phases 3–5 next.
 
 ## Idea
 Today the phone asks the computer on a timer (every 5 s in view, every 15 s in the background
@@ -167,11 +167,29 @@ Manual check (phone + computer; not for an agent inside MonoCode):
 5. Leave Hari in the background for an hour: Hari's battery use stays about where it was before this build.
 6. Restart the computer's app with notifications waiting: nothing shows twice on the phone.
 
+## Phase 2 — built (L-278)
+- Data: the computer's notification list carries `requestId` on approvals and questions (read from the bell entry's key `<session>:<kind>:<request>`; Rust `sanitize` passes it only for those kinds).
+- Phone: three Android categories (`hari_approval` Approve/Deny, `hari_answer` Answer box, `hari_reply` Reply box), none opening Hari. A panel post gets the category its entry can take (approval or question with a request and chat; finished chat).
+- Taps: `PanelActions` listens for button taps (deduped), sends `session.approve`, `session.answerQuestion {reply:{kind:"text",text}}` or `conversation.send` directly (not the outbox: an answer must not arrive late), then removes the notification and marks it read on the computer. A failure posts it again on the quiet `panel-results` channel: "Couldn't approve: <why>" over the original text, buttons kept.
+- Typed answers (computer): one-question prompts only. Text naming a choice (any case) picks it; otherwise it is the typed answer where the question allows one, or fills its "Other" choice; a question with several parts says "Open the chat to answer these questions", one with only fixed choices says to open the chat.
+- Changed from the plan: a sent action removes the notification instead of showing "Sent", the usual Android pattern; a failure stays.
+
+Manual check (phone + computer; not for an agent inside MonoCode):
+1. Let a chat ask for approval on the computer. The phone's notification shows Approve and Deny; Approve → the computer goes on, the notification leaves, the bell entry is read.
+2. Same with Deny → the computer shows the denial.
+3. A one-question prompt with choices: Answer with a choice's name (e.g. "blue") → that choice is picked. Answer with other text → the typed answer (or "Other").
+4. A question with several parts: Answer → the notification stays with "Couldn't send the answer: Open the chat to answer these questions".
+5. A finished chat: Reply "now add tests" → it arrives in that chat on the computer as a follow-up (queued if a turn is running).
+6. With the computer's app closed: tap Approve → the notification stays with the reason and its buttons; open the app and tap again → it works.
+7. Answer an approval on the computer first, then tap Approve on the phone → a "Couldn't approve" note, nothing else happens.
+8. Tap a notification's body (not a button) → it still opens the chat as before.
+
 ## Todos
 - [x] Share choices answered
 - [x] Phase 1 full spec, build, records (L-277)
 - [ ] Phase 1 manual check (list in "Phase 1 — built")
-- [ ] Phase 2
+- [x] Phase 2 build, records (L-278)
+- [ ] Phase 2 manual check (list in "Phase 2 — built")
 - [ ] Phase 3
 - [ ] Phase 4
 - [ ] Phase 5

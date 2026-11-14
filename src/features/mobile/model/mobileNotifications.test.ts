@@ -54,6 +54,17 @@ describe("phone notification feed (L-275)", () => {
     ]);
   });
 
+  it("gives approvals and questions the request the phone's buttons answer (L-278)", () => {
+    const base = { title: "Chat", body: "B", at: 1, read: false, sessionId: "s1" };
+    const feed = mobileNotificationFeed([
+      { ...base, id: "s1:approval:12", kind: "approval" },
+      { ...base, id: "s1:question:13", kind: "question" },
+      { ...base, id: "s1:finished", kind: "finished" },
+      { ...base, id: "s1:approval:x", kind: "approval" },
+    ]);
+    expect(feed.map((item) => item.requestId)).toEqual([12, 13, undefined, undefined]);
+  });
+
   it("reads only well-formed changes", () => {
     expect(parseMobileNotificationAction({ action: "clear" })).toEqual({ action: "clear" });
     expect(parseMobileNotificationAction({ action: "read" })).toEqual({ action: "read" });

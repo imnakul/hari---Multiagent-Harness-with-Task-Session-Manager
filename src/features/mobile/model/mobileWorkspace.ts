@@ -82,6 +82,7 @@ import { mobileTranscript } from "./mobileTranscript";
 import {
   CUSTOM_OPTION_ID,
   buildQuestionReply,
+  isOtherOption,
   type UserQuestionPrompt,
   type UserQuestionReply,
 } from "../../sessions/model/userQuestion";
@@ -487,6 +488,7 @@ export function mobileQuestionReply(
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const reply = value as Record<string, unknown>;
   if (reply.kind === "skipped") return { kind: "skipped" };
+  if (reply.kind === "text") return typedQuestionReply(reply.text, prompt);
   if (reply.kind !== "answered") return;
   const answers: Record<string, string[]> = {};
   const custom: Record<string, string> = {};
@@ -508,6 +510,33 @@ export function mobileQuestionReply(
   }
   const rebuilt = buildQuestionReply(prompt.questions, answers, custom);
   return rebuilt.kind === "answered" ? rebuilt : undefined;
+}
+
+/**
+ * Fork (Hari, L-278): an answer typed in the reply box of the phone's
+ * notification. Only for a prompt with one question: text naming an option
+ * picks it, anything else is the typed answer where the question takes one.
+ */
+function typedQuestionReply(
+  value: unknown,
+  prompt: UserQuestionPrompt,
+): UserQuestionReply | undefined {
+  const question = prompt.questions.length === 1 ? prompt.questions[0] : undefined;
+  if (!question || typeof value !== "string") return;
+  const text = value.trim();
+  if (!text || text.length > 10_000) return;
+  const named = question.options.find(
+    (option) => !isOtherOption(option) && option.label.trim().toLowerCase() === text.toLowerCase(),
+  );
+  const other = question.allowCustom
+    ? CUSTOM_OPTION_ID
+    : question.options.find(isOtherOption)?.id;
+  const rebuilt = named
+    ? buildQuestionReply(prompt.questions, { [question.id]: [named.id] })
+    : other
+      ? buildQuestionReply(prompt.questions, { [question.id]: [other] }, { [question.id]: text })
+      : undefined;
+  return rebuilt?.kind === "answered" ? rebuilt : undefined;
 }
 
 /** A new session from the phone, set to the model sheet's choice if it made one. */
