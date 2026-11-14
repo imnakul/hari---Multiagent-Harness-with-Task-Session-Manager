@@ -19,7 +19,7 @@ export default function ShareLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Share",
+          title: "Computer",
           headerLeft: () => (
             <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
           ),

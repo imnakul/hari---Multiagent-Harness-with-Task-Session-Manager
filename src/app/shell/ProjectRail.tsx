@@ -17,6 +17,7 @@ import {
   Settings,
   Zap,
   Whiteboard,
+  SmartPhone,
   Globe,
 } from "../../shared/ui/icons";
 import {
@@ -149,9 +150,11 @@ type Props = {
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  shareActive?: boolean;
   browserActive?: boolean;
   onTogglePanel?: () => void;
   onSelectProject: (path: string) => void;
@@ -210,9 +213,11 @@ export function ProjectRail({
   kanbanActive = false,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenShare,
   onOpenBrowser,
   automationsActive = false,
   whiteboardActive = false,
+  shareActive = false,
   browserActive = false,
   onTogglePanel,
   onSelectProject,
@@ -417,6 +422,7 @@ export function ProjectRail({
     notesActive || activityActive || tasksActive || kanbanActive || selectedProvider !== null ||
     automationsActive ||
     whiteboardActive ||
+    shareActive ||
     browserActive ||
     !!monos?.activeId;
   const pinnedIds = sections.pinned.map((item) => item.path);
@@ -524,6 +530,15 @@ export function ProjectRail({
                 onClick={onOpenWhiteboard}
                 active={whiteboardActive}
                 ariaLabel="Whiteboard"
+              />
+            ) : null}
+            {onOpenShare ? (
+              <RailAction
+                label="Share"
+                icon={SmartPhone}
+                onClick={onOpenShare}
+                active={shareActive}
+                ariaLabel="Share with your phone"
               />
             ) : null}
             {onOpenBrowser ? (

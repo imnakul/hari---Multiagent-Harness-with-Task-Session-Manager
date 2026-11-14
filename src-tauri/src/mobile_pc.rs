@@ -16,7 +16,10 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -344,6 +347,8 @@ fn stats() -> Result<Value, String> {
             .collect::<Vec<_>>(),
         "network": network,
         "uptime": native::uptime_seconds(),
+        // Fork (L-288): the phone shows Monitor on in place of Monitor off.
+        "monitorOff": monitor_off_now(),
     }))
 }
 
@@ -501,7 +506,8 @@ fn end_tree(pid: u32, identity: &str) -> Result<Value, String> {
 /// before the screen goes dark or the computer sleeps.
 fn power(action: &str) -> Result<Value, String> {
     let act: fn() -> Result<(), String> = match action {
-        "monitorOff" => native::monitor_off,
+        "monitorOff" => monitor_off_marked,
+        "monitorOn" => native::monitor_on,
         "lock" => native::lock,
         "hibernate" => native::hibernate,
         _ => return Err("Unsupported action".into()),
@@ -513,6 +519,36 @@ fn power(action: &str) -> Result<Value, String> {
         }
     });
     Ok(json!({ "done": true }))
+}
+
+/// Fork (L-288): turns the monitor off, then notes the last input at that
+/// moment, so stats can tell the phone the monitor is still off until someone
+/// touches the mouse or keyboard (or the phone turns it on).
+fn monitor_off_marked() -> Result<(), String> {
+    native::monitor_off()?;
+    std::thread::sleep(Duration::from_millis(300));
+    if let Some(tick) = native::last_input_tick() {
+        MONITOR_OFF_INPUT.store(u64::from(tick) | MONITOR_OFF_SET, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+/// The last-input tick when the phone turned the monitor off, with a high bit
+/// to say it is set; zero when the monitor isn't known to be off.
+static MONITOR_OFF_INPUT: AtomicU64 = AtomicU64::new(0);
+const MONITOR_OFF_SET: u64 = 1 << 63;
+
+/// Whether the monitor is off from the phone with no input since.
+fn monitor_off_now() -> bool {
+    let marked = MONITOR_OFF_INPUT.load(Ordering::Relaxed);
+    if marked & MONITOR_OFF_SET == 0 {
+        return false;
+    }
+    let still = native::last_input_tick() == Some((marked & !MONITOR_OFF_SET) as u32);
+    if !still {
+        MONITOR_OFF_INPUT.store(0, Ordering::Relaxed);
+    }
+    still
 }
 
 // ── Screenshot ───────────────────────────────────────────────────────────
@@ -930,6 +966,10 @@ mod native {
                 PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
             },
         },
+        UI::Input::KeyboardAndMouse::{
+            GetLastInputInfo, SendInput, INPUT, INPUT_0, INPUT_MOUSE, LASTINPUTINFO,
+            MOUSEEVENTF_MOVE, MOUSEINPUT,
+        },
         UI::WindowsAndMessaging::{
             EnumWindows, GetSystemMetrics, GetWindow, GetWindowLongPtrW, GetWindowTextW,
             GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SetForegroundWindow,
@@ -1147,6 +1187,47 @@ mod native {
             return Err(std::io::Error::last_os_error().to_string());
         }
         Ok(())
+    }
+
+    /// Fork (L-288): a one-pixel mouse nudge there and back wakes the
+    /// monitor (most systems ignore SC_MONITORPOWER "on").
+    pub fn monitor_on() -> Result<(), String> {
+        let nudge = |dx: i32| INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx,
+                    dy: 0,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        let inputs = [nudge(1), nudge(-1)];
+        // SAFETY: two filled INPUT structs and their size.
+        let sent = unsafe {
+            SendInput(
+                inputs.len() as u32,
+                inputs.as_ptr(),
+                std::mem::size_of::<INPUT>() as i32,
+            )
+        };
+        if sent == 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        Ok(())
+    }
+
+    /// The tick count of the last keyboard or mouse input.
+    pub fn last_input_tick() -> Option<u32> {
+        let mut info = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0,
+        };
+        // SAFETY: a valid out-pointer with its size set.
+        (unsafe { GetLastInputInfo(&mut info) } != 0).then_some(info.dwTime)
     }
 
     pub fn lock() -> Result<(), String> {
@@ -1425,6 +1506,12 @@ mod native {
     pub fn close_window(_handle: isize) {}
     pub fn monitor_off() -> Result<(), String> {
         Err(ONLY_WINDOWS.into())
+    }
+    pub fn monitor_on() -> Result<(), String> {
+        Err(ONLY_WINDOWS.into())
+    }
+    pub fn last_input_tick() -> Option<u32> {
+        None
     }
     pub fn lock() -> Result<(), String> {
         Err(ONLY_WINDOWS.into())

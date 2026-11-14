@@ -1,6 +1,6 @@
 import { requireNativeView } from "expo";
 import * as Clipboard from "expo-clipboard";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import Storage from "expo-sqlite/kv-store";
 import { useIsFocused } from "expo-router";
 import {

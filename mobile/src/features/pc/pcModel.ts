@@ -12,6 +12,8 @@ export type PcStats = {
   network?: { down?: number; up?: number };
   /** Seconds since Windows started. */
   uptime?: number;
+  /** Fork (L-288): off from the phone, with no input on the computer since. */
+  monitorOff?: boolean;
 };
 
 export type PcApp = {
@@ -37,7 +39,7 @@ export type AppSort = "cpu" | "memory" | "name";
 
 /** Changes the computer: refused there when `sentAt` is over a minute off. */
 export type PcAction = "close" | "end" | "minimize" | "maximize";
-export type PowerAction = "monitorOff" | "lock" | "hibernate";
+export type PowerAction = "monitorOff" | "monitorOn" | "lock" | "hibernate";
 export type ShortcutAction = "open" | "close" | "minimize" | "maximize" | "restart";
 
 /** A ring older than this is ignored (the phone was off when it was sent). */
@@ -68,6 +70,7 @@ export function parsePcStats(raw: unknown): PcStats {
   if (used !== undefined && total !== undefined && total > 0 && used <= total) stats.memory = { used, total };
   if (down !== undefined || up !== undefined) stats.network = { down, up };
   if (uptime !== undefined) stats.uptime = uptime;
+  if (field(raw, "monitorOff") === true) stats.monitorOff = true;
   for (const disk of list(field(raw, "disks"))) {
     const name = text(field(disk, "name"));
     const free = number(field(disk, "free"));

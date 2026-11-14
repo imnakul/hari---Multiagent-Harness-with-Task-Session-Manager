@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { Directory, File, FileMode, Paths } from "expo-file-system";
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 
 import { makeCommandId } from "@/features/connection/nativeLink";
 import { linkStreamLive, sendLinkItem } from "@/features/link/linkStream";
@@ -50,7 +50,7 @@ function enqueue(task: () => Promise<void>) {
 
 let channelReady: Promise<unknown> | null = null;
 /** A notification for something from the computer; a tap opens Share. */
-async function notify(title: string, body: string) {
+async function notify(title: string, body: string, openUrl?: string) {
   if (Platform.OS === "android") {
     channelReady ??= Notifications.setNotificationChannelAsync(SHARE_CHANNEL, {
       name: "Shared from your computer",
@@ -59,7 +59,7 @@ async function notify(title: string, body: string) {
     await channelReady;
   }
   await Notifications.scheduleNotificationAsync({
-    content: { title, body, data: { share: true } },
+    content: { title, body, data: openUrl ? { share: true, openUrl } : { share: true } },
     trigger: Platform.OS === "android" ? { channelId: SHARE_CHANNEL } : null,
   }).catch((reason: unknown) => console.warn("Share: could not post the notification", reason));
 }
@@ -99,6 +99,21 @@ export async function receiveShare(payload: unknown, command: Command): Promise<
     at: Date.now(),
     status: "done",
   });
+  if (share.open) {
+    // Opening a page from the background isn't allowed: the notification opens it when tapped.
+    if (AppState.currentState === "active") {
+      const opened = await Linking.openURL(share.text).then(
+        () => true,
+        (reason: unknown) => {
+          console.warn("Share: could not open the link", reason);
+          return false;
+        },
+      );
+      if (opened) return;
+    }
+    await notify("Open this link", preview(share.text), share.text);
+    return;
+  }
   await notify(
     kind === "clipboard" ? "Copied from your computer" : kind === "link" ? "Link from your computer" : "Text from your computer",
     preview(share.text),

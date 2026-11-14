@@ -438,16 +438,23 @@ pub fn mobile_share_list(app: AppHandle) -> Result<Value, String> {
 }
 
 /// Sends text to every paired phone: as text (a link when it is one address)
-/// or onto the phone's clipboard.
+/// or onto the phone's clipboard. `open` (L-287) asks the phone to open a
+/// web link as well; it is refused for anything that isn't one.
 #[tauri::command]
 pub fn mobile_share_send_text(
     window: Window,
     app: AppHandle,
     text: String,
     clipboard: bool,
+    open: Option<bool>,
 ) -> Result<(), String> {
     check_window(&window)?;
-    send_text(&app, checked_text(&text)?, clipboard)
+    let text = checked_text(&text)?;
+    let open = open == Some(true);
+    if open && (clipboard || kind_for_text(&text) != Kind::Link) {
+        return Err("Only web links open on the phone".into());
+    }
+    send_text(&app, text, clipboard, open)
 }
 
 /// Sends the computer's clipboard text onto the phone's clipboard.
@@ -457,10 +464,10 @@ pub fn mobile_share_send_clipboard(window: Window, app: AppHandle) -> Result<(),
     let text = arboard::Clipboard::new()
         .and_then(|mut clipboard| clipboard.get_text())
         .map_err(|_| "The clipboard has no text")?;
-    send_text(&app, checked_text(&text)?, true)
+    send_text(&app, checked_text(&text)?, true, false)
 }
 
-fn send_text(app: &AppHandle, text: String, clipboard: bool) -> Result<(), String> {
+fn send_text(app: &AppHandle, text: String, clipboard: bool, open: bool) -> Result<(), String> {
     let kind = if clipboard {
         Kind::Clipboard
     } else {
@@ -472,10 +479,11 @@ fn send_text(app: &AppHandle, text: String, clipboard: bool) -> Result<(), Strin
         Kind::Link => "link",
         _ => "text",
     };
-    push_to_phones(
-        app,
-        json!({ "type": type_name, "text": text, "entryId": id }),
-    )?;
+    let mut payload = json!({ "type": type_name, "text": text, "entryId": id });
+    if open {
+        payload["open"] = json!(true);
+    }
+    push_to_phones(app, payload)?;
     with(|share| {
         record(
             share,

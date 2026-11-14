@@ -36,6 +36,7 @@ import {
   modalStackOptions,
 } from "@/features/files/codeScreen";
 import { applySavedAppearance } from "@/features/settings/appearance";
+import { loadHapticsSetting } from "@/features/settings/haptics";
 import { modalSheetOptions } from "@/ui/ModalSheet";
 import { useLayoutChanging, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { DitherLoading } from "@/ui/DitherLoading";
@@ -54,6 +55,7 @@ import {
 
 // Light or dark as set in settings, or as the phone is.
 applySavedAppearance();
+loadHapticsSetting();
 
 const navigationTheme = (scheme: Scheme, colors: Palette) => {
   const base = scheme === "dark" ? DarkTheme : DefaultTheme;

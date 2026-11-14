@@ -15,6 +15,8 @@ import {
   safeFileName,
   settleInterrupted,
   shareCaption,
+  shareDay,
+  shareThumbnail,
   updateShareEntry,
   type PhoneShareEntry,
 } from "@/features/share/shareModel";
@@ -172,5 +174,41 @@ describe("parsePendingShares", () => {
       { type: "file", uri: "file:///cache/hari-share/1/a.png", name: "a.png", mimeType: "image/png", size: 5 },
     ]);
     expect(parsePendingShares("x")).toEqual([]);
+  });
+});
+
+describe("shareThumbnail (L-288)", () => {
+  const picture: PhoneShareEntry = {
+    id: "p",
+    direction: "in",
+    kind: "file",
+    name: "Screenshot.png",
+    mimeType: "image/png",
+    uri: "content://media/1",
+    at: 1,
+    status: "done",
+  };
+  it("draws a received picture from where it was saved", () => {
+    expect(shareThumbnail(picture)).toBe("content://media/1");
+  });
+  it("draws a sent picture from its copy", () => {
+    expect(shareThumbnail({ ...picture, direction: "out", status: "queued", uri: "file:///c/p.png" })).toBe("file:///c/p.png");
+  });
+  it("skips a picture not saved yet, other files and texts", () => {
+    expect(shareThumbnail({ ...picture, status: "moving" })).toBeNull();
+    expect(shareThumbnail({ ...picture, mimeType: "application/pdf" })).toBeNull();
+    expect(shareThumbnail({ ...picture, uri: undefined })).toBeNull();
+    expect(shareThumbnail({ id: "t", direction: "in", kind: "text", text: "hi", at: 1, status: "done" })).toBeNull();
+  });
+});
+
+describe("shareDay (L-288)", () => {
+  const now = new Date(2026, 10, 14, 15, 0).getTime();
+  it("names today and yesterday", () => {
+    expect(shareDay(new Date(2026, 10, 14, 0, 1).getTime(), now)).toBe("Today");
+    expect(shareDay(new Date(2026, 10, 13, 23, 59).getTime(), now)).toBe("Yesterday");
+  });
+  it("dates anything older", () => {
+    expect(shareDay(new Date(2026, 10, 1).getTime(), now)).not.toMatch(/Today|Yesterday/);
   });
 });

@@ -743,7 +743,8 @@ function fileUri(path: string): string {
   return `file://${abs.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function readBlobBase64(file: File): Promise<string | null> {
+/** A file as base64 (no data: prefix), or null when it is over the embed limit or unreadable. */
+export function readBlobBase64(file: File): Promise<string | null> {
   if (file.size > MAX_EMBED_BYTES) return Promise.resolve(null);
   return new Promise((resolve) => {
     const reader = new FileReader();

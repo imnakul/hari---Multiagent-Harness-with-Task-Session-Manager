@@ -7,7 +7,7 @@ import {
   tag,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { Image as ExpoImage } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";

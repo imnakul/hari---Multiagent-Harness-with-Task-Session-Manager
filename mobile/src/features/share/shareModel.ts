@@ -43,7 +43,12 @@ export type PhoneShareEntry = {
 
 /** A `share` item from the computer. */
 export type IncomingShare =
-  | { type: "text" | "link" | "clipboard"; text: string }
+  | {
+      type: "text" | "link" | "clipboard";
+      text: string;
+      /** Fork (L-287): "Open on phone": a web link the phone should open, not just keep. */
+      open?: boolean;
+    }
   | { type: "file"; fileId: string; name: string; mimeType: string; size: number };
 
 const KINDS: readonly ShareKind[] = ["text", "link", "clipboard", "file"];
@@ -82,6 +87,9 @@ export function parseIncomingShare(payload: unknown): IncomingShare | null {
   if (type !== "text" && type !== "link" && type !== "clipboard") return null;
   const text = field(payload, "text");
   if (typeof text !== "string" || !text.trim() || text.length > MAX_SHARE_TEXT) return null;
+  // Only a single web address opens; anything else arrives as usual.
+  if (field(payload, "open") === true && type !== "clipboard" && kindForText(text) === "link")
+    return { type, text: text.trim(), open: true };
   return { type, text };
 }
 
@@ -286,4 +294,22 @@ export function parsePendingShares(raw: unknown): PendingShare[] {
     }
     return [];
   });
+}
+
+/**
+ * Fork (L-288): where to draw a picture's thumbnail from; null for anything
+ * else, or a picture not on the phone (yet).
+ */
+export function shareThumbnail(entry: PhoneShareEntry): string | null {
+  if (entry.kind !== "file" || !entry.uri || !entry.mimeType?.startsWith("image/")) return null;
+  if (entry.direction === "in" && entry.status !== "done") return null;
+  return entry.uri;
+}
+
+/** Fork (L-288): the day a timeline entry falls on, for its separator: Today, Yesterday or the date. */
+export function shareDay(at: number, now = Date.now()): string {
+  const start = new Date(now).setHours(0, 0, 0, 0);
+  if (at >= start) return "Today";
+  if (at >= start - 86_400_000) return "Yesterday";
+  return new Date(at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }

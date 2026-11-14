@@ -7,10 +7,10 @@ import {
   shapes,
   tag,
 } from "@expo/ui/swift-ui/modifiers";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -25,6 +25,8 @@ import { useConnection, useMonoTools } from "@/features/connection/ConnectionPro
 import { shownFeedItems, useFeed } from "@/features/notifications/notificationFeed";
 import { useFeedPreferences } from "@/features/settings/notificationFeed";
 import { isRunning } from "@/features/liveUpdates/liveCards";
+import { canWake } from "@/features/liveUpdates/nativeLive";
+import { wakeComputer } from "@/features/pc/wake";
 import { PixelMascot } from "@/features/mascots/PixelMascot";
 import { ProjectMascot } from "@/features/mascots/ProjectMascot";
 import { plainText } from "@/features/sessions/markdownParser";
@@ -97,6 +99,22 @@ export function WorkspaceDrawer() {
       ? shownFeedItems(feed.items, seenOnDesktop).filter((item) => !item.read).length
       : 0;
   const tools = useMonoTools();
+  // Fork (Hari, L-288): Wake computer from the side menu; "Sent" shows a moment.
+  const [waking, setWaking] = useState<"busy" | "sent" | null>(null);
+  const wake = async () => {
+    const fingerprint = pairing?.desktop.fingerprint;
+    if (!fingerprint || waking === "busy") return;
+    setWaking("busy");
+    try {
+      if (!(await wakeComputer(fingerprint))) return setWaking(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setWaking("sent");
+      setTimeout(() => setWaking(null), 4_000);
+    } catch (reason) {
+      setWaking(null);
+      Alert.alert("Couldn’t wake the computer", reason instanceof Error ? reason.message : String(reason));
+    }
+  };
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [show, setShow] = useState<Show>("both");
@@ -188,7 +206,7 @@ export function WorkspaceDrawer() {
   // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,
   // squeezed beside the drawer, so the drawer shuts first.
   const openModal = (
-    path: "/settings" | "/mono-new" | "/tasks" | "/notes" | "/notifications",
+    path: "/settings" | "/mono-new" | "/tasks" | "/notes" | "/notifications" | "/computer",
   ) => {
     if (isModalRoute(pathname)) return;
     if (Platform.OS === "android") drawer.closeThen(() => router.push(path));
@@ -228,7 +246,7 @@ export function WorkspaceDrawer() {
           keyboardDismissMode="on-drag"
         >
           {/* Fork (Hari, L-236): the desktop's Tasks and Notes, over the lists. */}
-          {(catalog.phoneTools || feedShown) && !needle ? (
+          {(catalog.phoneTools || feedShown || pairing) && !needle ? (
             <View style={[styles.list, styles.toolList]}>
               {/* Fork (Hari, L-275): the desktop bell's history. */}
               {feedShown ? (
@@ -237,6 +255,18 @@ export function WorkspaceDrawer() {
                   label="Notifications"
                   badge={feedUnread}
                   onPress={() => openModal("/notifications")}
+                />
+              ) : null}
+              {/* Fork (Hari, L-288): the Computer hub and Wake-on-LAN, in either layout. */}
+              {pairing ? (
+                <ToolRow icon="computer" label="Computer" onPress={() => openModal("/computer")} />
+              ) : null}
+              {pairing && canWake ? (
+                <ToolRow
+                  icon="power"
+                  label="Wake computer"
+                  detail={waking === "busy" ? "Sending…" : waking === "sent" ? "Sent" : undefined}
+                  onPress={() => void wake()}
                 />
               ) : null}
               {catalog.phoneTools ? (
@@ -636,19 +666,23 @@ function ToolRow({
   label,
   onPress,
   badge = 0,
+  detail,
 }: {
   icon: IconName;
   label: string;
   onPress: () => void;
   /** Fork (L-275): a count shown at the end (unread notifications). */
   badge?: number;
+  /** Fork (L-288): a short state at the end, e.g. Wake computer's "Sent". */
+  detail?: string;
 }) {
   const styles = useStyles();
   const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
+      accessibilityLabel={badge ? `${label}, ${badge} unread` : detail ? `${label}, ${detail}` : label}
+      accessibilityLiveRegion={detail ? "polite" : undefined}
       onPress={onPress}
       style={({ pressed }) => [styles.toolRow, pressed && styles.rowActive]}
     >
@@ -658,6 +692,7 @@ function ToolRow({
       <Text style={[styles.rowLabel, styles.rowText]} numberOfLines={1}>
         {label}
       </Text>
+      {detail ? <Text style={styles.toolDetail}>{detail}</Text> : null}
       {badge ? (
         <View style={styles.toolBadge}>
           <Text style={styles.toolBadgeText}>{badge > 99 ? "99+" : badge}</Text>
@@ -668,6 +703,7 @@ function ToolRow({
 }
 
 const useStyles = themedStyles((colors) => ({
+  toolDetail: { color: colors.muted, fontSize: 14 },
   toolBadge: {
     minWidth: 22,
     height: 22,

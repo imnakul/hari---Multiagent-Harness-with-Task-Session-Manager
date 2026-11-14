@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { useEffect, useRef, useState } from "react";
 import { ActionSheetIOS, Alert } from "react-native";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";

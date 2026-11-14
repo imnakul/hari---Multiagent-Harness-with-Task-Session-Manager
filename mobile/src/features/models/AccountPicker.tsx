@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { useState } from "react";
 import {
   ActivityIndicator,

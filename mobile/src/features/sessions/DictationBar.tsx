@@ -8,7 +8,7 @@ import {
   type RecordingOptions,
 } from "expo-audio";
 import { File } from "expo-file-system";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,

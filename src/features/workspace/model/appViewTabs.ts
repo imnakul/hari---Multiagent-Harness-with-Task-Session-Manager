@@ -7,6 +7,7 @@ export const APP_VIEW_LABELS = {
   activity: "Activity",
   automations: "Automations",
   whiteboard: "Whiteboard",
+  share: "Share",
   browser: "Browser",
 } as const;
 
@@ -16,6 +17,7 @@ export type AppView = keyof typeof APP_VIEW_LABELS;
 const NEW_TAB_VIEW_ORDER: readonly AppView[] = [
   "browser",
   "whiteboard",
+  "share",
   "notes",
   "activity",
   "tasks",

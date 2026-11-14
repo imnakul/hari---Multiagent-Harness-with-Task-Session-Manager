@@ -58,6 +58,7 @@ import {
   Zap,
   Whiteboard,
   Globe,
+  SmartPhone,
   type IconComponent,
 } from "../../shared/ui/icons";
 import { createPortal } from "react-dom";
@@ -447,6 +448,7 @@ type Props = {
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   onGoToFile?: () => void;
   searchActive?: boolean;
@@ -457,6 +459,7 @@ type Props = {
   kanbanActive?: boolean;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  shareActive?: boolean;
   browserActive?: boolean;
   notesEnabled?: boolean;
   onToggleProjectRail?: () => void;
@@ -588,6 +591,7 @@ function SidebarComponent({
   onOpenKanban,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenShare,
   onOpenBrowser,
   onGoToFile,
   searchActive = false,
@@ -598,6 +602,7 @@ function SidebarComponent({
   kanbanActive = false,
   automationsActive = false,
   whiteboardActive = false,
+  shareActive = false,
   browserActive = false,
   notesEnabled = true,
   onToggleProjectRail,
@@ -1168,6 +1173,7 @@ function SidebarComponent({
     kanbanActive ||
     automationsActive ||
     whiteboardActive ||
+    shareActive ||
     browserActive ||
     settingsOpen;
   // A remembered Mono sits underneath these views; select it only while visible.
@@ -1196,6 +1202,7 @@ function SidebarComponent({
     !monoViewActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !shareActive &&
     !browserActive &&
     !settingsOpen;
   const sidebarVisible = open && sidebarAvailable;
@@ -1212,6 +1219,7 @@ function SidebarComponent({
     !kanbanActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !shareActive &&
     !browserActive &&
     !settingsOpen;
   // With the sidebar collapsed beside the compact rail, its tab shortcuts
@@ -2896,6 +2904,12 @@ function SidebarComponent({
           active: whiteboardActive,
           onClick: onOpenWhiteboard,
         },
+        onOpenShare && {
+          label: "Share",
+          icon: SmartPhone,
+          active: shareActive,
+          onClick: onOpenShare,
+        },
         onOpenBrowser && {
           label: "Browser",
           icon: Globe,
@@ -3094,6 +3108,7 @@ function SidebarComponent({
               kanbanActive={kanbanActive}
               onOpenAutomations={onOpenAutomations}
               onOpenWhiteboard={onOpenWhiteboard}
+              onOpenShare={onOpenShare}
               onOpenBrowser={onOpenBrowser}
               searchActive={searchActive}
               inboxActive={inboxActive}
@@ -3102,6 +3117,7 @@ function SidebarComponent({
               onOpenActivity={onOpenActivity}
               automationsActive={automationsActive}
               whiteboardActive={whiteboardActive}
+              shareActive={shareActive}
               browserActive={browserActive}
               inboxUnseen={inboxUnseen}
             />
@@ -3723,9 +3739,11 @@ function SidebarComponent({
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
           onOpenWhiteboard={onOpenWhiteboard}
+          onOpenShare={onOpenShare}
           onOpenBrowser={onOpenBrowser}
           automationsActive={automationsActive}
           whiteboardActive={whiteboardActive}
+          shareActive={shareActive}
           browserActive={browserActive}
           onOpenSettings={onOpenSettings}
           onTogglePanel={onToggleProjectRail}
@@ -3768,9 +3786,11 @@ function SidebarComponent({
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
           onOpenWhiteboard={onOpenWhiteboard}
+          onOpenShare={onOpenShare}
           onOpenBrowser={onOpenBrowser}
           automationsActive={automationsActive}
           whiteboardActive={whiteboardActive}
+          shareActive={shareActive}
           browserActive={browserActive}
           onTogglePanel={onToggleProjectRail}
           onSelectProject={onSelectProject}
@@ -3924,6 +3944,7 @@ function SidebarProjectPicker({
   onOpenKanban,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenShare,
   onOpenBrowser,
   searchActive = false,
   inboxActive = false,
@@ -3933,6 +3954,7 @@ function SidebarProjectPicker({
   kanbanActive = false,
   automationsActive = false,
   whiteboardActive = false,
+  shareActive = false,
   browserActive = false,
   inboxUnseen = false,
 }: {
@@ -3952,6 +3974,7 @@ function SidebarProjectPicker({
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   searchActive?: boolean;
   inboxActive?: boolean;
@@ -3961,6 +3984,7 @@ function SidebarProjectPicker({
   kanbanActive?: boolean;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  shareActive?: boolean;
   browserActive?: boolean;
   inboxUnseen?: boolean;
 }) {
@@ -4059,6 +4083,11 @@ function SidebarProjectPicker({
             <Whiteboard className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
+        {onOpenShare ? (
+          <IconButton label="Share" active={shareActive} onClick={onOpenShare}>
+            <SmartPhone className="size-3.5" strokeWidth={1.75} />
+          </IconButton>
+        ) : null}
         {onOpenBrowser ? (
           <IconButton
             label="Browser"
@@ -4125,9 +4154,11 @@ function CompactProjectRail({
   kanbanActive = false,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenShare,
   onOpenBrowser,
   automationsActive,
   whiteboardActive = false,
+  shareActive = false,
   browserActive = false,
   onOpenSettings,
   onTogglePanel,
@@ -4168,9 +4199,11 @@ function CompactProjectRail({
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   automationsActive: boolean;
   whiteboardActive?: boolean;
+  shareActive?: boolean;
   browserActive?: boolean;
   onOpenSettings?: () => void;
   onTogglePanel?: () => void;
@@ -4221,6 +4254,7 @@ function CompactProjectRail({
     !kanbanActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !shareActive &&
     !browserActive &&
     !monoViewActive;
   const openWorkspaceTab = (nextTab: SidebarTab) => {
@@ -4397,6 +4431,14 @@ function CompactProjectRail({
             icon={Whiteboard}
             active={whiteboardActive}
             onClick={action(whiteboardActive, onOpenWhiteboard)}
+          />
+        ) : null}
+        {onOpenShare ? (
+          <CompactRailAction
+            label="Share"
+            icon={SmartPhone}
+            active={shareActive}
+            onClick={action(shareActive, onOpenShare)}
           />
         ) : null}
         {onOpenBrowser ? (

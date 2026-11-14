@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useAnimatedReaction, type SharedValue } from "react-native-reanimated";

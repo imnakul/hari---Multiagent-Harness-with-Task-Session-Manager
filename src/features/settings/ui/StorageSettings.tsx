@@ -29,17 +29,20 @@ import { sessionDisplayTitle } from "../../sessions/model/session";
 import { usePathPointerDrag } from "../../sessions/hooks/usePathPointerDrag";
 import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
 import { ImageLightbox } from "../../../shared/ui/ImageLightbox";
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Copy, FolderOpen, RefreshCw, Trash2 } from "../../../shared/ui/icons";
 import {
   attachmentDisplayName,
   dateRangeBounds,
   deleteConfirmation,
   filterByDate,
+  filterByProjects,
   groupStorage,
   isDateFiltered,
   STORAGE_DATE_PRESETS,
   toDateInput,
   isImageAttachment,
+  storageProjects,
   storageTotals,
   withoutDeleted,
   type AttachmentStorageScan,
@@ -50,6 +53,7 @@ import {
   type StorageView,
   type StoredAttachment,
 } from "../model/attachmentStorage";
+import { forgetStorageThumbnails, storageThumbnail } from "./storageThumbnails";
 
 type DeleteResult = {
   deleted: string[];
@@ -103,6 +107,7 @@ export function StorageSettings({
   const [state, setState] = useState<ScanState>({ status: "loading" });
   const [view, setView] = useState<StorageView>("chat");
   const [range, setRange] = useState<StorageDateRange>({ preset: "all", from: "", to: "" });
+  const [pickedProjects, setPickedProjects] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const scanRequest = useRef(0);
@@ -125,11 +130,44 @@ export function StorageSettings({
   }, [refresh]);
 
   const scan = state.status === "ready" ? state.scan : null;
-  const filtered = isDateFiltered(range);
+  const datesFiltered = isDateFiltered(range);
   // "Today" and friends are read against the clock when the range changes.
-  const shown = useMemo(
+  const dated = useMemo(
     () => (scan ? filterByDate(scan, range, Date.now()) : null),
     [scan, range],
+  );
+  // Fork (L-289): the Project filter, after the dates so its counts match them.
+  const projectOptions = useMemo(
+    () => (scan && dated ? storageProjects(scan, dated) : []),
+    [scan, dated],
+  );
+  // A picked project whose files were all deleted drops out of the filter.
+  const projects = useMemo(
+    () => pickedProjects.filter((key) => projectOptions.some((option) => option.key === key)),
+    [pickedProjects, projectOptions],
+  );
+  const shown = useMemo(
+    () => (dated ? filterByProjects(dated, projects) : null),
+    [dated, projects],
+  );
+  const filtered = datesFiltered || projects.length > 0;
+  const filterScope = [
+    datesFiltered ? "saved in the chosen dates" : "",
+    projects.length ? (projects.length === 1 ? "in the chosen project" : "in the chosen projects") : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const projectSelectOptions = useMemo(
+    () => [
+      { value: "", label: "All projects", count: dated?.files.length ?? 0 },
+      ...projectOptions.map((option) => ({
+        value: option.key,
+        label: option.label,
+        keywords: option.detail,
+        count: option.count,
+      })),
+    ],
+    [projectOptions, dated],
   );
   const groups = useMemo(
     () => (shown ? groupStorage(shown, view, chatTitle) : []),
@@ -169,6 +207,7 @@ export function StorageSettings({
       const result = await invoke<DeleteResult>("attachment_storage_delete", {
         paths: files.map((file) => file.path),
       });
+      forgetStorageThumbnails(result.deleted);
       setState((current) =>
         current.status === "ready"
           ? { status: "ready", scan: withoutDeleted(current.scan, result.deleted) }
@@ -273,11 +312,34 @@ export function StorageSettings({
             </button>
           ))}
         </div>
-        <DateRangeControls
-          range={range}
-          onPreset={choosePreset}
-          onDates={(from, to) => setRange({ preset: "custom", from, to })}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {projectOptions.length ? (
+            <SearchableSelect
+              variant="pill"
+              label="Project"
+              value=""
+              options={projectSelectOptions}
+              searchable={projectOptions.length > 6}
+              searchPlaceholder="Search projects…"
+              multiple={{
+                values: projects,
+                summary: (count) => `${count} projects`,
+                onToggle: (key) =>
+                  setPickedProjects(
+                    projects.includes(key)
+                      ? projects.filter((entry) => entry !== key)
+                      : [...projects, key],
+                  ),
+              }}
+              onChange={() => setPickedProjects([])}
+            />
+          ) : null}
+          <DateRangeControls
+            range={range}
+            onPreset={choosePreset}
+            onDates={(from, to) => setRange({ preset: "custom", from, to })}
+          />
+        </div>
         {shown && shown.files.length ? (
           <ToolbarButton
             danger
@@ -285,7 +347,7 @@ export function StorageSettings({
             onClick={() =>
               void deleteFiles(
                 shown.files,
-                filtered ? "saved in the chosen dates" : "saved by MonoCode (all of them)",
+                filtered ? filterScope : "saved by MonoCode (all of them)",
               )
             }
           >
@@ -300,10 +362,13 @@ export function StorageSettings({
           {plural(totals.count, "file")}
           <button
             type="button"
-            onClick={() => setRange((current) => ({ ...current, preset: "all" }))}
+            onClick={() => {
+              setRange((current) => ({ ...current, preset: "all" }));
+              setPickedProjects([]);
+            }}
             className="ml-2 underline underline-offset-2 hover:text-content"
           >
-            Show all dates
+            Clear filters
           </button>
         </p>
       ) : null}
@@ -337,7 +402,7 @@ export function StorageSettings({
       ) : groups.length === 0 ? (
         <p className="rounded-xl border border-content/10 bg-content/3 px-4 py-6 text-center text-[12px] text-content/45">
           {filtered && scan?.files.length
-            ? "No files saved in these dates."
+            ? "No files match these filters."
             : "No saved attachments. Files you paste into a chat show up here."}
         </p>
       ) : (
@@ -346,7 +411,7 @@ export function StorageSettings({
             <StorageGroupCard
               key={`${view}:${group.key}`}
               group={group}
-              filtered={filtered}
+              filterScope={filtered ? filterScope : ""}
               busy={busy}
               onOpenSession={onOpenSession}
               onDelete={(files, scope) => void deleteFiles(files, scope)}
@@ -360,8 +425,9 @@ export function StorageSettings({
   );
 }
 
-function deleteScope(group: StorageGroup, filtered: boolean): string {
-  const dates = filtered ? " saved in the chosen dates" : "";
+/** `scope`: what the filters leave ("saved in the chosen dates"), or "" for none. */
+function deleteScope(group: StorageGroup, scope: string): string {
+  const dates = scope ? ` ${scope}` : "";
   switch (group.kind) {
     case "chat":
       return `from "${group.title}"${dates}`;
@@ -370,13 +436,13 @@ function deleteScope(group: StorageGroup, filtered: boolean): string {
     case "unlinked":
       return `not linked to a chat${dates}`;
     case "all":
-      return filtered ? "saved in the chosen dates" : "saved by MonoCode (all of them)";
+      return scope || "saved by MonoCode (all of them)";
   }
 }
 
 function StorageGroupCard({
   group,
-  filtered,
+  filterScope,
   busy,
   onOpenSession,
   onDelete,
@@ -384,7 +450,7 @@ function StorageGroupCard({
   onReveal,
 }: {
   group: StorageGroup;
-  filtered: boolean;
+  filterScope: string;
   busy: boolean;
   onOpenSession: (sessionId: string) => void;
   onDelete: (files: StoredAttachment[], scope: string) => void;
@@ -395,7 +461,7 @@ function StorageGroupCard({
   const shown = expanded ? group.files : group.files.slice(0, GROUP_PREVIEW);
   const session = group.session;
   const fileScope = (file: StoredAttachment) =>
-    file.sessionIds.length ? deleteScope(group, false) : "not linked to a chat";
+    file.sessionIds.length ? deleteScope(group, "") : "not linked to a chat";
 
   return (
     <section aria-label={group.title}>
@@ -428,10 +494,10 @@ function StorageGroupCard({
         <ToolbarButton
           danger
           disabled={busy}
-          onClick={() => onDelete(group.files, deleteScope(group, filtered))}
+          onClick={() => onDelete(group.files, deleteScope(group, filterScope))}
         >
           <Trash2 className="size-3.5" />
-          {group.kind === "all" && !filtered ? "Delete all" : group.files.length === 1 ? "Delete" : `Delete ${group.files.length}`}
+          {group.kind === "all" && !filterScope ? "Delete all" : group.files.length === 1 ? "Delete" : `Delete ${group.files.length}`}
         </ToolbarButton>
       </div>
       <ul
@@ -503,7 +569,10 @@ function StorageTile({
 }): JSX.Element {
   const [ref, visible] = useVisibleOnce<HTMLLIElement>();
   const image = isImageAttachment(file);
-  const [thumb, setThumb] = useState<{ status: "idle" | "missing" } | { status: "ready"; url: string }>({
+  // `url` is the full picture (the lightbox); `small` the tile's square copy (L-289).
+  const [thumb, setThumb] = useState<
+    { status: "idle" | "missing" } | { status: "ready"; url: string; small: string }
+  >({
     status: "idle",
   });
   const [open, setOpen] = useState(false);
@@ -515,8 +584,9 @@ function StorageTile({
     if (!visible || !image) return;
     let cancelled = false;
     const release = holdAttachmentPreviewUrl(file.path);
-    void loadAttachmentPreviewUrl(file.path).then((url) => {
-      if (!cancelled) setThumb(url ? { status: "ready", url } : { status: "missing" });
+    void loadAttachmentPreviewUrl(file.path).then(async (url) => {
+      const small = url ? await storageThumbnail(file.path, url) : null;
+      if (!cancelled) setThumb(url && small ? { status: "ready", url, small } : { status: "missing" });
     });
     return () => {
       cancelled = true;
@@ -527,7 +597,11 @@ function StorageTile({
   const label = `${name}, ${stamp}, ${formatFileSize(file.size)}`;
 
   return (
-    <li ref={ref} className="group relative aspect-square overflow-hidden rounded-lg bg-content/5">
+    // Off-screen tiles skip layout and paint (content-visibility), L-289.
+    <li
+      ref={ref}
+      className="group relative aspect-square overflow-hidden rounded-lg bg-content/5 [content-visibility:auto] [contain-intrinsic-size:auto_104px]"
+    >
       <button
         type="button"
         aria-label={image ? `Open ${label}` : `Show ${label} in its folder`}
@@ -541,7 +615,8 @@ function StorageTile({
       >
         {image && thumb.status === "ready" ? (
           <img
-            src={thumb.url}
+            src={thumb.small}
+            decoding="async"
             alt=""
             draggable={false}
             className="size-full object-cover outline outline-1 -outline-offset-1 outline-content/10"
@@ -606,7 +681,7 @@ function TileAction({
         event.stopPropagation();
         onClick();
       }}
-      className={`grid size-6 place-items-center rounded-md bg-black/55 text-white/90 backdrop-blur-sm transition-[transform,background-color] duration-100 active:scale-96 disabled:opacity-50 ${
+      className={`grid size-6 place-items-center rounded-md bg-black/70 text-white/90 transition-[transform,background-color] duration-100 active:scale-96 disabled:opacity-50 ${
         danger ? "hover:bg-red-600/80" : "hover:bg-black/75"
       }`}
     >
@@ -642,6 +717,8 @@ function ToolbarButton({
   );
 }
 
+const DATE_OPTIONS = STORAGE_DATE_PRESETS.map((option) => ({ value: option.id, label: option.label }));
+
 const FIELD =
   "rounded-md border border-content/10 bg-content/5 px-2 py-1 text-[12px] text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
@@ -657,23 +734,18 @@ function DateRangeControls({
   const today = toDateInput(Date.now());
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="flex items-center gap-1.5 text-[12px] text-content/55">
-        Saved
-        <select
-          value={range.preset}
-          onChange={(event) => {
-            const preset = STORAGE_DATE_PRESETS.find((option) => option.id === event.target.value);
-            if (preset) onPreset(preset.id);
-          }}
-          className={FIELD}
-        >
-          {STORAGE_DATE_PRESETS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* L-289: the app's own dropdown, like the Project filter beside it. */}
+      <SearchableSelect
+        variant="pill"
+        label="Saved"
+        value={range.preset}
+        options={DATE_OPTIONS}
+        searchable={false}
+        onChange={(value) => {
+          const preset = STORAGE_DATE_PRESETS.find((option) => option.id === value);
+          if (preset) onPreset(preset.id);
+        }}
+      />
       {range.preset === "custom" ? (
         <>
           <label className="flex items-center gap-1.5 text-[12px] text-content/55">

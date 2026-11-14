@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { router } from "expo-router";
 import { createContext, use, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";

@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Fragment, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";

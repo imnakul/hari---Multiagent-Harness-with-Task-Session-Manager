@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
 import {

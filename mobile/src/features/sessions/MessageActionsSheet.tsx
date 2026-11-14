@@ -26,7 +26,7 @@ import {
   scrollContentBackground,
   shapes,
 } from "@expo/ui/swift-ui/modifiers";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { Fragment, useRef, useState } from "react";
 
 import { useColors, withAlpha } from "@/ui/theme";

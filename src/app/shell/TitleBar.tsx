@@ -23,6 +23,7 @@ import {
   X,
   Zap,
   Whiteboard,
+  SmartPhone,
   Globe,
 } from "../../shared/ui/icons";
 import {
@@ -90,6 +91,7 @@ const APP_VIEW_ICONS = {
   activity: Activity,
   automations: Zap,
   whiteboard: Whiteboard,
+  share: SmartPhone,
   browser: Globe,
 };
 

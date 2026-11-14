@@ -7,7 +7,7 @@ import {
   useIsFocused,
   useLocalSearchParams,
 } from "expo-router";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Text } from "react-native";
 import { ConnectionNotice } from "@/features/connection/ConnectionNotice";

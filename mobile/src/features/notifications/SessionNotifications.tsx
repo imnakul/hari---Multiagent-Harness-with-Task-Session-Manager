@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import {
@@ -11,6 +11,7 @@ import {
   type NotificationCategory,
 } from "@/features/settings/notifications";
 import type { SessionSummary } from "@/features/workspace/types";
+import { kindForText } from "@/features/share/shareModel";
 import { feedServed, refreshFeed } from "./notificationFeed";
 
 // Only for when the app is out of view; one landing as it comes back stays
@@ -38,6 +39,8 @@ type Target = Partial<Data> & {
   feedId?: string;
   /** Fork (L-279): something shared from the computer. */
   share?: boolean;
+  /** Fork (L-287): a link the computer asked the phone to open. */
+  openUrl?: string;
 };
 const SESSION_CHANNEL = "sessions";
 
@@ -220,6 +223,14 @@ export function SessionNotifications() {
       Target | undefined;
     void Notifications.clearLastNotificationResponseAsync();
     if (data?.share) {
+      const url = typeof data.openUrl === "string" ? data.openUrl.trim() : "";
+      if (kindForText(url) === "link") {
+        void Linking.openURL(url).catch((reason: unknown) => {
+          console.warn("Share: could not open the link", reason);
+          router.push("/share");
+        });
+        return;
+      }
       router.push("/share");
       return;
     }

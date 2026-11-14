@@ -296,3 +296,62 @@ export function filterByDate(
     ),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Fork (L-289): the Project filter. A file belongs to the project of the chat
+// it's filed under (see `groupStorage`); files no chat points at are their own
+// choice, so they can be picked or left out like a project.
+
+export type StorageProjectOption = { key: string; label: string; detail: string; count: number };
+
+function projectKeyOf(file: StoredAttachment, sessions: Map<string, StorageSession>): string {
+  const session = primarySession(file, sessions);
+  return session ? pathKey(session.cwd) : UNLINKED_GROUP_KEY;
+}
+
+/**
+ * Every project that has saved files, by name, with "Not linked to a chat"
+ * last. Counts come from `counted` (the files the dates leave), so the menu
+ * matches what picking one would show; a project with none left still lists.
+ */
+export function storageProjects(
+  scan: AttachmentStorageScan,
+  counted: AttachmentStorageScan = scan,
+): StorageProjectOption[] {
+  const sessions = new Map(scan.sessions.map((session) => [session.id, session]));
+  const options = new Map<string, StorageProjectOption>();
+  for (const file of scan.files) {
+    const key = projectKeyOf(file, sessions);
+    if (options.has(key)) continue;
+    const session = key === UNLINKED_GROUP_KEY ? undefined : primarySession(file, sessions);
+    options.set(key, {
+      key,
+      label: session ? projectName(session.cwd) : "Not linked to a chat",
+      detail: session ? prettyCwd(session.cwd) : "",
+      count: 0,
+    });
+  }
+  const countedSessions = new Map(counted.sessions.map((session) => [session.id, session]));
+  for (const file of counted.files) {
+    const option = options.get(projectKeyOf(file, countedSessions));
+    if (option) option.count += 1;
+  }
+  return [...options.values()].sort((a, b) =>
+    a.key === UNLINKED_GROUP_KEY
+      ? 1
+      : b.key === UNLINKED_GROUP_KEY
+        ? -1
+        : a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
+}
+
+/** The scan with only the files in the picked projects; none picked keeps all. */
+export function filterByProjects(
+  scan: AttachmentStorageScan,
+  keys: readonly string[],
+): AttachmentStorageScan {
+  if (!keys.length) return scan;
+  const picked = new Set(keys);
+  const sessions = new Map(scan.sessions.map((session) => [session.id, session]));
+  return { ...scan, files: scan.files.filter((file) => picked.has(projectKeyOf(file, sessions))) };
+}

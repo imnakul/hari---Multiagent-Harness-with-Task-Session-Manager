@@ -37,6 +37,12 @@ describe("parsePcStats", () => {
     });
   });
 
+  it("says the monitor is off only when the computer says so exactly (L-288)", () => {
+    expect(parsePcStats({ monitorOff: true }).monitorOff).toBe(true);
+    expect(parsePcStats({ monitorOff: "yes" }).monitorOff).toBeUndefined();
+    expect(parsePcStats({}).monitorOff).toBeUndefined();
+  });
+
   it("reads nothing from a malformed answer", () => {
     expect(parsePcStats(null)).toEqual({ disks: [] });
     expect(parsePcStats({ memory: { used: 20, total: 10 } })).toEqual({ disks: [] });

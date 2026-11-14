@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   createContext,

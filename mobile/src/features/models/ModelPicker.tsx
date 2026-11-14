@@ -1,7 +1,7 @@
 import { Host as UniversalHost, Slider as UniversalSlider } from "@expo/ui";
 import { Host, Slider } from "@expo/ui/swift-ui";
 import { accessibilityLabel, tint } from "@expo/ui/swift-ui/modifiers";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { router } from "expo-router";
 import { Fragment, useState } from "react";
 import {

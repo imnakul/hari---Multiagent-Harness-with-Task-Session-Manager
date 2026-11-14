@@ -1,3 +1,6 @@
+import MonitorIcon from "@hugeicons/core-free-icons/MonitorIcon";
+import PowerIcon from "@hugeicons/core-free-icons/PowerIcon";
+import SmartPhone01Icon from "@hugeicons/core-free-icons/SmartPhone01Icon";
 import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
 import Archive01Icon from "@hugeicons/core-free-icons/Archive01Icon";
 import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
@@ -132,6 +135,10 @@ const icons = {
   clipboard: ClipboardIcon,
   download: Download04Icon,
   openLink: LinkSquare02Icon,
+  // Fork (Hari, L-288): Wake computer, Monitor on, Haptics.
+  power: PowerIcon,
+  monitor: MonitorIcon,
+  phone: SmartPhone01Icon,
 };
 
 export type IconName = keyof typeof icons;

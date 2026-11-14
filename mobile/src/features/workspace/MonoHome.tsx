@@ -1,4 +1,4 @@
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/ui/haptics";
 import { Link, router, Stack, useIsFocused, useNavigation } from "expo-router";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -328,16 +328,7 @@ export function MonoHome() {
               size={FOOTER_HEIGHT}
             />
           ) : null}
-          {/* Fork (Hari, L-279): text, links and files with the computer. */}
-          {pairing ? (
-            <CircleButton
-              icon="share"
-              label="Share"
-              onPress={() => router.push("/share")}
-              size={FOOTER_HEIGHT}
-            />
-          ) : null}
-          {/* Fork (Hari, L-280): the computer's stats, power and apps. */}
+          {/* Fork (Hari, L-280, L-288): the Computer hub, Share and Control. */}
           {pairing ? (
             <CircleButton
               icon="computer"

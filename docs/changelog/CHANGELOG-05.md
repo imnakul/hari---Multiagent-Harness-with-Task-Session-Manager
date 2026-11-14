@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 22:36 IST — Storage: Project filter, app dropdowns, smoother scrolling (L-289)
+- Type: fix + feature
+- What: Settings → Storage has a Project filter (pick one or more, plus "Not linked to a chat"); its Project and date dropdowns are the app's own (`SearchableSelect`, like the Tasks toolbar). Tiles now draw small square copies of each picture made off the main thread, skip layout and paint while off screen, and lost their per-tile blur, so long galleries scroll smoothly. "Clear filters" resets both.
+- Why: User report: no project filter, the page lagged when scrolling, the project picker should take several, and the date dropdown wasn't the app's own.
+- Files: [attachmentStorage.ts](../../src/features/settings/model/attachmentStorage.ts), [StorageSettings.tsx](../../src/features/settings/ui/StorageSettings.tsx), [storageThumbnails.ts](../../src/features/settings/ui/storageThumbnails.ts), [attachmentStorage.test.ts](../../src/features/settings/model/attachmentStorage.test.ts)
+- Commit: see the 0.16.0-local46 commit
+- Verified: typecheck ✅ tests ✅ (desktop settings, mobile and shared UI: 642, incl. 3 new); desktop check manual
+
+## 2026-11-14 22:36 IST — Hari: one Computer screen, Monitor on, Wake in the side menu, Haptics switch (L-288)
+- Type: feature + fix
+- What: Share and Computer are one screen with Share | Control tabs, switched by the same toggle as a project's New | Sessions. The side menu always shows Computer (and Wake computer when the phone can send it), not only in Monos-only mode; the Monos-only footer has one Computer button. Share reads like a chat (from the computer on the left, to it on the right, by day) and pictures show as thumbnails instead of file names. Control shows Monitor on while the monitor is off, and it works (the computer reports `monitorOff` and wakes the screen with a tiny mouse nudge). Settings → Feel → Haptics turns tap vibration off everywhere.
+- Why: User requests in the session (Computer in the sidebar, reuse the switch, Monitor on, Wake in a proper place, haptics toggle, image thumbnails).
+- Files: [ComputerHub.tsx](../../mobile/src/features/pc/ComputerHub.tsx), [ComputerControl.tsx](../../mobile/src/features/pc/ComputerControl.tsx), [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx), [shareModel.ts](../../mobile/src/features/share/shareModel.ts), [wake.ts](../../mobile/src/features/pc/wake.ts), [WorkspaceDrawer.tsx](../../mobile/src/features/workspace/WorkspaceDrawer.tsx), [MonoHome.tsx](../../mobile/src/features/workspace/MonoHome.tsx), [ui/haptics.ts](../../mobile/src/ui/haptics.ts), [settings/haptics.ts](../../mobile/src/features/settings/haptics.ts), [mobile_pc.rs](../../src-tauri/src/mobile_pc.rs); every phone file that vibrated now imports `@/ui/haptics`
+- Commit: see the 0.16.0-local46 commit
+- Verified: typecheck ✅ (mobile, desktop) lint ✅ (mobile; 2 old warnings in `dictation.ts`) tests ✅ (phone 314; Rust mobile_pc 6) rustfmt ✅; phone + desktop checks manual. `tests/mobile/watchFrames.test.ts` in the phone run is an old entry for a file that no longer exists.
+
+## 2026-11-14 22:36 IST — Share as its own view on the computer (L-287)
+- Type: feature
+- What: The title-bar phone icon and a Share page in the sidebar open a full Share view: a chat-style timeline with the phone (day separators), pictures and videos inline, files with Open and Show in folder, links with Open, Open on phone and Copy, filters (All, Media, Files, Links, Text), and drop or paste files to send. Replaces the popover.
+- Why: User request: "a Sidebar Panel, where proper chats, media, and everything we can see and use it".
+- Files: [ShareView.tsx](../../src/features/mobile/ui/ShareView.tsx), [ShareBubble.tsx](../../src/features/mobile/ui/ShareBubble.tsx), [ShareComposer.tsx](../../src/features/mobile/ui/ShareComposer.tsx), [PhoneStatus.tsx](../../src/features/mobile/ui/PhoneStatus.tsx), [shareView.ts](../../src/features/mobile/model/shareView.ts), [App.tsx](../../src/app/App.tsx), [Sidebar.tsx](../../src/app/shell/Sidebar.tsx), [mobile_share.rs](../../src-tauri/src/mobile_share.rs); [spec](../specs/share-panel-plan.md)
+- Commit: see the 0.16.0-local46 commit
+- Verified: typecheck ✅ tests ✅ (`shareView.test.ts`; Rust mobile_share 8) rustfmt ✅; desktop check manual
+
 ## 2026-11-14 21:41 IST — Hari: open a chat link on the phone or the computer (L-286)
 - Type: feature
 - What: Tapping a web link (or a link card) in a Hari chat now asks "On phone" or "On computer". On computer, the link opens in the computer's default browser and a toast says so. If the computer isn't connected, Hari says so instead.

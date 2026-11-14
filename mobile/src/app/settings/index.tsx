@@ -28,6 +28,7 @@ import {
   openPromotedSettings,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
+import { useHaptics } from "@/features/settings/haptics";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
 import { HariUpdateRows } from "@/features/updates/HariUpdateCard";
@@ -57,6 +58,7 @@ export default function SettingsScreen() {
   const [openAfterStarting, setOpenAfterStarting] = useOpenSessionAfterStarting();
   const blocked = useNotificationsBlocked();
   const [monoOnly] = useMonoOnlyLayout();
+  const [haptics, setHaptics] = useHaptics();
   const navigation = useNavigationContainerRef();
   const switchLayout = useChangeLayout();
   // The layouts go about the app differently, so settings closes, and the
@@ -202,6 +204,24 @@ export default function SettingsScreen() {
       <Text style={styles.note}>
         Turn off to stay on the new session screen and start more sessions.
       </Text>
+
+      {/* Fork (Hari, L-288): tap feedback on or off. */}
+      <Text style={styles.heading}>Feel</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon="phone"
+          label="Haptics"
+          onPress={() => setHaptics(!haptics)}
+          accessory={
+            <AccentSwitch
+              accessibilityLabel="Haptics"
+              value={haptics}
+              onValueChange={setHaptics}
+            />
+          }
+        />
+      </View>
+      <Text style={styles.note}>Vibrate lightly when you tap buttons and switches.</Text>
 
       {MONOS_ENABLED ? (
         <>

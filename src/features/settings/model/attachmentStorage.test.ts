@@ -3,10 +3,12 @@ import {
   attachmentDisplayName,
   deleteConfirmation,
   filterByDate,
+  filterByProjects,
   groupStorage,
   isDateFiltered,
   isImageAttachment,
   parseDateInput,
+  storageProjects,
   storageTotals,
   toDateInput,
   withoutDeleted,
@@ -130,5 +132,37 @@ describe("date filter (L-273)", () => {
     expect(isDateFiltered({ preset: "custom", from: "", to: "" })).toBe(false);
     expect(parseDateInput("2026-02-30")).toBeNull();
     expect(toDateInput(now)).toBe("2026-11-14");
+  });
+});
+
+describe("Project filter (L-289)", () => {
+  it("lists each project once by name, with unlinked files last", () => {
+    const options = storageProjects(scan);
+    expect(options.map((option) => [option.label, option.count])).toEqual([
+      ["docs", 1],
+      ["web", 3],
+      ["Not linked to a chat", 1],
+    ]);
+  });
+
+  it("counts what the dates leave but keeps every project listed", () => {
+    const dated = filterByDate(scan, { preset: "custom", from: "", to: "" }, 0);
+    const lateOnly = { ...scan, files: scan.files.filter((f) => f.modifiedMs >= 8) };
+    expect(storageProjects(scan, lateOnly).map((option) => option.count)).toEqual([1, 0, 1]);
+    expect(storageProjects(scan, dated)).toHaveLength(3);
+  });
+
+  it("keeps the files of the picked projects, or all when none is picked", () => {
+    const [docs, web, unlinked] = storageProjects(scan);
+    expect(filterByProjects(scan, []).files).toHaveLength(5);
+    expect(filterByProjects(scan, [web!.key]).files.map((f) => f.path)).toEqual([
+      "/t/1-1-a.png",
+      "/t/1-3-shared.png",
+      "/i/u/c.png",
+    ]);
+    expect(filterByProjects(scan, [docs!.key, unlinked!.key]).files.map((f) => f.path)).toEqual([
+      "/t/1-2-b.png",
+      "/t/1-4-loose.png",
+    ]);
   });
 });

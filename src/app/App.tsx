@@ -255,6 +255,8 @@ import {
 } from "../features/settings/model/uiScale";
 import { resolveZoomKeybinding } from "../features/settings/model/zoomKeybinding";
 import { subscribeOpenInBrowser, subscribeShowBrowser } from "../features/browser/model/browserRequest";
+import { SHARE_OPEN_EVENT } from "../features/mobile/model/mobileShare";
+import { subscribeShareView } from "../features/mobile/model/shareView";
 import {
   browserStore,
   requestPage,
@@ -1171,6 +1173,14 @@ const WhiteboardView = lazySurface(
   },
   { suspense: false },
 );
+// Fork (L-287): Share with the paired phone, as a view of its own.
+const ShareView = lazySurface(
+  async () => {
+    const module = await import("../features/mobile/ui/ShareView");
+    return { default: module.ShareView };
+  },
+  { suspense: false },
+);
 // Fork (L-203): the Browser tab loads on first open.
 const BrowserView = lazySurface(
   async () => {
@@ -1760,6 +1770,8 @@ function Workspace({
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
   const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
+  // Fork (L-287): Share with the paired phone.
+  const [shareViewOpen, setShareViewOpen] = useState(false);
   // Fork (L-203): the Browser tab. Pages and tabs live in browserTabs (L-207).
   const [browserViewOpen, setBrowserViewOpen] = useState(false);
   // Fork (L-207): the Browser side panel beside the chat, and its width.
@@ -1791,9 +1803,11 @@ function Workspace({
           ? "automations"
           : whiteboardViewOpen
             ? "whiteboard"
-            : browserViewOpen
-              ? "browser"
-              : undefined;
+            : shareViewOpen
+              ? "share"
+              : browserViewOpen
+                ? "browser"
+                : undefined;
   const rememberAppView = useCallback((view: AppView) => {
     setOpenAppViews((current) =>
       current.includes(view) ? current : [...current, view],
@@ -1921,6 +1935,7 @@ function Workspace({
     recordKind: "notes" as "notes" | "tasks" | "kanban" | "activity",
     automations: false,
     whiteboard: false,
+    share: false,
     browser: false,
   });
   const [updateNotice, setUpdateNotice] = useState(installedUpdate);
@@ -2182,6 +2197,7 @@ function Workspace({
       (!recordsViewOpen || (boardOpen && boardPaneVisible)) &&
       !automationsViewOpen &&
       !whiteboardViewOpen &&
+      !shareViewOpen &&
       !browserViewOpen &&
       !settingsOpen &&
       !monoViewId,
@@ -2191,6 +2207,7 @@ function Workspace({
           !recordsViewOpen &&
           !automationsViewOpen &&
           !whiteboardViewOpen &&
+          !shareViewOpen &&
           !browserViewOpen &&
           !settingsOpen
         ? (monoViewId ?? undefined)
@@ -2201,6 +2218,7 @@ function Workspace({
       !notesViewOpen &&
       !automationsViewOpen &&
       !whiteboardViewOpen &&
+      !shareViewOpen &&
       !browserViewOpen &&
       !settingsOpen
         ? shownMonoSessionId
@@ -2214,6 +2232,8 @@ function Workspace({
   automationsViewOpenRef.current = automationsViewOpen;
   const whiteboardViewOpenRef = useRef(whiteboardViewOpen);
   whiteboardViewOpenRef.current = whiteboardViewOpen;
+  const shareViewOpenRef = useRef(shareViewOpen);
+  shareViewOpenRef.current = shareViewOpen;
   const browserViewOpenRef = useRef(browserViewOpen);
   browserViewOpenRef.current = browserViewOpen;
   // Fork (L-207): a view covers the chats, so the Browser side panel is
@@ -2225,6 +2245,7 @@ function Workspace({
     recordsViewOpen ||
     automationsViewOpen ||
     whiteboardViewOpen ||
+    shareViewOpen ||
     browserViewOpen ||
     Boolean(monoViewId);
   const anyAppViewOpenRef = useRef(anyAppViewOpen);
@@ -2999,6 +3020,7 @@ function Workspace({
             (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
             !automationsViewOpenRef.current &&
             !whiteboardViewOpenRef.current &&
+            !shareViewOpenRef.current &&
             !browserViewOpenRef.current &&
             !settingsOpenRef.current
           ) {
@@ -3039,6 +3061,7 @@ function Workspace({
     recordsViewOpen,
     automationsViewOpen,
     whiteboardViewOpen,
+    shareViewOpen,
     browserViewOpen,
     settingsOpen,
     flushForegroundHarnessEvents,
@@ -3717,6 +3740,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setShareViewOpen(false);
     setBrowserViewOpen(false);
     const cwd = sidebarCwd;
     const session = newWorkspaceSession(cwd, sessionDefaults?.runtimeMode);
@@ -3739,6 +3763,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       const existing = findRemoteSessionTab(
         tabsRef.current,
@@ -3803,6 +3828,7 @@ function Workspace({
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
         setWhiteboardViewOpen(false);
+        setShareViewOpen(false);
         setBrowserViewOpen(false);
         const cwd =
           item.projectPath || active?.cwd || sessionDefaults?.cwd || projectCwd;
@@ -3873,6 +3899,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       const cwd =
         (card.sourceCwd && looksLikeProject(card.sourceCwd)
@@ -6208,6 +6235,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       lastMonoIdRef.current = monoId;
       const session = await ensureMonoSession(monoId, {
@@ -6236,6 +6264,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setMonoViewId(session.id);
       if (insetLayoutRef.current) {
@@ -6692,6 +6721,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       if (looksLikeProject(session.cwd))
         setProjectCwd(normalizeProjectPath(session.cwd));
@@ -6811,6 +6841,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
@@ -7492,6 +7523,7 @@ function Workspace({
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
             whiteboardViewOpenRef.current ||
+            shareViewOpenRef.current ||
             browserViewOpenRef.current ||
             settingsOpenRef.current ||
             filePickerOpenRef.current ||
@@ -7781,6 +7813,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setShareViewOpen(false);
     setBrowserViewOpen(false);
     setSelectedProvider((current) => (current === provider ? null : provider));
     setSessionSidebarOpen(true);
@@ -7814,6 +7847,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
@@ -8450,6 +8484,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
 
       // At most one folder can take the blank session, and it keeps the
@@ -11273,6 +11308,7 @@ function Workspace({
           setRecordsViewOpen(false);
           setAutomationsViewOpen(false);
           setWhiteboardViewOpen(false);
+          setShareViewOpen(false);
           setBrowserViewOpen(false);
           setSidebarTab("sessions", session.cwd);
         }
@@ -11436,6 +11472,7 @@ function Workspace({
             setRecordsViewOpen(false);
             setAutomationsViewOpen(false);
             setWhiteboardViewOpen(false);
+            setShareViewOpen(false);
             setBrowserViewOpen(false);
             setSidebarTab("sessions", cwd);
           },
@@ -15111,6 +15148,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       onOpenApprovalSession(sessionId, intent);
     },
@@ -15405,6 +15443,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setShareViewOpen(false);
     setBrowserViewOpen(false);
     setFilePickerInitialQuery("");
     setFilePickerResetToken((token) => token + 1);
@@ -15416,6 +15455,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setShareViewOpen(false);
     setBrowserViewOpen(false);
     setFilePickerInitialQuery(">");
     setFilePickerResetToken((token) => token + 1);
@@ -15434,6 +15474,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setShareViewOpen(false);
     setBrowserViewOpen(false);
     setSidebarTab("files");
     setFilesSearchOpen(true);
@@ -15453,6 +15494,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setSearchViewOpen(true);
       setSearchViewFocusToken((token) => token + 1);
@@ -15474,6 +15516,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setInboxViewOpen(true);
     });
@@ -15489,6 +15532,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setInboxViewOpen(false);
       const cwd =
@@ -15596,6 +15640,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("notes");
       setRecordsViewOpen(true);
@@ -15613,6 +15658,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("tasks");
       setRecordsViewOpen(true);
@@ -15630,6 +15676,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("kanban");
       setRecordsViewOpen(true);
@@ -15648,6 +15695,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("activity");
       setRecordsViewOpen(true);
@@ -15678,6 +15726,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setAutomationsViewOpen(true);
     });
@@ -15699,6 +15748,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setBrowserViewOpen(false);
+      setShareViewOpen(false);
       setWhiteboardViewOpen(true);
     });
   }, []);
@@ -15706,6 +15756,39 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   const onLeaveWhiteboard = useCallback(() => {
     setWhiteboardViewOpen(false);
   }, []);
+
+  // Fork (L-287): Share with the paired phone, as a view of its own.
+  const onOpenShare = useCallback(() => {
+    workspaceNavigation.cancel();
+    startTransition(() => {
+      closeMonoView();
+      rememberAppView("share");
+      setFilePickerOpen(false);
+      setSettingsOpen(false);
+      setSearchViewOpen(false);
+      setInboxViewOpen(false);
+      setRecordsViewOpen(false);
+      setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
+      setShareViewOpen(true);
+    });
+  }, []);
+
+  const onLeaveShare = useCallback(() => {
+    setShareViewOpen(false);
+  }, []);
+
+  // The title-bar phone button and a clicked arrival toast open Share.
+  useEffect(() => subscribeShareView(onOpenShare), [onOpenShare]);
+  useEffect(() => {
+    const opens = listen(SHARE_OPEN_EVENT, () => {
+      if (document.hasFocus()) onOpenShare();
+    });
+    return () => {
+      void opens.then((unlisten) => unlisten());
+    };
+  }, [onOpenShare]);
 
   // Fork (L-203): the Browser tab, opened bare or with a page to load.
   const onOpenBrowser = useCallback((url?: string) => {
@@ -15728,6 +15811,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(true);
     });
   }, []);
@@ -15758,6 +15842,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         throw new Error("This conversation is no longer available.");
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       setSearchViewOpen(false);
       setInboxViewOpen(false);
@@ -15783,6 +15868,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
           recordKind: recordKindRef.current,
           automations: automationsViewOpenRef.current,
           whiteboard: whiteboardViewOpenRef.current,
+          share: shareViewOpenRef.current,
           browser: browserViewOpenRef.current,
         };
       }
@@ -15793,6 +15879,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
         setWhiteboardViewOpen(false);
+        setShareViewOpen(false);
         setBrowserViewOpen(false);
         if (section) {
           setSettingsSection(section);
@@ -15869,6 +15956,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       activity: leavingFocus(onOpenActivity),
       automations: leavingFocus(onOpenAutomations),
       whiteboard: leavingFocus(onOpenWhiteboard),
+      share: leavingFocus(onOpenShare),
       browser: leavingFocus(() => onOpenBrowser()),
       settings: leavingFocus(onOpenSettings),
       notificationSettings: leavingFocus(onOpenNotificationSettings),
@@ -15883,6 +15971,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     onOpenActivity,
     onOpenAutomations,
     onOpenWhiteboard,
+    onOpenShare,
     onOpenBrowser,
     onOpenSettings,
     onOpenNotificationSettings,
@@ -15906,6 +15995,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     );
     setAutomationsViewOpen(returnView.automations);
     setWhiteboardViewOpen(returnView.whiteboard);
+    setShareViewOpen(returnView.share);
     setBrowserViewOpen(returnView.browser);
     setSettingsOpen(false);
   }, []);
@@ -15950,11 +16040,16 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     if (automationsViewOpen) {
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       return;
     }
     if (whiteboardViewOpen) {
       setWhiteboardViewOpen(false);
+      return;
+    }
+    if (shareViewOpen) {
+      setShareViewOpen(false);
       return;
     }
     if (browserViewOpen) {
@@ -15977,6 +16072,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     recordsViewOpen,
     automationsViewOpen,
     whiteboardViewOpen,
+    shareViewOpen,
     browserViewOpen,
   ]);
 
@@ -15987,6 +16083,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setShareViewOpen(false);
     setBrowserViewOpen(false);
     onVisitForward();
   }, [onVisitForward]);
@@ -16129,6 +16226,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
           activity: onOpenActivity,
           automations: onOpenAutomations,
           whiteboard: onOpenWhiteboard,
+          share: onOpenShare,
           browser: () => onOpenBrowser(),
         };
         open[view]();
@@ -16140,6 +16238,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setShareViewOpen(false);
       setBrowserViewOpen(false);
       activateTab(id);
     },
@@ -16154,6 +16253,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onOpenActivity,
       onOpenAutomations,
       onOpenWhiteboard,
+      onOpenShare,
       onOpenBrowser,
     ],
   );
@@ -16196,6 +16296,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       }
       if (view === "automations") setAutomationsViewOpen(false);
       if (view === "whiteboard") setWhiteboardViewOpen(false);
+      if (view === "share") setShareViewOpen(false);
       if (view === "browser") setBrowserViewOpen(false);
       if (nextId) navigation.select?.(nextId);
     });
@@ -16539,6 +16640,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
             whiteboardViewOpenRef.current ||
+            shareViewOpenRef.current ||
             browserViewOpenRef.current ||
             settingsOpenRef.current ||
             filePickerOpenRef.current ||
@@ -16640,6 +16742,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
         !automationsViewOpenRef.current &&
         !whiteboardViewOpenRef.current &&
+        !shareViewOpenRef.current &&
         !browserViewOpenRef.current &&
         !(
           e.target instanceof Element &&
@@ -17422,7 +17525,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     recordsViewOpen ||
     automationsViewOpen ||
     browserViewOpen ||
-    whiteboardViewOpen;
+    whiteboardViewOpen ||
+    shareViewOpen;
   const compactProjectRail = collapsedProjectRailMode === "compact";
   const compactRailActive = compactProjectRail && !projectRailOpen;
   const compactTitleNavigation =
@@ -17726,7 +17830,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         recordsViewOpen ||
         automationsViewOpen ||
         browserViewOpen ||
-        whiteboardViewOpen
+        whiteboardViewOpen ||
+        shareViewOpen
       }
       canGoForward={tabVisitNav.canForward}
       onGoBack={onRailBack}
@@ -17759,6 +17864,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onOpenNotes={notesEnabled ? sidebarPages.notes : undefined}
       onOpenAutomations={sidebarPages.automations}
       onOpenWhiteboard={sidebarPages.whiteboard}
+      onOpenShare={sidebarPages.share}
       onOpenBrowser={sidebarPages.browser}
       onGoToFile={onGoToFile}
       searchActive={searchViewOpen}
@@ -17768,6 +17874,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       activityActive={activityViewOpen}
       automationsActive={automationsViewOpen}
       whiteboardActive={whiteboardViewOpen}
+      shareActive={shareViewOpen}
       browserActive={browserViewOpen}
       notesEnabled={notesEnabled}
       // The inset layout has no project rail: the sidebar header's menu
@@ -18190,7 +18297,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
                       browserViewOpen ||
-                      whiteboardViewOpen
+                      whiteboardViewOpen ||
+                      shareViewOpen
                         ? "hidden"
                         : "flex min-h-0 min-w-0 flex-1 flex-col"
                     }
@@ -18201,7 +18309,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
                       browserViewOpen ||
-                      whiteboardViewOpen
+                      whiteboardViewOpen ||
+                      shareViewOpen
                     }
                     inert={
                       searchViewOpen ||
@@ -18210,6 +18319,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
                       whiteboardViewOpen ||
+                      shareViewOpen ||
                       browserViewOpen ||
                       undefined
                     }
@@ -18451,6 +18561,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                                 !recordsViewOpen &&
                                 !automationsViewOpen &&
                                 !whiteboardViewOpen &&
+                                !shareViewOpen &&
                                 !browserViewOpen &&
                                 !monoViewId &&
                                 activeLinkedWorkItemPanel?.sessionId ===
@@ -18721,6 +18832,21 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                         compactRail={!insetLayout && compactRailActive}
                         cwd={projectCwd}
                         onClose={onLeaveWhiteboard}
+                        onToggleSidebar={onToggleSidebar}
+                      />
+                    </AppViewSurface>
+                  ) : null}
+                  {shareViewOpen ||
+                  (insetLayout && openAppViews.includes("share")) ? (
+                    <AppViewSurface active={shareViewOpen}>
+                      <ShareView
+                        active={shareViewOpen}
+                        tabbed={insetLayout}
+                        besideRail={
+                          insetLayout || projectRailOpen || compactProjectRail
+                        }
+                        compactRail={!insetLayout && compactRailActive}
+                        onClose={onLeaveShare}
                         onToggleSidebar={onToggleSidebar}
                       />
                     </AppViewSurface>
