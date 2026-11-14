@@ -42,8 +42,25 @@ pub fn mobile_notifications_publish(window: Window, items: Value) -> Result<(), 
         return Err("Only workspace windows can publish notifications".into());
     }
     let items = sanitize(&items)?;
-    *FEED.lock().map_err(|_| "Notifications unavailable")? = Some(items);
+    let mut feed = FEED.lock().map_err(|_| "Notifications unavailable")?;
+    // Every window publishes the same shared list; send only real changes.
+    if feed.as_ref() == Some(&items) {
+        return Ok(());
+    }
+    *feed = Some(items);
+    signal_feed(&feed);
     Ok(())
+}
+
+/// Fork (Hari, L-277): connected phones get the list at once, in the shape
+/// `notifications.list` answers.
+fn signal_feed(feed: &Option<Vec<Value>>) {
+    if let Some(items) = feed {
+        crate::mobile_events::signal(
+            "notifications",
+            json!({ "available": true, "items": items }),
+        );
+    }
 }
 
 /// Answers a phone request. Changes are applied here and sent to the windows.
@@ -59,6 +76,7 @@ pub(crate) fn handle(app: &AppHandle, method: &str, params: &Value) -> Result<Va
     if let Some(items) = feed.as_mut() {
         apply(items, &change);
     }
+    signal_feed(&feed);
     drop(feed);
     app.emit(CHANGE_EVENT, &change)
         .map_err(|_| "Desktop window is unavailable")?;

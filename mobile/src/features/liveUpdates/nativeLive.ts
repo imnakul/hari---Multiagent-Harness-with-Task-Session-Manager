@@ -18,6 +18,8 @@ export type LiveEvent =
 type HariLiveModule = {
   update(cards: string): void;
   setWatching(on: boolean): void;
+  /** Fork (L-277); missing in builds before it. */
+  setStreamLive?(on: boolean): void;
   supported(): boolean;
   canPostPromoted(): boolean;
   openPromotedSettings(): boolean;
@@ -68,6 +70,19 @@ export function setLiveWatching(on: boolean) {
     native?.setWatching(on);
   } catch (error) {
     console.warn("Background watching: could not change it", error);
+  }
+}
+
+/**
+ * Fork (Hari, L-277): the event stream to the computer is open, so news
+ * arrives on it and the service's tick only needs to run rarely (every two
+ * minutes instead of 15 seconds, while no Live Update card shows).
+ */
+export function setLiveStreamLive(on: boolean) {
+  try {
+    native?.setStreamLive?.(on);
+  } catch (error) {
+    console.warn("Background watching: could not change the tick", error);
   }
 }
 

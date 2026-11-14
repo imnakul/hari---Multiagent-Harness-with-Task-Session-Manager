@@ -35,6 +35,10 @@ enum Call {
         pin: String,
         addresses: Vec<Address>,
         request: Value,
+        /// Fork (Hari, L-277): a long-held background watch on its own
+        /// connection with slow pings (`crate::quiet_watch`).
+        #[serde(default)]
+        quiet: bool,
     },
     #[serde(rename_all = "camelCase")]
     Next {
@@ -127,9 +131,14 @@ fn execute(input: &str) -> LinkResult<Value> {
             pin,
             addresses,
             request,
+            quiet,
         } => {
             static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-            let watch = runtime().block_on(crate::watch(&identity, &pin, &addresses, request))?;
+            let watch = if quiet {
+                runtime().block_on(crate::quiet_watch(&identity, &pin, &addresses, request))?
+            } else {
+                runtime().block_on(crate::watch(&identity, &pin, &addresses, request))?
+            };
             let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
             watches().lock().unwrap().insert(id, Arc::new(watch));
             Ok(json!({ "watchId": id }))

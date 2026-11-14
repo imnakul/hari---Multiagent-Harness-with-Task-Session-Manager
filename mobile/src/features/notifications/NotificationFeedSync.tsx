@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
+import { linkStreamLive, onLinkSignal } from "@/features/link/linkStream";
 import { onLiveEvent, setLiveWatching } from "@/features/liveUpdates/nativeLive";
 import { readFeedPreferences, useFeedPreferences } from "@/features/settings/notificationFeed";
 import {
@@ -23,6 +24,9 @@ import {
 
 /** How often the list is asked for while Hari is on screen. */
 const POLL_MS = 5_000;
+/** Fork (L-277): with the event stream open the list arrives by itself; ask
+ *  this rarely, in case a change was missed. */
+const STREAM_POLL_MS = 60_000;
 const SESSION_CHANNEL = "sessions";
 
 const category = (item: FeedItem): NotificationCategory | "automations" =>
@@ -34,6 +38,8 @@ const category = (item: FeedItem): NotificationCategory | "automations" =>
 
 /**
  * Fork (Hari, L-275): keeps the phone's copy of the desktop bell's history.
+ * With the event stream open (L-277) the computer pushes the list as it
+ * changes, and the asking below slows to a once-a-minute check.
  * Asks for it every 5 seconds on screen, and on each tick of the background
  * service (every 15 seconds, and as the screen comes on) while "Keep watching
  * in the background" holds the service on. Each new unread entry the user
@@ -50,6 +56,7 @@ export function NotificationFeedSync() {
   });
   const fingerprint = pairing?.desktop.fingerprint ?? null;
   const busy = useRef(false);
+  const lastFetch = useRef(0);
 
   // Android stops the service with the app swiped away only if the user lets it.
   useEffect(() => {
@@ -95,18 +102,26 @@ export function NotificationFeedSync() {
     }
   }, []);
 
-  const fetchFeed = useCallback(async () => {
-    if (!fingerprint || busy.current) return;
-    busy.current = true;
-    try {
-      const parsed = parseFeed(await command<unknown>("notifications.list"));
+  const take = useCallback(
+    async (desktop: string, answer: unknown) => {
+      const parsed = parseFeed(answer);
       if (!parsed) throw new Error("The computer sent notifications Hari can't read");
+      lastFetch.current = Date.now();
       if (!parsed.available) {
         setFeedState({ phase: "waiting" });
         return;
       }
       setFeedState({ phase: "ready", items: parsed.items, error: null });
-      await post(fingerprint, parsed.items);
+      await post(desktop, parsed.items);
+    },
+    [post],
+  );
+
+  const fetchFeed = useCallback(async () => {
+    if (!fingerprint || busy.current) return;
+    busy.current = true;
+    try {
+      await take(fingerprint, await command<unknown>("notifications.list"));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       const current = feedState();
@@ -116,7 +131,17 @@ export function NotificationFeedSync() {
     } finally {
       busy.current = false;
     }
-  }, [fingerprint, command, post]);
+  }, [fingerprint, command, take]);
+
+  // Fork (L-277): the computer pushes the list on the event stream as it changes.
+  useEffect(() => {
+    if (!fingerprint) return;
+    return onLinkSignal("notifications", (payload) => {
+      void take(fingerprint, payload).catch((reason: unknown) => {
+        console.warn("Notifications from the stream", reason);
+      });
+    });
+  }, [fingerprint, take]);
 
   useEffect(() => {
     if (!fingerprint) {
@@ -138,7 +163,10 @@ export function NotificationFeedSync() {
       clearInterval(timer);
       if (state !== "active") return;
       void fetchFeed();
-      timer = setInterval(() => void fetchFeed(), POLL_MS);
+      timer = setInterval(() => {
+        if (linkStreamLive() && Date.now() - lastFetch.current < STREAM_POLL_MS) return;
+        void fetchFeed();
+      }, POLL_MS);
     };
     poll(AppState.currentState);
     const subscription = AppState.addEventListener("change", poll);
@@ -151,7 +179,10 @@ export function NotificationFeedSync() {
   // Out of view: the background service's tick (timers don't run then).
   useEffect(() => {
     const subscription = onLiveEvent((event) => {
-      if (event.action === "tick" && AppState.currentState !== "active") void fetchFeed();
+      if (event.action !== "tick" || AppState.currentState === "active") return;
+      // The stream brings changes while it is open; the tick is the fallback.
+      if (linkStreamLive() && Date.now() - lastFetch.current < STREAM_POLL_MS) return;
+      void fetchFeed();
     });
     return () => subscription?.remove();
   }, [fetchFeed]);

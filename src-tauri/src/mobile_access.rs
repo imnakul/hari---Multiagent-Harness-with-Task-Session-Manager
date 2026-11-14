@@ -324,6 +324,7 @@ pub fn mobile_revoke(host: State<'_, MobileHost>, device_id: String) -> Result<(
         host.gate.remove(&device.fingerprint);
         let peer = device.fingerprint.clone();
         inner.watches.retain(|_, watch| watch.peer != peer);
+        crate::mobile_events::forget(&peer);
     }
     config.devices.retain(|device| device.id != device_id);
     save(&host, &config)?;
@@ -403,6 +404,26 @@ fn watch(
 ) -> Result<(), String> {
     if request["version"] != VERSION {
         return Err("Update MonoCode on both devices".into());
+    }
+    // Fork (Hari, L-277): the phone's always-open event stream.
+    if request["method"] == "events.watch" {
+        let inner = host
+            .inner
+            .lock()
+            .map_err(|_| "Mobile service unavailable")?;
+        if !inner.config.enabled {
+            return Err("Mobile access disabled".into());
+        }
+        if !inner
+            .config
+            .devices
+            .iter()
+            .any(|device| device.fingerprint == peer)
+        {
+            return Err("Device revoked or not paired".into());
+        }
+        drop(inner);
+        return crate::mobile_events::watch(peer, &request["params"], sink);
     }
     if request["method"] != "conversation.watch" {
         return Err("Unsupported mobile operation".into());
@@ -721,6 +742,7 @@ async fn handle(
             inner.config = config;
             host.gate.remove(peer);
             inner.watches.retain(|_, watch| watch.peer != peer);
+            crate::mobile_events::forget(peer);
             return Ok(Value::Null);
         }
         if method == "workspace.list" {
@@ -751,6 +773,10 @@ async fn handle(
         // windows publish.
         if crate::mobile_notifications::handles(method) {
             return crate::mobile_notifications::handle(app, method, &params);
+        }
+        // Fork (Hari, L-277): acks and the phone's outbox.
+        if crate::mobile_events::handles(method) {
+            return crate::mobile_events::handle(app, peer, method, &params);
         }
         if ![
             "conversation.read",

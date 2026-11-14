@@ -52,6 +52,14 @@ vi.mock("expo-notifications", () => ({
   IosAuthorizationStatus: { NOT_DETERMINED: 0 },
 }));
 vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-sqlite/kv-store", () => ({
+  default: {
+    getItemSync: () => null,
+    setItemSync: () => {},
+    setItem: () => Promise.resolve(),
+    removeItem: () => Promise.resolve(),
+  },
+}));
 vi.mock("expo-constants", () => ({
   default: { expoConfig: { extra: { eas: { projectId: "project-id" } } } },
 }));

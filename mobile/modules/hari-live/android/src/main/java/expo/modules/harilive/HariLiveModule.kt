@@ -39,6 +39,11 @@ class HariLiveModule : Module() {
       HariLive.setWatching(context, on)
     }
 
+    /** Fork (L-277): the event stream is open, so the service ticks rarely. */
+    Function("setStreamLive") { on: Boolean ->
+      HariLive.setStreamLive(on)
+    }
+
     /** Whether this Android draws Live Updates at all (Android 16 and later). */
     Function("supported") { Build.VERSION.SDK_INT >= 36 }
 

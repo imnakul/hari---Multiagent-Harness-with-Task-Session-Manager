@@ -19,7 +19,8 @@ use std::{
 };
 
 pub use transport::{
-    exchange, read_frame, serve, server_endpoint, watch, write_frame, Watch, WatchSink,
+    exchange, quiet_watch, read_frame, serve, server_endpoint, watch, watch_heartbeat, write_frame,
+    Watch, WatchSink, QUIET_HEARTBEAT,
 };
 pub type LinkResult<T> = Result<T, String>;
 pub const VERSION: u32 = 1;

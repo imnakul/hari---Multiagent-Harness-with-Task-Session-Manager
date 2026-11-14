@@ -127,6 +127,24 @@ pub fn server(identity: &Identity, gate: Gate) -> LinkResult<quinn::ServerConfig
     Ok(config)
 }
 pub fn client(identity: &Identity, pin: &str) -> LinkResult<quinn::ClientConfig> {
+    // Connections stay open between requests: pings keep an idle one alive,
+    // and one the desktop no longer answers fails within seconds rather than
+    // holding up the next request.
+    client_with(identity, pin, 4, 12)
+}
+/// Fork (Hari, L-277): the always-open event stream, held in the background.
+/// It pings every 20 s instead of every 4 s, so the phone's radio wakes
+/// rarely; the desktop's 30 s idle limit still applies, and the desktop's own
+/// heartbeat on the stream (every 20 s) keeps it under that.
+pub fn quiet_client(identity: &Identity, pin: &str) -> LinkResult<quinn::ClientConfig> {
+    client_with(identity, pin, 20, 45)
+}
+fn client_with(
+    identity: &Identity,
+    pin: &str,
+    keep_alive_secs: u64,
+    idle_secs: u64,
+) -> LinkResult<quinn::ClientConfig> {
     if pin.len() != 64 || !pin.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err("Invalid desktop identity".into());
     }
@@ -148,12 +166,13 @@ pub fn client(identity: &Identity, pin: &str) -> LinkResult<quinn::ClientConfig>
     let crypto =
         quinn::crypto::rustls::QuicClientConfig::try_from(tls).map_err(|e| e.to_string())?;
     let mut config = quinn::ClientConfig::new(Arc::new(crypto));
-    // Connections stay open between requests: pings keep an idle one alive,
-    // and one the desktop no longer answers fails within seconds rather than
-    // holding up the next request.
     let mut transport = quinn::TransportConfig::default();
-    transport.keep_alive_interval(Some(std::time::Duration::from_secs(4)));
-    transport.max_idle_timeout(Some(std::time::Duration::from_secs(12).try_into().unwrap()));
+    transport.keep_alive_interval(Some(std::time::Duration::from_secs(keep_alive_secs)));
+    transport.max_idle_timeout(Some(
+        std::time::Duration::from_secs(idle_secs)
+            .try_into()
+            .unwrap(),
+    ));
     config.transport_config(Arc::new(transport));
     Ok(config)
 }

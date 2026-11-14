@@ -84,6 +84,16 @@ async fn write_message(
 pub type WatchSink = mpsc::Sender<Value>;
 /// How often an idle watch proves the desktop is still there.
 pub const WATCH_HEARTBEAT: Duration = Duration::from_secs(10);
+/// Fork (Hari, L-277): a watch may ask for a slower heartbeat (the phone's
+/// background event stream), within these bounds.
+const HEARTBEAT_SECS: std::ops::RangeInclusive<u64> = 5..=25;
+/// The heartbeat a watch request asks for, or the usual one.
+pub fn watch_heartbeat(request: &Value) -> Duration {
+    request["heartbeat"]
+        .as_u64()
+        .map(|secs| Duration::from_secs(secs.clamp(*HEARTBEAT_SECS.start(), *HEARTBEAT_SECS.end())))
+        .unwrap_or(WATCH_HEARTBEAT)
+}
 /// Answers each request on its own stream. A request marked `"watch": true`
 /// goes to `watcher` instead, and its stream stays open: every value the
 /// watcher sends becomes a frame, with heartbeats between, until the watcher
@@ -144,6 +154,7 @@ where
                 {
                     // A watch runs beside the connection's requests, not in front of them.
                     let (sink, updates) = mpsc::channel(64);
+                    let heartbeat = watch_heartbeat(request);
                     let watching = watcher(key.clone(), request.clone(), sink);
                     tokio::spawn(stream_watch(
                         send,
@@ -152,6 +163,7 @@ where
                         watching,
                         gate.clone(),
                         key.clone(),
+                        heartbeat,
                     ));
                     continue;
                 }
@@ -182,6 +194,7 @@ async fn stream_watch(
     watching: impl Future<Output = LinkResult<()>>,
     gate: Gate,
     key: String,
+    every: Duration,
 ) {
     let frame = |result: LinkResult<Value>| match result {
         Ok(value) => serde_json::json!({"ok":true,"result":value}),
@@ -214,7 +227,7 @@ async fn stream_watch(
         Box::pin(
             async move { while recv.read_chunk(1024, true).await.is_ok_and(|c| c.is_some()) {} },
         );
-    let mut heartbeat = tokio::time::interval(WATCH_HEARTBEAT);
+    let mut heartbeat = tokio::time::interval(every);
     heartbeat.tick().await;
     loop {
         let value = tokio::select! {
@@ -251,10 +264,15 @@ async fn connect(
     pin: &str,
     addresses: &[Address],
 ) -> LinkResult<(quinn::Endpoint, quinn::Connection)> {
+    connect_with(tls::client(identity, pin)?, addresses).await
+}
+async fn connect_with(
+    config: quinn::ClientConfig,
+    addresses: &[Address],
+) -> LinkResult<(quinn::Endpoint, quinn::Connection)> {
     if addresses.is_empty() || addresses.len() > 16 {
         return Err("Desktop has no usable addresses".into());
     }
-    let config = tls::client(identity, pin)?;
     let mut attempts = JoinSet::new();
     for address in addresses.iter().cloned() {
         let config = config.clone();
@@ -470,6 +488,9 @@ pub struct Watch {
     task: tokio::task::JoinHandle<()>,
     /// Set once the stream failed or the desktop ended it.
     ended: Arc<AtomicBool>,
+    /// Whether its connection may go back to the pool (a quiet watch's may not:
+    /// its pings are too slow for requests).
+    pooled: bool,
 }
 impl Watch {
     /// Wait without consuming/projecting data, so the layout worker remains
@@ -512,13 +533,40 @@ impl Watch {
         // Dropping the task's streams finishes ours and stops the desktop's.
         self.task.abort();
         self.ready.notify_waiters();
-        if self.ended.load(Ordering::Relaxed) || self.connection.close_reason().is_some() {
+        if !self.pooled
+            || self.ended.load(Ordering::Relaxed)
+            || self.connection.close_reason().is_some()
+        {
             self.connection.close(0_u32.into(), b"Stopped watching");
             let _ = timeout(Duration::from_secs(2), self.endpoint.wait_idle()).await;
         } else {
             give(&self.key, self.endpoint.clone(), self.connection.clone());
         }
     }
+}
+
+/// Sends a watch request on `connection`: the streams once the desktop agreed,
+/// its refusal, or the link's failure.
+async fn open_watch(
+    connection: &quinn::Connection,
+    request: &Value,
+) -> Result<LinkResult<(quinn::SendStream, quinn::RecvStream)>, Failure> {
+    let (send, recv, answer) = timeout(Duration::from_secs(35), async {
+        let (mut send, mut recv) = connection.open_bi().await.map_err(|e| e.to_string())?;
+        write_message(&mut send, request, REQUEST_LIMIT).await?;
+        let answer = read_frame(&mut recv, RESPONSE_LIMIT).await?;
+        Ok::<_, String>((send, recv, answer))
+    })
+    .await
+    .map_err(|_| Failure::Timeout)?
+    .map_err(Failure::Link)?;
+    if answer["ok"] != true {
+        return Ok(Err(answer["error"]
+            .as_str()
+            .unwrap_or("Desktop request failed")
+            .to_string()));
+    }
+    Ok(Ok((send, recv)))
 }
 
 /// Opens a watch: one request whose stream the desktop keeps writing to.
@@ -534,29 +582,75 @@ pub async fn watch(
     let opened = on_connection(identity, pin, addresses, |endpoint, connection| {
         let request = &request;
         async move {
-            let opened = timeout(Duration::from_secs(35), async {
-                let (mut send, mut recv) = connection.open_bi().await.map_err(|e| e.to_string())?;
-                write_message(&mut send, request, REQUEST_LIMIT).await?;
-                let answer = read_frame(&mut recv, RESPONSE_LIMIT).await?;
-                Ok::<_, String>((send, recv, answer))
+            Ok(match open_watch(&connection, request).await? {
+                Err(error) => (Err(error), true),
+                // Held out of the pool while it watches.
+                Ok((send, recv)) => (Ok((endpoint, connection, send, recv)), false),
             })
-            .await
-            .map_err(|_| Failure::Timeout)?
-            .map_err(Failure::Link)?;
-            let (send, recv, answer) = opened;
-            if answer["ok"] != true {
-                let error = answer["error"]
-                    .as_str()
-                    .unwrap_or("Desktop request failed")
-                    .to_string();
-                return Ok((Err(error), true));
-            }
-            // Held out of the pool while it watches.
-            Ok((Ok((endpoint, connection, send, recv)), false))
         }
     })
     .await?;
-    let (endpoint, connection, send, mut recv) = opened?;
+    let (endpoint, connection, send, recv) = opened?;
+    Ok(follow(
+        key,
+        endpoint,
+        connection,
+        send,
+        recv,
+        WATCH_HEARTBEAT,
+        true,
+    ))
+}
+
+/// Fork (Hari, L-277): the background event stream's heartbeat.
+pub const QUIET_HEARTBEAT: Duration = Duration::from_secs(20);
+
+/// Fork (Hari, L-277): a watch held for a long time in the background, on a
+/// connection of its own with slow pings and a slow heartbeat, so the phone's
+/// radio wakes about every 20 s rather than every 4 s.
+pub async fn quiet_watch(
+    identity: &Identity,
+    pin: &str,
+    addresses: &[Address],
+    mut request: Value,
+) -> LinkResult<Watch> {
+    request["watch"] = Value::Bool(true);
+    request["heartbeat"] = Value::from(QUIET_HEARTBEAT.as_secs());
+    let (endpoint, connection) = connect_with(tls::quiet_client(identity, pin)?, addresses).await?;
+    let opened = match open_watch(&connection, &request).await {
+        Ok(Ok(streams)) => Ok(streams),
+        Ok(Err(error)) => Err(error),
+        Err(failure) => Err(failure.into()),
+    };
+    let (send, recv) = match opened {
+        Ok(streams) => streams,
+        Err(error) => {
+            connection.close(0_u32.into(), b"Failed");
+            return Err(error);
+        }
+    };
+    let key = pool_key(identity, pin, addresses);
+    Ok(follow(
+        key,
+        endpoint,
+        connection,
+        send,
+        recv,
+        QUIET_HEARTBEAT,
+        false,
+    ))
+}
+
+/// Reads a watch's frames into its queue until it fails or the desktop ends it.
+fn follow(
+    key: String,
+    endpoint: quinn::Endpoint,
+    connection: quinn::Connection,
+    send: quinn::SendStream,
+    mut recv: quinn::RecvStream,
+    heartbeat: Duration,
+    pooled: bool,
+) -> Watch {
     let (sender, updates) = mpsc::unbounded_channel();
     let ready = Arc::new(Notify::new());
     let incoming = ready.clone();
@@ -566,7 +660,7 @@ pub async fn watch(
         // Finishing our side tells the desktop to stop, so hold it open.
         let _send = send;
         loop {
-            let frame = timeout(WATCH_HEARTBEAT * 3, read_frame(&mut recv, RESPONSE_LIMIT))
+            let frame = timeout(heartbeat * 3, read_frame(&mut recv, RESPONSE_LIMIT))
                 .await
                 .unwrap_or_else(|_| Err("Desktop stopped answering".into()));
             let update = match frame {
@@ -590,7 +684,7 @@ pub async fn watch(
             incoming.notify_waiters();
         }
     });
-    Ok(Watch {
+    Watch {
         key,
         endpoint,
         connection,
@@ -598,7 +692,8 @@ pub async fn watch(
         ready,
         task,
         ended,
-    })
+        pooled,
+    }
 }
 
 #[cfg(test)]
@@ -722,6 +817,68 @@ mod tests {
         watching.close().await;
         endpoint.close(0_u32.into(), b"Test complete");
         task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_quiet_watch_asks_for_the_slow_heartbeat_and_stays_out_of_the_pool() {
+        let desktop = Identity::generate().unwrap();
+        let phone = Identity::generate().unwrap();
+        let gate = Gate::default();
+        gate.allow(phone.fingerprint().unwrap(), None);
+        let endpoint =
+            server_endpoint(&desktop, gate.clone(), "127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = endpoint.local_addr().unwrap().port();
+        let task = tokio::spawn(serve(
+            endpoint.clone(),
+            gate,
+            |_, request| async move { Ok(request) },
+            |_, request: Value, sink: WatchSink| async move {
+                if request["method"] != "events.watch" {
+                    return Err("Unsupported mobile operation".into());
+                }
+                tokio::spawn(async move {
+                    sink.send(json!({ "heartbeat": watch_heartbeat(&request).as_secs() }))
+                        .await
+                        .unwrap();
+                });
+                Ok(())
+            },
+        ));
+        let address = [Address {
+            host: "127.0.0.1".into(),
+            port,
+        }];
+        let pin = desktop.fingerprint().unwrap();
+        let refused = quiet_watch(&phone, &pin, &address, json!({"method":"other"})).await;
+        assert_eq!(refused.err().unwrap(), "Unsupported mobile operation");
+
+        let watching = quiet_watch(&phone, &pin, &address, json!({"method":"events.watch"}))
+            .await
+            .unwrap();
+        let first = watching.next(Duration::from_secs(5)).await.unwrap();
+        assert_eq!(
+            first,
+            vec![json!({ "heartbeat": QUIET_HEARTBEAT.as_secs() })]
+        );
+        assert!(!watching.pooled);
+        let connection = watching.connection.clone();
+        watching.close().await;
+        assert!(connection.close_reason().is_some());
+        // A request opens its own pooled connection, not the quiet one.
+        let answer = exchange(&phone, &pin, &address, json!({"method":"ping"}))
+            .await
+            .unwrap();
+        assert_eq!(answer["method"], "ping");
+        endpoint.close(0_u32.into(), b"Test complete");
+        task.await.unwrap();
+    }
+
+    #[test]
+    fn a_watch_heartbeat_stays_within_bounds() {
+        assert_eq!(watch_heartbeat(&json!({})), WATCH_HEARTBEAT);
+        assert_eq!(watch_heartbeat(&json!({"heartbeat": 1})).as_secs(), 5);
+        assert_eq!(watch_heartbeat(&json!({"heartbeat": 20})).as_secs(), 20);
+        assert_eq!(watch_heartbeat(&json!({"heartbeat": 600})).as_secs(), 25);
     }
 
     #[tokio::test]

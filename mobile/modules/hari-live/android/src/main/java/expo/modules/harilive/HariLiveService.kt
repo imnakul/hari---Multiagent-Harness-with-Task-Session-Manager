@@ -30,8 +30,14 @@ class HariLiveService : Service() {
     override fun run() {
       HariLive.renew(this@HariLiveService)
       HariLive.dispatch(mapOf("action" to "tick"))
-      handler.postDelayed(this, TICK_MS)
+      handler.postDelayed(this, HariLive.tickMs())
     }
+  }
+
+  /** Fork (L-277): starts the wait for the next tick again at the current pace. */
+  fun reschedule() {
+    handler.removeCallbacks(tick)
+    handler.postDelayed(tick, HariLive.tickMs())
   }
 
   private val screen = object : BroadcastReceiver() {
@@ -51,7 +57,7 @@ class HariLiveService : Service() {
     if (Build.VERSION.SDK_INT >= 33) registerReceiver(screen, filter, Context.RECEIVER_NOT_EXPORTED)
     else registerReceiver(screen, filter)
     listening = true
-    handler.postDelayed(tick, TICK_MS)
+    handler.postDelayed(tick, HariLive.tickMs())
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -103,8 +109,8 @@ class HariLiveService : Service() {
     super.onDestroy()
   }
 
-  private companion object {
-    const val TAG = "HariLiveService"
+  companion object {
+    private const val TAG = "HariLiveService"
     const val TICK_MS = 15_000L
   }
 }

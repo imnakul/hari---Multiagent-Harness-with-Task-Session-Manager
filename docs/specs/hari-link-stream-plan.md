@@ -1,10 +1,10 @@
-# Draft — Hari link: always-open stream, outboxes, Share, stats and PC control
+# Progress — Hari link: always-open stream, outboxes, Share, stats and PC control
 
 Branch: `nakul/windows-support-upstream-0.16.0`
 Base: `62a2a762` (plus uncommitted L-265 to L-276)
 Created: 2026-11-14 15:36 (IST) · Updated: 2026-11-14 (scope added, Share choices answered)
 Tier: Large (protocol change on the phone link, new phone and desktop screens, Android service change)
-Status: Draft — direction agreed with Nakul. Build local first, in the phases below.
+Status: Progress — Phase 1 built (L-277); Phases 2–5 next.
 
 ## Idea
 Today the phone asks the computer on a timer (every 5 s in view, every 15 s in the background
@@ -114,7 +114,7 @@ from bed, plus a separate WOL app to wake the PC. Hari can take over most of tha
 - Conflicts: newer edit wins, per note or task (`updatedAt`). A deleted item stays deleted.
 
 ## Build order
-Proposed 2026-11-14 (awaiting Nakul's go): one continuous build of all five, in this order, without waiting for
+Decided 2026-11-14 ("yes, you can build in order and keep committing, but push for release only once"): one continuous build of all five, in this order, without waiting for
 approval between them; checks pass at the end of each before the next starts; one manual
 check list at the end.
 1. Stream + outbox + notifications by push (proves the link).
@@ -152,9 +152,25 @@ tests) is written before each phase starts.
 - PC control is remote control of a signed-in PC: only the paired phone (pinned key) can send
   it, power actions are confirmed, and stale commands are refused.
 
+## Phase 1 — built (L-277)
+- Protocol: `events.watch {epoch?, after?}` (a watch). The computer sends `{type:"hello",epoch,last,resume}` first, then `{type:"item",item:{seq,id,kind,at,payload}}` in order and `{type:"signal",kind,payload}` (latest value only, not kept). The phone acks with `events.ack {epoch,seq}` and sends its own outbox with `events.send {items:[{id,kind,at,payload}]}` → `{accepted:[id],rejected:[{id,error}]}`; ids are deduped (last 500). Phase 1 refuses every item kind ("Unsupported item"); kinds arrive with their phases.
+- Computer outbox: per paired phone, `mobile-events.json` in app data, 200 items, 64 KB per payload, 7 days. A new epoch when the file is lost or the phone re-pairs; the phone resets its cursor on a new epoch. Forgotten on revoke and leave.
+- Quiet watch: in the background the link asks for a 20 s heartbeat on its own connection with longer timeouts (`quiet_client`), so the radio sleeps between pings. In view it shares the usual pooled connection with a 5 s heartbeat.
+- Phone: `runLinkStream` holds one watch per paired computer, reopens on in-view/background change, retries 1 s → 30 s, and asks an older computer again every 5 minutes. While live, the Android watcher ticks every 120 s when no session card is shown, and the notifications poll drops to once a minute.
+- Notifications: the computer sends the bell's list as the `notifications` signal whenever it changes, so the phone's panel updates within about a second.
+
+Manual check (phone + computer; not for an agent inside MonoCode):
+1. Hari in view, paired: let a chat finish on the computer. Hari's panel notification appears within about 2 s.
+2. Hari in the background with "Keep watching in the background" on: the same, within about 2 s.
+3. Swipe a notification away on the phone → it leaves the computer's bell; clear the bell on the computer → it leaves the phone.
+4. Turn the computer's mobile access off and on: Hari reconnects by itself within about 30 s.
+5. Leave Hari in the background for an hour: Hari's battery use stays about where it was before this build.
+6. Restart the computer's app with notifications waiting: nothing shows twice on the phone.
+
 ## Todos
 - [x] Share choices answered
-- [ ] Phase 1 full spec, build, records, manual check
+- [x] Phase 1 full spec, build, records (L-277)
+- [ ] Phase 1 manual check (list in "Phase 1 — built")
 - [ ] Phase 2
 - [ ] Phase 3
 - [ ] Phase 4

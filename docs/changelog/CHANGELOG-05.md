@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 16:16 IST — Hari keeps one link open to the computer (L-277)
+- Type: feature
+- What: While paired, Hari now keeps one encrypted link open to the computer instead of only asking every few seconds. In view it uses the normal connection; in the background (Android, with "Keep watching in the background" on) it uses a quiet one that checks in every 20 s. The computer's notification list arrives on it within about a second, and Hari polls only once a minute while the link is open. Both sides now keep an outbox that the next phases use (sharing, notification actions). With an older computer, Hari keeps polling as before.
+- Why: Phase 1 of the Hari link plan: push instead of poll, and the base for Share, PC control and stats.
+- Files: [transport.rs](../../crates/mobile-link/src/transport.rs), [tls.rs](../../crates/mobile-link/src/tls.rs), [ffi.rs](../../crates/mobile-link/src/ffi.rs), [mobile_events.rs](../../src-tauri/src/mobile_events.rs), [mobile_access.rs](../../src-tauri/src/mobile_access.rs), [mobile_notifications.rs](../../src-tauri/src/mobile_notifications.rs), [linkStream.ts](../../mobile/src/features/link/linkStream.ts), [linkProtocol.ts](../../mobile/src/features/link/linkProtocol.ts), [LinkStreamSync.tsx](../../mobile/src/features/link/LinkStreamSync.tsx), [NotificationFeedSync.tsx](../../mobile/src/features/notifications/NotificationFeedSync.tsx), [HariLive.kt](../../mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLive.kt), [SessionNotifications.test.tsx](../../mobile/tests/SessionNotifications.test.tsx) (its kv-store mock was missing since L-275)
+- Commit: uncommitted
+- Verified: typecheck ✅ (root, mobile) lint ✅ (mobile changed files) tests ✅ (mobile-link 34, src-tauri mobile_ 16, mobile 9 new, SessionNotifications fixed; `tests/mobile/watchFrames.test.ts` can't load from the phone config on Windows, as before) Kotlin compile ✅; phone checks manual
+
 ## 2026-11-14 15:36 IST — Plan: always-open Hari link, Share and a later cloud mailbox
 - Type: docs
 - What: Wrote down the agreed direction for the phone link: one always-open two-way connection, an outbox on each side so nothing is lost, a Share panel, "send to clipboard" both ways with a notification, push for notifications and notes/tasks, and later a cloud mailbox on Nakul's spare Convex account. Local version first.

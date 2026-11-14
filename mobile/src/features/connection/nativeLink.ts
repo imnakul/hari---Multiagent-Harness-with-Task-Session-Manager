@@ -50,11 +50,14 @@ export function request<T>(
 /**
  * Opens a watch: the desktop keeps the request's stream open and writes each
  * change to it. Pull them with `nextUpdates`; `closeWatch` stops it.
+ * `quiet` (L-277) holds it on a connection of its own with slow pings and a
+ * 20 s heartbeat, for a stream kept open in the background.
  */
 export async function openWatch(
   pairing: Pairing,
   method: string,
   params: object,
+  options: { quiet?: boolean } = {},
 ): Promise<number> {
   const { watchId } = await nativeCall<{ watchId: number }>({
     operation: "watch",
@@ -62,6 +65,7 @@ export async function openWatch(
     pin: pairing.desktop.fingerprint,
     addresses: pairing.desktop.addresses,
     request: { version: 1, id: makeCommandId(), method, params },
+    quiet: options.quiet === true,
   });
   return watchId;
 }

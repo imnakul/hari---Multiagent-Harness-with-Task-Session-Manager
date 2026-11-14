@@ -43,6 +43,8 @@ mod menu;
 mod mobile_access;
 mod mobile_router;
 mod mobile_tools;
+// Fork (Hari, L-277): the always-open event stream to the phone.
+mod mobile_events;
 // Fork (Hari, L-275): the bell's history for the phone.
 mod mobile_notifications;
 mod mono;
@@ -390,6 +392,10 @@ pub fn run() {
             harness::reap_orphaned_harness_processes();
             session_store::init(app.handle())?;
             control::init(app.handle())?;
+            // Fork (Hari, L-277): a broken outbox file must not stop the app.
+            if let Err(error) = mobile_events::init(app.handle()) {
+                eprintln!("monocode: phone outbox: {error}");
+            }
             mobile_access::init(app.handle())?;
             reminders::init(app.handle());
             checkpoint::init(app.handle())?;

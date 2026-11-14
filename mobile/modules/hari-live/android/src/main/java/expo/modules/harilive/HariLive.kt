@@ -64,6 +64,7 @@ internal object HariLive {
   // Fork (Hari, L-275): the quiet notification the service shows while it
   // only watches for the computer's notifications (no session card).
   const val WATCH_CHANNEL = "hari-watch"
+  private const val STREAM_TICK_MS = 120_000L
   private const val WATCH_ID = 7299
   private const val WATCH_URL = "monocode://notifications"
 
@@ -75,6 +76,24 @@ internal object HariLive {
   /** Keep the service running with no card, so the app can check the computer. */
   var watching = false
     private set
+  /**
+   * Fork (L-277): the app holds the event stream to the computer open, which
+   * brings news at once; the tick is then only a fallback and runs rarely.
+   */
+  var streamLive = false
+    private set
+
+  /** How long until the service's next tick. */
+  fun tickMs(): Long =
+    if (streamLive && cards.isEmpty()) STREAM_TICK_MS else HariLiveService.TICK_MS
+
+  fun setStreamLive(on: Boolean) {
+    main.post {
+      if (streamLive == on) return@post
+      streamLive = on
+      service?.reschedule()
+    }
+  }
   private var posted: Set<Int> = emptySet()
   var service: HariLiveService? = null
   private var starting = false
