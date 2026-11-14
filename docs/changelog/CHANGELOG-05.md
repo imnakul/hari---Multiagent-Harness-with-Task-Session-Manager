@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 06:17 IST — Aside's Ask Aside panel can use MonoCode's CLIs (L-274)
+- Type: feature
+- What: MonoCode can now answer Aside's "Ask Aside" side panel. Turn it on in Settings → Connections → Aside browser and press "Add models to Aside"; Aside then lists "Hari · Claude", "Hari · Command Code" and "Hari · Antigravity" models. Each Aside chat runs here as a conversation in a pinned project named CLI, streams its reply (and tool steps as thinking) back to Aside, follows Aside's Reasoning setting, and stops when Aside stops. Aside's chat titles and memory requests are answered locally without running a model.
+- Why: The user wanted Ask Aside to use the Claude Code, Command Code and Antigravity subscriptions they already run in MonoCode instead of Aside's own providers, and to see those chats in MonoCode.
+- Files: [aside_link.rs](../../src-tauri/src/aside_link.rs), [lib.rs](../../src-tauri/src/lib.rs), [aside-link](../../src/features/aside-link), [App.tsx](../../src/app/App.tsx), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [settings.ts](../../src/features/settings/model/settings.ts), [aside-link-plan.md](../specs/aside-link-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (vitest 8173) cargo test aside_link ✅ (7) build —
+
 ## 2026-11-14 08:10 IST — Zen: Settings button in the top bar (L-264)
 - Type: feature
 - What: Zen's top-right buttons now include Settings (a gear, after Keep on top). Clicking it leaves Zen, waits for the window to grow back to full size, then opens Settings.
