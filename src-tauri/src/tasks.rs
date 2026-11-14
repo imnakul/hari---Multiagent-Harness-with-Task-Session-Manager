@@ -240,7 +240,11 @@ pub(crate) fn tasks_upsert_blocking(
 ) -> Result<Task, String> {
     validate_task_upsert(&task)?;
     let conn = store.lock_conn()?;
-    upsert_task(&conn, &task).map_err(|error| error.to_string())
+    let task = upsert_task(&conn, &task).map_err(|error| error.to_string())?;
+    drop(conn);
+    // Fork (Hari, L-281): the paired phone refreshes its offline copy.
+    crate::mobile_tools::changed("tasks");
+    Ok(task)
 }
 
 #[tauri::command]
@@ -262,6 +266,8 @@ pub(crate) fn tasks_delete_blocking(
     drop(conn);
     // Same as notes: the row deletion is authoritative, image cleanup is best effort.
     let _ = crate::notes::remove_note_assets(&app, &id);
+    // Fork (Hari, L-281): the paired phone drops it from its offline copy.
+    crate::mobile_tools::changed("tasks");
     Ok(())
 }
 

@@ -324,6 +324,10 @@ fn receive(app: &AppHandle, peer: &str, kind: &str, payload: &Value) -> Result<(
     match kind {
         // Fork (L-279): text, links and clipboard from the phone.
         "share" => crate::mobile_share::receive(app, peer, payload),
+        // Fork (Hari, L-281): task and note edits the phone made offline.
+        kind if crate::mobile_tools::OUTBOX_KINDS.contains(&kind) => {
+            crate::mobile_tools::receive(app, kind, payload)
+        }
         _ => Err("Unsupported item".into()),
     }
 }

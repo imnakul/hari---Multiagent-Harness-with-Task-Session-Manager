@@ -20,6 +20,17 @@ import {
 } from "@/features/tools/tools";
 import type { Project } from "@/features/workspace/types";
 
+// Fork (Hari, L-281): tools.ts reaches the link and the phone storage for offline use; here the link is up.
+vi.mock("expo-sqlite/kv-store", () => ({ default: { getItemSync: () => null, setItemSync: () => undefined } }));
+vi.mock("@/features/link/linkStream", () => ({
+  linkComputer: () => null,
+  linkCanQueue: () => false,
+  linkStreamLive: () => true,
+  pendingLinkItems: () => [],
+  sendLinkItem: vi.fn(),
+  dropLinkItems: vi.fn(),
+}));
+
 const projects = [
   { name: "Mono", path: "E:\\Code\\mono" },
   { name: "Alpha", path: "E:\\Code\\alpha" },

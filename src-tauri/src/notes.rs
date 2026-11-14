@@ -166,7 +166,10 @@ pub(crate) fn notes_upsert_blocking(
     store: State<'_, SessionStore>,
     note: NoteUpsert,
 ) -> Result<Note, String> {
-    save_content(store, note, "note", None)
+    let note = save_content(store, note, "note", None)?;
+    // Fork (Hari, L-281): the paired phone refreshes its offline copy.
+    crate::mobile_tools::changed("notes");
+    Ok(note)
 }
 
 pub(crate) fn save_content(
@@ -208,6 +211,8 @@ pub(crate) fn notes_delete_blocking(
     // The note deletion is authoritative. A cleanup failure should not leave a
     // successfully deleted note visible in the UI.
     let _ = remove_note_assets(&app, &id);
+    // Fork (Hari, L-281): the paired phone drops it from its offline copy.
+    crate::mobile_tools::changed("notes");
     Ok(())
 }
 

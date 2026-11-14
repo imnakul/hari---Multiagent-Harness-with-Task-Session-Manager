@@ -2,6 +2,8 @@
 //! no window, so the desktop service answers them from its own store, then
 //! tells every window to refresh. The only writes are task and note saves, the
 //! same ones the desktop's own screens make.
+use std::collections::HashMap;
+
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -52,59 +54,13 @@ fn run(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String> {
             Ok(json!({ "tasks": tasks.iter().map(task_summary).collect::<Vec<_>>() }))
         }
         "tasks.create" => {
-            let body = text(params, "body");
-            let title = match text(params, "title").trim() {
-                "" => title_from(&body),
-                given => clip(given, TITLE_CHARS),
-            };
-            let task = tasks_upsert_blocking(
-                app.state(),
-                TaskUpsert {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    title,
-                    body,
-                    status: TaskStatus::Todo,
-                    tags: tags(params).unwrap_or_default(),
-                    project_cwd: optional(params, "projectCwd"),
-                    source_session_id: optional(params, "sourceSessionId"),
-                    source_block_id: None,
-                    focus_date: None,
-                    focus_days: Vec::new(),
-                    today: None,
-                    archived: false,
-                    sort_order: None,
-                },
-            )?;
+            let task = create_task(app, uuid::Uuid::new_v4().to_string(), params)?;
             Ok(json!({ "task": task_summary(&task) }))
         }
         "tasks.update" => {
             let id = text(params, "id");
             let task = tasks_get_blocking(app.state(), id)?.ok_or("This task was deleted")?;
-            let mut next = upsert_of(task);
-            if let Some(status) = params.get("status").filter(|value| value.is_string()) {
-                next.status = serde_json::from_value(status.clone())
-                    .map_err(|_| "Unknown task status".to_string())?;
-            }
-            if let Some(title) = params["title"]
-                .as_str()
-                .map(str::trim)
-                .filter(|t| !t.is_empty())
-            {
-                next.title = clip(title, TITLE_CHARS);
-            }
-            if let Some(tags) = tags(params) {
-                next.tags = tags;
-            }
-            if params.get("projectCwd").is_some() {
-                next.project_cwd = optional(params, "projectCwd");
-            }
-            // Fork (L-243): the phone pins a task to a day, or unpins it, with
-            // its own local day so the desktop records Focus history.
-            if let Some(focus) = focus_change(params)? {
-                next.focus_date = focus;
-                next.today = optional(params, "today");
-            }
-            let task = tasks_upsert_blocking(app.state(), next)?;
+            let task = update_task(app, task, params)?;
             Ok(json!({ "task": task_summary(&task) }))
         }
         "notes.list" => {
@@ -146,12 +102,19 @@ fn save_note(app: &AppHandle, params: &Value) -> Result<Value, String> {
             return Ok(json!({ "conflict": true, "note": current }));
         }
     }
+    let note = write_note(app, params, current)?;
+    Ok(json!({ "conflict": false, "note": note }))
+}
+
+/// Writes the phone's note over `current` (the desktop's copy, if any).
+fn write_note(app: &AppHandle, params: &Value, current: Option<Note>) -> Result<Note, String> {
+    let id = text(params, "id");
     let body = text(params, "body").replace("\r\n", "\n");
     let title = match text(params, "title").trim() {
         "" => title_from(&body),
         given => clip(given, TITLE_CHARS),
     };
-    let note = notes_upsert_blocking(
+    notes_upsert_blocking(
         app.state(),
         NoteUpsert {
             id,
@@ -172,8 +135,151 @@ fn save_note(app: &AppHandle, params: &Value) -> Result<Value, String> {
             },
             finalize_slug: params["finalize"] == true,
         },
-    )?;
-    Ok(json!({ "conflict": false, "note": note }))
+    )
+}
+
+fn create_task(app: &AppHandle, id: String, params: &Value) -> Result<Task, String> {
+    let body = text(params, "body");
+    let title = match text(params, "title").trim() {
+        "" => title_from(&body),
+        given => clip(given, TITLE_CHARS),
+    };
+    tasks_upsert_blocking(
+        app.state(),
+        TaskUpsert {
+            id,
+            title,
+            body,
+            status: TaskStatus::Todo,
+            tags: tags(params).unwrap_or_default(),
+            project_cwd: optional(params, "projectCwd"),
+            source_session_id: optional(params, "sourceSessionId"),
+            source_block_id: None,
+            focus_date: None,
+            focus_days: Vec::new(),
+            today: None,
+            archived: false,
+            sort_order: None,
+        },
+    )
+}
+
+/// Applies the fields `params` carries to `task`; the rest stay as they are.
+fn update_task(app: &AppHandle, task: Task, params: &Value) -> Result<Task, String> {
+    let mut next = upsert_of(task);
+    if let Some(status) = params.get("status").filter(|value| value.is_string()) {
+        next.status = serde_json::from_value(status.clone())
+            .map_err(|_| "Unknown task status".to_string())?;
+    }
+    if let Some(title) = params["title"]
+        .as_str()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        next.title = clip(title, TITLE_CHARS);
+    }
+    if let Some(tags) = tags(params) {
+        next.tags = tags;
+    }
+    if params.get("projectCwd").is_some() {
+        next.project_cwd = optional(params, "projectCwd");
+    }
+    // Fork (L-243): the phone pins a task to a day, or unpins it, with
+    // its own local day so the desktop records Focus history.
+    if let Some(focus) = focus_change(params)? {
+        next.focus_date = focus;
+        next.today = optional(params, "today");
+    }
+    tasks_upsert_blocking(app.state(), next)
+}
+
+/// Fork (Hari, L-281): tells the paired phone that tasks or notes changed, so
+/// it refreshes its offline copy. Called after every desktop write, whatever
+/// made it (a window, an agent, the phone).
+pub(crate) fn changed(kind: &str) {
+    let signal = match kind {
+        "tasks" => "tasks.changed",
+        _ => "notes.changed",
+    };
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(0));
+    crate::mobile_events::signal(signal, json!({ "at": at }));
+}
+
+pub(crate) const OUTBOX_KINDS: [&str; 3] = ["tasks.create", "tasks.update", "notes.save"];
+
+/// The `updatedAt` each phone outbox write produced, by task or note id, so a
+/// later queued edit of the same item (whose base is older) still applies.
+static PHONE_WRITES: std::sync::LazyLock<std::sync::Mutex<HashMap<String, i64>>> =
+    std::sync::LazyLock::new(Default::default);
+const PHONE_WRITES_MAX: usize = 500;
+
+fn recorded(id: &str) -> Option<i64> {
+    PHONE_WRITES.lock().ok()?.get(id).copied()
+}
+
+fn record(id: &str, updated_at: i64) {
+    if let Ok(mut writes) = PHONE_WRITES.lock() {
+        if writes.len() >= PHONE_WRITES_MAX {
+            writes.clear();
+        }
+        writes.insert(id.to_owned(), updated_at);
+    }
+}
+
+/// Newer edit wins: the phone's offline edit applies when the desktop's copy is
+/// the one the phone edited (`base`), or the phone's own last write, or older
+/// than the edit itself (`edited_at`, the phone's clock).
+fn phone_wins(base: Option<i64>, recorded: Option<i64>, current: i64, edited_at: i64) -> bool {
+    base == Some(current) || recorded == Some(current) || edited_at > current
+}
+
+/// Fork (Hari, L-281): a task or note edit the phone made offline, from its
+/// outbox. Deletes on the desktop stick, and an edit older than the desktop's
+/// copy is dropped; the error tells the phone why.
+pub(crate) fn receive(app: &AppHandle, kind: &str, payload: &Value) -> Result<(), String> {
+    let edited_at = payload["editedAt"].as_i64().ok_or("Missing edit time")?;
+    let base = payload["baseUpdatedAt"].as_i64();
+    let id = text(payload, "id");
+    match kind {
+        "tasks.create" => {
+            // Sent twice (the answer was lost): it exists already.
+            if tasks_get_blocking(app.state(), id.clone())?.is_none() {
+                let task = create_task(app, id, payload)?;
+                record(&task.id, task.updated_at);
+            }
+            let _ = app.emit("monocode://tasks-changed", ());
+        }
+        "tasks.update" => {
+            let task = tasks_get_blocking(app.state(), id.clone())?
+                .ok_or("This task was deleted on your computer")?;
+            if !phone_wins(base, recorded(&id), task.updated_at, edited_at) {
+                return Err("This task changed on your computer after this edit".into());
+            }
+            let task = update_task(app, task, payload)?;
+            record(&task.id, task.updated_at);
+            let _ = app.emit("monocode://tasks-changed", ());
+        }
+        "notes.save" => {
+            let current = notes_get_blocking(app.state(), id.clone())?;
+            // Keep mine / Save again, chosen on the phone after a refusal.
+            let force = payload["force"] == true;
+            match (&current, base) {
+                _ if force => {}
+                (None, Some(_)) => return Err("This note was deleted on your computer".into()),
+                (Some(note), _) if !phone_wins(base, recorded(&id), note.updated_at, edited_at) => {
+                    return Err("This note changed on your computer after this edit".into());
+                }
+                _ => {}
+            }
+            let note = write_note(app, payload, current)?;
+            record(&note.id, note.updated_at);
+            let _ = app.emit("monocode://notes-changed", ());
+        }
+        _ => return Err("Unsupported item".into()),
+    }
+    Ok(())
 }
 
 /// The task as the phone's list shows it. Retired statuses read as Todo, and
@@ -351,6 +457,31 @@ mod tests {
         );
         assert!(focus_change(&json!({ "focusDate": "2026-11-11" })).is_err());
         assert!(focus_change(&json!({ "focusDate": 5, "today": "2026-11-11" })).is_err());
+    }
+
+    #[test]
+    fn the_newer_edit_wins() {
+        // The phone edited the copy the desktop still has.
+        assert!(phone_wins(Some(100), None, 100, 50));
+        // A second queued edit after the phone's own first write.
+        assert!(phone_wins(Some(100), Some(300), 300, 200));
+        // Changed on the desktop after the phone's edit: the desktop wins.
+        assert!(!phone_wins(Some(100), None, 300, 200));
+        // Changed on the desktop before the phone's edit: the phone wins.
+        assert!(phone_wins(Some(100), None, 300, 400));
+        // A note the phone made, already on the desktop from its own write.
+        assert!(phone_wins(None, Some(300), 300, 200));
+        assert!(!phone_wins(None, None, 300, 200));
+    }
+
+    #[test]
+    fn records_forget_everything_when_full() {
+        for index in 0..PHONE_WRITES_MAX {
+            record(&format!("test-{index}"), 1);
+        }
+        record("test-last", 7);
+        assert_eq!(recorded("test-last"), Some(7));
+        assert_eq!(recorded("test-0"), None);
     }
 
     #[test]

@@ -32,6 +32,8 @@ import {
   type TaskItem,
   type TaskStatus,
 } from "@/features/tools/tools";
+import { cachedTasks, pendingToolEdits } from "@/features/tools/toolsCache";
+import { ToolsOffline } from "@/features/tools/ToolsOffline";
 import { Icon } from "@/ui/Icon";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
@@ -46,15 +48,20 @@ export default function TasksScreen() {
   const { command, catalog } = useConnection();
   const run = command as Command;
   const projects = catalog.projects;
-  const [tasks, setTasks] = useState<TaskItem[] | null>(null);
+  // Fork (Hari, L-281): opens on the phone's saved copy, then the computer's.
+  const [tasks, setTasks] = useState<TaskItem[] | null>(cachedTasks);
   const [error, setError] = useState<string | null>(null);
+  /** Changes waiting on the phone, while the list is its saved copy; null when online. */
+  const [offline, setOffline] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setTasks(await listTasks(run));
+      const listed = await listTasks(run);
+      setTasks(listed.items);
+      setOffline(listed.offline ? pendingToolEdits().length : null);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -64,9 +71,10 @@ export default function TasksScreen() {
     let live = true;
     const fetch = () =>
       listTasks(run).then(
-        (items) => {
+        (listed) => {
           if (!live) return;
-          setTasks(items);
+          setTasks(listed.items);
+          setOffline(listed.offline ? pendingToolEdits().length : null);
           setError(null);
         },
         (reason) => live && setError(reason instanceof Error ? reason.message : String(reason)),
@@ -278,6 +286,7 @@ export default function TasksScreen() {
       {tasks === null && !error ? (
         <ActivityIndicator style={styles.loading} color={colors.muted} />
       ) : null}
+      {offline !== null ? <ToolsOffline waiting={offline} /> : null}
       {error ? <Text style={styles.empty}>{error}</Text> : null}
       {tasks !== null && !groups.length ? <Text style={styles.empty}>{emptyText}</Text> : null}
       {groups.map((group) => (

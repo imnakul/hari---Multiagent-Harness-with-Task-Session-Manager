@@ -147,6 +147,16 @@ vi.mock("@/features/connection/ConnectionNotice", () => ({
 vi.mock("@/features/connection/nativeLink", () => ({
   hasNativeTranscript: false,
 }));
+// Fork (Hari, L-281): Tasks and Notes reach the link stream for offline use.
+vi.mock("@/features/link/linkStream", () => ({
+  linkComputer: () => null,
+  linkCanQueue: () => false,
+  linkStreamLive: () => true,
+  pendingLinkItems: () => [],
+  sendLinkItem: vi.fn(),
+  dropLinkItems: vi.fn(),
+}));
+vi.mock("expo-sqlite/kv-store", () => ({ default: { getItemSync: () => null, setItemSync: () => undefined } }));
 vi.mock("@/features/connection/useProjectChanges", () => ({
   useProjectChanges: (_project: string, _enabled: boolean, path?: string) => ({
     result: { branch: path ? desktop.existing.name : "main", files: [] },

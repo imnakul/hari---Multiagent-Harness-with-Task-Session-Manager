@@ -21,6 +21,7 @@ import { NotificationFeedSync } from "@/features/notifications/NotificationFeedS
 import { PanelActions } from "@/features/notifications/PanelActions";
 import { ShareSync } from "@/features/share/ShareSync";
 import { PcSync } from "@/features/pc/PcSync";
+import { ToolsSync } from "@/features/tools/ToolsSync";
 import { LiveUpdates } from "@/features/liveUpdates/LiveUpdates";
 import { HariUpdatePrompt } from "@/features/updates/HariUpdatePrompt";
 import { SessionActivity } from "@/features/sessions/SessionActivity";
@@ -192,6 +193,8 @@ function LinkedWorkspace() {
       <ShareSync />
       {/* Fork (Hari, L-280): Find my phone, phone stats, Wake-on-LAN cards. */}
       <PcSync />
+      {/* Fork (Hari, L-281): Tasks and Notes kept on the phone for offline. */}
+      <ToolsSync />
       <LiveUpdates />
       <HariUpdatePrompt />
       <SessionActivity />

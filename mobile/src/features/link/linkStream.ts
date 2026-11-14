@@ -166,6 +166,28 @@ export function pendingLinkItems(): OutboxItem[] {
   return current ? loadOutbox(current.fingerprint) : [];
 }
 
+/** The paired computer's fingerprint while the stream runs for it. */
+export function linkComputer(): string | null {
+  return current?.fingerprint ?? null;
+}
+
+/**
+ * Fork (Hari, L-281): whether a write can wait in the outbox for the computer:
+ * paired, and the computer isn't a MonoCode from before the stream.
+ */
+export function linkCanQueue(): boolean {
+  return current !== null && state.phase !== "unsupported";
+}
+
+/** Drops waiting items `match` picks; a newer one replaces them. */
+export function dropLinkItems(match: (item: OutboxItem) => boolean): void {
+  const link = current;
+  if (!link) return;
+  const outbox = loadOutbox(link.fingerprint);
+  const kept = outbox.filter((item) => !match(item));
+  if (kept.length !== outbox.length) saveOutbox(link.fingerprint, kept);
+}
+
 /** Sends what waits in the outbox, a batch at a time, until it is empty or the link fails. */
 async function flushOutbox(): Promise<void> {
   const link = current;

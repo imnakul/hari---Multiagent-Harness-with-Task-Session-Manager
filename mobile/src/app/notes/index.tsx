@@ -14,6 +14,8 @@ import {
   type Command,
   type NoteItem,
 } from "@/features/tools/tools";
+import { cachedNotes, pendingToolEdits } from "@/features/tools/toolsCache";
+import { ToolsOffline } from "@/features/tools/ToolsOffline";
 import { chatTime } from "@/features/workspace/relativeTime";
 import { radii, themedStyles, useColors } from "@/ui/theme";
 
@@ -24,14 +26,19 @@ export default function NotesScreen() {
   const colors = useColors();
   const { command, catalog } = useConnection();
   const run = command as Command;
-  const [notes, setNotes] = useState<NoteItem[] | null>(null);
+  // Fork (Hari, L-281): opens on the phone's saved copy, then the computer's.
+  const [notes, setNotes] = useState<NoteItem[] | null>(cachedNotes);
   const [error, setError] = useState<string | null>(null);
+  /** Changes waiting on the phone, while the list is its saved copy; null when online. */
+  const [offline, setOffline] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setNotes(await listNotes(run));
+      const listed = await listNotes(run);
+      setNotes(listed.items);
+      setOffline(listed.offline ? pendingToolEdits().length : null);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -41,9 +48,10 @@ export default function NotesScreen() {
     let live = true;
     const fetch = () =>
       listNotes(run).then(
-        (items) => {
+        (listed) => {
           if (!live) return;
-          setNotes(items);
+          setNotes(listed.items);
+          setOffline(listed.offline ? pendingToolEdits().length : null);
           setError(null);
         },
         (reason) => live && setError(reason instanceof Error ? reason.message : String(reason)),
@@ -95,6 +103,7 @@ export default function NotesScreen() {
         {notes === null && !error ? (
           <ActivityIndicator style={styles.loading} color={colors.muted} />
         ) : null}
+        {offline !== null ? <ToolsOffline waiting={offline} /> : null}
         {error ? <Text style={styles.empty}>{error}</Text> : null}
         {notes !== null && !shown.length ? (
           <Text style={styles.empty}>{needle ? "No notes match." : "No notes yet."}</Text>

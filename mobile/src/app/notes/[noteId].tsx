@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
+import { linkStreamLive, onLinkOutboxSettled } from "@/features/link/linkStream";
 import { HeaderButton } from "@/features/files/codeScreen";
 import { Markdown } from "@/features/sessions/Markdown";
 import { SettingsPage } from "@/features/settings/SettingsUI";
@@ -18,6 +19,8 @@ type Status =
   | { kind: "saving" }
   | { kind: "saved" }
   | { kind: "failed"; message: string }
+  /** Fork (Hari, L-281): waits in the link outbox; `live` while the link is up and it is on its way. */
+  | { kind: "queued"; live: boolean }
   /** Changed on the desktop since this phone read it; `note` is its copy, null if deleted. */
   | { kind: "conflict"; note: Note | null };
 
@@ -52,6 +55,10 @@ export default function NoteScreen() {
   const conflict = useRef(false);
   /** Saved, but the note's lasting name isn't set yet; leaving sets it. */
   const unfinalized = useRef(false);
+  /** A save went to the outbox: later ones follow it there, in order. */
+  const viaQueue = useRef(false);
+  /** The outbox item of the last queued save, until the computer answers. */
+  const waiting = useRef<string | null>(null);
 
   useEffect(() => {
     if (isNew) return;
@@ -98,8 +105,16 @@ export default function NoteScreen() {
           baseUpdatedAt: base.current,
           force,
           finalize,
+          queue: viaQueue.current,
         });
-        if (saved.conflict) {
+        if (!saved.conflict && saved.queued) {
+          // The base stays the computer's copy until the computer has it.
+          viaQueue.current = true;
+          waiting.current = saved.queued;
+          conflict.current = false;
+          unfinalized.current = !finalize;
+          setStatus({ kind: "queued", live: linkStreamLive() });
+        } else if (saved.conflict) {
           dirty.current = true;
           conflict.current = true;
           setStatus({ kind: "conflict", note: saved.note });
@@ -123,6 +138,35 @@ export default function NoteScreen() {
   useEffect(() => {
     saveRef.current = save;
   }, [save]);
+
+  // Fork (Hari, L-281): the computer's answer to a queued save. Taken: saved.
+  // Refused (changed there after this edit, or deleted): the usual choice.
+  useEffect(
+    () =>
+      onLinkOutboxSettled((answer) => {
+        const id = waiting.current;
+        if (!id) return;
+        if (answer.accepted.includes(id)) {
+          waiting.current = null;
+          setStatus((now) => (now.kind === "queued" ? { kind: "saved" } : now));
+          return;
+        }
+        const refused = answer.rejected.find((entry) => entry.id === id);
+        if (!refused) return;
+        waiting.current = null;
+        conflict.current = true;
+        dirty.current = true;
+        if (/deleted/i.test(refused.error)) {
+          setStatus({ kind: "conflict", note: null });
+          return;
+        }
+        readNote(run, noteId).then(
+          (note) => setStatus({ kind: "conflict", note }),
+          () => setStatus({ kind: "failed", message: refused.error }),
+        );
+      }),
+    [noteId, run],
+  );
   useEffect(
     () => () => {
       clearTimeout(timer.current);
@@ -142,6 +186,7 @@ export default function NoteScreen() {
     if (status.kind !== "conflict") return;
     if (!status.note) return router.back();
     base.current = status.note.updatedAt;
+    viaQueue.current = false;
     latest.current = fieldsOf(status.note);
     setFields(latest.current);
     dirty.current = false;
@@ -251,6 +296,10 @@ function statusText(status: Status) {
       return "Saving…";
     case "saved":
       return "Saved on your computer";
+    case "queued":
+      return status.live
+        ? "Sending to your computer…"
+        : "Saved on this phone. Goes to your computer when it’s connected.";
     case "failed":
       return `Not saved: ${status.message}`;
     default:

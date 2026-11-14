@@ -1,5 +1,31 @@
 import type { Inline, MarkdownBlock } from "@/features/sessions/markdownParser";
 import type { Project } from "@/features/workspace/types";
+import {
+  dropLinkItems,
+  linkCanQueue,
+  linkStreamLive,
+  sendLinkItem,
+} from "@/features/link/linkStream";
+
+import {
+  cachedNote,
+  cachedNotes,
+  cachedTasks,
+  pendingToolEdits,
+  savedTask,
+  storeNote,
+  storeNotes,
+  storeTasks,
+} from "./toolsCache";
+import {
+  overlayNote,
+  overlayNotes,
+  overlayTasks,
+  pendingTaskResult,
+  queuedNoteBase,
+} from "./toolsOverlay";
+
+export { titleFrom } from "./toolsOverlay";
 
 // Fork (Hari, L-236): the desktop's Tasks and Notes, and its link previews, as
 // the phone reads them. The desktop answers from its own store; these are the
@@ -57,7 +83,10 @@ export type Note = {
   updatedAt: number;
 };
 
-export type NoteSave = { conflict: false; note: Note } | { conflict: true; note: Note | null };
+export type NoteSave =
+  /** `queued`: the outbox item it waits in (Fork, L-281), when the link is down. */
+  | { conflict: false; note: Note; queued?: string }
+  | { conflict: true; note: Note | null };
 
 export type LinkPreview = {
   title?: string | null;
@@ -87,9 +116,60 @@ export function toolsChanged(kind: Kind) {
 }
 
 // ── Requests ────────────────────────────────────────────────────────────────
+// Fork (Hari, L-281): lists and notes are saved on the phone as they arrive,
+// and read from there when the computer can't be reached. With the link down,
+// task and note writes wait in its outbox and reach the computer when it's
+// back; there the newer edit wins and deletes stick.
 
-export const listTasks = (command: Command) =>
-  command<{ tasks: TaskItem[] }>("tasks.list").then((value) => value.tasks);
+/** A list, and whether it is the phone's saved copy (the computer is out of reach). */
+export type Listed<T> = { items: T[]; offline: boolean };
+
+/**
+ * A list asked for again within SHARE_LIST_MS (a sync and a screen together)
+ * shares one request. Writes forget it, so the next list is fresh.
+ */
+const SHARE_LIST_MS = 2_000;
+function sharedRequest<T>() {
+  let recent: { at: number; request: Promise<T> } | null = null;
+  return {
+    run(start: () => Promise<T>, fresh = false): Promise<T> {
+      const now = Date.now();
+      if (!fresh && recent && now - recent.at < SHARE_LIST_MS) return recent.request;
+      const request = start();
+      recent = { at: now, request };
+      request.catch(() => {
+        if (recent?.request === request) recent = null;
+      });
+      return request;
+    },
+    forget() {
+      recent = null;
+    },
+  };
+}
+const taskLists = sharedRequest<TaskItem[]>();
+const noteLists = sharedRequest<NoteItem[]>();
+
+/** Whether a write goes to the outbox: the link is down, or `preferQueue` (an editor that queued already). */
+const queues = (preferQueue = false) => linkCanQueue() && (preferQueue || !linkStreamLive());
+
+const errorText = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
+
+/** The tasks; `fresh` skips a list another caller asked for just now. */
+export async function listTasks(command: Command, fresh = false): Promise<Listed<TaskItem>> {
+  try {
+    const tasks = await taskLists.run(async () => {
+      const { tasks } = await command<{ tasks: TaskItem[] }>("tasks.list");
+      storeTasks(tasks);
+      return tasks;
+    }, fresh);
+    return { items: overlayTasks(tasks, pendingToolEdits()), offline: false };
+  } catch (reason) {
+    const saved = cachedTasks();
+    if (!saved) throw reason;
+    return { items: saved, offline: true };
+  }
+}
 
 export async function createTask(
   command: Command,
@@ -100,8 +180,18 @@ export async function createTask(
     projectCwd?: string | null;
     sourceSessionId?: string;
   },
-) {
+): Promise<TaskItem> {
+  if (queues()) {
+    const edit = { kind: "tasks.create", payload: { ...input, id: newId(), editedAt: Date.now() } };
+    const id = sendLinkItem(edit.kind, edit.payload);
+    taskLists.forget();
+    toolsChanged("tasks");
+    const task = pendingTaskResult(null, { id, ...edit });
+    if (!task) throw new Error("Couldn’t keep the task on this phone");
+    return task;
+  }
   const { task } = await command<{ task: TaskItem }>("tasks.create", input);
+  taskLists.forget();
   toolsChanged("tasks");
   return task;
 }
@@ -121,22 +211,66 @@ export async function updateTask(
     focusDate?: string | null;
     today?: string;
   },
-) {
+): Promise<TaskItem> {
+  if (queues()) {
+    const shown = cachedTasks()?.find((task) => task.id === id) ?? null;
+    if (!shown) throw new Error("This task isn’t saved on this phone");
+    const payload = {
+      id,
+      ...changes,
+      editedAt: Date.now(),
+      baseUpdatedAt: savedTask(id)?.updatedAt ?? null,
+    };
+    const itemId = sendLinkItem("tasks.update", payload);
+    taskLists.forget();
+    toolsChanged("tasks");
+    return pendingTaskResult(shown, { id: itemId, kind: "tasks.update", payload }) ?? shown;
+  }
   const { task } = await command<{ task: TaskItem }>("tasks.update", { id, ...changes });
+  taskLists.forget();
   toolsChanged("tasks");
   return task;
 }
 
-export const listNotes = (command: Command) =>
-  command<{ notes: NoteItem[] }>("notes.list").then((value) => value.notes);
+export async function listNotes(command: Command, fresh = false): Promise<Listed<NoteItem>> {
+  try {
+    const notes = await noteLists.run(async () => {
+      const { notes } = await command<{ notes: NoteItem[] }>("notes.list");
+      storeNotes(notes);
+      return notes;
+    }, fresh);
+    return { items: overlayNotes(notes, pendingToolEdits()), offline: false };
+  } catch (reason) {
+    const saved = cachedNotes();
+    if (!saved) throw reason;
+    return { items: saved, offline: true };
+  }
+}
 
-export const readNote = (command: Command, id: string) =>
-  command<{ note: Note }>("notes.read", { id }).then((value) => value.note);
+/** The note, from the computer, else as this phone saved it last. */
+export async function readNote(command: Command, id: string): Promise<Note> {
+  try {
+    const { note } = await command<{ note: Note }>("notes.read", { id });
+    storeNote(note);
+    return overlayNote(id, note, pendingToolEdits()) ?? note;
+  } catch (reason) {
+    const saved = cachedNote(id);
+    if (saved) return saved;
+    throw new Error(
+      linkStreamLive()
+        ? errorText(reason)
+        : "This note isn’t saved on this phone yet. Open it when your computer is connected.",
+    );
+  }
+}
 
 /**
  * Saves a note the phone read at `baseUpdatedAt` (null for a new one). When it
  * changed on the desktop since, nothing is saved and the desktop's copy comes
- * back as a conflict; `force` saves over it.
+ * back as a conflict; `force` saves over it. With the link down (or `queue`,
+ * once an editor has queued), it waits in the outbox instead: the answer then
+ * names the outbox item (`queued`), and a waiting save of the same note is
+ * replaced.
  */
 export async function saveNote(
   command: Command,
@@ -150,12 +284,46 @@ export async function saveNote(
     baseUpdatedAt: number | null;
     force?: boolean;
     finalize?: boolean;
+    queue?: boolean;
   },
-) {
-  const saved = await command<NoteSave>("notes.save", input);
-  if (!saved.conflict) toolsChanged("notes");
+): Promise<NoteSave> {
+  const { queue, ...fields } = input;
+  const pending = pendingToolEdits();
+  // Saves of this note still waiting; a new save waits behind them, in order,
+  // and replaces them.
+  const replaced = pending.filter(
+    (item) => item.kind === "notes.save" && isNoteSave(item.payload, fields.id),
+  );
+  if (queues(queue || replaced.length > 0)) {
+    const payload = {
+      ...fields,
+      baseUpdatedAt: queuedNoteBase(fields.id, fields.baseUpdatedAt, pending),
+      // A Keep mine still waiting stays one when typing replaces it.
+      force: fields.force === true || replaced.some((item) => isForced(item.payload)),
+      editedAt: Date.now(),
+    };
+    dropLinkItems((item) => item.kind === "notes.save" && isNoteSave(item.payload, fields.id));
+    const itemId = sendLinkItem("notes.save", payload);
+    noteLists.forget();
+    toolsChanged("notes");
+    const note = cachedNote(fields.id);
+    if (!note) throw new Error("Couldn’t keep the note on this phone");
+    return { conflict: false, note, queued: itemId };
+  }
+  const saved = await command<NoteSave>("notes.save", fields);
+  if (!saved.conflict) {
+    storeNote(saved.note);
+    noteLists.forget();
+    toolsChanged("notes");
+  }
   return saved;
 }
+
+const isForced = (payload: unknown) =>
+  typeof payload === "object" && payload !== null && "force" in payload && payload.force === true;
+
+const isNoteSave = (payload: unknown, id: string) =>
+  typeof payload === "object" && payload !== null && "id" in payload && payload.id === id;
 
 /** Recent previews only, as the desktop keeps them; each can hold a page image. */
 const PREVIEW_LIMIT = 30;
@@ -283,26 +451,6 @@ export function parseTags(input: string): string[] {
     if (tags.length === 20) break;
   }
   return tags;
-}
-
-/** The first heading or line of text, as the desktop titles an untitled note. */
-export function titleFrom(text: string): string {
-  let fenced = false;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line.startsWith("```")) {
-      fenced = !fenced;
-      continue;
-    }
-    if (fenced || !line || line === "---") continue;
-    const title = line
-      .replace(/^#{1,6}\s+/, "")
-      .replace(/\*\*|__|`/g, "")
-      .trim()
-      .slice(0, 200);
-    if (title) return title;
-  }
-  return "Untitled";
 }
 
 /** A note's first words after its title, for the list. */

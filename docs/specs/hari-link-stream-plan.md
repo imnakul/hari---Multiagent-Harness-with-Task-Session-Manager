@@ -4,7 +4,7 @@ Branch: `nakul/windows-support-upstream-0.16.0`
 Base: `62a2a762` (plus uncommitted L-265 to L-276)
 Created: 2026-11-14 15:36 (IST) · Updated: 2026-11-14 (scope added, Share choices answered)
 Tier: Large (protocol change on the phone link, new phone and desktop screens, Android service change)
-Status: Progress — Phases 1–4 built (L-277, L-278, L-279, L-280); Phase 5 next.
+Status: Progress — Phases 1–5 built (L-277, L-278, L-279, L-280, L-281); manual checks pending.
 
 ## Idea
 Today the phone asks the computer on a timer (every 5 s in view, every 15 s in the background
@@ -279,6 +279,20 @@ Manual check (phone + computer; not for an agent inside MonoCode):
 7. Computer: Settings → Phone → Add app… → pick an .exe → it appears on the phone; Remove and Reset work.
 8. Computer: phone icon → the phone's battery, temperature, storage and network show; Find my phone → the phone rings loudly with a Stop notification; Stop ringing on the computer, or Stop on the phone, ends it; it stops by itself after 2 minutes.
 
+## Phase 5 — built (L-281)
+- Computer: `mobile_tools.rs` applies the outbox kinds `tasks.create`, `tasks.update` and `notes.save` (each with `editedAt`, updates with `baseUpdatedAt`). An edit applies when the computer's copy is unchanged since the phone's base, was last written by the phone, or is older than the edit; otherwise it is refused with a reason. A create is applied once per phone id; a note save with `force` (Keep mine) skips the checks. Every Tasks or Notes write and delete signals `tasks.changed` / `notes.changed`.
+- Phone: `toolsCache.ts` keeps the lists and the 50 notes read last per paired computer; `toolsOverlay.ts` lays waiting edits over them; `tools.ts` falls back to the copy and queues writes when the stream is down; `ToolsSync.tsx` refreshes on each signal and whenever the stream comes up (fetching the 20 newest notes and any saved note that changed).
+- Changed from the plan: no separate delete from the phone (the phone has no delete for tasks or notes yet); task edits offline need the task in the phone's copy.
+
+Manual check (phone + computer; not for an agent inside MonoCode):
+1. With the computer on, open Tasks and Notes on the phone, open a couple of notes.
+2. Quit MonoCode (or turn off the PC's network) → Tasks and Notes still open with "Computer not connected"; the opened notes and the newest ones open in full; an unread older note says it isn't saved on this phone yet.
+3. Offline: add a task, tick one done, edit a note → they show at once and the line counts the waiting changes.
+4. Start MonoCode → within a few seconds the changes appear on the computer, and the phone line goes away.
+5. Offline, edit note A on the phone; then edit note A on the computer; reconnect → the phone's note editor shows the conflict; Reload shows the computer's text, Keep mine saves the phone's.
+6. Offline, edit a task on the phone; delete it on the computer; reconnect → it stays deleted.
+7. Change a task or note on the computer while the phone's list is open → the list updates by itself.
+
 ## Todos
 - [x] Share choices answered
 - [x] Phase 1 full spec, build, records (L-277)
@@ -289,4 +303,5 @@ Manual check (phone + computer; not for an agent inside MonoCode):
 - [ ] Phase 3 manual check (list in "Phase 3 — built")
 - [x] Phase 4 build, records (L-280)
 - [ ] Phase 4 manual check (list in "Phase 4 — built")
-- [ ] Phase 5
+- [x] Phase 5 build, records (L-281)
+- [ ] Phase 5 manual check (list in "Phase 5 — built")
