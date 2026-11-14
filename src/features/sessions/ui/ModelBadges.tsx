@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { AgentModel } from "../model/models";
 import { Lock } from "../../../shared/ui/icons";
 
@@ -23,4 +24,26 @@ export function ModelBadges({
       ) : null}
     </span>
   );
+}
+
+/**
+ * Fork (L-263): the Free pill, lock and lock reason for a model shown as a
+ * plain dropdown option (Settings), so a locked model can't be picked there
+ * either. Spread into the option next to its value and label.
+ */
+export function modelOptionMarks(model: AgentModel): {
+  icon?: ReactNode;
+  disabled?: boolean;
+  title?: string;
+} {
+  return {
+    ...(model.badge || model.locked
+      ? { icon: <ModelBadges model={model} /> }
+      : {}),
+    ...(model.locked
+      ? { disabled: true, title: `Locked: ${model.locked.reason}` }
+      : model.badge === "free"
+        ? { title: "Free" }
+        : {}),
+  };
 }

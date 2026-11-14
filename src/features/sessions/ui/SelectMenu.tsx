@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { Check, ChevronDown } from "../../../shared/ui/icons";
 import { Popover } from "../../../shared/ui/Popover";
@@ -11,6 +12,10 @@ export type SelectMenuOption = {
   value: string;
   label: string;
   disabled?: boolean;
+  /** Hover text, e.g. why the option is disabled. */
+  title?: string;
+  /** Marks shown after the label, e.g. a model's Free pill or lock. */
+  trailing?: ReactNode;
 };
 
 type Props = {
@@ -139,6 +144,7 @@ export function SelectMenu({
                 aria-selected={selected}
                 aria-disabled={option.disabled || undefined}
                 disabled={option.disabled}
+                title={option.title}
                 data-shared-hover-preserve={selected ? "" : undefined}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => pick(index)}
@@ -152,6 +158,7 @@ export function SelectMenu({
               >
                 {" "}
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                {option.trailing}
                 {selected ? (
                   <Check className="size-3.5 shrink-0" strokeWidth={2} />
                 ) : null}

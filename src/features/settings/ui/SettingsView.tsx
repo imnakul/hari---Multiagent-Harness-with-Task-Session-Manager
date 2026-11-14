@@ -618,6 +618,7 @@ import { clearManagedWallpaper, pickImage } from "../../../platform/tauri/fs";
 import { IS_WINDOWS } from "../../../platform/tauri/platform";
 import { MigrationView } from "../../sessions/ui/MigrationView";
 import { SelectMenu } from "../../sessions/ui/SelectMenu";
+import { modelOptionMarks } from "../../sessions/ui/ModelBadges";
 import { SharedHoverHighlight } from "../../sessions/ui/SharedHoverHighlight";
 import { TerminalSpinner } from "../../sessions/ui/TerminalSpinner";
 
@@ -2478,6 +2479,7 @@ function AiHelperTargetEditor({
     ...models.map((model) => ({
       value: model.nativeId ?? model.id,
       label: model.name,
+      ...modelOptionMarks(model),
     })),
   ];
   const accounts = supportsProviderAccounts(target.provider)
@@ -6032,10 +6034,15 @@ function ProviderRow({
                 void refreshHarnessCatalogs([harness], { force: true });
               }
             }}
-            options={models.map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))}
+            options={models.map((item) => {
+              const { icon, ...marks } = modelOptionMarks(item);
+              return {
+                value: item.id,
+                label: item.name,
+                ...marks,
+                ...(icon ? { trailing: icon } : {}),
+              };
+            })}
             className="w-52"
             menuWidth={280}
             maxHeight={420}
@@ -6934,9 +6941,11 @@ export function Select({
                 }}
                 onClick={() => pick(option.value)}
                 className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] ${
-                  highlighted || isSelected
-                    ? "bg-selection text-content"
-                    : "text-content hover:bg-content/5"
+                  option.disabled
+                    ? "cursor-not-allowed text-content/35"
+                    : highlighted || isSelected
+                      ? "bg-selection text-content"
+                      : "text-content hover:bg-content/5"
                 }`}
               >
                 <span className="min-w-0 flex-1">
