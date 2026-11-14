@@ -1498,9 +1498,15 @@ mod tests {
         assert!(release_stale_requests(&mut state));
         assert_eq!(state.replies[&7], Some(json!({})));
         assert_eq!(state.replies[&8], None);
-        assert!(record_reply(&mut state, 7, json!({})).is_err(), "card closed");
+        assert!(
+            record_reply(&mut state, 7, json!({})).is_err(),
+            "card closed"
+        );
         record_reply(&mut state, 8, permission_reply("allow", None)).unwrap();
-        assert_eq!(state.phase, "ready", "a late answer must not mark Claude busy");
+        assert_eq!(
+            state.phase, "ready",
+            "a late answer must not mark Claude busy"
+        );
         assert!(!release_stale_requests(&mut state), "nothing left to close");
 
         state.replies.insert(9, None);

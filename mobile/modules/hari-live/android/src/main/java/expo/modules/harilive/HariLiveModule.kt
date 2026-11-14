@@ -52,6 +52,18 @@ class HariLiveModule : Module() {
       HariShare.saveToDownloads(context, source, name, mimeType)
     }
 
+    /** Fork (L-290): deletes files Hari saved to Download/Hari; how many went. */
+    Function("deleteSaved") { uris: List<String> -> HariFiles.deleteSaved(context, uris) }
+
+    /** Fork (L-290): keeps the screen on while a big file moves. */
+    Function("keepAwake") { on: Boolean -> HariFiles.keepAwake(appContext.currentActivity, on) }
+
+    /** Fork (L-297): the phone's storage for the computer's Phone files browser. */
+    Function("hasAllFiles") { HariFiles.hasAllFiles() }
+    Function("openAllFilesSettings") { HariFiles.openAllFilesSettings(context) }
+    Function("listFiles") { path: String, offset: Int -> HariFiles.list(path, offset) }
+    Function("describeFile") { path: String -> HariFiles.describe(path) }
+
     /** Fork (L-279): opens a saved file in the app the user picks. */
     Function("openFile") { uri: String, mimeType: String -> HariShare.open(context, uri, mimeType) }
 

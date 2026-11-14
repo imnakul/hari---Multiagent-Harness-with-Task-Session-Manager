@@ -23,12 +23,15 @@ export type BrowserMenuAction =
   | "link.external"
   | "link.copy"
   | "link.chat"
+  | "link.phone"
   | "image.newTab"
   | "image.copy"
   | "image.chat"
+  | "image.phone"
   | "selection.copy"
   | "selection.search"
   | "selection.chat"
+  | "selection.phone"
   | "page.back"
   | "page.forward"
   | "page.reload"
@@ -37,6 +40,7 @@ export type BrowserMenuAction =
   | "tools.shot"
   | "tools.area"
   | "tools.page"
+  | "tools.pagePhone"
   | "dev.selector"
   | "dev.html"
   | "dev.element"
@@ -86,6 +90,7 @@ export function browserMenuItems(
         item("link.external", "Open link in default browser"),
         item("link.copy", "Copy link address"),
         item("link.chat", "Add link to chat"),
+        item("link.phone", "Send link to phone"),
       ]
     : [];
   const image =
@@ -94,6 +99,7 @@ export function browserMenuItems(
           item("image.newTab", "Open image in new tab"),
           item("image.copy", "Copy image address"),
           item("image.chat", "Add image to chat"),
+          item("image.phone", "Send image address to phone"),
         ]
       : [];
   const text = target.selection.trim();
@@ -102,6 +108,7 @@ export function browserMenuItems(
         item("selection.copy", "Copy", { shortcut: "Ctrl+C" }),
         item("selection.search", `Search the web for “${clipLabel(text, 24)}”`),
         item("selection.chat", "Add selection to chat"),
+        item("selection.phone", "Send selection to phone"),
       ]
     : [];
   const developer: Action & { submenu: Action[] } = {
@@ -136,6 +143,7 @@ export function browserMenuItems(
       item("tools.shot", "Screenshot visible page"),
       item("tools.area", "Screenshot an area"),
       item("tools.page", "Add page address to chat"),
+      item("tools.pagePhone", "Send page to phone"),
     ],
     [developer, inspect],
     [

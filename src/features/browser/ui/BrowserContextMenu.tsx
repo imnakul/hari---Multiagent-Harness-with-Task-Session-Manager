@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { sendTextToShare } from "../../mobile/model/sendToShare";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef } from "react";
 import { ExplorerMenu, type ExplorerMenuItem } from "../../files/ui/ExplorerMenu";
@@ -108,6 +109,18 @@ export function BrowserContextMenu({
             target.linkText.trim() ? `"${target.linkText.trim()}" → ${target.linkUrl}` : target.linkUrl,
           ].join("\n"),
         );
+        break;
+      case "link.phone":
+        void sendTextToShare(target.linkUrl, "Link");
+        break;
+      case "image.phone":
+        void sendTextToShare(target.sourceUrl, "Image address");
+        break;
+      case "selection.phone":
+        void sendTextToShare(target.selection, "Text");
+        break;
+      case "tools.pagePhone":
+        void sendTextToShare(pageUrl, "Page");
         break;
       case "image.newTab":
         newTab(target.sourceUrl);

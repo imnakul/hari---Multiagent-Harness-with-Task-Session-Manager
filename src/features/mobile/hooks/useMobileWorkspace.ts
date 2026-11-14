@@ -22,7 +22,7 @@ import {
   type WatchBaseline,
 } from "../model/mobileWatch";
 import type { RuntimeMode, Session } from "../../sessions/model/session";
-import { mobileAccountUsage } from "../model/mobileAccountUsage";
+import { mobileAllUsage, mobileAccountUsage } from "../model/mobileAccountUsage";
 import { useMobileNotificationFeed } from "./useMobileNotificationFeed";
 
 type Request = {
@@ -285,6 +285,8 @@ export function useMobileWorkspace(options: Options) {
                 conversationId ? savedFor.current(conversationId) : undefined,
                 current.current.defaultRuntimeMode,
               );
+            } else if (payload.method === "usage.all") {
+              result = await mobileAllUsage(payload.params.refresh === true);
             } else if (payload.method === "accounts.usage") {
               result = await mobileAccountUsage(
                 payload.params.provider,

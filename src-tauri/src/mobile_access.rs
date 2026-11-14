@@ -812,6 +812,8 @@ async fn handle(
             "conversation.attachment",
             "models.list",
             "accounts.usage",
+            // Fork (Hari, L-296): Settings → Usage on the phone.
+            "usage.all",
             "session.configure",
             "project.changes",
             "project.worktrees",
@@ -854,6 +856,7 @@ async fn handle(
             "conversation.attachment" => "conversation.read",
             "models.list"
             | "accounts.usage"
+            | "usage.all"
             | "project.worktrees"
             | "project.files"
             | "project.file"

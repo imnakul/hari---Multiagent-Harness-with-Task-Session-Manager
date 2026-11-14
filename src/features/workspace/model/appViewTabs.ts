@@ -17,7 +17,7 @@ export type AppView = keyof typeof APP_VIEW_LABELS;
 const NEW_TAB_VIEW_ORDER: readonly AppView[] = [
   "browser",
   "whiteboard",
-  "share",
+  // Share (L-290) is a side panel from the title-bar phone button, not a tab.
   "notes",
   "activity",
   "tasks",

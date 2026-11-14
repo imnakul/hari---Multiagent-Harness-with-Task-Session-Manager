@@ -19,10 +19,10 @@
 //! recover, and WebView2 restarts its own GPU process.
 
 use std::collections::{HashMap, HashSet};
-#[cfg(windows)]
-use tauri::{PhysicalPosition, PhysicalSize};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+#[cfg(windows)]
+use tauri::{PhysicalPosition, PhysicalSize};
 
 use tauri::{State, Window};
 

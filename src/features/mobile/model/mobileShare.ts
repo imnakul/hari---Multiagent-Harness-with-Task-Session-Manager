@@ -20,6 +20,11 @@ export type ShareEntry = {
   at: number;
   /** Queued: the phone hasn't taken it yet (a file: hasn't fetched it). */
   status: "queued" | "done";
+  /** Fork (L-290): items sent together (files + caption). */
+  groupId?: string;
+  /** Pinned and saved never roll off; both sync with the phone. */
+  pinned?: boolean;
+  saved?: boolean;
 };
 
 export type ShareList = { items: ShareEntry[]; phones: number };
@@ -60,6 +65,10 @@ function parseEntry(raw: unknown): ShareEntry | null {
   if (mimeType !== undefined) entry.mimeType = mimeType;
   if (path !== undefined) entry.path = path;
   if (device !== undefined) entry.device = device;
+  const groupId = optionalString(field(raw, "groupId"));
+  if (groupId) entry.groupId = groupId;
+  if (field(raw, "pinned") === true) entry.pinned = true;
+  if (field(raw, "saved") === true) entry.saved = true;
   if (kind === "file" ? !entry.name : entry.text === undefined) return null;
   return entry;
 }

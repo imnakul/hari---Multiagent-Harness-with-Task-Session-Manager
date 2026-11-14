@@ -84,7 +84,10 @@ fn save(
 }
 
 pub(crate) fn delete(conn: &Connection, session_id: &str) -> rusqlite::Result<()> {
-    conn.execute("DELETE FROM session_panel WHERE session_id = ?1", [session_id])?;
+    conn.execute(
+        "DELETE FROM session_panel WHERE session_id = ?1",
+        [session_id],
+    )?;
     Ok(())
 }
 

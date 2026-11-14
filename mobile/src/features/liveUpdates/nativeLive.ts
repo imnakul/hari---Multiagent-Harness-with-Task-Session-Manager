@@ -26,6 +26,13 @@ type HariLiveModule = {
   takeShared?(): string;
   saveToDownloads?(source: string, name: string, mimeType: string): Promise<string>;
   openFile?(uri: string, mimeType: string): boolean;
+  /** Fork (L-290, L-297); missing in builds before it. */
+  deleteSaved?(uris: string[]): number;
+  keepAwake?(on: boolean): void;
+  hasAllFiles?(): boolean;
+  openAllFilesSettings?(): boolean;
+  listFiles?(path: string, offset: number): string;
+  describeFile?(path: string): string;
   /** Fork (L-280); missing in builds before it. */
   phoneStats?(): Record<string, unknown>;
   wake?(macs: string[], broadcasts: string[]): Promise<number>;
@@ -129,6 +136,36 @@ export function openNativeFile(uri: string, mimeType: string): boolean {
     return false;
   }
 }
+/** Fork (L-290): deletes files Hari saved to Download/Hari; how many went (0 without the module). */
+export function deleteSavedFiles(uris: string[]): number {
+  if (!uris.length) return 0;
+  try {
+    return native?.deleteSaved?.(uris) ?? 0;
+  } catch (error) {
+    console.warn("Share: could not delete saved files", error);
+    return 0;
+  }
+}
+
+/** Fork (L-290): keeps the screen on while a big file moves. */
+export function keepScreenAwake(on: boolean) {
+  try {
+    native?.keepAwake?.(on);
+  } catch {
+    // Older builds: the screen may sleep; the transfer resumes.
+  }
+}
+
+/** Fork (L-297): the phone storage the computer can browse; null without the module. */
+export const phoneFiles = native?.listFiles
+  ? {
+      allowed: () => native?.hasAllFiles?.() ?? false,
+      openSettings: () => native?.openAllFilesSettings?.() ?? false,
+      list: (path: string, offset: number): string => native?.listFiles?.(path, offset) ?? "{}",
+      describe: (path: string): string => native?.describeFile?.(path) ?? "{}",
+    }
+  : null;
+
 export const openBatterySettings = () => native?.openBatterySettings();
 
 /** Fork (L-280): this phone's battery, temperature, storage and network; null without the module. */
@@ -161,6 +198,19 @@ export function setNativeRinging(start: boolean) {
 
 /** Whether Android lets Hari show Live Updates; checked again on returning
  *  from system settings. */
+/** Fork (Hari, L-297): whether All files access is on; checked again on return to Hari. */
+export function useAllFilesAllowed() {
+  const [allowed, setAllowed] = useState(() => phoneFiles?.allowed() ?? false);
+  useEffect(() => {
+    if (!phoneFiles) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setAllowed(phoneFiles?.allowed() ?? false);
+    });
+    return () => subscription.remove();
+  }, []);
+  return allowed;
+}
+
 export function usePromotedAllowed() {
   const [allowed, setAllowed] = useState(
     () => native?.canPostPromoted() ?? false,

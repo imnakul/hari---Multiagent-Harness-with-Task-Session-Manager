@@ -62,7 +62,10 @@ struct TabZoom {
 
 impl Default for TabZoom {
     fn default() -> Self {
-        Self { want: 1.0, loading: false }
+        Self {
+            want: 1.0,
+            loading: false,
+        }
     }
 }
 
@@ -127,7 +130,9 @@ pub(crate) fn parse_web_url(raw: &str) -> Result<Url, String> {
     match url.scheme() {
         "http" | "https" => Ok(url),
         "about" if url.as_str() == "about:blank" => Ok(url),
-        other => Err(format!("The browser opens http and https pages, not {other}:")),
+        other => Err(format!(
+            "The browser opens http and https pages, not {other}:"
+        )),
     }
 }
 
@@ -197,7 +202,12 @@ fn create<R: Runtime>(
             }
             // A new page drops the injected tool; put it back while it is on.
             if !loading {
-                let mode = webview.state::<BrowserTabs>().lock().picking.get(&tab).cloned();
+                let mode = webview
+                    .state::<BrowserTabs>()
+                    .lock()
+                    .picking
+                    .get(&tab)
+                    .cloned();
                 if let Some(mode) = mode {
                     let _ = webview.eval(picker_script(&mode));
                 }
@@ -237,7 +247,8 @@ fn create<R: Runtime>(
         // Links that ask for a new window open as a new Browser tab.
         .on_new_window(move |url, _features| {
             if parse_web_url(url.as_str()).is_ok() {
-                let _ = popup_app.emit_to(HOST_WINDOW, NEW_TAB_EVENT, json!({ "url": url.as_str() }));
+                let _ =
+                    popup_app.emit_to(HOST_WINDOW, NEW_TAB_EVENT, json!({ "url": url.as_str() }));
             }
             NewWindowResponse::Deny
         });
@@ -266,11 +277,18 @@ fn activate<R: Runtime>(
         let Some(id) = tab_of(&name) else { continue };
         if id == tab {
             if let Some(bounds) = bounds {
-                webview.set_bounds(bounds.rect()).map_err(|e| e.to_string())?;
+                webview
+                    .set_bounds(bounds.rect())
+                    .map_err(|e| e.to_string())?;
             }
             #[cfg(windows)]
             native::resume(&webview);
-            if visible { webview.show() } else { webview.hide() }.map_err(|e| e.to_string())?;
+            if visible {
+                webview.show()
+            } else {
+                webview.hide()
+            }
+            .map_err(|e| e.to_string())?;
         } else {
             let _ = webview.hide();
             #[cfg(windows)]
@@ -322,7 +340,9 @@ pub async fn browser_preload(
             native::resume(&webview);
             webview.navigate(url).map_err(|e| e.to_string())
         }
-        None => create(&app, tab, url, bounds)?.hide().map_err(|e| e.to_string()),
+        None => create(&app, tab, url, bounds)?
+            .hide()
+            .map_err(|e| e.to_string()),
     }
 }
 
@@ -369,7 +389,12 @@ pub async fn browser_set_visible(
     let Some(webview) = active.and_then(|tab| app.get_webview(&label(tab))) else {
         return Ok(());
     };
-    if visible { webview.show() } else { webview.hide() }.map_err(|e| e.to_string())
+    if visible {
+        webview.show()
+    } else {
+        webview.hide()
+    }
+    .map_err(|e| e.to_string())
 }
 
 /// `action` is "back", "forward", "reload" or "hardReload" (skips the cache).
@@ -420,7 +445,11 @@ pub async fn browser_close(
 /// Page zoom; 1.0 is 100%.
 #[tauri::command]
 pub async fn browser_zoom(app: AppHandle, tab: u32, factor: f64) -> Result<(), String> {
-    let factor = if factor.is_finite() { factor.clamp(0.25, 5.0) } else { 1.0 };
+    let factor = if factor.is_finite() {
+        factor.clamp(0.25, 5.0)
+    } else {
+        1.0
+    };
     app.state::<BrowserTabs>()
         .lock()
         .zoom
@@ -560,7 +589,9 @@ pub async fn browser_pick(
     match mode.as_str() {
         "element" | "area" => {
             tabs.lock().picking.insert(tab, mode.clone());
-            webview.eval(picker_script(&mode)).map_err(|e| e.to_string())
+            webview
+                .eval(picker_script(&mode))
+                .map_err(|e| e.to_string())
         }
         "off" => {
             tabs.lock().picking.remove(&tab);
@@ -604,7 +635,9 @@ fn on_bridge<R: Runtime>(app: &AppHandle<R>, tab: u32, params: &Value) {
     if params["name"].as_str() != Some(BRIDGE) {
         return;
     }
-    let Some(payload) = params["payload"].as_str() else { return };
+    let Some(payload) = params["payload"].as_str() else {
+        return;
+    };
     if payload.len() > MAX_BRIDGE_BYTES {
         return;
     }
@@ -612,7 +645,9 @@ fn on_bridge<R: Runtime>(app: &AppHandle<R>, tab: u32, params: &Value) {
     if !tabs.lock().picking.contains_key(&tab) {
         return;
     }
-    let Ok(data) = serde_json::from_str::<Value>(payload) else { return };
+    let Ok(data) = serde_json::from_str::<Value>(payload) else {
+        return;
+    };
     match data["kind"].as_str() {
         Some("picks") => {}
         // An area capture and Escape both end the tool.
@@ -625,25 +660,36 @@ fn on_bridge<R: Runtime>(app: &AppHandle<R>, tab: u32, params: &Value) {
 }
 
 fn on_cdp_event<R: Runtime>(app: &AppHandle<R>, tab: u32, event: &str, json: &str) {
-    let Ok(params) = serde_json::from_str::<Value>(json) else { return };
+    let Ok(params) = serde_json::from_str::<Value>(json) else {
+        return;
+    };
     if event == "Runtime.bindingCalled" {
         on_bridge(app, tab, &params);
         return;
     }
     if let Some(entry) = devtools_entry(event, &params) {
-        let _ = app.emit_to(HOST_WINDOW, DEVTOOLS_EVENT, json!({ "tab": tab, "entry": entry }));
+        let _ = app.emit_to(
+            HOST_WINDOW,
+            DEVTOOLS_EVENT,
+            json!({ "tab": tab, "entry": entry }),
+        );
     }
 }
 
 /// Request or response headers as name → text, capped (L-222). Shown in the
 /// Network details only; notes added to a chat leave them out.
 fn headers_of(value: &Value) -> Value {
-    let Some(map) = value.as_object() else { return Value::Null };
+    let Some(map) = value.as_object() else {
+        return Value::Null;
+    };
     let headers = map
         .iter()
         .take(80)
         .map(|(name, value)| {
-            let text = value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string());
+            let text = value
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| value.to_string());
             (cap(name, 200), Value::String(cap(&text, 2000)))
         })
         .collect();
@@ -674,13 +720,23 @@ fn remote_text(object: &Value) -> String {
                 format!(
                     "{}: {}",
                     p["name"].as_str().unwrap_or("?"),
-                    p["value"].as_str().unwrap_or(p["type"].as_str().unwrap_or("?"))
+                    p["value"]
+                        .as_str()
+                        .unwrap_or(p["type"].as_str().unwrap_or("?"))
                 )
             })
             .collect();
-        let open = if object["subtype"] == "array" { "[" } else { "{" };
+        let open = if object["subtype"] == "array" {
+            "["
+        } else {
+            "{"
+        };
         let close = if open == "[" { "]" } else { "}" };
-        let more = if object["preview"]["overflow"] == true { ", …" } else { "" };
+        let more = if object["preview"]["overflow"] == true {
+            ", …"
+        } else {
+            ""
+        };
         return format!("{open}{}{more}{close}", fields.join(", "));
     }
     if let Some(value) = object.get("value") {
@@ -695,7 +751,9 @@ fn remote_text(object: &Value) -> String {
 
 fn source_of(url: &Value, line: &Value) -> Value {
     match (url.as_str(), line.as_i64()) {
-        (Some(url), Some(line)) if !url.is_empty() => json!(format!("{}:{}", cap(url, 300), line + 1)),
+        (Some(url), Some(line)) if !url.is_empty() => {
+            json!(format!("{}:{}", cap(url, 300), line + 1))
+        }
         (Some(url), None) if !url.is_empty() => json!(cap(url, 300)),
         _ => Value::Null,
     }
@@ -801,17 +859,16 @@ mod native {
     use std::time::Duration;
     use tauri::{Emitter, Manager, Runtime, Webview};
     use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2, ICoreWebView2ContextMenuTarget, ICoreWebView2Settings4,
-        ICoreWebView2_11, ICoreWebView2_3, COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND,
+        ICoreWebView2, ICoreWebView2ContextMenuTarget, ICoreWebView2Settings4, ICoreWebView2_11,
+        ICoreWebView2_3, COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND,
         COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_AUDIO, COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_IMAGE,
         COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_SELECTED_TEXT,
         COREWEBVIEW2_CONTEXT_MENU_TARGET_KIND_VIDEO,
     };
     use webview2_com::{
-        take_pwstr, CallDevToolsProtocolMethodCompletedHandler,
-        ContextMenuRequestedEventHandler, DevToolsProtocolEventReceivedEventHandler,
-        NavigationCompletedEventHandler, NavigationStartingEventHandler,
-        TrySuspendCompletedHandler, ZoomFactorChangedEventHandler,
+        take_pwstr, CallDevToolsProtocolMethodCompletedHandler, ContextMenuRequestedEventHandler,
+        DevToolsProtocolEventReceivedEventHandler, NavigationCompletedEventHandler,
+        NavigationStartingEventHandler, TrySuspendCompletedHandler, ZoomFactorChangedEventHandler,
     };
     use windows_core::{Interface, BOOL, HSTRING, PWSTR};
 
@@ -922,14 +979,15 @@ mod native {
         mut on_event: impl FnMut(String) + 'static,
     ) -> windows_core::Result<()> {
         let receiver = core.GetDevToolsProtocolEventReceiver(&HSTRING::from(event))?;
-        let handler = DevToolsProtocolEventReceivedEventHandler::create(Box::new(move |_, args| {
-            if let Some(args) = args {
-                let mut json = PWSTR::null();
-                args.ParameterObjectAsJson(&mut json)?;
-                on_event(take_pwstr(json));
-            }
-            Ok(())
-        }));
+        let handler =
+            DevToolsProtocolEventReceivedEventHandler::create(Box::new(move |_, args| {
+                if let Some(args) = args {
+                    let mut json = PWSTR::null();
+                    args.ParameterObjectAsJson(&mut json)?;
+                    on_event(take_pwstr(json));
+                }
+                Ok(())
+            }));
         let mut token = 0i64;
         receiver.add_DevToolsProtocolEventReceived(&handler, &mut token)
     }
@@ -949,7 +1007,9 @@ mod native {
         let _ = webview.with_webview(move |platform| {
             let controller = platform.controller();
             unsafe {
-                let Ok(core) = controller.CoreWebView2() else { return };
+                let Ok(core) = controller.CoreWebView2() else {
+                    return;
+                };
                 if let Ok(settings) = core.Settings() {
                     let _ = settings.SetAreDevToolsEnabled(true);
                     // Edge's own saver: offers to save a login, then fills
@@ -1059,7 +1119,9 @@ mod native {
         let params = params.to_string();
         webview
             .with_webview(move |platform| unsafe {
-                let Ok(core) = platform.controller().CoreWebView2() else { return };
+                let Ok(core) = platform.controller().CoreWebView2() else {
+                    return;
+                };
                 let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
                     move |result, json| {
                         let _ = tx.send(result.map(|_| json).map_err(|e| e.message().to_string()));

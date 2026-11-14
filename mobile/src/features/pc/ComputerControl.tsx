@@ -1,10 +1,11 @@
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Alert, AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { canWake } from "@/features/liveUpdates/nativeLive";
 import { Chip, Control, Meter, Section, Segments } from "@/features/pc/ComputerParts";
+import { DeviceControls } from "@/features/pc/DeviceControls";
 import {
   formatBytes,
   formatRate,
@@ -60,6 +61,10 @@ const answerNote = (raw: unknown): string | undefined => {
  * Nothing is asked of the computer while this screen is closed.
  * L-288: the Control tab of the Computer hub; Monitor on takes Monitor off's
  * place while the monitor is off from here.
+ * L-293: a spinner beside a row while its action runs; Apps and Running apps
+ * fold (closed at first); Lock moved off (Hibernate and Monitor off stay);
+ * sound, media, camera, Bluetooth, Hibernate when idle and the computer's
+ * files below.
  */
 export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
   const styles = useStyles();
@@ -75,6 +80,8 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
   const [openApp, setOpenApp] = useState<string | null>(null);
   const [openShortcut, setOpenShortcut] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [appsOpen, setAppsOpen] = useState(false);
+  const [runningOpen, setRunningOpen] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The monitor as last switched from here, trusted over stats for a moment:
@@ -281,8 +288,9 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
                 />
                 <View style={styles.network} accessible accessibilityLabel={`Network down ${formatRate(stats.network?.down)}, up ${formatRate(stats.network?.up)}`}>
                   <Text style={styles.networkLabel}>Network</Text>
-                  <Text style={styles.networkValue}>↓ {formatRate(stats.network?.down)}</Text>
-                  <Text style={styles.networkValue}>↑ {formatRate(stats.network?.up)}</Text>
+                  <Text style={styles.networkValue} numberOfLines={1}>
+                    ↓ {formatRate(stats.network?.down)}   ↑ {formatRate(stats.network?.up)}
+                  </Text>
                 </View>
               </View>
               {stats.disks.length ? (
@@ -310,7 +318,6 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
         ) : (
           <Control icon="computerOff" label="Monitor off" busy={busy === "power.monitorOff"} disabled={reachable === false} onPress={() => void monitor(true)} />
         )}
-        <Control icon="lock" label="Lock" busy={busy === "power.lock"} disabled={reachable === false} onPress={() => void power("lock", "Locked")} />
         <Control icon="moon" label="Hibernate" busy={busy === "power.hibernate"} disabled={reachable === false} onPress={hibernate} />
         <Control icon="image" label="Screenshot" busy={busy === "screenshot"} disabled={reachable === false} onPress={() => void screenshot()} />
       </View>
@@ -321,7 +328,7 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
       ) : null}
 
       {reachable !== false && shortcuts?.length ? (
-        <Section title="Apps">
+        <Section title="Apps" fold={{ open: appsOpen, onToggle: () => setAppsOpen(!appsOpen), count: shortcuts.length }}>
           {shortcuts.map((shortcut, index) => {
             const expanded = openShortcut === shortcut.id;
             const working = busy === `shortcut.${shortcut.id}`;
@@ -340,6 +347,7 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
                     {shortcut.name}
                   </Text>
                   <Text style={styles.rowMeta}>{shortcut.running ? "Running" : shortcut.found ? "" : "Not found"}</Text>
+                  {working ? <ActivityIndicator size="small" color={colors.muted} accessibilityLabel="Working" /> : null}
                 </Pressable>
                 {expanded ? (
                   <View style={styles.chips}>
@@ -367,6 +375,7 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
       {reachable !== false ? (
         <Section
           title="Running apps"
+          fold={{ open: runningOpen, onToggle: () => setRunningOpen(!runningOpen), count: sortedApps?.length }}
           right={<Segments label="Sort running apps" value={sort} options={SORTS} onChange={setSort} />}
         >
           {sortedApps === null ? (
@@ -391,12 +400,15 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
                     onPress={() => setOpenApp(expanded ? null : app.identity)}
                     style={({ pressed }) => [styles.appRow, pressed && styles.pressed]}
                   >
-                    <Text style={styles.rowTitle} numberOfLines={1}>
-                      {app.title || app.name}
-                    </Text>
-                    <Text style={styles.appMeta} numberOfLines={1}>
-                      {meta}
-                    </Text>
+                    <View style={styles.appText}>
+                      <Text style={styles.rowTitle} numberOfLines={1}>
+                        {app.title || app.name}
+                      </Text>
+                      <Text style={styles.appMeta} numberOfLines={1}>
+                        {meta}
+                      </Text>
+                    </View>
+                    {working ? <ActivityIndicator size="small" color={colors.muted} accessibilityLabel="Working" /> : null}
                   </Pressable>
                   {expanded ? (
                     <View style={styles.chips}>
@@ -414,6 +426,24 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
               );
             })
           )}
+        </Section>
+      ) : null}
+
+      <DeviceControls say={say} reachable={reachable} />
+
+      {reachable !== false ? (
+        <Section title="Files">
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/computer/files")}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          >
+            <Icon name="drive" size={20} color={colors.accent} />
+            <Text style={styles.rowTitle}>Browse the computer’s files</Text>
+            <View style={styles.rowEnd}>
+              <Icon name="chevronRight" size={16} color={colors.muted} />
+            </View>
+          </Pressable>
         </Section>
       ) : null}
     </SettingsPage>
@@ -475,7 +505,9 @@ const useStyles = themedStyles((colors) => ({
   link: { color: colors.accent, fontSize: 15, fontWeight: "600" },
   divider: { height: StyleSheet.hairlineWidth, marginLeft: 14, backgroundColor: colors.stroke },
   row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, paddingHorizontal: 14 },
-  appRow: { minHeight: 56, justifyContent: "center", gap: 2, paddingHorizontal: 14, paddingVertical: 8 },
+  appRow: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  appText: { flex: 1, minWidth: 0, gap: 2 },
+  rowEnd: { marginLeft: "auto" },
   rowTitle: { flexShrink: 1, color: colors.content, fontSize: 15 },
   rowMeta: { marginLeft: "auto", color: colors.muted, fontSize: 13 },
   appMeta: { color: colors.muted, fontSize: 13, fontVariant: ["tabular-nums"] },

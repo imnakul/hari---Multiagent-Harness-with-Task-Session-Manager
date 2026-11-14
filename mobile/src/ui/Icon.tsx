@@ -1,3 +1,19 @@
+import VolumeHighIcon from "@hugeicons/core-free-icons/VolumeHighIcon";
+import VolumeOffIcon from "@hugeicons/core-free-icons/VolumeOffIcon";
+import PinIcon from "@hugeicons/core-free-icons/PinIcon";
+import Bookmark02Icon from "@hugeicons/core-free-icons/Bookmark02Icon";
+import BluetoothIcon from "@hugeicons/core-free-icons/BluetoothIcon";
+import MicOff01Icon from "@hugeicons/core-free-icons/MicOff01Icon";
+import Camera02Icon from "@hugeicons/core-free-icons/Camera02Icon";
+import CameraOff02Icon from "@hugeicons/core-free-icons/CameraOff02Icon";
+import PlayIcon from "@hugeicons/core-free-icons/PlayIcon";
+import PauseIcon from "@hugeicons/core-free-icons/PauseIcon";
+import NextIcon from "@hugeicons/core-free-icons/NextIcon";
+import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
+import PreviousIcon from "@hugeicons/core-free-icons/PreviousIcon";
+import HeadphonesIcon from "@hugeicons/core-free-icons/HeadphonesIcon";
+import HardDriveIcon from "@hugeicons/core-free-icons/HardDriveIcon";
+import MusicNote01Icon from "@hugeicons/core-free-icons/MusicNote01Icon";
 import MonitorIcon from "@hugeicons/core-free-icons/MonitorIcon";
 import PowerIcon from "@hugeicons/core-free-icons/PowerIcon";
 import SmartPhone01Icon from "@hugeicons/core-free-icons/SmartPhone01Icon";
@@ -86,6 +102,7 @@ const icons = {
   chevronDown: ArrowDown01Icon,
   chevronUpDown: UnfoldMoreIcon,
   chevronRight: ArrowRight01Icon,
+  arrowLeft: ArrowLeft01Icon,
   branch: GitBranchIcon,
   computer: ComputerIcon,
   computerOff: ComputerRemoveIcon,
@@ -139,6 +156,24 @@ const icons = {
   power: PowerIcon,
   monitor: MonitorIcon,
   phone: SmartPhone01Icon,
+  // Fork (Hari, L-290..L-295): Share pins and saves; Control audio, media, Bluetooth, camera.
+  pin: PinIcon,
+  bookmark: Bookmark02Icon,
+  bluetooth: BluetoothIcon,
+  micOn: Mic01Icon,
+  micOff: MicOff01Icon,
+  cameraOn: Camera02Icon,
+  cameraOff: CameraOff02Icon,
+  play: PlayIcon,
+  pause: PauseIcon,
+  next: NextIcon,
+  previous: PreviousIcon,
+  headphones: HeadphonesIcon,
+  drive: HardDriveIcon,
+  sleep: Moon02Icon,
+  music: MusicNote01Icon,
+  volume: VolumeHighIcon,
+  volumeOff: VolumeOffIcon,
 };
 
 export type IconName = keyof typeof icons;

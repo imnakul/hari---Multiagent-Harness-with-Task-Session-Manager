@@ -1,22 +1,81 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Icon, type IconName } from "@/ui/Icon";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
 // Fork (Hari, L-280): the Computer screen's small building blocks.
 
-export function Section({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
+export function Section({
+  title,
+  right,
+  children,
+  fold,
+}: {
+  title: string;
+  right?: ReactNode;
+  children: ReactNode;
+  /** L-293: a section that opens and closes from its title, with a count. */
+  fold?: { open: boolean; onToggle: () => void; count?: number };
+}) {
   const styles = useStyles();
+  const colors = useColors();
+  const reduced = useReducedMotion();
+  const turn = useSharedValue(fold?.open ? 1 : 0);
+  useEffect(() => {
+    turn.value = withTiming(fold?.open ? 1 : 0, { duration: reduced ? 0 : 200 });
+  }, [fold?.open, reduced, turn]);
+  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${-90 + turn.value * 90}deg` }] }));
+  if (!fold)
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            {title}
+          </Text>
+          {right}
+        </View>
+        <View style={styles.card}>{children}</View>
+      </View>
+    );
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle} accessibilityRole="header">
-          {title}
-        </Text>
-        {right}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: fold.open }}
+          accessibilityLabel={`${title}${fold.count === undefined ? "" : `, ${fold.count}`}`}
+          onPress={fold.onToggle}
+          hitSlop={8}
+          style={({ pressed }) => [styles.foldHead, pressed && { opacity: 0.6 }]}
+        >
+          <Animated.View style={chevron}>
+            <Icon name="chevronDown" size={16} color={colors.muted} />
+          </Animated.View>
+          <Text style={styles.foldTitle} accessibilityRole="header">
+            {title}
+          </Text>
+          {fold.count === undefined ? null : <Text style={styles.foldCount}>{fold.count}</Text>}
+        </Pressable>
+        {fold.open ? right : null}
       </View>
-      <View style={styles.card}>{children}</View>
+      {fold.open ? (
+        <Animated.View
+          entering={reduced ? undefined : FadeIn.duration(200)}
+          exiting={reduced ? undefined : FadeOut.duration(150)}
+          style={styles.card}
+        >
+          {children}
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -154,6 +213,18 @@ const useStyles = themedStyles((colors) => ({
     minHeight: 32,
   },
   sectionTitle: { flex: 1, color: colors.muted, fontSize: 15 },
+  foldHead: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 },
+  foldTitle: { color: colors.muted, fontSize: 15 },
+  foldCount: {
+    color: colors.muted,
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,

@@ -71,6 +71,7 @@ import {
 } from "../../../shared/lib/drag";
 import { ExplorerMenu, type ExplorerMenuItem } from "./ExplorerMenu";
 import { FileTypeIcon } from "./FileTypeIcon";
+import { sendFilesToShare } from "../../mobile/model/sendToShare";
 import { PaneHeader } from "../../../shared/ui/PaneHeader";
 
 const GIT_STATUS_COLOR: Record<string, string> = {
@@ -245,6 +246,10 @@ function explorerItems(
         ]
       : []),
     { kind: "item", id: "reveal", label: REVEAL_LABEL },
+    // Fork (Hari, L-291): files only; folders can't go to the phone.
+    ...(target.isDir
+      ? []
+      : [{ kind: "item" as const, id: "send-phone", label: "Send to phone" }]),
   ];
 }
 
@@ -687,6 +692,9 @@ export const FileTree = memo(function FileTree({
         return;
       case "reveal":
         await run(() => revealPath(target.path));
+        return;
+      case "send-phone":
+        if (!target.isDir) void sendFilesToShare([target.path]);
         return;
       case "open-terminal":
         onOpenTerminal?.(target.isDir ? target.path : parentPath(target.path));

@@ -1,6 +1,12 @@
 import { asRecord } from "../../../integrations/harness/providers/codex/codexProtocol";
 
-export type RateLimitProvider = "claude" | "codex" | "opencode" | "antigravity-cli" | "devin";
+export type RateLimitProvider =
+  | "claude"
+  | "codex"
+  | "opencode"
+  | "antigravity-cli"
+  | "devin"
+  | "command-code";
 
 export type RateLimitStatus =
   "idle" | "fetching" | "ok" | "error" | "unavailable";
@@ -587,4 +593,85 @@ function numberField(rec: Record<string, unknown>, key: string): number | null {
 function stringField(rec: Record<string, unknown>, key: string): string | null {
   const value = rec[key];
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/** Fork (L-296): what the `fetch_command_code_usage` command returns. */
+export type CommandCodeUsage = {
+  credits?: unknown;
+  subscription?: unknown;
+  summary?: unknown;
+};
+
+/** Monthly credits per Command Code plan, as the CLI counts them. */
+const COMMAND_CODE_PLAN_CREDITS: Record<string, number> = {
+  "individual-go": 10,
+  "individual-go-v1": 10,
+  "individual-goat": 70,
+  "individual-pro": 30,
+  "individual-pro-v1": 80,
+  "individual-provider": 15,
+  "individual-max": 150,
+  "individual-ultra": 300,
+  "teams-pro": 40,
+};
+
+function commandCodePlanCredits(planId: unknown): number | null {
+  if (typeof planId !== "string" || !planId) return null;
+  const id = planId.toLowerCase().replace(/_/g, "-");
+  const match = Object.keys(COMMAND_CODE_PLAN_CREDITS)
+    .sort((a, b) => b.length - a.length)
+    .find((key) => id.startsWith(key));
+  return match ? COMMAND_CODE_PLAN_CREDITS[match] : null;
+}
+
+function commandCodeWindow(raw: unknown, windowMinutes: number): RateLimitWindow | null {
+  const rec = asRecord(raw);
+  if (!rec) return null;
+  const used = numberField(rec, "used");
+  const cap = numberField(rec, "cap");
+  if (used == null || cap == null || cap <= 0) return null;
+  return {
+    usedPercent: clampUsedPercent((used / cap) * 100),
+    windowMinutes,
+    resetsAt: parseResetTimestamp(rec.resetAt) ?? parseResetTimestamp(rec.resetsAt),
+  };
+}
+
+/**
+ * Fork (L-296): Command Code's 5-hour and weekly limits, and the share of
+ * this month's credits used, worked out as the Command Code CLI does.
+ */
+export function parseCommandCodeUsage(usage: CommandCodeUsage): ProviderRateLimits {
+  const credits = asRecord(usage.credits);
+  const windows = asRecord(credits?.windowLimits);
+  const subscription = asRecord(asRecord(usage.subscription)?.data);
+  const pool = asRecord(credits?.credits);
+  const monthlyLeft = Math.max(0, (pool && numberField(pool, "monthlyCredits")) ?? 0);
+  const purchased = Math.max(0, (pool && numberField(pool, "purchasedCredits")) ?? 0);
+  const free = Math.max(0, (pool && numberField(pool, "freeCredits")) ?? 0);
+  const left = monthlyLeft + purchased + free;
+  const summary = asRecord(usage.summary);
+  const spent = Math.max(0, (summary && numberField(summary, "totalCost")) ?? 0);
+  const planCredits =
+    subscription?.status === "active" ? commandCodePlanCredits(subscription.planId) : null;
+  const total = planCredits !== null ? Math.max(planCredits, monthlyLeft) + purchased + free : spent + left;
+  const monthly: RateLimitWindow | null =
+    (left > 0 || spent > 0) && total > 0
+      ? {
+          usedPercent: clampUsedPercent(((total - left) / total) * 100),
+          windowMinutes: MONTHLY_WINDOW_MINUTES,
+          resetsAt: parseResetTimestamp(subscription?.currentPeriodEnd),
+        }
+      : null;
+  return {
+    provider: "command-code",
+    session: commandCodeWindow(windows?.fiveHour, SESSION_WINDOW_MINUTES),
+    weekly: commandCodeWindow(windows?.weekly, WEEKLY_WINDOW_MINUTES),
+    monthly,
+    ...(left > 0 ? { creditBalance: left } : {}),
+    resetCredits: null,
+    updatedAt: Date.now(),
+    error: null,
+    status: "ok",
+  };
 }

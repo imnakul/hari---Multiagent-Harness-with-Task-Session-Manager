@@ -150,6 +150,7 @@ import UngroupItemsIcon from "@hugeicons/core-free-icons/UngroupItemsIcon";
 import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
 import WholeWordIcon from "@hugeicons/core-free-icons/WholeWordIcon";
 import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
+import Moon02Icon from "@hugeicons/core-free-icons/Moon02Icon";
 import { forwardRef, type Ref } from "react";
 
 /** Props shared by every chrome icon. `icon` is filled in by the named wrappers. */
@@ -204,6 +205,7 @@ const UnfoldVerticalIcon: IconSvgElement = [
 
 export const Activity = wrap(Activity01Icon, "Activity");
 export const Calendar = wrap(Calendar03Icon, "Calendar");
+export const Moon = wrap(Moon02Icon, "Moon");
 export const AlertCircle = wrap(AlertCircleIcon, "AlertCircle");
 export const AppWindow = wrap(AppWindowIcon, "AppWindow");
 export const Archive = wrap(Archive02Icon, "Archive");

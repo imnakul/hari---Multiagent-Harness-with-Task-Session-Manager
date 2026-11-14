@@ -71,7 +71,8 @@ describe("parseIncomingShare", () => {
   it("drops the wrong shapes", () => {
     expect(parseIncomingShare({ type: "text", text: "  " })).toBeNull();
     expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: -1 })).toBeNull();
-    expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: 200 * 1024 * 1024 })).toBeNull();
+    expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: 2 * 1024 * 1024 * 1024 })).toBeNull();
+    expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: 200 * 1024 * 1024 })).not.toBeNull();
     expect(parseIncomingShare({ type: "other", text: "x" })).toBeNull();
     expect(parseIncomingShare(null)).toBeNull();
   });

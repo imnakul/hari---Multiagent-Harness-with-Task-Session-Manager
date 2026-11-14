@@ -3,10 +3,12 @@ import { homeDir } from "../../../platform/tauri/fs";
 import {
   errorRateLimits,
   parseClaudeOAuthUsage,
+  parseCommandCodeUsage,
   parseCodexRateLimits,
   parseDevinUsage,
   parseOpencodeGoUsage,
   unavailableRateLimits,
+  type CommandCodeUsage,
   type DevinUsage,
   type ProviderRateLimits,
 } from "./rateLimits";
@@ -73,6 +75,36 @@ export async function fetchOpencodeGoRateLimits(): Promise<ProviderRateLimits> {
     "opencode",
     result.error?.trim() || "OpenCode Go usage unavailable",
   );
+}
+
+type CommandCodeUsageFetch = CommandCodeUsage & {
+  status: "ok" | "error" | "unavailable" | string;
+  httpStatus?: number | null;
+  error?: string | null;
+};
+
+/**
+ * Fork (L-296): Command Code's plan usage. The host reads the CLI's saved key
+ * and asks Command Code; the key never reaches the webview.
+ */
+export async function fetchCommandCodeRateLimits(): Promise<ProviderRateLimits> {
+  let result: CommandCodeUsageFetch;
+  try {
+    result = await invoke<CommandCodeUsageFetch>("fetch_command_code_usage");
+  } catch (error) {
+    return errorRateLimits(
+      "command-code",
+      error instanceof Error ? error.message : "Command Code usage unavailable",
+    );
+  }
+  if (result.status === "ok") {
+    const parsed = parseCommandCodeUsage(result);
+    if (parsed.session || parsed.weekly || parsed.monthly) return parsed;
+    return errorRateLimits("command-code", "Command Code usage response was unexpected");
+  }
+  if (result.status === "unavailable")
+    return unavailableRateLimits("command-code", result.error?.trim() || "Command Code not signed in");
+  return errorRateLimits("command-code", result.error?.trim() || "Command Code usage unavailable");
 }
 
 type DevinUsageFetch = {

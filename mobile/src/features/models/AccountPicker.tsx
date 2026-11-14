@@ -163,7 +163,7 @@ function AccountWarning({
 }
 
 /** A window, reset countdown and percentage share one line above its meter. */
-function AccountUsage({
+export function AccountUsage({
   snapshot,
   loading,
   failed,

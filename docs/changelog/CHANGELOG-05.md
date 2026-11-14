@@ -1,5 +1,19 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 02:59 IST — Share side panel, phone controls for sound, camera and Bluetooth, hibernate when idle, usage and files both ways (L-290 to L-297)
+- Type: feature + fix
+- What:
+  - **Share (L-290, L-291):** a side panel on the computer instead of a full page; messaging-app bubbles (pictures keep their shape, picture grids, formatted text, link cards); pins and saves synced with the phone; files up to 1 GB with resume and a space check; files over 10 MB from the computer wait for a Download tap; storage use and Delete all (keeps pinned and saved). "Send to Share" in the chat selection, link, Browser and Files menus. The phone gets the same look, Share in the side menu and a lighter composer.
+  - **Hibernate when idle (L-292):** a moon button in the bottom bar and a switch on Hari's Control tab; after 2 minutes with no chat working, a 30-second notice with Cancel, then hibernate.
+  - **Hari Control (L-293 to L-295):** spinners beside app actions, Network on one line, Apps and Running apps fold, Lock removed; microphone, volume, sound output and now-playing controls; camera access switch; Bluetooth on/off with paired devices.
+  - **Usage (L-296):** Command Code's 5-hour, weekly and monthly usage in the bottom bar; Hari → Settings → Usage for every provider and account.
+  - **Files (L-297):** Hari browses the computer's drives and sends a file to Share; the computer's Share panel browses the phone's storage.
+  - **Fix:** the Mono panel header left room for 4 title-bar buttons, but there are 5 since the Share button (L-279), so it slid under them.
+- Why: User requests 2026-11-14 (plan locked in the session: 1-A, no tray apps, 3-A, build all at once, hibernate on idle on the desktop too).
+- Files: [plan](../specs/share-chat-pc-control-plan.md); Rust [mobile_share.rs](../../src-tauri/src/mobile_share.rs), [mobile_pc.rs](../../src-tauri/src/mobile_pc.rs), [mobile_pc_extra.rs](../../src-tauri/src/mobile_pc_extra.rs), [command_code_usage.rs](../../src-tauri/src/command_code_usage.rs), [Cargo.toml](../../src-tauri/Cargo.toml); desktop [SharePanel.tsx](../../src/features/mobile/ui/SharePanel.tsx), [PhoneFilesView.tsx](../../src/features/mobile/ui/PhoneFilesView.tsx), [sendToShare.ts](../../src/features/mobile/model/sendToShare.ts), [IdleHibernate.tsx](../../src/app/shell/IdleHibernate.tsx), [UsageFooter.tsx](../../src/app/shell/UsageFooter.tsx), [MonoSidebar.tsx](../../src/features/monos/ui/MonoSidebar.tsx); phone [DeviceControls.tsx](../../mobile/src/features/pc/DeviceControls.tsx), [ComputerControl.tsx](../../mobile/src/features/pc/ComputerControl.tsx), [computer/files.tsx](../../mobile/src/app/computer/files.tsx), [settings/usage.tsx](../../mobile/src/app/settings/usage.tsx), [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx), [HariFiles.kt](../../mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariFiles.kt)
+- Commit: see the 0.16.0-local47 commit
+- Verified: typecheck ✅ (desktop, mobile) lint ✅ (mobile; 2 old warnings in `dictation.ts`) tests ✅ (desktop vitest 8235; phone 314; Rust lib 941, with 2 old failures in `fs.rs` that expect macOS paths such as `/opt/homebrew/bin` and fail on Windows) rustfmt ✅; desktop and phone checks manual (list in the plan's Done)
+
 ## 2026-11-14 22:36 IST — Storage: Project filter, app dropdowns, smoother scrolling (L-289)
 - Type: fix + feature
 - What: Settings → Storage has a Project filter (pick one or more, plus "Not linked to a chat"); its Project and date dropdowns are the app's own (`SearchableSelect`, like the Tasks toolbar). Tiles now draw small square copies of each picture made off the main thread, skip layout and paint while off screen, and lost their per-tile blur, so long galleries scroll smoothly. "Clear filters" resets both.

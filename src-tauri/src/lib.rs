@@ -7,16 +7,17 @@ mod artifacts;
 mod aside_link;
 mod attachment_storage;
 mod automations;
-mod browser_servers;
-mod browser_view;
 mod azure_devops;
 mod background_work;
+mod browser_servers;
+mod browser_view;
 mod chat_background;
 mod checkpoint;
 mod claude_folder_trust;
 mod claude_interactive;
 mod codex_mono_store;
 mod command_code;
+mod command_code_usage;
 mod control;
 pub mod control_cli;
 mod cursor_store;
@@ -50,6 +51,7 @@ mod mobile_events;
 mod mobile_notifications;
 // Fork (Hari, L-279): Share between the computer and the phone.
 mod mobile_pc;
+mod mobile_pc_extra;
 mod mobile_share;
 mod mono;
 #[cfg(target_os = "macos")]
@@ -485,12 +487,20 @@ pub fn run() {
             mobile_share::mobile_share_send_clipboard,
             mobile_share::mobile_share_send_files,
             mobile_share::mobile_share_remove,
+            mobile_share::mobile_share_mark,
+            mobile_share::mobile_share_clear,
+            mobile_share::mobile_share_storage,
+            mobile_share::mobile_phone_files_list,
+            mobile_share::mobile_phone_files_send,
             mobile_pc::mobile_pc_phone_stats,
             mobile_pc::mobile_pc_ring,
             mobile_pc::mobile_pc_apps_list,
             mobile_pc::mobile_pc_apps_add,
             mobile_pc::mobile_pc_apps_remove,
             mobile_pc::mobile_pc_apps_reset,
+            mobile_pc_extra::idle_hibernate_get,
+            mobile_pc_extra::idle_hibernate_set,
+            mobile_pc_extra::idle_hibernate_now,
             mobile_access::mobile_push,
             remote::remote_machines,
             remote::remote_connect,
@@ -724,6 +734,7 @@ pub fn run() {
             antigravity_cli::antigravity_cli_agents,
             rate_limits::fetch_claude_usage,
             rate_limits::fetch_opencode_go_usage,
+            command_code_usage::fetch_command_code_usage,
             devin_usage::fetch_devin_usage,
             pty::pty_spawn,
             claude_interactive::claude_interactive_start,

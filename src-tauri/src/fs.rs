@@ -6415,8 +6415,7 @@ pub async fn write_base64_file(path: String, data: String) -> Result<(), String>
         if destination.is_dir() {
             return Err("Cannot save to a directory.".into());
         }
-        std::fs::write(&destination, bytes)
-            .map_err(|e| format!("{}: {e}", destination.display()))
+        std::fs::write(&destination, bytes).map_err(|e| format!("{}: {e}", destination.display()))
     })
     .await
     .map_err(|e| e.to_string())?

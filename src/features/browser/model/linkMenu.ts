@@ -38,6 +38,7 @@ export const LINK_MENU_ITEMS = [
   { id: "open-default", label: "Open in default browser" },
   { id: "copy-link", label: "Copy link" },
   { id: "copy-text", label: "Copy link text" },
+  { id: "send-phone", label: "Send to phone" },
 ] as const;
 
 export type LinkMenuAction = (typeof LINK_MENU_ITEMS)[number]["id"];

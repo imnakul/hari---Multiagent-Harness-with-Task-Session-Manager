@@ -21,6 +21,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useOffline } from "@/features/connection/ConnectionNotice";
 import { useConnection, useMonoTools } from "@/features/connection/ConnectionProvider";
 import { shownFeedItems, useFeed } from "@/features/notifications/notificationFeed";
 import { useFeedPreferences } from "@/features/settings/notificationFeed";
@@ -89,7 +90,9 @@ export function WorkspaceDrawer() {
   const colors = useColors();
   const styles = useStyles();
   const { projects, monos: roster } = useWorkspace();
-  const { pairing, catalog } = useConnection();
+  const { pairing, catalog, connected } = useConnection();
+  // Fork (Hari, L-290): Computer while the desktop answers; Wake while it can't.
+  const offline = useOffline();
   // Fork (Hari, L-275): shown once the desktop answers; older ones can't.
   const feed = useFeed();
   const [{ seenOnDesktop }] = useFeedPreferences();
@@ -206,7 +209,7 @@ export function WorkspaceDrawer() {
   // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,
   // squeezed beside the drawer, so the drawer shuts first.
   const openModal = (
-    path: "/settings" | "/mono-new" | "/tasks" | "/notes" | "/notifications" | "/computer",
+    path: "/settings" | "/mono-new" | "/tasks" | "/notes" | "/notifications" | "/computer" | "/computer?tab=share",
   ) => {
     if (isModalRoute(pathname)) return;
     if (Platform.OS === "android") drawer.closeThen(() => router.push(path));
@@ -257,11 +260,12 @@ export function WorkspaceDrawer() {
                   onPress={() => openModal("/notifications")}
                 />
               ) : null}
-              {/* Fork (Hari, L-288): the Computer hub and Wake-on-LAN, in either layout. */}
-              {pairing ? (
-                <ToolRow icon="computer" label="Computer" onPress={() => openModal("/computer")} />
+              {/* Fork (Hari, L-288, L-290): the Computer hub (Share | Control) while the computer answers,
+                  Wake-on-LAN in its place once it can't be reached. */}
+              {pairing && connected ? (
+                <ToolRow icon="share" label="Share" onPress={() => openModal("/computer?tab=share")} />
               ) : null}
-              {pairing && canWake ? (
+              {offline && canWake ? (
                 <ToolRow
                   icon="power"
                   label="Wake computer"

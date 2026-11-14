@@ -5,7 +5,10 @@
 
 export const MAX_SHARE_HISTORY = 100;
 export const MAX_SHARE_TEXT = 30_000;
-export const MAX_SHARE_FILE_BYTES = 100 * 1024 * 1024;
+/** Fork (L-290): up to 1 GB, resumable. */
+export const MAX_SHARE_FILE_BYTES = 1024 * 1024 * 1024;
+/** Fork (L-290): files from the computer up to this arrive by themselves; bigger wait for Download. */
+export const AUTO_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 /** One `share.upload` / `share.download` piece, before base64. */
 export const SHARE_CHUNK_BYTES = 1024 * 1024;
 export const MAX_SHARE_FILES = 20;
@@ -13,6 +16,8 @@ export const MAX_SHARE_FILES = 20;
 export type ShareKind = "text" | "link" | "clipboard" | "file";
 
 export type ShareStatus =
+  /** Fork (L-290): a big file from the computer, waiting for the user to tap Download. */
+  | "offered"
   /** Waiting in the outbox, or a file not moved yet. */
   | "queued"
   /** A file on its way (`progress` says how far). */
@@ -39,7 +44,17 @@ export type PhoneShareEntry = {
   status: ShareStatus;
   progress?: number;
   error?: string;
+  /** Fork (L-290): items sent together (files + caption). */
+  groupId?: string;
+  /** Pinned and saved never roll off; both sync with the computer. */
+  pinned?: boolean;
+  saved?: boolean;
 };
+
+/** Fork (L-290): a pin, save or Delete all made on the other device. */
+export type ShareMeta =
+  | { type: "meta"; action: "pin" | "unpin" | "save" | "unsave"; ids: string[] }
+  | { type: "meta"; action: "clear" };
 
 /** A `share` item from the computer. */
 export type IncomingShare =
@@ -48,11 +63,18 @@ export type IncomingShare =
       text: string;
       /** Fork (L-287): "Open on phone": a web link the phone should open, not just keep. */
       open?: boolean;
+      /** Fork (L-290): the computer's id for it, the same on both sides. */
+      entryId?: string;
+      groupId?: string;
     }
-  | { type: "file"; fileId: string; name: string; mimeType: string; size: number };
+  | { type: "file"; fileId: string; name: string; mimeType: string; size: number; groupId?: string };
 
 const KINDS: readonly ShareKind[] = ["text", "link", "clipboard", "file"];
-const STATUSES: readonly ShareStatus[] = ["queued", "moving", "done", "failed"];
+const STATUSES: readonly ShareStatus[] = ["offered", "queued", "moving", "done", "failed"];
+const META_ACTIONS = ["pin", "unpin", "save", "unsave"] as const;
+const isId = (value: unknown): value is string =>
+  typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+const optionalId = (value: unknown): string | undefined => (isId(value) ? value : undefined);
 
 const field = (value: unknown, name: string): unknown =>
   typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
@@ -76,21 +98,128 @@ export function parseIncomingShare(payload: unknown): IncomingShare | null {
     const size = field(payload, "size");
     if (typeof fileId !== "string" || !fileId || typeof name !== "string" || !name) return null;
     if (!isSize(size) || size > MAX_SHARE_FILE_BYTES) return null;
+    const groupId = optionalId(field(payload, "groupId"));
     return {
       type,
       fileId,
       name: safeFileName(name),
       mimeType: typeof mimeType === "string" && mimeType.includes("/") ? mimeType : "application/octet-stream",
       size,
+      ...(groupId ? { groupId } : {}),
     };
   }
   if (type !== "text" && type !== "link" && type !== "clipboard") return null;
   const text = field(payload, "text");
   if (typeof text !== "string" || !text.trim() || text.length > MAX_SHARE_TEXT) return null;
+  const entryId = optionalId(field(payload, "entryId"));
+  const groupId = optionalId(field(payload, "groupId"));
+  const ids = { ...(entryId ? { entryId } : {}), ...(groupId ? { groupId } : {}) };
   // Only a single web address opens; anything else arrives as usual.
   if (field(payload, "open") === true && type !== "clipboard" && kindForText(text) === "link")
-    return { type, text: text.trim(), open: true };
-  return { type, text };
+    return { type, text: text.trim(), open: true, ...ids };
+  return { type, text, ...ids };
+}
+
+/** Fork (L-290): a `meta` share item, or null for anything else. */
+export function parseShareMeta(payload: unknown): ShareMeta | null {
+  if (field(payload, "type") !== "meta") return null;
+  const action = field(payload, "action");
+  if (action === "clear") return { type: "meta", action };
+  const known = META_ACTIONS.find((candidate) => candidate === action);
+  const ids = field(payload, "ids");
+  if (!known || !Array.isArray(ids)) return null;
+  return { type: "meta", action: known, ids: ids.filter(isId) };
+}
+
+/** Fork (L-290): what a meta action changes on an entry. */
+export function metaChange(action: "pin" | "unpin" | "save" | "unsave"): { pinned?: boolean; saved?: boolean } {
+  if (action === "pin") return { pinned: true };
+  if (action === "unpin") return { pinned: false };
+  if (action === "save") return { saved: true };
+  return { saved: false };
+}
+
+/** Fork (L-290): applies a pin or save to the history. */
+export function markShareEntries(
+  history: PhoneShareEntry[],
+  ids: readonly string[],
+  change: { pinned?: boolean; saved?: boolean },
+): PhoneShareEntry[] {
+  return trimShareHistory(
+    history.map((entry) => {
+      if (!ids.includes(entry.id)) return entry;
+      const next: PhoneShareEntry = { ...entry, ...change };
+      if (!next.pinned) delete next.pinned;
+      if (!next.saved) delete next.saved;
+      return next;
+    }),
+  );
+}
+
+/** Past the limit the oldest go first, but never a pinned or saved one. */
+export function trimShareHistory(history: PhoneShareEntry[]): PhoneShareEntry[] {
+  const next = [...history];
+  while (next.length > MAX_SHARE_HISTORY) {
+    let index = -1;
+    for (let at = next.length - 1; at >= 0; at -= 1) {
+      const entry = next[at];
+      if (entry && !entry.pinned && !entry.saved) {
+        index = at;
+        break;
+      }
+    }
+    if (index < 0) break;
+    next.splice(index, 1);
+  }
+  return next;
+}
+
+/** Fork (L-290): Delete all keeps pinned and saved; the rest goes (with their received files). */
+export function splitForClear(history: PhoneShareEntry[]): { keep: PhoneShareEntry[]; gone: PhoneShareEntry[] } {
+  const keep: PhoneShareEntry[] = [];
+  const gone: PhoneShareEntry[] = [];
+  for (const entry of history) (entry.pinned || entry.saved ? keep : gone).push(entry);
+  return { keep, gone };
+}
+
+/** Fork (L-290): files this phone received into Downloads/Hari, counted for Storage. */
+export function receivedFiles(history: PhoneShareEntry[]): PhoneShareEntry[] {
+  return history.filter(
+    (entry) => entry.direction === "in" && entry.kind === "file" && entry.status === "done" && !!entry.uri,
+  );
+}
+
+/** Whether a file from the computer arrives by itself or waits for Download. */
+export function autoDownloads(size: number): boolean {
+  return size <= AUTO_DOWNLOAD_BYTES;
+}
+
+/**
+ * Fork (L-290): the timeline as rows: a group (files sent together and their
+ * caption) becomes one row at the place of its newest item. Newest first;
+ * inside a row oldest first, so files keep their order and the caption sits last.
+ */
+export type ShareRow = { key: string; items: PhoneShareEntry[] };
+
+export function shareRows(history: PhoneShareEntry[]): ShareRow[] {
+  const rows: ShareRow[] = [];
+  const groups = new Map<string, ShareRow>();
+  for (const entry of history) {
+    if (!entry.groupId) {
+      rows.push({ key: entry.id, items: [entry] });
+      continue;
+    }
+    const row = groups.get(entry.groupId);
+    if (row) {
+      row.items.push(entry);
+      continue;
+    }
+    const next = { key: entry.groupId, items: [entry] };
+    groups.set(entry.groupId, next);
+    rows.push(next);
+  }
+  for (const row of rows) row.items.reverse();
+  return rows;
 }
 
 function parseEntry(raw: unknown): PhoneShareEntry | null {
@@ -117,6 +246,10 @@ function parseEntry(raw: unknown): PhoneShareEntry | null {
   if (isSize(size)) entry.size = size;
   const progress = field(raw, "progress");
   if (typeof progress === "number" && progress >= 0 && progress <= 1) entry.progress = progress;
+  const groupId = optionalId(field(raw, "groupId"));
+  if (groupId) entry.groupId = groupId;
+  if (field(raw, "pinned") === true) entry.pinned = true;
+  if (field(raw, "saved") === true) entry.saved = true;
   if (knownKind === "file" ? !entry.name : entry.text === undefined) return null;
   return entry;
 }
@@ -129,7 +262,7 @@ export function parseShareHistory(raw: unknown): PhoneShareEntry[] {
 
 /** Newest first, the oldest dropped past the limit. */
 export function addShareEntry(history: PhoneShareEntry[], entry: PhoneShareEntry): PhoneShareEntry[] {
-  return [entry, ...history.filter((old) => old.id !== entry.id)].slice(0, MAX_SHARE_HISTORY);
+  return trimShareHistory([entry, ...history.filter((old) => old.id !== entry.id)]);
 }
 
 export function updateShareEntry(
@@ -170,7 +303,9 @@ export function shareCaption(entry: PhoneShareEntry): string {
           : "Text";
   const where = entry.direction === "in" ? "from your computer" : "to your computer";
   const state =
-    entry.status === "queued"
+    entry.status === "offered"
+      ? " · tap to download"
+      : entry.status === "queued"
       ? " · waiting"
       : entry.status === "moving"
         ? ` · ${Math.round((entry.progress ?? 0) * 100)}%`
@@ -185,6 +320,7 @@ export function formatShareSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   const mb = bytes / (1024 * 1024);
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 

@@ -3,18 +3,19 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState, useSyncExternalStore, type JSX } from "react";
 import { SmartPhone } from "../../../shared/ui/icons";
 import { parseShareList, SHARE_CHANGE_EVENT } from "../model/mobileShare";
-import { readShareSeen, requestShareView, subscribeShareSeen } from "../model/shareView";
+import { readShareSeen, readSharePanelOpen, subscribeSharePanel, subscribeShareSeen, toggleSharePanel } from "../model/shareView";
 
 const BUTTON =
   "flex w-10 items-center justify-center text-content/60 transition-colors hover:bg-content/10 hover:text-content";
 
 /**
- * Fork (Hari, L-279, L-287): the title-bar phone button. It opens the Share
- * view; arrivals put a dot on it until Share has shown them.
+ * Fork (Hari, L-279, L-287, L-290): the title-bar phone button. It opens and
+ * closes the Share panel; arrivals put a dot on it until Share has shown them.
  */
 export function ShareButton(): JSX.Element {
   const [newestIn, setNewestIn] = useState(0);
-  const seenAt = useSyncExternalStore(subscribeShareSeen, readShareSeen);
+  const seenAt = useSyncExternalStore(subscribeShareSeen, readShareSeen, readShareSeen);
+  const open = useSyncExternalStore(subscribeSharePanel, readSharePanelOpen, () => false);
 
   const load = useCallback(() => {
     invoke<unknown>("mobile_share_list")
@@ -41,8 +42,9 @@ export function ShareButton(): JSX.Element {
       title="Share with your phone"
       aria-label={unseen ? "Share with your phone, new items" : "Share with your phone"}
       data-tauri-drag-region="false"
-      onClick={requestShareView}
-      className={`relative ${BUTTON}`}
+      aria-pressed={open}
+      onClick={toggleSharePanel}
+      className={`relative ${BUTTON} ${open ? "bg-content/10 text-content" : ""}`}
     >
       <SmartPhone className="size-3.5" strokeWidth={1.75} />
       {unseen ? (

@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 
 import {
   addShareEntry,
+  markShareEntries,
   parseShareHistory,
   settleInterrupted,
   updateShareEntry,
@@ -57,6 +58,21 @@ export function setShareProgress(id: string, progress: number) {
 /** Removes these from the history (all of them with none given). Saved files stay. */
 export function removeShares(ids?: string[]) {
   commit(ids ? current().filter((entry) => !ids.includes(entry.id)) : []);
+}
+
+/** Fork (L-290): pins or saves these (or takes the pin or save off). */
+export function markShares(ids: readonly string[], change: { pinned?: boolean; saved?: boolean }) {
+  commit(markShareEntries(current(), ids, change));
+}
+
+/** Fork (L-290): what Delete all leaves: the history becomes exactly these. */
+export function replaceShares(next: PhoneShareEntry[]) {
+  commit(next);
+}
+
+/** Fork (L-290): the history as stored, in bytes (for Storage). */
+export function shareHistoryBytes(): number {
+  return (Storage.getItemSync(KEY) ?? "").length;
 }
 
 export function useShareHistory(): PhoneShareEntry[] {

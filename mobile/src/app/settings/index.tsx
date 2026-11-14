@@ -26,6 +26,8 @@ import {
   livePromotable,
   openBatterySettings,
   openPromotedSettings,
+  phoneFiles,
+  useAllFilesAllowed,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
 import { useHaptics } from "@/features/settings/haptics";
@@ -153,6 +155,8 @@ export default function SettingsScreen() {
       <FeedSettings />
 
       {liveAvailable ? <LiveUpdateSettings /> : null}
+
+      <ComputerSettings />
 
       <Text style={styles.heading}>Preferences</Text>
       <View style={styles.card}>
@@ -343,6 +347,41 @@ function FeedSettings() {
             ? "Hari checks your computer every 15 seconds while it’s closed, with a quiet notification at the bottom of the panel. For this to last, set Battery to No restrictions and turn on Autostart. "
             : "Notifications from your computer arrive only while Hari is open. "}
           <Text style={{ color: colors.accent }}>Open app settings</Text>
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Fork (Hari, L-296, L-297): Command Code usage, and whether the computer
+ * may browse this phone's files (Android's All files access).
+ */
+function ComputerSettings() {
+  const styles = useStyles();
+  const allFiles = useAllFilesAllowed();
+  return (
+    <>
+      <Text style={styles.heading}>Computer</Text>
+      <View style={styles.card}>
+        <SettingsRow icon="metrics" label="Usage" onPress={() => router.push("/settings/usage")} />
+        {phoneFiles ? (
+          <>
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="folder"
+              label="Phone files on the computer"
+              value={allFiles ? "On" : "Off"}
+              onPress={() => void phoneFiles?.openSettings()}
+            />
+          </>
+        ) : null}
+      </View>
+      {phoneFiles ? (
+        <Text style={styles.note}>
+          {allFiles
+            ? "The computer can browse this phone's storage from Share and copy files to itself."
+            : "Turn on All files access for Hari to browse this phone's storage from the computer's Share panel."}
         </Text>
       ) : null}
     </>

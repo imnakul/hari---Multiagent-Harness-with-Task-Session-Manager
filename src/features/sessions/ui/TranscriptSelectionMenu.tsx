@@ -4,8 +4,10 @@ import {
   FilePlusCorner,
   MessageSquarePlus,
   Quote,
+  SmartPhone,
 } from "../../../shared/ui/icons";
 import { requestSavePrompt } from "../../prompts/model/savedPrompts";
+import { sendTextToShare } from "../../mobile/model/sendToShare";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Popover } from "../../../shared/ui/Popover";
 import { type TranscriptSelection } from "../model/transcriptSelection";
@@ -108,6 +110,13 @@ export function TranscriptSelectionMenu({
           onDismiss={onDismiss}
         >
           <Quote aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+        </SelectionAction>
+        <SelectionAction
+          label="Send to phone"
+          onSelect={() => void sendTextToShare(selection.text)}
+          onDismiss={onDismiss}
+        >
+          <SmartPhone aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
         </SelectionAction>
       </div>
     </Popover>

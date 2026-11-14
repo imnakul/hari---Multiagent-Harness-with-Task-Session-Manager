@@ -1,7 +1,9 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { copyText } from "../../../platform/tauri/clipboard";
-import { AppWindow, Copy, ExternalLink, Globe } from "../../../shared/ui/icons";
+import { AppWindow, Copy, ExternalLink, Globe, SmartPhone } from "../../../shared/ui/icons";
+import { sendTextToShare } from "../../mobile/model/sendToShare";
+import { ShareSentToast } from "../../mobile/ui/ShareSentToast";
 import { ExplorerMenu, type ExplorerMenuItem } from "../../files/ui/ExplorerMenu";
 import { openInBackgroundTab } from "../model/backgroundTabs";
 import { openInMonoBrowser } from "../model/browserRequest";
@@ -19,6 +21,7 @@ const ICONS: Record<LinkMenuAction, typeof Globe> = {
   "open-default": ExternalLink,
   "copy-link": Copy,
   "copy-text": Copy,
+  "send-phone": SmartPhone,
 };
 
 const MENU_ITEMS: ExplorerMenuItem[] = LINK_MENU_ITEMS.flatMap((item, index) => {
@@ -29,7 +32,7 @@ const MENU_ITEMS: ExplorerMenuItem[] = LINK_MENU_ITEMS.flatMap((item, index) => 
     label: item.label,
     icon: <Icon aria-hidden className="size-3.5" />,
   };
-  return index === 3 ? [{ kind: "sep" } as const, entry] : [entry];
+  return index === 3 || index === 5 ? [{ kind: "sep" } as const, entry] : [entry];
 });
 
 /**
@@ -78,7 +81,13 @@ export function LinkContextMenu() {
     };
   }, []);
 
-  if (!menu) return <BackgroundTabToast />;
+  if (!menu)
+    return (
+      <>
+        <BackgroundTabToast />
+        <ShareSentToast />
+      </>
+    );
 
   const pick = (id: string) => {
     const { href, text } = menu;
@@ -99,12 +108,16 @@ export function LinkContextMenu() {
       case "copy-text":
         void copyText(text).catch(() => {});
         break;
+      case "send-phone":
+        void sendTextToShare(href, "Link");
+        break;
     }
   };
 
   return (
     <>
     <BackgroundTabToast />
+    <ShareSentToast />
     <ExplorerMenu
       x={menu.x}
       y={menu.y}

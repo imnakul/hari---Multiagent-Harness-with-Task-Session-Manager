@@ -1790,7 +1790,8 @@ function monoUsageProviders(harness: HarnessId): RateLimitProvider[] {
   return harness === "claude" ||
     harness === "codex" ||
     harness === "opencode" ||
-    harness === "devin"
+    harness === "devin" ||
+    harness === "command-code"
     ? [harness]
     : [];
 }

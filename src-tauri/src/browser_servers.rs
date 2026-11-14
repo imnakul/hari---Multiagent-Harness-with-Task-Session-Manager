@@ -12,9 +12,34 @@ pub struct LocalServer {
 
 /// Process names (lowercase, without `.exe`) that usually serve a web page.
 const DEV_SERVERS: &[&str] = &[
-    "node", "bun", "deno", "python", "python3", "pythonw", "php", "ruby", "java", "dotnet",
-    "go", "hugo", "caddy", "nginx", "httpd", "uvicorn", "gunicorn", "flask", "rails", "puma",
-    "air", "wrangler", "workerd", "vite", "next-server", "esbuild", "jekyll", "zola",
+    "node",
+    "bun",
+    "deno",
+    "python",
+    "python3",
+    "pythonw",
+    "php",
+    "ruby",
+    "java",
+    "dotnet",
+    "go",
+    "hugo",
+    "caddy",
+    "nginx",
+    "httpd",
+    "uvicorn",
+    "gunicorn",
+    "flask",
+    "rails",
+    "puma",
+    "air",
+    "wrangler",
+    "workerd",
+    "vite",
+    "next-server",
+    "esbuild",
+    "jekyll",
+    "zola",
 ];
 
 pub(crate) fn is_dev_server(name: &str) -> bool {
@@ -24,7 +49,10 @@ pub(crate) fn is_dev_server(name: &str) -> bool {
 }
 
 /// One row per port, lowest first.
-pub(crate) fn pick(listeners: &[(u16, u32)], name_of: impl Fn(u32) -> Option<String>) -> Vec<LocalServer> {
+pub(crate) fn pick(
+    listeners: &[(u16, u32)],
+    name_of: impl Fn(u32) -> Option<String>,
+) -> Vec<LocalServer> {
     let mut servers: Vec<LocalServer> = listeners
         .iter()
         .filter(|(port, _)| *port >= 1024)
@@ -102,7 +130,9 @@ mod native {
     }
 
     pub(super) fn ipv4() -> Vec<(u16, u32)> {
-        let Some(buffer) = table(AF_INET) else { return Vec::new() };
+        let Some(buffer) = table(AF_INET) else {
+            return Vec::new();
+        };
         unsafe {
             let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
             let rows: &[MIB_TCPROW_OWNER_PID] =
@@ -117,7 +147,9 @@ mod native {
     }
 
     pub(super) fn ipv6() -> Vec<(u16, u32)> {
-        let Some(buffer) = table(AF_INET6) else { return Vec::new() };
+        let Some(buffer) = table(AF_INET6) else {
+            return Vec::new();
+        };
         let loopback: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
         unsafe {
             let table = &*(buffer.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);
@@ -140,14 +172,23 @@ mod tests {
         assert!(is_dev_server("node.exe"));
         assert!(is_dev_server("Python"));
         assert!(!is_dev_server("svchost.exe"));
-        let found = pick(&[(5173, 1), (5173, 1), (445, 2), (3000, 3), (8080, 4)], |pid| {
-            Some(["", "node.exe", "System", "bun.exe", "svchost.exe"][pid as usize].to_string())
-        });
+        let found = pick(
+            &[(5173, 1), (5173, 1), (445, 2), (3000, 3), (8080, 4)],
+            |pid| {
+                Some(["", "node.exe", "System", "bun.exe", "svchost.exe"][pid as usize].to_string())
+            },
+        );
         assert_eq!(
             found,
             vec![
-                LocalServer { port: 3000, name: "bun".into() },
-                LocalServer { port: 5173, name: "node".into() },
+                LocalServer {
+                    port: 3000,
+                    name: "bun".into()
+                },
+                LocalServer {
+                    port: 5173,
+                    name: "node".into()
+                },
             ]
         );
     }

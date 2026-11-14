@@ -34,7 +34,7 @@ internal object HariShare {
   private const val SHARE_URL = "monocode://share"
   private const val MAX_PENDING = 40
   private const val MAX_FILES = 20
-  private const val MAX_FILE_BYTES = 100L * 1024 * 1024
+  private const val MAX_FILE_BYTES = 1024L * 1024 * 1024
   private const val MAX_TEXT = 30_000
   private const val FOLDER = "Download/Hari"
   private val lock = Any()
@@ -72,7 +72,7 @@ internal object HariShare {
   /**
    * Copies a shared file into the app's cache: the sending app's permission
    * to read it ends with the share activity. Null when it can't be read or
-   * is over 100 MB.
+   * is over 1 GB.
    */
   fun copyIn(context: Context, uri: Uri): JSONObject? {
     val resolver = context.contentResolver
@@ -109,7 +109,7 @@ internal object HariShare {
             val read = input.read(buffer)
             if (read < 0) break
             copied += read
-            if (copied > MAX_FILE_BYTES) throw IllegalStateException("Over 100 MB")
+            if (copied > MAX_FILE_BYTES) throw IllegalStateException("Over 1 GB")
             output.write(buffer, 0, read)
           }
         }

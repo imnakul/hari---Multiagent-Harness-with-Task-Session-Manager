@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShareEntry } from "./mobileShare";
 import {
+  isLongShareText,
   isShareMedia,
   markShareSeen,
   matchesShareFilter,
+  pinnedShares,
   readShareSeen,
   shareDays,
+  shareRows,
   subscribeShareSeen,
 } from "./shareView";
 
@@ -55,7 +58,7 @@ describe("Share view (L-287)", () => {
       ],
       now,
     );
-    expect(days.map((day) => day.items.map((entry) => entry.id))).toEqual([["o"], ["y"], ["b", "c"]]);
+    expect(days.map((day) => day.rows.map((row) => row.key))).toEqual([["o"], ["y"], ["b", "c"]]);
     expect(days[1]?.label).toBe("Yesterday");
     expect(days[2]?.label).toBe("Today");
   });
@@ -73,5 +76,39 @@ describe("Share view (L-287)", () => {
     expect(readShareSeen()).toBe(50);
     expect(listener).toHaveBeenCalledTimes(1);
     stop();
+  });
+});
+
+describe("Share rows, pins and saves (L-290)", () => {
+  const at = (id: string, time: number, extra: Partial<ShareEntry> = {}): ShareEntry => ({
+    ...base,
+    id,
+    at: time,
+    ...extra,
+  });
+
+  it("puts files sent together and their caption in one row", () => {
+    const rows = shareRows([
+      at("caption", 30, { groupId: "g" }),
+      at("solo", 25),
+      at("b", 20, { groupId: "g" }),
+      at("a", 10, { groupId: "g" }),
+    ]);
+    expect(rows.map((row) => [row.key, row.items.map((item) => item.id)])).toEqual([
+      ["g", ["a", "b", "caption"]],
+      ["solo", ["solo"]],
+    ]);
+  });
+
+  it("lists pinned items oldest first and filters saved ones", () => {
+    const items = [at("new", 20, { pinned: true }), at("old", 10, { pinned: true, saved: true }), at("x", 5)];
+    expect(pinnedShares(items).map((item) => item.id)).toEqual(["old", "new"]);
+    expect(items.filter((item) => matchesShareFilter(item, "saved")).map((item) => item.id)).toEqual(["old"]);
+  });
+
+  it("folds very long text", () => {
+    expect(isLongShareText("short")).toBe(false);
+    expect(isLongShareText("x".repeat(800))).toBe(true);
+    expect(isLongShareText(Array(20).fill("line").join("\n"))).toBe(true);
   });
 });

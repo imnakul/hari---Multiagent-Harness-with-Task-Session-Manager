@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement, ReactNode, Ref } from "react";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import {
   Platform,
@@ -24,8 +24,14 @@ export function SettingsPage({
   children,
   onRefresh,
   refreshing = false,
+  scrollRef,
+  header,
 }: {
   top?: number;
+  /** Fork (Hari, L-290): to scroll to a pinned Share message. */
+  scrollRef?: Ref<ScrollView>;
+  /** Fork (Hari, L-290): stays at the top while the rest scrolls (Share's pin bar). */
+  header?: ReactNode;
   children: ReactNode;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -39,6 +45,8 @@ export function SettingsPage({
   const contentTop = top ?? (Platform.OS === "android" ? headerHeight + 12 : undefined);
   return (
     <ScrollView
+      ref={scrollRef}
+      stickyHeaderIndices={header ? [0] : undefined}
       refreshControl={
         onRefresh ? (
           <RefreshControl
@@ -57,6 +65,7 @@ export function SettingsPage({
         { paddingBottom: bottom + 40 },
       ]}
     >
+      {header ? <View>{header}</View> : null}
       {children}
     </ScrollView>
   );

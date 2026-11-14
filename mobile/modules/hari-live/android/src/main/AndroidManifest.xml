@@ -6,6 +6,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <!-- Fork (Hari, L-280): the phone's network type for the computer's Share popover. -->
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <!-- Fork (Hari, L-297): the computer's "Phone files" browser (sideloaded APK; the user turns on All files access). -->
+  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
   <application>
     <service
       android:name="expo.modules.harilive.HariLiveService"

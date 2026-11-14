@@ -7,6 +7,7 @@ import {
   formatUsagePercent,
   formatWindowLabel,
   type ProviderRateLimits,
+  type RateLimitProvider,
 } from "../../providers/model/rateLimits";
 import {
   getCachedRateLimits,
@@ -92,4 +93,56 @@ export async function mobileAccountUsage(provider: unknown, refresh = false) {
       ]),
     ),
   };
+}
+
+/** Fork (Hari, L-296): providers with one login per computer, shown once signed in. */
+const SINGLE_LOGIN: { provider: RateLimitProvider; label: string }[] = [
+  { provider: "command-code", label: "Command Code" },
+  { provider: "opencode", label: "OpenCode Go" },
+  { provider: "devin", label: "Devin" },
+];
+
+/**
+ * Fork (Hari, L-296): every provider and account with usage, for the phone's
+ * Settings → Usage. Claude Code and Codex list each account; the others
+ * appear once they are signed in on this computer.
+ */
+export async function mobileAllUsage(refresh = false) {
+  const providers: {
+    provider: string;
+    label: string;
+    accounts: { id: string; label: string; usage: ReturnType<typeof mobileUsageSnapshot> }[];
+  }[] = [];
+  const now = () => Date.now();
+  const showRemaining = loadShowRemainingUsage();
+  for (const [provider, label] of [
+    ["claude", "Claude Code"],
+    ["codex", "Codex"],
+  ] as const) {
+    const accounts = providerAccounts(provider);
+    if (!accounts.length) continue;
+    const { accounts: usage } = await mobileAccountUsage(provider, refresh);
+    providers.push({
+      provider,
+      label,
+      accounts: accounts.flatMap((account) =>
+        usage[account.id] ? [{ id: account.id, label: account.label, usage: usage[account.id] }] : [],
+      ),
+    });
+  }
+  const singles = await Promise.all(
+    SINGLE_LOGIN.map(async ({ provider, label }) => {
+      const limits = await loadRateLimits(provider, "default", refresh).catch(() => null);
+      return { provider, label, limits };
+    }),
+  );
+  for (const { provider, label, limits } of singles) {
+    if (!limits || limits.status === "unavailable") continue;
+    providers.push({
+      provider,
+      label,
+      accounts: [{ id: "default", label, usage: mobileUsageSnapshot(limits, now(), showRemaining) }],
+    });
+  }
+  return { providers };
 }

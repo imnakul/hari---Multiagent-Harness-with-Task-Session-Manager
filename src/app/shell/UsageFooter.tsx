@@ -1,4 +1,5 @@
 import { ProcessMonitor } from "./ProcessMonitor";
+import { IdleHibernateButton } from "./IdleHibernate";
 import type { Session } from "../../features/sessions/model/session";
 import { antigravityCliLimitsForModel } from "../../features/providers/model/antigravityCliUsage";
 import { runtimeProviderBinaryPath } from "../../features/providers/model/providerBinaryPaths";
@@ -236,8 +237,10 @@ export function UsageFooter({
           ) : null
         }
       />
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <IdleHibernateButton inset={inset} />
       {showTerminals || showTerminalButton || pressureSlot ? (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {pressureSlot ? (
             <span
               ref={pressureSlot}
@@ -272,6 +275,7 @@ export function UsageFooter({
           ) : null}
         </div>
       ) : null}
+      </div>
     </footer>
   );
 }
@@ -315,6 +319,8 @@ export function UsageChips({
     session?.harness === "antigravity-cli" ? session.model : undefined,
   );
   const requestedDevin = providers.includes("devin");
+  // Fork (L-296): one Command Code login per machine, like OpenCode Go.
+  const wantCommandCode = providers.includes("command-code");
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [accountsVersion, setAccountsVersion] = useState(0);
@@ -391,6 +397,7 @@ export function UsageChips({
   const cachedCodex = useCachedRateLimits("codex", codexAccountId);
   const opencode = useCachedRateLimits("opencode");
   const devin = useCachedRateLimits("devin");
+  const commandCode = useCachedRateLimits("command-code");
   const claude = claudeAccountAvailable
     ? cachedClaude
     : unavailableRateLimits(
@@ -419,7 +426,9 @@ export function UsageChips({
     if (wantOpencode) void loadRateLimits("opencode");
     if (wantCli) void loadRateLimits("antigravity-cli", cliAccountKey);
     if (wantDevin) void loadRateLimits("devin");
+    if (wantCommandCode) void loadRateLimits("command-code");
   }, [
+    wantCommandCode,
     claudeAccountAvailable,
     claudeAccountId,
     codexAccountAvailable,
@@ -477,6 +486,7 @@ export function UsageChips({
     if (wantOpencode) jobs.push(loadRateLimits("opencode", "default", true));
     if (wantCli) jobs.push(loadRateLimits("antigravity-cli", cliAccountKey, true));
     if (wantDevin) jobs.push(loadRateLimits("devin", "default", true));
+    if (wantCommandCode) jobs.push(loadRateLimits("command-code", "default", true));
     const run = Promise.allSettled(jobs)
       .then(() => undefined)
       .finally(() => {
@@ -486,6 +496,7 @@ export function UsageChips({
     inflight.current = run;
     return run;
   }, [
+    wantCommandCode,
     accountEntries,
     accountMode,
     claudeAccountAvailable,
@@ -513,6 +524,7 @@ export function UsageChips({
       targets.push({ provider: "codex", accountId: codexAccountId });
     if (wantDevin) targets.push({ provider: "devin", accountId: "default" });
     if (wantOpencode) targets.push({ provider: "opencode", accountId: "default" });
+    if (wantCommandCode) targets.push({ provider: "command-code", accountId: "default" });
     if (wantCli)
       targets.push({ provider: "antigravity-cli", accountId: cliAccountKey });
     return targets;
@@ -520,7 +532,7 @@ export function UsageChips({
     accountMode, accountEntries,
     wantClaude, claudeAccountAvailable, claudeAccountId,
     wantCodex, codexAccountAvailable, codexAccountId,
-    wantDevin, wantOpencode, wantCli, cliAccountKey,
+    wantDevin, wantOpencode, wantCommandCode, wantCli, cliAccountKey,
   ]);
   useRateLimitsPolling(pollingTargets);
 
@@ -658,8 +670,15 @@ export function UsageChips({
   );
 
   const showOpencodeChip = wantOpencode && opencode.status !== "unavailable";
+  const showCommandCodeChip = wantCommandCode && commandCode.status !== "unavailable";
   const showUsage =
-    accountMode || wantClaude || wantCodex || showOpencodeChip || wantCli || wantDevin;
+    accountMode ||
+    wantClaude ||
+    wantCodex ||
+    showOpencodeChip ||
+    wantCli ||
+    wantDevin ||
+    showCommandCodeChip;
   const noAccounts = allAccountsUsage && !accountMode;
   const cliChip = (
     <UsageProviderChip
@@ -742,6 +761,16 @@ export function UsageChips({
               remainingQuota={remainingQuota}
               inUse={session?.harness === "opencode"}
               onRefresh={() => void loadRateLimits("opencode", "default", true)}
+            />
+          ) : null}
+          {showCommandCodeChip ? (
+            <UsageProviderChip
+              variant={variant}
+              limits={commandCode}
+              now={now}
+              project={project}
+              inUse={session?.harness === "command-code"}
+              onRefresh={() => void loadRateLimits("command-code", "default", true)}
             />
           ) : null}
           {wantDevin ? (

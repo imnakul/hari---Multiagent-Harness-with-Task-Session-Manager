@@ -7,7 +7,7 @@ const MIN_WIDTH = 340;
 const DEFAULT_WIDTH = 400;
 let rememberedWidth = DEFAULT_WIDTH;
 /** Room the panel's header leaves for the window controls drawn over it. */
-export const MONO_WINDOW_CONTROLS_WIDTH = "calc(10rem + 1px)";
+export const MONO_WINDOW_CONTROLS_WIDTH = "calc(12.5rem + 1px)";
 
 /** The shared frame for a Mono's details and turn sidebars. */
 export function MonoSidebar({

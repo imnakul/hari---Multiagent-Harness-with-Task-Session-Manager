@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
-const METHODS: [&str; 9] = [
+const METHODS: [&str; 16] = [
     "pc.stats",
     "pc.apps",
     "pc.app",
@@ -37,6 +37,13 @@ const METHODS: [&str; 9] = [
     "pc.shortcut",
     "pc.wakeInfo",
     "phone.stats",
+    "pc.audio",
+    "pc.media",
+    "pc.camera",
+    "pc.bluetooth",
+    "pc.idleHibernate",
+    "pc.files.list",
+    "pc.files.offer",
 ];
 /// How far a command's `sentAt` may be from this clock (either way).
 const STALE_MS: u64 = 60_000;
@@ -263,7 +270,43 @@ fn run(app: &AppHandle, peer: &str, method: &str, params: &Value) -> Result<Valu
         }
         "pc.wakeInfo" => Ok(json!({ "cards": native::wake_cards() })),
         "phone.stats" => phone_stats(app, peer, params),
+        // Fork (Hari, L-292..L-297): readings need no time; changes do.
+        "pc.audio" | "pc.media" | "pc.camera" | "pc.bluetooth" | "pc.idleHibernate" => {
+            if changes(method, params) {
+                fresh(params, now_ms())?;
+            }
+            extra(app, method, params)
+        }
+        "pc.files.list" => crate::mobile_pc_extra::files_list(params, native::disks()),
+        "pc.files.offer" => {
+            fresh(params, now_ms())?;
+            crate::mobile_pc_extra::files_offer(app, peer, params)
+        }
         _ => Err("Unsupported mobile operation".into()),
+    }
+}
+
+/// True when a device-control call asks for a change rather than a reading.
+fn changes(method: &str, params: &Value) -> bool {
+    let keys: &[&str] = match method {
+        "pc.audio" => &["micMuted", "speakerMuted", "volume", "output"],
+        "pc.media" => &["action"],
+        "pc.camera" => &["allowed"],
+        "pc.bluetooth" => &["on"],
+        "pc.idleHibernate" => &["armed"],
+        _ => &[],
+    };
+    keys.iter().any(|key| !params[*key].is_null())
+}
+
+fn extra(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String> {
+    use crate::mobile_pc_extra as x;
+    match method {
+        "pc.audio" => x::audio(params),
+        "pc.media" => x::media(params),
+        "pc.camera" => x::camera(params),
+        "pc.bluetooth" => x::bluetooth(params),
+        _ => x::idle_hibernate(app, params),
     }
 }
 
