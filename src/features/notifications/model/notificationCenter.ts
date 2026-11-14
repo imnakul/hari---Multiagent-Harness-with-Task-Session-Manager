@@ -29,6 +29,12 @@ export type CenterNotification = {
   model?: string;
   /** Opens this chat on click, when it still exists. */
   sessionId?: string;
+  /**
+   * Fork (Hari, L-275): recorded while the chat was open in the focused
+   * window. The bell hides it; the phone may still show it (the user may
+   * have walked away from the open chat).
+   */
+  seenOnDesktop?: boolean;
 };
 
 export type CenterNotificationInput = Omit<CenterNotification, "id" | "at" | "read"> & {
@@ -56,6 +62,10 @@ function optionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
+function optionalBoolean(value: unknown): value is boolean | undefined {
+  return value === undefined || typeof value === "boolean";
+}
+
 function isCenterNotification(value: unknown): value is CenterNotification {
   if (typeof value !== "object" || value === null) return false;
   const field = (name: string): unknown => Reflect.get(value, name);
@@ -71,7 +81,8 @@ function isCenterNotification(value: unknown): value is CenterNotification {
     optionalString(field("cwd")) &&
     optionalString(field("harness")) &&
     optionalString(field("model")) &&
-    optionalString(field("sessionId"))
+    optionalString(field("sessionId")) &&
+    optionalBoolean(field("seenOnDesktop"))
   );
 }
 
@@ -144,10 +155,28 @@ export function dismissAllCenterNotifications(): void {
   if (readItems().length > 0) writeItems([]);
 }
 
-export function markCenterNotificationsRead(): void {
+/** Fork (Hari, L-275): removes several at once (the phone's swipes). */
+export function dismissCenterNotifications(ids: readonly string[]): void {
+  const gone = new Set(ids);
   const items = readItems();
-  if (items.some((item) => !item.read))
-    writeItems(items.map((item) => (item.read ? item : { ...item, read: true })));
+  if (items.some((item) => gone.has(item.id)))
+    writeItems(items.filter((item) => !gone.has(item.id)));
+}
+
+/** Marks these entries read, or every entry when `ids` is left out. */
+export function markCenterNotificationsRead(ids?: readonly string[]): void {
+  const only = ids ? new Set(ids) : null;
+  const items = readItems();
+  const marks = (item: CenterNotification) => !item.read && (!only || only.has(item.id));
+  if (items.some(marks))
+    writeItems(items.map((item) => (marks(item) ? { ...item, read: true } : item)));
+}
+
+/** What the title-bar bell lists: entries not seen as they happened. */
+export function desktopCenterNotifications(
+  items: readonly CenterNotification[],
+): CenterNotification[] {
+  return items.filter((item) => !item.seenOnDesktop);
 }
 
 export const CENTER_KIND_LABEL: Record<CenterNotificationKind, string> = {

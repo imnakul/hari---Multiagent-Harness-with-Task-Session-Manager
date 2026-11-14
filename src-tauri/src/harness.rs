@@ -845,10 +845,12 @@ fn mcp_key_values(
 
 #[tauri::command]
 pub async fn claude_mcp_remove(
+    app: AppHandle,
     host: State<'_, HarnessHost>,
     cwd: String,
     name: String,
     scope: String,
+    config_path: Option<String>,
 ) -> Result<(), String> {
     if !valid_mcp_name(&name) {
         return Err("Invalid MCP server name".into());
@@ -856,14 +858,37 @@ pub async fn claude_mcp_remove(
     if !matches!(scope.as_str(), "local" | "project" | "user") {
         return Err("Invalid MCP scope".into());
     }
+    // Fork (L-272): a row from a MonoCode Claude account's config is removed
+    // from that account. Only discovered account files are accepted.
+    let config_dir = config_path.and_then(|path| {
+        crate::mcp::claude_account_configs(&app)
+            .into_iter()
+            .find(|account| account.as_path() == Path::new(&path))
+            .and_then(|account| account.parent().map(Path::to_path_buf))
+    });
     let binary_path = host.runtime_binary_path("claude");
     tauri::async_runtime::spawn_blocking(move || {
-        claude_mcp_command(
-            vec!["mcp".into(), "remove".into(), name, "--scope".into(), scope],
-            cwd,
+        let args = vec!["mcp".into(), "remove".into(), name, "--scope".into(), scope];
+        let Some(dir) = config_dir else {
+            return claude_mcp_command(args, cwd, Duration::from_secs(30), binary_path.as_deref());
+        };
+        let binary = resolve_mcp_binary("claude", binary_path.as_deref())?;
+        if !expand_home(&cwd).is_dir() {
+            return Err("Project directory does not exist".into());
+        }
+        let output = exec_output_with_env(
+            &binary.to_string_lossy(),
+            &args,
+            Some(&cwd),
             Duration::from_secs(30),
-            binary_path.as_deref(),
-        )
+            &[("CLAUDE_CONFIG_DIR", &dir)],
+        )?;
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if output.status.success() {
+            return Ok(stdout);
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("{} {}", stderr.trim(), stdout).trim().to_string())
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -1864,7 +1889,21 @@ pub(crate) fn exec_output(
     cwd: Option<&str>,
     timeout: Duration,
 ) -> Result<std::process::Output, String> {
+    exec_output_with_env(command, args, cwd, timeout, &[])
+}
+
+/// `exec_output` with extra environment variables (fork, L-272).
+pub(crate) fn exec_output_with_env(
+    command: &str,
+    args: &[String],
+    cwd: Option<&str>,
+    timeout: Duration,
+    env: &[(&str, &Path)],
+) -> Result<std::process::Output, String> {
     let mut cmd = new_provider_command(Path::new(command), args)?;
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

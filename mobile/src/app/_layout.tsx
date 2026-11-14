@@ -16,6 +16,7 @@ import {
 import { WorkspaceGate } from "@/features/connection/WorkspaceGate";
 
 import { SessionNotifications } from "@/features/notifications/SessionNotifications";
+import { NotificationFeedSync } from "@/features/notifications/NotificationFeedSync";
 import { LiveUpdates } from "@/features/liveUpdates/LiveUpdates";
 import { HariUpdatePrompt } from "@/features/updates/HariUpdatePrompt";
 import { SessionActivity } from "@/features/sessions/SessionActivity";
@@ -177,6 +178,8 @@ function LinkedWorkspace() {
   return (
     <WorkspaceProvider key={connection.pairing?.desktop.deviceId}>
       <SessionNotifications />
+      {/* Fork (Hari, L-275): the desktop bell's history. */}
+      <NotificationFeedSync />
       <LiveUpdates />
       <HariUpdatePrompt />
       <SessionActivity />
@@ -224,6 +227,8 @@ function LinkedWorkspace() {
                 {/* Fork (Hari, L-236): the desktop's Tasks and Notes. */}
                 <Stack.Screen name="tasks" options={screens.modal} />
                 <Stack.Screen name="notes" options={screens.modal} />
+                {/* Fork (Hari, L-275): the desktop bell's history. */}
+                <Stack.Screen name="notifications" options={screens.modal} />
                 <Stack.Screen name="changes" options={screens.changes} />
               </Stack>
             </SessionFrame>
@@ -249,6 +254,7 @@ const SOLID_ROUTES = new Set([
   "models",
   "tasks",
   "notes",
+  "notifications",
   "mono-profile/[monoId]",
 ]);
 

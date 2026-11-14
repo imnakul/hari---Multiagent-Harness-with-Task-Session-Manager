@@ -18,7 +18,9 @@ import android.util.Log
  * Fork (Hari, L-239): keeps the app running while a session runs, so it can
  * ask the computer how the sessions are doing every 15 seconds with the phone
  * locked, and at once when the screen comes on. Its notification is the first
- * Live Update card. It stops when no card is left.
+ * Live Update card. It stops when no card is left, unless the app keeps it
+ * watching for the computer's notifications (L-275): then a quiet notification
+ * stands in for the card.
  */
 class HariLiveService : Service() {
   private val handler = Handler(Looper.getMainLooper())
@@ -55,8 +57,9 @@ class HariLiveService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     HariLive.serviceStarted(this)
     // Started plainly (see HariLive.start), so Android expects nothing of it:
-    // with no card left, or none it may show, it just stops.
-    if (HariLive.cards.isEmpty()) {
+    // with no card left, or none it may show, it just stops. Fork (L-275):
+    // unless it is watching for the computer's notifications.
+    if (HariLive.cards.isEmpty() && !HariLive.watching) {
       finish()
       return START_NOT_STICKY
     }

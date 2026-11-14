@@ -1,5 +1,9 @@
 import { mobileUsageLimit } from "../../sessions/model/usageLimit";
 import { mobileQueue } from "./mobileQueue";
+import {
+  isAttachmentPreviewSize,
+  mobileAttachmentImage,
+} from "./mobileAttachmentPreview";
 import { mobileWaiting } from "./mobileApproval";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -302,11 +306,11 @@ function mobileLaunch(launch: MonoSpawnedSession, live: readonly Session[]) {
  * open is read from disk once into `saved` and reused from there: it cannot
  * change until it opens, and then the live copy wins.
  */
-export async function mobileConversation(
+/** The session behind a phone conversation ID: a session's own, or `mono:<id>`. */
+async function conversationSession(
   id: string,
   live: readonly Session[],
   saved?: Map<string, Session>,
-  range?: (turnIds: string[]) => [number, number],
 ) {
   const mono = id.startsWith("mono:")
     ? listMonos().find((mono) => mono.id === id.slice(5))
@@ -318,6 +322,35 @@ export async function mobileConversation(
     ? (live.find((session) => session.id === sessionId) ??
       (await readSaved(sessionId, saved)))
     : undefined;
+  return { mono, session };
+}
+
+/** Fork (Hari, L-268): an image the user sent in this conversation, sized for the phone. */
+export async function mobileConversationAttachment(
+  id: string,
+  params: Record<string, unknown>,
+  live: readonly Session[],
+  saved?: Map<string, Session>,
+) {
+  const size = params.size ?? "thumb";
+  if (!isAttachmentPreviewSize(size)) throw new Error("Unknown preview size");
+  const { session } = await conversationSession(id, live, saved);
+  if (!session) throw new Error("This conversation is no longer available");
+  return mobileAttachmentImage(
+    session,
+    String(params.messageId ?? ""),
+    String(params.attachmentId ?? ""),
+    size,
+  );
+}
+
+export async function mobileConversation(
+  id: string,
+  live: readonly Session[],
+  saved?: Map<string, Session>,
+  range?: (turnIds: string[]) => [number, number],
+) {
+  const { mono, session } = await conversationSession(id, live, saved);
   return {
     id,
     messages: session ? mobileMessages(session) : [],

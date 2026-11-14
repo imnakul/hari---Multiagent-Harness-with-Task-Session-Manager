@@ -462,6 +462,8 @@ function McpConnections({
         cwd,
         name: server.name,
         scope: selectedScope,
+        // Fork (L-272): the backend removes a MonoCode account's row from that account.
+        configPath: server.configPath || null,
       });
       await refresh();
     } catch (cause) {

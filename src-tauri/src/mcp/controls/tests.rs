@@ -32,6 +32,7 @@ impl Fixture {
             &self.project(),
             None,
             None,
+            &[],
             provider,
             scope,
             &path.to_string_lossy(),
@@ -46,6 +47,7 @@ impl Fixture {
             None,
             &self.home().join("desktop.json"),
             None,
+            &[],
         )
     }
 }
@@ -456,4 +458,75 @@ fn antigravity_cli_rejects_invalid_flags_and_undiscovered_paths() {
     assert!(f
         .toggle("antigravity-cli", "user", &unrelated, "docs", false)
         .is_err());
+}
+
+#[test]
+fn claude_account_configs_are_listed_and_toggled_in_their_own_file() {
+    // Fork (L-272): MonoCode Claude accounts keep MCP servers in their own config.
+    let fixture = Fixture::new();
+    let accounts = fixture.0.join("app/provider-accounts/claude");
+    let account = accounts.join("account-a/.claude.json");
+    fixture.write(
+        &fixture.home().join(".claude.json"),
+        r#"{"mcpServers":{"aside":{"command":"home"}}}"#,
+    );
+    fixture.write(
+        &account,
+        r#"{"mcpServers":{"aside":{"command":"a"},"aside-cu":{"command":"a"}}}"#,
+    );
+    std::fs::create_dir_all(accounts.join("empty-account")).unwrap();
+    let configs = super::super::claude_account_configs_in(&accounts);
+    assert_eq!(configs, vec![account.clone()]);
+    let rows = |configs: &[PathBuf]| {
+        discover(
+            &fixture.home(),
+            &fixture.project(),
+            None,
+            &fixture.home().join("desktop.json"),
+            None,
+            configs,
+        )
+    };
+    let found = rows(&configs);
+    let account_rows: Vec<_> = found
+        .iter()
+        .filter(|row| Path::new(&row.config_path) == account)
+        .collect();
+    assert_eq!(account_rows.len(), 2);
+    assert!(account_rows
+        .iter()
+        .all(|row| row.provider == "claude" && row.scope == "user"));
+    set_enabled(
+        &fixture.home(),
+        &fixture.project(),
+        None,
+        None,
+        &configs,
+        "claude",
+        "user",
+        &configs[0].to_string_lossy(),
+        "aside-cu",
+        false,
+    )
+    .unwrap();
+    let key = fixture.project().to_string_lossy().replace('\\', "/");
+    assert_eq!(
+        read_json(&account).unwrap()["projects"][key.as_str()]["disabledMcpServers"],
+        serde_json::json!(["aside-cu"])
+    );
+    assert!(read_json(&fixture.home().join(".claude.json"))
+        .unwrap()
+        .get("projects")
+        .is_none());
+    let found = rows(&configs);
+    let enabled = |path: &Path, name: &str| {
+        found
+            .iter()
+            .find(|row| row.name == name && Path::new(&row.config_path) == path)
+            .unwrap()
+            .enabled
+    };
+    assert!(!enabled(&account, "aside-cu"));
+    assert!(enabled(&account, "aside"));
+    assert!(enabled(&fixture.home().join(".claude.json"), "aside"));
 }

@@ -747,9 +747,16 @@ async fn handle(
         if crate::mobile_tools::handles(method) {
             break 'locked Err(std::mem::take(&mut params));
         }
+        // Fork (Hari, L-275): the bell's history, answered from the copy the
+        // windows publish.
+        if crate::mobile_notifications::handles(method) {
+            return crate::mobile_notifications::handle(app, method, &params);
+        }
         if ![
             "conversation.read",
             "conversation.older",
+            // Fork (Hari, L-268): a sent image, sized for the phone.
+            "conversation.attachment",
             "models.list",
             "accounts.usage",
             "session.configure",
@@ -791,6 +798,7 @@ async fn handle(
         // project, and goes to the window that owns whichever it named.
         let route = match method {
             "models.list" if params["conversationId"].is_string() => "conversation.read",
+            "conversation.attachment" => "conversation.read",
             "models.list"
             | "accounts.usage"
             | "project.worktrees"

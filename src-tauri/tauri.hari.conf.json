@@ -1,6 +1,13 @@
 {
+  "productName": "Hari",
+  "mainBinaryName": "monocode",
   "bundle": {
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/hari-installer-hooks.nsh"
+      }
+    }
   },
   "plugins": {
     "updater": {

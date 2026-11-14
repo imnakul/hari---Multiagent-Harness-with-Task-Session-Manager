@@ -2,12 +2,35 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde_json::Value;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::dirs_home;
 use crate::fs::expand_home;
 
 pub(crate) mod controls;
+
+/// Fork (L-272): the `.claude.json` of every MonoCode Claude account
+/// (`<app data>/provider-accounts/claude/<id>/`). Chats on those accounts run
+/// with `CLAUDE_CONFIG_DIR` set there, so their MCP servers live in that file,
+/// not in `~/.claude.json`.
+pub(crate) fn claude_account_configs(app: &AppHandle) -> Vec<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| claude_account_configs_in(&dir.join("provider-accounts").join("claude")))
+        .unwrap_or_default()
+}
+
+fn claude_account_configs_in(accounts: &Path) -> Vec<PathBuf> {
+    let mut configs: Vec<PathBuf> = std::fs::read_dir(accounts)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path().join(".claude.json"))
+        .filter(|path| path.is_file())
+        .collect();
+    configs.sort();
+    configs
+}
 
 fn claude_desktop_config(home: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
@@ -458,7 +481,8 @@ pub struct McpConnection {
 }
 
 #[tauri::command]
-pub async fn mcp_discover(cwd: String) -> Result<Vec<McpConnection>, String> {
+pub async fn mcp_discover(app: AppHandle, cwd: String) -> Result<Vec<McpConnection>, String> {
+    let claude_accounts = claude_account_configs(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let home = dirs_home().ok_or("Home directory not found")?;
         let project = expand_home(&cwd);
@@ -471,6 +495,7 @@ pub async fn mcp_discover(cwd: String) -> Result<Vec<McpConnection>, String> {
             codex_home.as_deref(),
             &desktop_config,
             opencode_config.as_deref(),
+            &claude_accounts,
         ))
     })
     .await
@@ -483,27 +508,32 @@ fn discover(
     codex_home_override: Option<&Path>,
     desktop_config: &Path,
     opencode_config: Option<&Path>,
+    claude_accounts: &[PathBuf],
 ) -> Vec<McpConnection> {
     let mut connections = Vec::new();
     let claude = home.join(".claude.json");
-    if let Some(config) = read_json(&claude) {
-        add_json_servers(
-            &mut connections,
-            "claude",
-            "user",
-            &claude,
-            config.get("mcpServers"),
-        );
-        add_json_servers(
-            &mut connections,
-            "claude",
-            "local",
-            &claude,
-            config
-                .get("projects")
-                .and_then(|projects| projects.get(controls::claude_project_key(&config, project)))
-                .and_then(|entry| entry.get("mcpServers")),
-        );
+    for path in std::iter::once(&claude).chain(claude_accounts) {
+        if let Some(config) = read_json(path) {
+            add_json_servers(
+                &mut connections,
+                "claude",
+                "user",
+                path,
+                config.get("mcpServers"),
+            );
+            add_json_servers(
+                &mut connections,
+                "claude",
+                "local",
+                path,
+                config
+                    .get("projects")
+                    .and_then(|projects| {
+                        projects.get(controls::claude_project_key(&config, project))
+                    })
+                    .and_then(|entry| entry.get("mcpServers")),
+            );
+        }
     }
     // CLI uses dedicated user/workspace files; ACP reads its private profile; do not scan IDE settings.
     add_json_file(
@@ -605,26 +635,42 @@ fn discover(
             &b.config_path,
         ))
     });
-    if let Some(config) = read_json(&claude) {
-        let key = controls::claude_project_key(&config, project);
-        if let Some(disabled) = config
-            .get("projects")
-            .and_then(|projects| projects.get(&key))
-            .and_then(|entry| entry.get("disabledMcpServers"))
-            .and_then(Value::as_array)
-        {
-            for connection in &mut connections {
-                if connection.provider == "claude" {
-                    // Claude's native disable choice applies to a server name in
-                    // the selected project, independently of its config scope.
-                    connection.enabled = !disabled
-                        .iter()
-                        .any(|name| name.as_str() == Some(&connection.name));
-                }
+    for connection in &mut connections {
+        if connection.provider != "claude" {
+            continue;
+        }
+        // Claude's native disable choice applies to a server name in the
+        // selected project, independently of its config scope. An account's
+        // own rows follow that account's file; the rest follow ~/.claude.json.
+        let source = claude_disable_source(&claude, claude_accounts, &connection.config_path);
+        if let Some(config) = read_json(source) {
+            let key = controls::claude_project_key(&config, project);
+            if let Some(disabled) = config
+                .get("projects")
+                .and_then(|projects| projects.get(&key))
+                .and_then(|entry| entry.get("disabledMcpServers"))
+                .and_then(Value::as_array)
+            {
+                connection.enabled = !disabled
+                    .iter()
+                    .any(|name| name.as_str() == Some(&connection.name));
             }
         }
     }
     connections
+}
+
+/// The Claude config that holds the disable choice for a discovered row: the
+/// row's own file for a MonoCode account, otherwise `~/.claude.json`.
+pub(crate) fn claude_disable_source<'a>(
+    home_config: &'a Path,
+    claude_accounts: &'a [PathBuf],
+    config_path: &str,
+) -> &'a Path {
+    claude_accounts
+        .iter()
+        .find(|account| account.as_path() == Path::new(config_path))
+        .map_or(home_config, PathBuf::as_path)
 }
 
 fn add_json_file(
@@ -1205,7 +1251,7 @@ mod tests {
         let codex_config: toml::Value = toml::from_str(&codex_raw).unwrap();
         assert!(codex_config.get("mcp_servers").is_some());
         std::fs::write(home.join(".config/opencode/opencode.jsonc"), "{\"mcp\": {\"servers\": {\"four\": {\"type\": \"remote\", \"url\": \"https://example.com\",},},}}").unwrap();
-        let found = discover(&home, &project, None, &desktop, None);
+        let found = discover(&home, &project, None, &desktop, None, &[]);
         let names: Vec<_> = found
             .iter()
             .map(|entry| (entry.provider.as_str(), entry.name.as_str()))
@@ -1332,7 +1378,7 @@ mod tests {
             r#"{"mcpServers":{"servers":{"command":"npx"},"docs":{"command":"node"}}}"#,
         )
         .unwrap();
-        let found = discover(&root, &project, None, &root.join("desktop.json"), None);
+        let found = discover(&root, &project, None, &root.join("desktop.json"), None, &[]);
         assert_eq!(found.len(), 2);
         assert!(found.iter().all(|server| server.scope == "user"));
         assert!(found.iter().any(|server| server.name == "servers"));

@@ -1154,6 +1154,7 @@ describe("settings navigation", () => {
       "monos",
       "inbox",
       "archive",
+      "storage",
       "worktrees",
       "migration",
     ]);

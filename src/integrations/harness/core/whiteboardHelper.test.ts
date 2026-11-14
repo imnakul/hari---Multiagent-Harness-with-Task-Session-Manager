@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { askWhiteboardAgent, whiteboardAgentTargets, whiteboardSeesImages } from "./whiteboardHelper";
 
 const FENCE = "```";
@@ -57,7 +57,6 @@ describe("whiteboard agent helper", () => {
 
   it("sends images only to helpers that take pictures in the prompt (L-221)", () => {
     expect(whiteboardSeesImages({ provider: "claude" })).toBe(true);
-    expect(whiteboardSeesImages({ provider: "claude" }, true)).toBe(false);
     expect(whiteboardSeesImages({ provider: "codex" })).toBe(true);
     expect(whiteboardSeesImages({ provider: "opencode" })).toBe(true);
     expect(whiteboardSeesImages({ provider: "antigravity" } as never)).toBe(false);
@@ -66,10 +65,9 @@ describe("whiteboard agent helper", () => {
   it("refuses images for a helper that can't see them, without running it (L-221)", async () => {
     let ran = false;
     const outcome = await askWhiteboardAgent({
-      target: { provider: "claude" },
+      target: { provider: "antigravity-cli" },
       cwd: "C:/tmp",
       prompt: "x",
-      interactive: true,
       images: [{ id: "1", name: "shot.png", mimeType: "image/png", kind: "image", size: 3, data: "AAAA" }],
       isAvailable: () => true,
       run: async () => {
@@ -80,6 +78,22 @@ describe("whiteboard agent helper", () => {
     expect(ran).toBe(false);
     expect(outcome).toMatchObject({ ok: false, cancelled: false });
     expect(!outcome.ok && outcome.message).toContain("can't see images");
+  });
+
+  // L-271: Interactive Claude used to be refused here; it now Reads the saved image.
+  it("sends images to Claude's Interactive CLI too (L-271)", async () => {
+    const run = vi.fn(async () => "Looks like a login form.");
+    const outcome = await askWhiteboardAgent({
+      target: { provider: "claude" },
+      cwd: "C:/tmp",
+      prompt: "x",
+      interactive: true,
+      images: [{ id: "1", name: "shot.png", mimeType: "image/png", kind: "image", size: 3, data: "AAAA" }],
+      isAvailable: () => true,
+      run,
+    });
+    expect(run).toHaveBeenCalledOnce();
+    expect(outcome).toMatchObject({ ok: true });
   });
 
   it("lists the AI helper settings first, without repeats or unavailable providers", () => {

@@ -20,6 +20,7 @@ import {
 } from "@/features/settings/notifications";
 import { useOpenSessionAfterStarting } from "@/features/settings/newSessions";
 import { useLivePreferences } from "@/features/settings/liveUpdates";
+import { useFeedPreferences } from "@/features/settings/notificationFeed";
 import {
   liveAvailable,
   livePromotable,
@@ -147,6 +148,8 @@ export default function SettingsScreen() {
         </Text>
       ) : null}
 
+      <FeedSettings />
+
       {liveAvailable ? <LiveUpdateSettings /> : null}
 
       <Text style={styles.heading}>Preferences</Text>
@@ -266,6 +269,63 @@ export default function SettingsScreen() {
         <Text style={styles.error}>{connection.error}</Text>
       ) : null}
     </SettingsPage>
+  );
+}
+
+/**
+ * Fork (Hari, L-275): the desktop bell's history. Its screen, what else gets
+ * posted, and (Android) the quiet service that checks with Hari out of view.
+ */
+function FeedSettings() {
+  const colors = useColors();
+  const styles = useStyles();
+  const [feed, setFeed] = useFeedPreferences();
+  const toggle = (
+    icon: IconName,
+    label: string,
+    name: "automations" | "seenOnDesktop" | "watch",
+  ) => (
+    <SettingsRow
+      icon={icon}
+      label={label}
+      onPress={() => setFeed({ [name]: !feed[name] })}
+      accessory={
+        <AccentSwitch
+          accessibilityLabel={label}
+          value={feed[name]}
+          onValueChange={(on) => setFeed({ [name]: on })}
+        />
+      }
+    />
+  );
+  return (
+    <>
+      <View style={[styles.card, styles.feedCard]}>
+        <SettingsRow
+          icon="inbox"
+          label="All notifications"
+          onPress={() => router.push("/notifications")}
+        />
+        <View style={styles.divider} />
+        {toggle("automation", "Automations", "automations")}
+        <View style={styles.divider} />
+        {toggle("computer", "Also chats open on the computer", "seenOnDesktop")}
+        {liveAvailable ? (
+          <>
+            <View style={styles.divider} />
+            {toggle("notifications", "Keep watching in the background", "watch")}
+          </>
+        ) : null}
+      </View>
+      {liveAvailable ? (
+        <Text style={styles.note} onPress={() => void openBatterySettings()}>
+          {feed.watch
+            ? "Hari checks your computer every 15 seconds while it’s closed, with a quiet notification at the bottom of the panel. For this to last, set Battery to No restrictions and turn on Autostart. "
+            : "Notifications from your computer arrive only while Hari is open. "}
+          <Text style={{ color: colors.accent }}>Open app settings</Text>
+        </Text>
+      ) : null}
+    </>
   );
 }
 
@@ -396,6 +456,10 @@ const useStyles = themedStyles((colors) => ({
   },
   lastCard: {
     marginTop: 24,
+  },
+  // Fork (L-275): a second group under the categories.
+  feedCard: {
+    marginTop: 12,
   },
   error: {
     color: colors.deletions,

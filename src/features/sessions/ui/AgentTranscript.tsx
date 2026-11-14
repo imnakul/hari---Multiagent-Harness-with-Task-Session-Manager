@@ -1934,6 +1934,9 @@ function AgentTranscriptComponent({
             </HistoryTurn>
           );
         })}
+        {!busy && !externalTurnId && backgroundTasks?.length ? (
+          <IdleBackgroundTasks tasks={backgroundTasks} />
+        ) : null}
       </TranscriptContent>
       {onAddToChat || onSaveSelectionNote || onSaveSelectionTask || onBookmarkQuote ? (
         <TranscriptSelectionMenu
@@ -2105,6 +2108,34 @@ function LiveFoldTitle({
     </span>
   ) : (
     shimmer
+  );
+}
+
+/**
+ * Fork (L-265): the agent finished its reply but left work running (a
+ * monitor, a dev server). Without this the chat looks idle until the agent
+ * wakes up on its own.
+ */
+function IdleBackgroundTasks({ tasks }: { tasks: string[] }) {
+  return (
+    <div
+      role="status"
+      data-idle-background
+      className="flex min-w-0 items-center gap-2 px-4 py-1 font-sans text-[12px] text-content/55"
+      title={tasks.join("\n")}
+    >
+      <span
+        aria-hidden
+        className="size-1.5 shrink-0 rounded-full bg-content/40 motion-safe:animate-pulse"
+      />
+      <span className="shrink-0">
+        {tasks.length === 1 ? "1 task" : `${tasks.length} tasks`} running in
+        background
+      </span>
+      <span className="min-w-0 truncate text-content/40">
+        · {tasks.join(" · ")}
+      </span>
+    </div>
   );
 }
 
@@ -4932,6 +4963,7 @@ function ActivityToolRow({
       chip={bare}
       failed={state === "rejected"}
       status={state}
+      wrappable={!errorDetail}
       onOpenFile={onOpenFile}
       onOpenDiff={onOpenDiff}
     />
@@ -4969,7 +5001,7 @@ function ActivityToolRow({
       ) : (
         <div
           aria-label={`Tool call: ${label}`}
-          className="flex min-w-0 items-center gap-1.5 py-1"
+          className="flex min-w-0 items-center gap-1.5 py-1 has-[[aria-expanded=true]]:items-start"
         >
           {bare ? null : <ActivityToolIcon state={state} live={live} />}
           {summary}
@@ -5316,6 +5348,7 @@ function ToolCallSummary({
   chip = false,
   failed = false,
   status = "accepted",
+  wrappable = false,
 }: {
   label: string;
   preview?: ToolPreview;
@@ -5327,19 +5360,20 @@ function ToolCallSummary({
   chip?: boolean;
   failed?: boolean;
   status?: ToolCallState;
+  /** Click a command to show it in full (never inside a row that is a button). */
+  wrappable?: boolean;
 }) {
   const { action, target, fileName, filePath, isFile, previewMatchesFile } =
     resolveToolCallDisplay(label, preview, cwd);
   if (!action || !target) {
     return (
-      <span
-        className={`min-w-0 flex-1 truncate font-mono text-[13px] ${
+      <WrappableToolText
+        text={label}
+        canWrap={wrappable}
+        className={`flex-1 font-mono text-[13px] ${
           failed ? "text-red-400" : chip ? "text-content/65" : "text-content/80"
         }`}
-        title={label}
-      >
-        {label}
-      </span>
+      />
     );
   }
   const openFile =
@@ -5361,7 +5395,7 @@ function ToolCallSummary({
       : "text-content/85";
 
   return (
-    <span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[13px]">
+    <span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[13px] has-[[aria-expanded=true]]:items-start">
       <span className={`shrink-0 font-sans text-sm ${actionTone}`}>
         {action}
       </span>
@@ -5416,12 +5450,54 @@ function ToolCallSummary({
       ) : (
         <span
           className={`flex min-w-0 flex-1 items-center gap-1.5 pl-1 ${targetTone}`}
-          title={target}
         >
-          <span className="min-w-0 truncate">{target}</span>
+          <WrappableToolText text={target} canWrap={wrappable} />
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * A tool row's command or search text: one truncated line by default so a
+ * run of rows stays scannable, with the full text on hover. When `canWrap`,
+ * clicking it shows the whole text wrapped in place (and clicking again folds
+ * it back). Only for rows that are not themselves a button. Fork L-267.
+ */
+function WrappableToolText({
+  text,
+  canWrap,
+  className = "",
+}: {
+  text: string;
+  canWrap: boolean;
+  className?: string;
+}) {
+  const [wrapped, setWrapped] = useState(false);
+  if (!canWrap) {
+    return (
+      <span className={`min-w-0 truncate ${className}`} title={text}>
+        {text}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={wrapped}
+      title={wrapped ? "Show on one line" : text}
+      onClick={(event) => {
+        event.stopPropagation();
+        setWrapped((value) => !value);
+      }}
+      className={`min-w-0 cursor-pointer rounded text-left font-[inherit] transition-colors duration-150 hover:text-content focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-400/60 ${
+        wrapped
+          ? "whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+          : "truncate"
+      } ${className}`}
+    >
+      {text}
+    </button>
   );
 }
 

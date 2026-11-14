@@ -52,6 +52,8 @@ const MODAL_ROUTES = [
   // Fork (Hari, L-236).
   "/tasks",
   "/notes",
+  // Fork (Hari, L-275).
+  "/notifications",
 ];
 export const isModalRoute = (pathname: string) =>
   MODAL_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));

@@ -34,6 +34,7 @@ export type SettingsSectionId =
   | "inbox"
   | "worktrees"
   | "archive"
+  | "storage"
   | "migration"
   | "experimentation";
 
@@ -165,6 +166,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     keywords: "archived restore delete hidden",
   },
   {
+    // Fork (L-273): the files MonoCode saved for chat attachments.
+    id: "storage",
+    group: "workspace",
+    label: "Storage",
+    description:
+      "Pasted images and attached files saved for your chats: see them by chat or project, and delete the ones you no longer need.",
+    keywords:
+      "storage attachments images screenshots pasted files disk space delete clean up gallery",
+  },
+  {
     id: "worktrees",
     group: "workspace",
     label: "Worktrees",
@@ -226,6 +237,13 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     section: "mcp",
     label: "MCP servers",
     keywords: "claude tools connections oauth authenticate login add remove",
+  },
+  {
+    id: "storage-attachments",
+    section: "storage",
+    label: "Saved attachments",
+    keywords:
+      "pasted images screenshots files disk space delete clean up gallery claude copies",
   },
   {
     id: "monos-enabled",

@@ -131,6 +131,10 @@ pub struct StartInput {
     account_id: Option<String>,
     model: String,
     effort: Option<String>,
+    /// Fork (L-266): Claude's `--thinking-display`: `summarized`, `highlights`
+    /// or `omitted`. Absent keeps the CLI's own default (omitted on Claude 5).
+    #[serde(default)]
+    thinking_display: Option<String>,
     permission_mode: String,
     fast: bool,
     fork: Option<ForkInput>,
@@ -210,6 +214,13 @@ fn validate_start(input: &StartInput) -> Result<(), String> {
             "Unsupported interactive effort; use the native terminal to configure this setting"
                 .into(),
         );
+    }
+    if input
+        .thinking_display
+        .as_deref()
+        .is_some_and(|d| !matches!(d, "summarized" | "highlights" | "omitted"))
+    {
+        return Err("Unsupported Claude reasoning display".into());
     }
     Ok(())
 }
@@ -377,6 +388,9 @@ pub fn claude_interactive_start(
     }
     if let Some(effort) = input.effort {
         args.extend(["--effort".into(), effort]);
+    }
+    if let Some(display) = input.thinking_display {
+        args.extend(["--thinking-display".into(), display]);
     }
     if let Some(prompt) = &input.prompt {
         args.push(prompt.text.clone());
@@ -794,8 +808,11 @@ fn save_attachments(
                         | "html"
                         | "css"
                 ));
-        if !image && !text {
-            return Err("Interactive attachments support images and text files".into());
+        // Fork (L-270): Claude Code's Read tool reads PDFs page by page.
+        let pdf =
+            file.kind == "file" && (file.mime_type == "application/pdf" || extension == "pdf");
+        if !image && !text && !pdf {
+            return Err("Interactive attachments support images, PDFs and text files".into());
         }
         let bytes = if let Some(data) = file.data {
             if data.len() > 45 * 1024 * 1024 {
@@ -822,6 +839,9 @@ fn save_attachments(
         if text && std::str::from_utf8(&bytes).is_err() {
             return Err("Text attachments must be UTF-8".into());
         }
+        if pdf && !bytes.starts_with(b"%PDF-") {
+            return Err(format!("{} is not a PDF", file.name));
+        }
         let ext = if image {
             match file.mime_type.as_str() {
                 "image/png" => "png",
@@ -829,6 +849,8 @@ fn save_attachments(
                 "image/gif" => "gif",
                 _ => "webp",
             }
+        } else if pdf {
+            "pdf"
         } else {
             "txt"
         };
@@ -1405,6 +1427,32 @@ mod tests {
         let mut missing = file();
         missing.data = None;
         assert!(save_attachments(&dir, vec![missing]).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn attachments_keep_pdfs_and_reject_other_binaries() {
+        let dir =
+            std::env::temp_dir().join(format!("monocode-attachments-{}", uuid::Uuid::new_v4()));
+        let pdf = |data: &str| InteractiveAttachment {
+            name: "spec.pdf".into(),
+            mime_type: "application/pdf".into(),
+            kind: "file".into(),
+            data: Some(data.into()),
+            path: None,
+            copy_from_path: None,
+        };
+        // "%PDF-1.7"
+        let paths = save_attachments(&dir, vec![pdf("JVBERi0xLjc=")]).unwrap();
+        assert!(paths[0].ends_with(".pdf"));
+        assert_eq!(std::fs::read(&paths[0]).unwrap(), b"%PDF-1.7");
+        // "hello" sent as a PDF
+        assert!(save_attachments(&dir, vec![pdf("aGVsbG8=")]).is_err());
+        let mut docx = pdf("UEsDBA==");
+        docx.name = "notes.docx".into();
+        docx.mime_type =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document".into();
+        assert!(save_attachments(&dir, vec![docx]).is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

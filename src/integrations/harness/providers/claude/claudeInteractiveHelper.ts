@@ -1,6 +1,8 @@
+import type { Attachment } from "../../../../features/sessions/model/session";
 import { preferredModelId } from "../../../../features/sessions/model/models";
 import type { HarnessEvent } from "../../core/types";
 import {
+  allowInteractiveAttachmentReads,
   forgetInteractiveClaude,
   sendInteractiveClaude,
   stopInteractiveClaude,
@@ -11,7 +13,8 @@ import {
  * native terminal (the Interactive mode chats use) instead of the structured
  * child. Each call is a fresh Claude conversation, closed afterwards, so the
  * caller's prompt carries all the context. A tool request ends the call: a
- * helper should only answer.
+ * helper should only answer. The one exception (L-271): Claude may Read the
+ * attachments sent with this call, which is how it sees an image.
  */
 export async function runInteractiveClaudeHelper(input: {
   cwd: string;
@@ -23,6 +26,8 @@ export async function runInteractiveClaudeHelper(input: {
   signal?: AbortSignal;
   /** Names the hidden session in diagnostics, e.g. "whiteboard". */
   purpose: string;
+  /** Saved to disk and listed as paths for Claude to Read (L-271). */
+  attachments?: Attachment[];
 }): Promise<string> {
   input.signal?.throwIfAborted();
   const sessionId = `${input.purpose}-helper-${crypto.randomUUID()}`;
@@ -47,6 +52,7 @@ export async function runInteractiveClaudeHelper(input: {
     }
   };
   const onAbort = () => stop?.();
+  if (input.attachments?.length) allowInteractiveAttachmentReads(sessionId, true);
   input.signal?.addEventListener("abort", onAbort, { once: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -60,6 +66,7 @@ export async function runInteractiveClaudeHelper(input: {
         runtimeMode: "supervised",
         diagnostic: { purpose: `${input.purpose}-helper` },
         text: input.prompt,
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         onEvent,
       }),
       stopped,
@@ -76,6 +83,7 @@ export async function runInteractiveClaudeHelper(input: {
   } finally {
     clearTimeout(timer);
     input.signal?.removeEventListener("abort", onAbort);
+    allowInteractiveAttachmentReads(sessionId, false);
     await forgetInteractiveClaude(sessionId).catch(() => undefined);
   }
 }

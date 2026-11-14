@@ -324,9 +324,9 @@ export function WhiteboardChat({
     if (!message || busy || !loaded) return;
     if (!runTarget) return;
     const pictures = images;
-    if (pictures.length && !whiteboardSeesImages(runTarget, interactive)) {
+    if (pictures.length && !whiteboardSeesImages(runTarget)) {
       setAttachError(
-        `${interactive ? "Claude's Interactive CLI mode" : HARNESS_TITLE[runTarget.provider]} can't see images here. Switch to Claude (Structured), Codex or OpenCode, or remove the image.`,
+        `${HARNESS_TITLE[runTarget.provider]} can't see images here. Switch to Claude (Structured), Codex or OpenCode, or remove the image.`,
       );
       return;
     }

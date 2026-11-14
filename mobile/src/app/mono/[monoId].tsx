@@ -38,6 +38,7 @@ import {
 } from "@/features/sessions/SessionScreen";
 import { useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { Transcript } from "@/features/sessions/Transcript";
+import { TranscriptConversation } from "@/features/sessions/transcriptConversation";
 import { NativeTranscript } from "@/features/sessions/NativeTranscript";
 import type { TranscriptAgent } from "@/features/sessions/TranscriptTurn";
 import { ReplyToolsProvider } from "@/features/tools/ReplyTools";
@@ -357,7 +358,10 @@ function MonoTranscript({
   return turns.length > 0 ? (
     // Fork (Hari, L-236): replies can go to the desktop's Notes and Tasks.
     <ReplyToolsProvider>
-      <Transcript turns={turns} agent={agent} hasOlder={hasOlder} loadOlder={loadOlder} />
+      {/* Fork (Hari, L-268): for the thumbnails of images sent to the Mono. */}
+      <TranscriptConversation value={conversationId}>
+        <Transcript turns={turns} agent={agent} hasOlder={hasOlder} loadOlder={loadOlder} />
+      </TranscriptConversation>
     </ReplyToolsProvider>
   ) : (
     <EmptySession mono={agent} />

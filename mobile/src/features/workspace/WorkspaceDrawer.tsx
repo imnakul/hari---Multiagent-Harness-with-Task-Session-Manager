@@ -22,6 +22,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useConnection, useMonoTools } from "@/features/connection/ConnectionProvider";
+import { shownFeedItems, useFeed } from "@/features/notifications/notificationFeed";
+import { useFeedPreferences } from "@/features/settings/notificationFeed";
 import { isRunning } from "@/features/liveUpdates/liveCards";
 import { PixelMascot } from "@/features/mascots/PixelMascot";
 import { ProjectMascot } from "@/features/mascots/ProjectMascot";
@@ -86,6 +88,14 @@ export function WorkspaceDrawer() {
   const styles = useStyles();
   const { projects, monos: roster } = useWorkspace();
   const { pairing, catalog } = useConnection();
+  // Fork (Hari, L-275): shown once the desktop answers; older ones can't.
+  const feed = useFeed();
+  const [{ seenOnDesktop }] = useFeedPreferences();
+  const feedShown = feed.phase !== "unsupported" && feed.phase !== "loading";
+  const feedUnread =
+    feed.phase === "ready"
+      ? shownFeedItems(feed.items, seenOnDesktop).filter((item) => !item.read).length
+      : 0;
   const tools = useMonoTools();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -177,7 +187,9 @@ export function WorkspaceDrawer() {
   // Settings rises over the open drawer, which is still there once it's shut.
   // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,
   // squeezed beside the drawer, so the drawer shuts first.
-  const openModal = (path: "/settings" | "/mono-new" | "/tasks" | "/notes") => {
+  const openModal = (
+    path: "/settings" | "/mono-new" | "/tasks" | "/notes" | "/notifications",
+  ) => {
     if (isModalRoute(pathname)) return;
     if (Platform.OS === "android") drawer.closeThen(() => router.push(path));
     else router.push(path);
@@ -216,10 +228,23 @@ export function WorkspaceDrawer() {
           keyboardDismissMode="on-drag"
         >
           {/* Fork (Hari, L-236): the desktop's Tasks and Notes, over the lists. */}
-          {catalog.phoneTools && !needle ? (
+          {(catalog.phoneTools || feedShown) && !needle ? (
             <View style={[styles.list, styles.toolList]}>
-              <ToolRow icon="tasks" label="Tasks" onPress={() => openModal("/tasks")} />
-              <ToolRow icon="note" label="Notes" onPress={() => openModal("/notes")} />
+              {/* Fork (Hari, L-275): the desktop bell's history. */}
+              {feedShown ? (
+                <ToolRow
+                  icon="notifications"
+                  label="Notifications"
+                  badge={feedUnread}
+                  onPress={() => openModal("/notifications")}
+                />
+              ) : null}
+              {catalog.phoneTools ? (
+                <>
+                  <ToolRow icon="tasks" label="Tasks" onPress={() => openModal("/tasks")} />
+                  <ToolRow icon="note" label="Notes" onPress={() => openModal("/notes")} />
+                </>
+              ) : null}
             </View>
           ) : null}
           {listedMonos.length ? (
@@ -606,13 +631,24 @@ const ProjectRow = memo(function ProjectRow({
 });
 
 /** A row that opens one of the desktop's tools in its own sheet. */
-function ToolRow({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+function ToolRow({
+  icon,
+  label,
+  onPress,
+  badge = 0,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  /** Fork (L-275): a count shown at the end (unread notifications). */
+  badge?: number;
+}) {
   const styles = useStyles();
   const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
       onPress={onPress}
       style={({ pressed }) => [styles.toolRow, pressed && styles.rowActive]}
     >
@@ -622,11 +658,31 @@ function ToolRow({ icon, label, onPress }: { icon: IconName; label: string; onPr
       <Text style={[styles.rowLabel, styles.rowText]} numberOfLines={1}>
         {label}
       </Text>
+      {badge ? (
+        <View style={styles.toolBadge}>
+          <Text style={styles.toolBadgeText}>{badge > 99 ? "99+" : badge}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
 
 const useStyles = themedStyles((colors) => ({
+  toolBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  toolBadgeText: {
+    color: colors.onAccent,
+    fontSize: 12,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
   toolList: {
     marginBottom: 18,
   },

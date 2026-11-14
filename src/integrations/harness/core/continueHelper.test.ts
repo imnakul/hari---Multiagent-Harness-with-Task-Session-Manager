@@ -31,17 +31,35 @@ const CARD = "## Goal\nFix the login bug for every user.\n\n## Next step\nRun th
 const all = () => true;
 
 describe("continueHelperTargets (L-189)", () => {
-  it("puts the chosen helper first, then Settings, source, target and the rest", () => {
+  // L-269 changed this: "Choose a model" no longer falls through to unchosen providers.
+  it("with Choose a model, runs only the chosen helper and the AI helper's main and backup", () => {
     const targets = continueHelperTargets({
       choice: choice({ helper: { provider: "antigravity-cli", model: "g" } }),
       sourceHarness: "claude",
-      settings: { mode: "custom", primary: { provider: "opencode" }, fallback: null },
+      settings: {
+        mode: "custom",
+        primary: { provider: "command-code", model: "meta/muse-ember" },
+        fallback: { provider: "opencode" },
+      },
     });
     expect(targets.map((target) => target.provider)).toEqual([
       "antigravity-cli",
+      "command-code",
       "opencode",
+    ]);
+  });
+
+  it("with Automatic, puts the chosen helper first, then source, target and the rest", () => {
+    const targets = continueHelperTargets({
+      choice: choice({ helper: { provider: "antigravity-cli", model: "g" } }),
+      sourceHarness: "claude",
+      settings: { mode: "automatic" },
+    });
+    expect(targets.map((target) => target.provider)).toEqual([
+      "antigravity-cli",
       "claude",
       "codex",
+      "opencode",
       "command-code",
     ]);
   });

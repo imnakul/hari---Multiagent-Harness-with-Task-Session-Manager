@@ -592,6 +592,31 @@ export function defaultModelSettings(
   return settings;
 }
 
+/**
+ * Fork (L-266): how much of Claude's reasoning an Interactive chat shows,
+ * as Claude Code's `--thinking-display`. Chat-level like `claudeExecution`;
+ * the full thinking is billed the same whichever is shown.
+ */
+export const CLAUDE_THINKING_DISPLAYS = [
+  { value: "omitted", label: "Off" },
+  { value: "highlights", label: "Highlights" },
+  { value: "summarized", label: "Summaries" },
+] as const;
+
+export type ClaudeThinkingDisplay = (typeof CLAUDE_THINKING_DISPLAYS)[number]["value"];
+
+function isClaudeThinkingDisplay(value: unknown): value is ClaudeThinkingDisplay {
+  return CLAUDE_THINKING_DISPLAYS.some((display) => display.value === value);
+}
+
+/** The chat's reasoning display; Summaries unless the chat picked another. */
+export function claudeThinkingDisplay(
+  settings: Record<string, string> | undefined,
+): ClaudeThinkingDisplay {
+  const value = settings?.claudeThinkingDisplay;
+  return isClaudeThinkingDisplay(value) ? value : "summarized";
+}
+
 export function mergeModelSettings(
   model: AgentModel,
   current?: Record<string, string>,
@@ -601,6 +626,8 @@ export function mergeModelSettings(
   if (!current) return next;
   if (model.harness === "claude" && (current.claudeExecution === "interactive" || current.claudeExecution === "structured"))
     next.claudeExecution = current.claudeExecution;
+  if (model.harness === "claude" && isClaudeThinkingDisplay(current.claudeThinkingDisplay))
+    next.claudeThinkingDisplay = current.claudeThinkingDisplay;
   if (model.harness === "antigravity-cli" && current.antigravityAgent !== undefined)
     next.antigravityAgent = current.antigravityAgent;
   for (const setting of model.settings ?? []) {

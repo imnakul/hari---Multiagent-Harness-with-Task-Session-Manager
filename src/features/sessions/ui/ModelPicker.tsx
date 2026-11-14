@@ -19,6 +19,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  CLAUDE_THINKING_DISPLAYS,
+  claudeThinkingDisplay,
   coerceModelPickerTab,
   getModelSnapshot,
   getPickerVisibilitySnapshot,
@@ -826,6 +828,41 @@ export function ModelPicker({
             </button>
           ))}
         </div>
+        {values.claudeExecution === "interactive" ? (
+          <div className="mt-2">
+            <div
+              className="px-2 pb-1 text-[11px] text-content/50"
+              title="Claude's thinking is billed the same either way. The new choice applies when Claude next starts: your next message, once it is idle."
+            >
+              Reasoning shown
+            </div>
+            <div
+              role="group"
+              aria-label="Reasoning shown"
+              className="flex gap-1"
+            >
+              {CLAUDE_THINKING_DISPLAYS.map((display) => {
+                const selected = claudeThinkingDisplay(values) === display.value;
+                return (
+                  <button
+                    key={display.value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() =>
+                      onSettingsChange({
+                        ...values,
+                        claudeThinkingDisplay: display.value,
+                      })
+                    }
+                    className={`flex-1 rounded-md px-2 py-1.5 text-[12px] ${selected ? "bg-selection text-content" : "text-content/60 hover:bg-content/5"}`}
+                  >
+                    {display.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         {values.claudeExecution === "interactive" &&
         (claudeExecution.onOpenTerminal || claudeExecution.onOpenDiagnostics) ? (
           <button

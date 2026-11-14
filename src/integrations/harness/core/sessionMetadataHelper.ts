@@ -67,7 +67,14 @@ function targetKey(target: AiHelperTarget): string {
   return `${target.provider}:${target.accountId ?? ""}:${target.model ?? ""}`;
 }
 
-/** The chosen model, then the AI helper settings, the chat's provider and the rest. */
+/**
+ * The chosen model, then the AI helper settings. With the AI helper on
+ * Automatic, the chat's provider and every other helper provider follow.
+ *
+ * Fork (L-269): with "Choose a model", only models the owner picked run, so a
+ * failing pick never falls through to an unchosen provider (Claude Code,
+ * Gemini) and spends its quota.
+ */
 export function sessionMetadataHelperTargets(input: {
   settings: Pick<SessionMetadataAiSettings, "helper">;
   aiHelper: AiHelperSettings;
@@ -78,9 +85,10 @@ export function sessionMetadataHelperTargets(input: {
   if (input.aiHelper.mode === "custom") {
     list.push(input.aiHelper.primary);
     if (input.aiHelper.fallback) list.push(input.aiHelper.fallback);
+  } else {
+    for (const id of [input.harness, ...AI_HELPER_PROVIDERS])
+      if (isHelperProvider(id)) list.push({ provider: id });
   }
-  for (const id of [input.harness, ...AI_HELPER_PROVIDERS])
-    if (isHelperProvider(id)) list.push({ provider: id });
   const seen = new Set<string>();
   const providers = new Set<string>();
   return list.filter((target) => {

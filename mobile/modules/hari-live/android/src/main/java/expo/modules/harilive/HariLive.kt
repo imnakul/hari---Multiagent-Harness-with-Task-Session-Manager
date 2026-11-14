@@ -61,11 +61,19 @@ internal object HariLive {
   // posts the cards again on every tick, so they stay while it runs; if the
   // app dies, they go within this time instead of staying for good.
   private const val CARD_TIMEOUT_MS = 2 * 60_000L
+  // Fork (Hari, L-275): the quiet notification the service shows while it
+  // only watches for the computer's notifications (no session card).
+  const val WATCH_CHANNEL = "hari-watch"
+  private const val WATCH_ID = 7299
+  private const val WATCH_URL = "monocode://notifications"
 
   private val main = Handler(Looper.getMainLooper())
 
   // Only touched on the main thread.
   var cards: List<LiveCard> = emptyList()
+    private set
+  /** Keep the service running with no card, so the app can check the computer. */
+  var watching = false
     private set
   private var posted: Set<Int> = emptySet()
   var service: HariLiveService? = null
@@ -93,6 +101,22 @@ internal object HariLive {
     }
   }
 
+  /** Fork (L-275): keeps the service running with no card (on), or lets it stop (off). */
+  fun setWatching(context: Context, on: Boolean) {
+    val app = context.applicationContext
+    main.post {
+      // Run even when unchanged: the app calls this as it opens, which
+      // starts the service again if Android stopped it.
+      watching = on
+      try {
+        render(app)
+      } catch (error: Exception) {
+        Log.w(TAG, "Could not change background watching", error)
+        if (cards.isEmpty()) service?.finish()
+      }
+    }
+  }
+
   /** Posts the same cards again, which renews their timeout (each service tick). */
   fun renew(context: Context) {
     val app = context.applicationContext
@@ -111,12 +135,16 @@ internal object HariLive {
     Log.e(TAG, "Live Update failed; turning it off for this run", error)
     failed = true
     cards = emptyList()
+    clearAll(context)
     try {
-      service?.finish()
+      // Fork (L-275): watching goes on without the cards.
+      if (watching) render(context) else service?.finish()
     } catch (stop: Exception) {
       Log.w(TAG, "Could not stop the Live Update service", stop)
+      try {
+        service?.finish()
+      } catch (_: Exception) {}
     }
-    clearAll(context)
     dispatch(mapOf("action" to "failed", "message" to (error.message ?: error.javaClass.simpleName)))
   }
 
@@ -185,12 +213,24 @@ internal object HariLive {
     val shown = cards.map { id(it.key) to build(context, it) }
     val running = service
     if (shown.isEmpty()) {
-      running?.finish()
+      if (!watching) {
+        running?.finish()
+        manager.cancel(WATCH_ID)
+      } else if (running != null) {
+        // Fork (L-275): no session runs, but the app still checks the
+        // computer. Swapped first: Android won't cancel the service's own
+        // notification, so the last card goes once it no longer is.
+        running.foreground(WATCH_ID, watchNotification(context, manager))
+      } else if (!starting) {
+        start(context)
+      }
       // Every card on the channel, including any a killed run left behind.
       clearAll(context)
       return
     }
     if (running != null) running.foreground(shown[0].first, shown[0].second)
+    // A card is the service's notification now; the quiet one goes.
+    manager.cancel(WATCH_ID)
     shown.forEach { (id, notification) ->
       if (running == null || id != shown[0].first) manager.notify(id, notification)
     }
@@ -238,6 +278,35 @@ internal object HariLive {
     channel.enableVibration(false)
     channel.setShowBadge(false)
     manager.createNotificationChannel(channel)
+  }
+
+  /**
+   * Fork (L-275): the service's notification while it only watches. Lowest
+   * importance (folded at the bottom of the shade, no icon, sound or badge);
+   * tapping it opens the Notifications screen.
+   */
+  private fun watchNotification(context: Context, manager: NotificationManager): Notification {
+    if (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(WATCH_CHANNEL) == null) {
+      val channel = NotificationChannel(WATCH_CHANNEL, "Background watching", NotificationManager.IMPORTANCE_MIN)
+      channel.description = "Shown while Hari checks your computer for new notifications"
+      channel.setSound(null, null)
+      channel.enableVibration(false)
+      channel.setShowBadge(false)
+      manager.createNotificationChannel(channel)
+    }
+    val builder =
+      if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, WATCH_CHANNEL)
+      else @Suppress("DEPRECATION") Notification.Builder(context).setPriority(Notification.PRIORITY_MIN)
+    return builder
+      .setSmallIcon(R.drawable.hari_live_icon)
+      .setContentTitle("Watching your computer")
+      .setContentText("New notifications from your computer show here")
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setShowWhen(false)
+      .setCategory(Notification.CATEGORY_SERVICE)
+      .setContentIntent(openIntent(context, WATCH_URL, "watch"))
+      .build()
   }
 
   fun build(context: Context, card: LiveCard): Notification {

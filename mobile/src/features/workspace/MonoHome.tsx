@@ -26,6 +26,7 @@ import { themedStyles, useColors, useScheme } from "@/ui/theme";
 
 import { markMonoSeen, markMonoUnread, useUnreadMonos } from "./monoSeen";
 import { onMonoCreated } from "./newMono";
+import { useFeed } from "@/features/notifications/notificationFeed";
 import type { Mono } from "./types";
 import { oneLine, when } from "./WorkspaceDrawer";
 import { useWorkspace } from "./WorkspaceProvider";
@@ -60,6 +61,8 @@ export function MonoHome() {
   const { monos: roster } = useWorkspace();
   const { pairing, command, refresh, selection, select } = useConnection();
   const tools = useMonoTools();
+  const feedPhase = useFeed().phase;
+  const feedShown = feedPhase !== "unsupported" && feedPhase !== "loading";
   const [query, setQuery] = useState("");
   const [listReady, setListReady] = useState(false);
   // iOS's edge effect, a band with a hard line, off under the header once
@@ -316,6 +319,15 @@ export function MonoHome() {
             onPress={() => router.push("/settings")}
             size={FOOTER_HEIGHT}
           />
+          {/* Fork (Hari, L-275): the desktop bell's history. */}
+          {feedShown ? (
+            <CircleButton
+              icon="notifications"
+              label="Notifications"
+              onPress={() => router.push("/notifications")}
+              size={FOOTER_HEIGHT}
+            />
+          ) : null}
           <LiquidView
             borderRadius={FOOTER_HEIGHT / 2}
             style={styles.searchFrame}

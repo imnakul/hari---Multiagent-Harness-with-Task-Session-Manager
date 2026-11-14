@@ -9,6 +9,7 @@ use super::{discover, read_json};
 
 #[tauri::command]
 pub async fn mcp_set_enabled(
+    app: tauri::AppHandle,
     cwd: String,
     provider: String,
     scope: String,
@@ -16,6 +17,7 @@ pub async fn mcp_set_enabled(
     name: String,
     enabled: bool,
 ) -> Result<(), String> {
+    let claude_accounts = super::claude_account_configs(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let home = crate::dirs_home().ok_or("Home directory not found")?;
         let project = crate::fs::expand_home(&cwd);
@@ -26,6 +28,7 @@ pub async fn mcp_set_enabled(
             &project,
             codex_home.as_deref(),
             opencode_config.as_deref(),
+            &claude_accounts,
             &provider,
             &scope,
             &config_path,
@@ -43,6 +46,7 @@ fn set_enabled(
     project: &Path,
     codex_home: Option<&Path>,
     opencode_config: Option<&Path>,
+    claude_accounts: &[PathBuf],
     provider: &str,
     scope: &str,
     config_path: &str,
@@ -66,6 +70,7 @@ fn set_enabled(
         codex_home,
         &super::claude_desktop_config(home),
         opencode_config,
+        claude_accounts,
     );
     let row = rows
         .iter()
@@ -79,8 +84,10 @@ fn set_enabled(
     // Resolve links before replacing a file, so a config symlink remains intact.
     let selected = std::fs::canonicalize(&row.config_path).map_err(|error| error.to_string())?;
     if provider == "claude" {
-        let path = home.join(".claude.json");
-        update_file(&path, |raw| {
+        // Fork (L-272): a MonoCode account's row toggles in that account's file.
+        let home_config = home.join(".claude.json");
+        let path = super::claude_disable_source(&home_config, claude_accounts, &row.config_path);
+        update_file(path, |raw| {
             // Recheck the selected server after taking the write lock.
             let config = read_json(&selected).ok_or("MCP config is no longer readable")?;
             let configured = match scope {

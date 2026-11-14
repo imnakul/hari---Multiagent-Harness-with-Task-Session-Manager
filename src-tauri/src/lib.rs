@@ -4,6 +4,7 @@ mod account_identity;
 mod activity;
 mod antigravity_cli;
 mod artifacts;
+mod attachment_storage;
 mod automations;
 mod browser_servers;
 mod browser_view;
@@ -42,6 +43,8 @@ mod menu;
 mod mobile_access;
 mod mobile_router;
 mod mobile_tools;
+// Fork (Hari, L-275): the bell's history for the phone.
+mod mobile_notifications;
 mod mono;
 #[cfg(target_os = "macos")]
 mod mono_chat;
@@ -450,6 +453,7 @@ pub fn run() {
             mobile_access::mobile_revoke,
             mobile_access::mobile_publish,
             mobile_access::mobile_reply,
+            mobile_notifications::mobile_notifications_publish,
             mobile_access::mobile_push,
             remote::remote_machines,
             remote::remote_connect,
@@ -644,6 +648,8 @@ pub fn run() {
             harness::harness_resolve_claude,
             harness::claude_mcp_list,
             mcp::mcp_discover,
+            attachment_storage::attachment_storage_scan,
+            attachment_storage::attachment_storage_delete,
             mcp::controls::mcp_set_enabled,
             mcp::mcp_add,
             harness::claude_mcp_add,

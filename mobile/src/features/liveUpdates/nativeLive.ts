@@ -17,6 +17,7 @@ export type LiveEvent =
 
 type HariLiveModule = {
   update(cards: string): void;
+  setWatching(on: boolean): void;
   supported(): boolean;
   canPostPromoted(): boolean;
   openPromotedSettings(): boolean;
@@ -53,6 +54,20 @@ export function showLiveCards(cards: LiveCard[], color?: string) {
   } catch (error) {
     // Called from an effect: a throw here would close the app.
     console.warn("Live Update: could not update the cards", error);
+  }
+}
+
+/**
+ * Fork (Hari, L-275): keeps the service (and its 15-second tick) running with
+ * no session card, so the app can check the computer for notifications while
+ * it is out of view. Must be turned on while the app is open: Android won't
+ * start the service from the background.
+ */
+export function setLiveWatching(on: boolean) {
+  try {
+    native?.setWatching(on);
+  } catch (error) {
+    console.warn("Background watching: could not change it", error);
   }
 }
 

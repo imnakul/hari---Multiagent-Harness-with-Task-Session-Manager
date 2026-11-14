@@ -20,16 +20,34 @@ const settings: SessionMetadataAiSettings = { helper: null, instructions: "", au
 const base = { blocks, cwd: "/repo", harness: "claude" as const, settings, isAvailable: () => true };
 
 describe("sessionMetadataHelperTargets (L-190)", () => {
-  it("puts the chosen model first, then AI helper settings, the chat's provider and the rest", () => {
+  // L-269 changed this: "Choose a model" no longer falls through to unchosen providers.
+  it("with Choose a model, runs only the chosen model and the AI helper's main and backup", () => {
     const targets = sessionMetadataHelperTargets({
       settings: { ...settings, helper: { provider: "codex", model: "m" } },
-      aiHelper: { mode: "custom", primary: { provider: "opencode" }, fallback: null },
+      aiHelper: {
+        mode: "custom",
+        primary: { provider: "command-code", model: "meta/muse-ember" },
+        fallback: { provider: "opencode", model: "big-pickle" },
+      },
       harness: "claude",
     });
     expect(targets).toEqual([
       { provider: "codex", model: "m" },
-      { provider: "opencode" },
+      { provider: "command-code", model: "meta/muse-ember" },
+      { provider: "opencode", model: "big-pickle" },
+    ]);
+  });
+
+  it("with Automatic, puts the chosen model first, then the chat's provider and the rest", () => {
+    const targets = sessionMetadataHelperTargets({
+      settings: { ...settings, helper: { provider: "codex", model: "m" } },
+      aiHelper: { mode: "automatic" },
+      harness: "claude",
+    });
+    expect(targets).toEqual([
+      { provider: "codex", model: "m" },
       { provider: "claude" },
+      { provider: "opencode" },
       { provider: "antigravity-cli" },
       { provider: "command-code" },
     ]);

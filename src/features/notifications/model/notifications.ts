@@ -222,8 +222,8 @@ function clip(text: string): string {
 }
 
 /**
- * Adds the event to the title-bar notification history (L-91) unless the user
- * is looking at that chat right now. Independent of the OS banner setting.
+ * Adds the event to the title-bar notification history (L-91). One the user
+ * is looking at right now is kept for the phone only (L-275). Independent of the OS banner setting.
  * One entry per chat reply and per pending request, so repeats replace it.
  */
 export function recordSessionNotification(
@@ -231,8 +231,10 @@ export function recordSessionNotification(
   event: NotificationEvent,
   sessionVisible: boolean,
 ): void {
-  if (session.inboxAsk || (windowFocused && sessionVisible)) return;
+  if (session.inboxAsk) return;
   const { subtitle, body } = notificationText(session, event);
+  // Fork (Hari, L-275): kept for the phone, hidden from the bell.
+  const seenOnDesktop = windowFocused && sessionVisible;
   recordCenterNotification({
     key:
       event === "finished"
@@ -245,6 +247,7 @@ export function recordSessionNotification(
     harness: session.harness,
     model: session.model,
     sessionId: session.id,
+    ...(seenOnDesktop ? { seenOnDesktop } : {}),
   });
 }
 

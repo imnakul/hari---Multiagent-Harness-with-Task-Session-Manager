@@ -3,8 +3,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   MAX_CENTER_NOTIFICATIONS,
   centerNotificationsSnapshot,
+  desktopCenterNotifications,
   dismissAllCenterNotifications,
   dismissCenterNotification,
+  dismissCenterNotifications,
   markCenterNotificationsRead,
   recordAutomationNotification,
   recordCenterNotification,
@@ -81,4 +83,22 @@ it("ignores malformed stored entries", () => {
   expect(centerNotificationsSnapshot().map((item) => item.id)).toEqual(["ok"]);
   localStorage.setItem("monocode.notificationCenter.v1", "{not json");
   expect(centerNotificationsSnapshot()).toEqual([]);
+});
+
+it("dismisses several, marks only the named read, and hides phone-only entries from the bell (L-275)", () => {
+  recordCenterNotification({ ...base, key: "a", at: 1 });
+  recordCenterNotification({ ...base, key: "b", at: 2, seenOnDesktop: true });
+  recordCenterNotification({ ...base, key: "c", at: 3 });
+  markCenterNotificationsRead(["b"]);
+  expect(centerNotificationsSnapshot().map((item) => [item.id, item.read])).toEqual([
+    ["c", false],
+    ["b", true],
+    ["a", false],
+  ]);
+  expect(desktopCenterNotifications(centerNotificationsSnapshot()).map((item) => item.id)).toEqual(["c", "a"]);
+  dismissCenterNotifications(["a", "missing"]);
+  expect(centerNotificationsSnapshot().map((item) => item.id)).toEqual(["c", "b"]);
+  // A later event for the same chat, while away, shows on the desktop again.
+  recordCenterNotification({ ...base, key: "b", at: 4 });
+  expect(desktopCenterNotifications(centerNotificationsSnapshot()).map((item) => item.id)).toEqual(["b", "c"]);
 });

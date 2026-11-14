@@ -31,6 +31,14 @@ class HariLiveModule : Module() {
       HariLive.update(context, HariLive.parse(cards))
     }
 
+    /**
+     * Fork (L-275): keeps the service running with no card, so the app can
+     * check the computer for notifications while it's out of view.
+     */
+    Function("setWatching") { on: Boolean ->
+      HariLive.setWatching(context, on)
+    }
+
     /** Whether this Android draws Live Updates at all (Android 16 and later). */
     Function("supported") { Build.VERSION.SDK_INT >= 36 }
 

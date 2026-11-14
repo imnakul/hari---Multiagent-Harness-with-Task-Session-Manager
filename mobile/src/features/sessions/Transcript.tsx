@@ -1,5 +1,6 @@
 import { useIsFocused } from "expo-router";
 import {
+  use,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -46,6 +47,7 @@ import {
   TranscriptTurn,
   type TranscriptAgent,
 } from "./TranscriptTurn";
+import { TranscriptConversation } from "./transcriptConversation";
 
 const GAP = 4;
 /** How far from the end, past any blank space, before the scroll-to-end button shows. */
@@ -101,6 +103,8 @@ export function Transcript({
   loadOlder?: () => Promise<void>;
 }) {
   const colors = useColors();
+  // A Mono's screen names its conversation here without the error sheet's actions.
+  const outerConversation = use(TranscriptConversation);
   const { top, bottom } = useSessionLayout();
   // On a pushed screen the turns are drawn once the push starts, or the
   // slide waits for them to be laid out; elsewhere a frame after the list
@@ -396,6 +400,7 @@ export function Transcript({
 
   return (
     <TranscriptOpened value={opened}>
+      <TranscriptConversation value={conversationId ?? outerConversation}>
       {selectedError ? (
         <SessionErrorSheet
           message={selectedError.text}
@@ -477,6 +482,7 @@ export function Transcript({
           list stays hidden until it has placed them; without this the screen
           showed only the wallpaper meanwhile, like an empty chat. */}
       {allTurns.length > 0 && !settled ? <TranscriptLoading since={mountedAt} /> : null}
+      </TranscriptConversation>
     </TranscriptOpened>
   );
 }

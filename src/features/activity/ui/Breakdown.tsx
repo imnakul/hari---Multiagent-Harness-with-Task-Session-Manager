@@ -1,5 +1,5 @@
-import type { ReactElement, ReactNode } from "react";
-import { AppWindow, Folder, GitBranch, Globe } from "../../../shared/ui/icons";
+import { useState, type ReactElement, type ReactNode } from "react";
+import { AppWindow, ChevronRight, Folder, GitBranch, Globe } from "../../../shared/ui/icons";
 import { formatDuration, type AwSummary, type ProjectSummary } from "../model/activity";
 
 function Section({
@@ -131,40 +131,73 @@ export function SitesBreakdown({ aw }: { aw: AwSummary | null }): ReactElement |
       ) : (
         <ul className="flex flex-col gap-0.5">
           {aw.sites.map((site) => (
-            <li
-              key={site.domain}
-              className="motion-safe:animate-[zen-step-in_220ms_ease-out_both] rounded-md px-2 py-1.5 hover:bg-content/[0.04]"
-            >
-              <div className="flex items-center gap-2 text-[12px]">
-                <Globe className="size-3.5 shrink-0 text-content/40" strokeWidth={1.75} />
-                <span className="min-w-0 flex-1 truncate text-content/85">{site.domain}</span>
-                <span className="shrink-0 tabular-nums text-content/55">
-                  {formatDuration(site.ms)}
-                </span>
-              </div>
-              <div className="mt-1.5 pl-[22px]">
-                <Bar ratio={site.ms / max} color="bg-mention" />
-              </div>
-              {site.titles.length > 0 ? (
-                <ul className="mt-1 flex flex-col pl-[22px]">
-                  {site.titles.map((tab) => (
-                    <li
-                      key={tab.title}
-                      title={tab.title}
-                      className="flex items-center gap-2 text-[11px] text-content/40"
-                    >
-                      <span className="min-w-0 flex-1 truncate">{tab.title}</span>
-                      <span className="shrink-0 tabular-nums text-content/35">
-                        {formatDuration(tab.ms)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
+            <SiteRow key={site.domain} site={site} max={max} />
           ))}
         </ul>
       )}
     </Section>
+  );
+}
+
+type AwSite = AwSummary["sites"][number];
+
+/**
+ * One website. Its tab titles start folded (fork, L-274) so the list stays a
+ * short ranking of sites; the row opens them.
+ */
+function SiteRow({ site, max }: { site: AwSite; max: number }): ReactElement {
+  const [open, setOpen] = useState(false);
+  const hasTabs = site.titles.length > 0;
+  const summary = (
+    <>
+      <div className="flex items-center gap-2 text-[12px]">
+        <Globe className="size-3.5 shrink-0 text-content/40" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 truncate text-content/85">{site.domain}</span>
+        {hasTabs ? (
+          <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-content/35">
+            {site.titles.length} {site.titles.length === 1 ? "tab" : "tabs"}
+            <ChevronRight
+              aria-hidden
+              className={`size-3 transition-transform duration-150 ease-out ${open ? "rotate-90" : ""}`}
+              strokeWidth={1.75}
+            />
+          </span>
+        ) : null}
+        <span className="shrink-0 tabular-nums text-content/55">{formatDuration(site.ms)}</span>
+      </div>
+      <div className="mt-1.5 pl-[22px]">
+        <Bar ratio={site.ms / max} color="bg-mention" />
+      </div>
+    </>
+  );
+  return (
+    <li className="motion-safe:animate-[zen-step-in_220ms_ease-out_both] rounded-md hover:bg-content/[0.04]">
+      {hasTabs ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="block w-full rounded-md px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          {summary}
+        </button>
+      ) : (
+        <div className="px-2 py-1.5">{summary}</div>
+      )}
+      {hasTabs && open ? (
+        <ul className="flex flex-col px-2 pb-1.5 pl-[30px]">
+          {site.titles.map((tab) => (
+            <li
+              key={tab.title}
+              title={tab.title}
+              className="flex items-center gap-2 text-[11px] text-content/40"
+            >
+              <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+              <span className="shrink-0 tabular-nums text-content/35">{formatDuration(tab.ms)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
   );
 }

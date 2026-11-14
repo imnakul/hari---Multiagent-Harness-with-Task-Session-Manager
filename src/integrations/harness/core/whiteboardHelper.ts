@@ -67,12 +67,12 @@ export function whiteboardTargetLabel(target: AiHelperTarget): string {
 }
 
 /**
- * Fork (L-221): helpers that take images inside the prompt itself. The rest
- * (Antigravity, Claude's Interactive CLI) could only open a saved file with a
- * tool, and Whiteboard helpers run without tools.
+ * Fork (L-221): helpers that take images inside the prompt itself. Antigravity
+ * could only open a saved file with a tool, and Whiteboard helpers run without
+ * tools. Claude's Interactive CLI may Read its own saved attachments (L-271).
  */
-export function whiteboardSeesImages(target: AiHelperTarget, interactive = false): boolean {
-  if (target.provider === "claude") return !interactive;
+export function whiteboardSeesImages(target: AiHelperTarget): boolean {
+  if (target.provider === "claude") return true;
   return target.provider === "codex" || target.provider === "opencode";
 }
 
@@ -107,6 +107,7 @@ export async function askWhiteboardAgent(input: {
             modelSettings: settings,
             signal: input.signal,
             purpose: "whiteboard",
+            ...(images ? { attachments: images } : {}),
           })
         : runHarnessHelperPrompt(target.provider, {
         cwd: input.cwd,
@@ -121,12 +122,11 @@ export async function askWhiteboardAgent(input: {
   if (!isAvailable(input.target)) {
     return { ok: false, cancelled: false, message: `${name} is not available as an AI helper.` };
   }
-  if (images && !whiteboardSeesImages(input.target, interactive)) {
-    const what = interactive ? "Claude's Interactive CLI mode" : name;
+  if (images && !whiteboardSeesImages(input.target)) {
     return {
       ok: false,
       cancelled: false,
-      message: `${what} can't see images here. Switch to Claude (Structured), Codex or OpenCode, or remove the image.`,
+      message: `${name} can't see images here. Switch to Claude (Structured), Codex or OpenCode, or remove the image.`,
     };
   }
   const result = await runHelperPipeline({

@@ -192,6 +192,8 @@ export type TurnItem =
       reaction?: string;
       emojiOnly?: boolean;
       attachments?: number;
+      /** Fork (Hari, L-268): what `attachments` counts; absent from older desktops. */
+      files?: SentAttachment[];
       compact?: boolean;
     }
   | { type: "text"; id: string; text: string; streaming?: boolean }
@@ -250,6 +252,22 @@ export type TurnMetrics = {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   cacheHitPercent?: number;
+};
+
+/** Fork (Hari, L-268): a file sent with a message, as the desktop lists it. */
+export type SentAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  kind: "image" | "audio" | "file";
+};
+
+/** A sent image from `conversation.attachment`, base64 without a data-URL prefix. */
+export type AttachmentImage = {
+  mimeType: string;
+  data: string;
+  width: number;
+  height: number;
 };
 
 /** Fork (Hari, L-238): the desktop's message queue for a conversation, as its

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import {
   mobileCatalog,
   mobileConversation,
+  mobileConversationAttachment,
   mobileModels,
   mobileProjectChanges,
   mobileProjectWorktrees,
@@ -22,6 +23,7 @@ import {
 } from "../model/mobileWatch";
 import type { RuntimeMode, Session } from "../../sessions/model/session";
 import { mobileAccountUsage } from "../model/mobileAccountUsage";
+import { useMobileNotificationFeed } from "./useMobileNotificationFeed";
 
 type Request = {
   id: string;
@@ -60,6 +62,8 @@ type Options = {
   ) => Promise<unknown>;
 };
 export function useMobileWorkspace(options: Options) {
+  // Fork (Hari, L-275): the bell's history for the phone's notifications.
+  useMobileNotificationFeed();
   const current = useRef(options);
   current.current = options;
   const wake = useRef<(() => void) | null>(null);
@@ -259,6 +263,14 @@ export function useMobileWorkspace(options: Options) {
                 },
               );
               result = { turns: conversation.turns, older };
+            } else if (payload.method === "conversation.attachment") {
+              const conversationId = String(payload.params.conversationId ?? "");
+              result = await mobileConversationAttachment(
+                conversationId,
+                payload.params,
+                current.current.sessions,
+                savedFor.current(conversationId),
+              );
             } else if (payload.method === "models.list") {
               const conversationId =
                 typeof payload.params.conversationId === "string"

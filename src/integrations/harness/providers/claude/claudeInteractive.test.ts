@@ -89,6 +89,7 @@ const {
   interactiveClaudeExternalTurn,
   returnInteractiveClaudeToChat,
   parkInteractiveClaude,
+  allowInteractiveAttachmentReads,
 } = await import("./claudeInteractive");
 
 let events: HarnessEvent[];
@@ -352,6 +353,7 @@ describe("interactive turn delivery", () => {
         resume: false,
         model: "claude-sonnet-5",
         effort: "medium",
+        thinkingDisplay: "summarized",
         permissionMode: "default",
       });
       expect(
@@ -359,6 +361,23 @@ describe("interactive turn delivery", () => {
       ).toBe(true);
     },
   );
+  it("launches Claude with the chat's reasoning display (L-266)", async () => {
+    const turn = sendInteractiveClaude(
+      input({
+        text: "warmup",
+        modelSettings: {
+          claudeExecution: "interactive",
+          effort: "medium",
+          claudeThinkingDisplay: "highlights",
+        },
+      }),
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(mocks.starts[0]).toMatchObject({ thinkingDisplay: "highlights" });
+  });
   it("does not retry an uncertain write, even when another send is attempted", async () => {
     await running();
     mocks.sendError = true;
@@ -881,6 +900,46 @@ describe("interactive turn delivery", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await turn;
   });
+  it("lets a helper read only its own saved attachments without asking (L-271)", async () => {
+    await running();
+    allowInteractiveAttachmentReads("interactive-test", true);
+    const image = {
+      id: "img",
+      kind: "image" as const,
+      name: "board.png",
+      mimeType: "image/png",
+      size: 1,
+      data: "AA==",
+    };
+    const turn = sendInteractiveClaude(input({ attachments: [image] }));
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    hook("PermissionRequest", {
+      tool_name: "Read",
+      tool_use_id: "read-own",
+      tool_input: { file_path: "\\saved\\ONE.txt" },
+    });
+    await settle();
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      "claude_interactive_reply",
+      expect.objectContaining({ behavior: "allow" }),
+    );
+    expect(events.some((event) => event.type === "approval.requested")).toBe(
+      false,
+    );
+    hook("PermissionRequest", {
+      tool_name: "Read",
+      tool_use_id: "read-other",
+      tool_input: { file_path: "/repo/.env" },
+    });
+    await settle();
+    expect(
+      events.filter((event) => event.type === "approval.requested"),
+    ).toHaveLength(1);
+    allowInteractiveAttachmentReads("interactive-test", false);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+  });
   it("answers AskUserQuestion through its PreToolUse hook without terminal text injection", async () => {
     await running();
     const turn = sendInteractiveClaude(input());
@@ -1047,6 +1106,88 @@ describe("interactive observation and parking", () => {
       type: "message.delta",
       text: "Reply after compact",
     });
+  });
+  it("shows an auto-compact in the chat while it runs (L-265)", async () => {
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    hook("PreCompact", { trigger: "auto" });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(events).toContainEqual({
+      type: "status",
+      key: "claude-compaction",
+      text: "Compacting context…",
+    });
+    hook("PostCompact", { trigger: "auto" });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(events).toContainEqual({
+      type: "status",
+      key: "claude-compaction",
+      text: "Compacted context",
+    });
+    expect(events).toContainEqual({ type: "context.stale" });
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+  });
+  it("leaves the Compact button's own status alone (L-265)", async () => {
+    await running();
+    const turn = sendInteractiveClaude(input({ text: "/compact" }));
+    await waitFor(() => mocks.sends.length === 1);
+    hook("PreCompact", { trigger: "manual" });
+    hook("PostCompact", { trigger: "manual" });
+    await vi.advanceTimersByTimeAsync(3000);
+    await turn;
+    expect(
+      events.some((e) => e.type === "status" && e.key === "claude-compaction"),
+    ).toBe(false);
+  });
+  it("reports background tasks left running after the turn ends (L-265)", async () => {
+    const turn = sendInteractiveClaude(input());
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    hook("PostToolUse", {
+      tool_name: "Bash",
+      tool_input: { command: "npm run dev", run_in_background: true },
+      tool_response: { backgroundTaskId: "shell1" },
+    });
+    hook("Stop", {
+      background_tasks: [
+        {
+          id: "mon1",
+          type: "monitor",
+          status: "running",
+          description: "Wait for release run",
+        },
+        { id: "shell1", type: "shell", status: "running" },
+        { id: "old", type: "shell", status: "completed" },
+      ],
+      session_crons: [],
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(events).toContainEqual({
+      type: "background.updated",
+      tasks: ["npm run dev", "Wait for release run"],
+    });
+    // A todo-list task is not background work.
+    hook("TaskCreated", { task_id: "todo1", task_subject: "Write tests" });
+    const notification =
+      "<task-notification>\n<task-id>mon1</task-id>\n<status>completed</status>\n</task-notification>";
+    hook("UserPromptSubmit", { prompt: notification });
+    mocks.lines.push(
+      JSON.stringify({
+        type: "user",
+        uuid: "notification",
+        message: { content: notification },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(events.filter((e) => e.type === "background.updated").at(-1)).toEqual(
+      { type: "background.updated", tasks: ["npm run dev"] },
+    );
+    await stopInteractiveClaude("interactive-test");
+    expect(events.filter((e) => e.type === "background.updated").at(-1)).toEqual(
+      { type: "background.updated", tasks: [] },
+    );
   });
   it("still ends a /compact turn on PostCompact", async () => {
     await running();

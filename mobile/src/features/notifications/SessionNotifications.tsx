@@ -11,6 +11,7 @@ import {
   type NotificationCategory,
 } from "@/features/settings/notifications";
 import type { SessionSummary } from "@/features/workspace/types";
+import { feedServed, refreshFeed } from "./notificationFeed";
 
 // Only for when the app is out of view; one landing as it comes back stays
 // in the list.
@@ -31,7 +32,11 @@ type Data = { projectId: string; sessionId: string };
 /** Further and further apart, for a push token that didn't come. */
 const RETRY_MS = [5_000, 15_000, 45_000];
 /** Where a pushed notification opens: a session, or a Mono's chat. */
-type Target = Partial<Data> & { monoId?: string };
+type Target = Partial<Data> & {
+  monoId?: string;
+  /** Fork (L-275): an entry of the desktop bell's history. */
+  feedId?: string;
+};
 const SESSION_CHANNEL = "sessions";
 
 /**
@@ -168,6 +173,9 @@ export function SessionNotifications() {
     // that pushes sends the rest.
     if (AppState.currentState === "active" || (push && registered.current))
       return;
+    // Fork (Hari, L-275): a desktop that sends its bell's history posts
+    // these through NotificationFeed, with the desktop's own words.
+    if (Platform.OS === "android" && feedServed()) return;
     const preferences = current.current;
     const projects = connection.catalog.projects;
     for (const session of sessions) {
@@ -209,6 +217,18 @@ export function SessionNotifications() {
     const data = response.notification.request.content.data as
       Target | undefined;
     void Notifications.clearLastNotificationResponseAsync();
+    // Fork (Hari, L-275): read on the desktop too; an automation's opens
+    // the Notifications screen.
+    if (data?.feedId) {
+      void command
+        .current("notifications.read", { ids: [data.feedId] })
+        .then(() => refreshFeed())
+        .catch((reason: unknown) => console.warn("Could not mark the notification read", reason));
+      if (!data.projectId || !data.sessionId) {
+        router.push("/notifications");
+        return;
+      }
+    }
     // A Mono's habit run names its session too: that opens as the sheet a
     // Mono's sessions do, in whichever project, picked for the phone or not.
     if (data?.monoId && data.projectId && data.sessionId) {

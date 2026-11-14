@@ -3,6 +3,7 @@ import { newSession, type HarnessId } from "./session";
 import {
   MODELS,
   allModels,
+  claudeThinkingDisplay,
   coerceModelPickerTab,
   defaultModelId,
   defaultSessionChoice,
@@ -121,6 +122,19 @@ describe("model settings memory", () => {
   it("keeps valid current values when merging onto a model", () => {
     expect(mergeModelSettings(opus, { effort: "xhigh", fast: "true" })).toEqual(
       { effort: "xhigh", fast: "true" },
+    );
+  });
+
+  it("keeps a chat's Claude reasoning display across models, dropping unknown values (L-266)", () => {
+    expect(
+      mergeModelSettings(haiku, { claudeThinkingDisplay: "highlights" }),
+    ).toMatchObject({ claudeThinkingDisplay: "highlights" });
+    expect(
+      mergeModelSettings(haiku, { claudeThinkingDisplay: "verbose" }),
+    ).not.toHaveProperty("claudeThinkingDisplay");
+    expect(claudeThinkingDisplay(undefined)).toBe("summarized");
+    expect(claudeThinkingDisplay({ claudeThinkingDisplay: "omitted" })).toBe(
+      "omitted",
     );
   });
 

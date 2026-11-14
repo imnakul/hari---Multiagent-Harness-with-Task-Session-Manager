@@ -78,6 +78,7 @@ import {
 import { JiraSettings } from "./JiraSettings";
 import { GradientBlurBackground } from "./GradientBlurBackground";
 import { McpSettings } from "./McpSettings";
+import { StorageSettings } from "./StorageSettings";
 import { DebugInspector } from "../../debug-inspector/ui/DebugInspector";
 import { SettingsToggle as Toggle } from "./SettingsToggle";
 import {
@@ -907,6 +908,9 @@ export function SettingsView({
                   onRestoreProject={onRestoreProject}
                   onDeleteProject={onDeleteProject}
                 />
+              ) : null}
+              {section === "storage" ? (
+                <StorageSettings onOpenSession={onOpenSession} />
               ) : null}
               {section === "migration" ? (
                 <MigrationView onImportSessions={onImportSessions} />

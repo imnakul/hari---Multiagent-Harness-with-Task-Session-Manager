@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore, type JSX } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore, type JSX } from "react";
 import { projectName } from "../../../shared/lib/paths";
 import { Popover } from "../../../shared/ui/Popover";
 import { Bell, ExternalLink, X } from "../../../shared/ui/icons";
@@ -7,6 +7,7 @@ import {
   CENTER_KIND_LABEL,
   OPEN_NOTIFICATION_SESSION_EVENT,
   centerNotificationsSnapshot,
+  desktopCenterNotifications,
   dismissAllCenterNotifications,
   dismissCenterNotification,
   markCenterNotificationsRead,
@@ -103,11 +104,13 @@ function NotificationCard({
  * notification history (fork-only, L-91). Opening the panel marks entries read.
  */
 export function NotificationBell(): JSX.Element {
-  const items = useSyncExternalStore(
+  const history = useSyncExternalStore(
     subscribeCenterNotifications,
     centerNotificationsSnapshot,
     centerNotificationsSnapshot,
   );
+  // Fork (L-275): entries seen as they happened are for the phone only.
+  const items = useMemo(() => desktopCenterNotifications(history), [history]);
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);

@@ -43,7 +43,11 @@ function targetKey(target: AiHelperTarget): string {
   return `${target.provider}:${target.accountId ?? ""}:${target.model ?? ""}`;
 }
 
-/** The chosen helper first, then Settings, the two chats' providers and the rest as fallbacks. */
+/**
+ * The chosen helper first, then Settings. With the AI helper on Automatic, the
+ * two chats' providers and the rest follow as fallbacks; with "Choose a model"
+ * only picked models run (L-269), so an unchosen provider never spends quota.
+ */
 export function continueHelperTargets(input: {
   choice: ContinueChoice;
   sourceHarness: HarnessId;
@@ -54,9 +58,10 @@ export function continueHelperTargets(input: {
   if (input.settings.mode === "custom") {
     list.push(input.settings.primary);
     if (input.settings.fallback) list.push(input.settings.fallback);
-  }
-  for (const id of [input.sourceHarness, input.choice.target.harness, ...AI_HELPER_PROVIDERS]) {
-    if (isHelperProvider(id)) list.push({ provider: id });
+  } else {
+    for (const id of [input.sourceHarness, input.choice.target.harness, ...AI_HELPER_PROVIDERS]) {
+      if (isHelperProvider(id)) list.push({ provider: id });
+    }
   }
   const seen = new Set<string>();
   const providers = new Set<string>();

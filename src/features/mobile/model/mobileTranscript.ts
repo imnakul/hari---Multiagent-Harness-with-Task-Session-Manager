@@ -1,5 +1,9 @@
 import { monoReactionBlocks } from "../../monos/model/monoReaction";
 import {
+  mobileAttachmentRefs,
+  type MobileAttachmentRef,
+} from "./mobileAttachmentPreview";
+import {
   launchAnchors,
   monoSpawnedSessions,
   type LaunchedSessionState,
@@ -75,6 +79,11 @@ export type MobileTurnItem =
       reaction?: string;
       emojiOnly?: boolean;
       attachments?: number;
+      /**
+       * Fork (Hari, L-268): what `attachments` counts, for thumbnails. The
+       * count stays for phone builds that only know it.
+       */
+      files?: MobileAttachmentRef[];
       /** Another message follows straight on, so this one drops its time. */
       compact?: boolean;
     }
@@ -393,7 +402,10 @@ function blockItem(block: Block, cwd: string): MobileTurnItem | null {
       ...(block.monoReaction ? { reaction: block.monoReaction } : {}),
       ...(text && isEmojiOnlyMessage(text) ? { emojiOnly: true } : {}),
       ...(block.attachments?.length
-        ? { attachments: block.attachments.length }
+        ? {
+            attachments: block.attachments.length,
+            files: mobileAttachmentRefs(block.attachments),
+          }
         : {}),
     };
   }

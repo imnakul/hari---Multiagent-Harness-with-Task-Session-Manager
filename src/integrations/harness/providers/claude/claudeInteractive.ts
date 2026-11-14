@@ -10,7 +10,10 @@ import {
   type SendTurnInput,
   type CompactContextInput,
 } from "../../core/types";
-import { nativeModelId } from "../../../../features/sessions/model/models";
+import {
+  claudeThinkingDisplay,
+  nativeModelId,
+} from "../../../../features/sessions/model/models";
 import {
   loadInteractiveFolderTrust,
   loadInteractiveIdleMinutes,
@@ -103,6 +106,9 @@ type Live = {
   wake: boolean;
   background: Set<string>;
   uncertainBackground: boolean;
+  /** Shell/monitor tasks to show as running in the chat, with their labels (L-265). */
+  shownBackground: Map<string, string>;
+  shownBackgroundKey: string;
   seenMessages: Set<string>;
   lastParkCheck: number;
   continuation?: string;
@@ -117,6 +123,19 @@ const stoppedDiagnostics = new Map<string, InteractiveDiagnostics>();
 const MAX_STOPPED_DIAGNOSTICS = 50;
 const epochs = new Map<string, number>();
 const parking = new Map<string, Promise<boolean>>();
+/**
+ * Fork (L-271): hidden helper sessions whose own saved attachments Claude may
+ * Read without a prompt, so a Whiteboard image reaches Interactive Claude.
+ * Holds the normalised paths saved for that session; nothing else is allowed.
+ */
+const attachmentReads = new Map<string, Set<string>>();
+const readKey = (path: string) => path.replace(/\\/g, "/").toLowerCase();
+
+/** Lets `id` Read the attachments it is sent from now on; `false` ends it. */
+export function allowInteractiveAttachmentReads(id: string, allow: boolean): void {
+  if (allow) attachmentReads.set(id, attachmentReads.get(id) ?? new Set());
+  else attachmentReads.delete(id);
+}
 
 function wakePoll(live: Live): void {
   live.lastActivity = Date.now();
@@ -306,6 +325,30 @@ function complete(live: Live): void {
   live.pending = undefined;
 }
 
+/** Marks a shell or monitor task Claude runs in the background for the chat. */
+function showBackground(live: Live, key: string, label: unknown): void {
+  const text = typeof label === "string" ? label.trim().split("\n")[0] : "";
+  live.shownBackground.set(
+    key,
+    text ? text.slice(0, 120) : (live.shownBackground.get(key) ?? "Background task"),
+  );
+}
+
+/**
+ * Fork (L-265): tells the chat which background tasks are still running, so
+ * a finished turn with a monitor or server left going does not look idle
+ * until Claude wakes up. Todo-list tasks and subagents are not shown.
+ */
+function syncBackground(live: Live): void {
+  for (const key of live.shownBackground.keys())
+    if (!live.background.has(key)) live.shownBackground.delete(key);
+  const tasks = [...live.shownBackground.values()];
+  const key = tasks.join("\n");
+  if (key === live.shownBackgroundKey || live.stopped) return;
+  live.shownBackgroundKey = key;
+  live.onEvent({ type: "background.updated", tasks });
+}
+
 function hookEvent(live: Live, row: Record<string, unknown>): void {
   const event = row.hook_event_name;
   const agent = typeof row.agent_id === "string" ? row.agent_id : undefined;
@@ -319,8 +362,14 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
   if (event === "PreToolUse" && toolInput?.run_in_background === true)
     live.uncertainBackground = true;
   const backgroundId = asRecord(row.tool_response)?.backgroundTaskId;
-  if (event === "PostToolUse" && typeof backgroundId === "string")
+  if (event === "PostToolUse" && typeof backgroundId === "string") {
     live.background.add(`task:${backgroundId}`);
+    showBackground(
+      live,
+      `task:${backgroundId}`,
+      toolInput?.description ?? toolInput?.command,
+    );
+  }
   if (event === "Stop" && !row.agent_id) {
     if (
       Array.isArray(row.background_tasks) &&
@@ -339,11 +388,14 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
           live.uncertainBackground = true;
         else if (
           !["completed", "failed", "killed", "stopped"].includes(entry.status)
-        )
+        ) {
           live.background.add(`task:${entry.id}`);
+          showBackground(live, `task:${entry.id}`, entry.description);
+        }
       }
     } else live.uncertainBackground = true;
   }
+  syncBackground(live);
   if (row.agent_id && event !== "PermissionRequest") return;
   if (event === "UserPromptSubmit") {
     const taskId = interactiveTaskNotification(row.prompt);
@@ -416,7 +468,14 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     live.approvals.set(requestId, row);
     const questions =
       name === "AskUserQuestion" ? questionsFromUnknown(input) : [];
-    if (questions.length) {
+    const ownAttachment =
+      event === "PermissionRequest" &&
+      name === "Read" &&
+      typeof input.file_path === "string" &&
+      attachmentReads.get(live.id)?.has(readKey(input.file_path)) === true;
+    if (ownAttachment) {
+      void replyInteractiveClaude(live.id, requestId, "allow");
+    } else if (questions.length) {
       emit(live, {
         type: "question.asked",
         requestId,
@@ -482,6 +541,23 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
     clearTimeout(live.pending.timer);
     live.pending.onAccepted?.();
   }
+  // Fork (L-265): an auto-compact can take a minute with no transcript
+  // output, so the chat says so instead of looking stuck. The Compact button
+  // already shows its own status.
+  if (event === "PreCompact" && !live.pending?.compact)
+    emit(live, {
+      type: "status",
+      key: "claude-compaction",
+      text: "Compacting context…",
+    });
+  if (event === "PostCompact" && !live.pending?.compact) {
+    emit(live, {
+      type: "status",
+      key: "claude-compaction",
+      text: "Compacted context",
+    });
+    emit(live, { type: "context.stale" });
+  }
   // PostCompact ends only a /compact turn. An auto-compact fires it mid-turn,
   // and Claude keeps working after it (fork, L-121).
   if (
@@ -508,6 +584,8 @@ function hookEvent(live: Live, row: Record<string, unknown>): void {
       );
     emit(live, { type: "session.ended" });
     finishExternal(live);
+    live.background.clear();
+    syncBackground(live);
   }
 }
 
@@ -550,6 +628,7 @@ async function poll(live: Live): Promise<void> {
         if (interactiveTaskNotification(text) === live.continuation) {
           if (live.pending?.accepted) complete(live);
           live.background.delete(`task:${live.continuation}`);
+          syncBackground(live);
           live.continuation = undefined;
           live.transcript = newTranscriptState();
         }
@@ -684,6 +763,7 @@ function launchKey(input: SendTurnInput): string {
     input.modelSettings?.effort,
     input.modelSettings?.fast,
     input.modelSettings?.context,
+    claudeThinkingDisplay(input.modelSettings),
     input.runtimeMode,
     input.intent === "plan",
   ]);
@@ -798,6 +878,8 @@ async function ensureLive(
     wake: false,
     background: new Set(),
     uncertainBackground: false,
+    shownBackground: new Map(),
+    shownBackgroundKey: "",
     seenMessages: new Set(),
     lastParkCheck: 0,
   };
@@ -831,6 +913,7 @@ async function ensureLive(
         ),
         effort: normalizeClaudeCliEffort(effort, nativeModelId(input.model)),
         fast: input.modelSettings?.fast === "true",
+        thinkingDisplay: claudeThinkingDisplay(input.modelSettings),
         permissionMode:
           input.intent === "plan"
             ? "plan"
@@ -1028,6 +1111,8 @@ export async function sendInteractiveClaude(
       nativeId: live.binding.nativeId,
       attachments: input.attachments,
     });
+    const readable = attachmentReads.get(input.sessionId);
+    if (readable) for (const path of paths) readable.add(readKey(path));
     checkEpoch(input.sessionId, epoch);
     if (
       live.pending ||
@@ -1362,6 +1447,9 @@ export async function stopInteractiveClaude(
   if (!preserveEpoch) epochs.set(id, interactiveClaudeEpoch(id) + 1);
   const live = lives.get(id);
   if (live) {
+    // Its background tasks end with the CLI (L-265).
+    live.background.clear();
+    syncBackground(live);
     live.stopped = true;
     clearTimeout(live.timer);
     finishExternal(live);

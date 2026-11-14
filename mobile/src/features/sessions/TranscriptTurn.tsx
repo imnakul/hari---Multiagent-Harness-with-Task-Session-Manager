@@ -21,6 +21,7 @@ import { DocumentCard, MonoChoices } from "./MonoCards";
 import { ReplyLinkCards, ReplyToolButtons } from "@/features/tools/ReplyTools";
 
 import { Markdown } from "./Markdown";
+import { MessageAttachments } from "./MessageAttachments";
 import { ProviderLogo } from "./ProviderLogo";
 import { sessionErrorContent, type SessionErrorNotice } from "./sessionError";
 import {
@@ -295,9 +296,7 @@ function UserMessage({
         ]}
       >
         {item.attachments ? (
-          <Text style={styles.attachments}>
-            {item.attachments === 1 ? "1 attachment" : `${item.attachments} attachments`}
-          </Text>
+          <MessageAttachments messageId={item.id} count={item.attachments} files={item.files} />
         ) : null}
         {item.text ? (
           <Text
@@ -571,11 +570,6 @@ const useStyles = themedStyles((colors) => ({
     color: colors.content,
     fontSize: 16,
     lineHeight: 23,
-  },
-  attachments: {
-    color: colors.muted,
-    fontSize: 13,
-    marginBottom: 4,
   },
   showMore: {
     marginTop: 4,
