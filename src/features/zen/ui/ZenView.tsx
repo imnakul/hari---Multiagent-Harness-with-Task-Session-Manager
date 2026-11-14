@@ -28,6 +28,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  Settings,
   Target,
   X,
   Zap,
@@ -298,6 +299,11 @@ export type ZenViewProps = {
   onColumnsChange?: (columns: boolean) => void;
   onExit: () => void;
   /**
+   * Settings is a full page the panel can't hold, so this leaves Zen and
+   * opens it there (fork, L-264).
+   */
+  onOpenSettings: () => void;
+  /**
    * The project terminals (L-233). They sit below or beside the chats in a
    * grid App lays out through `dockGridRef`, as in Focus (L-136).
    */
@@ -337,6 +343,7 @@ export function ZenView({
   onClosePane,
   onColumnsChange,
   onExit,
+  onOpenSettings,
   dock,
   dockGridRef,
   footer,
@@ -613,6 +620,9 @@ export function ZenView({
           ) : (
             <Pin className="size-3.5" strokeWidth={1.75} />
           )}
+        </IconButton>
+        <IconButton label="Settings (leaves Zen mode)" onClick={onOpenSettings}>
+          <Settings className="size-3.5" strokeWidth={1.75} />
         </IconButton>
         {IS_MAC ? <div className="w-1.5 shrink-0" /> : <WindowControls />}
       </header>

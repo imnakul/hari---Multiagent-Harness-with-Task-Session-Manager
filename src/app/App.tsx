@@ -15753,6 +15753,14 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   );
 
   const onOpenSettings = useCallback(() => openSettings(), [openSettings]);
+  // Fork (L-264): Settings draws in the workspace, which Zen covers, so the
+  // window grows back first. While Zen is still entering or leaving, the click
+  // does nothing, like the Zen toggle.
+  const onZenOpenSettings = useCallback(async () => {
+    if (zenBusy.current || !zenModeRef.current) return;
+    await leaveZen(true);
+    openSettings();
+  }, [leaveZen, openSettings]);
   useEffect(() => {
     const openProviders = () => openSettings("providers");
     window.addEventListener(OPEN_PROVIDER_SETTINGS_EVENT, openProviders);
@@ -17882,6 +17890,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       }}
       pinned={zenPinned}
       onTogglePin={onToggleZenPin}
+      onOpenSettings={() => void onZenOpenSettings()}
       renderPane={(session) => (
         <SessionPane
           {...sessionPaneProps}
