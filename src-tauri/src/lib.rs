@@ -4,6 +4,7 @@ mod account_identity;
 mod activity;
 mod antigravity_cli;
 mod artifacts;
+mod aside_link;
 mod automations;
 mod browser_servers;
 mod browser_view;
@@ -388,6 +389,7 @@ pub fn run() {
             session_store::init(app.handle())?;
             control::init(app.handle())?;
             mobile_access::init(app.handle())?;
+            aside_link::init(app.handle())?;
             reminders::init(app.handle());
             checkpoint::init(app.handle())?;
             activity::init(app.handle());
@@ -443,6 +445,14 @@ pub fn run() {
             browser_view::browser_close,
             browser_view::browser_context_element,
             browser_view::browser_page_action,
+            aside_link::aside_link_status,
+            aside_link::aside_link_configure,
+            aside_link::aside_link_attach,
+            aside_link::aside_link_detach,
+            aside_link::aside_link_push,
+            aside_link::aside_link_finish,
+            aside_link::aside_link_write_models,
+            aside_link::aside_link_project,
             mobile_access::mobile_status,
             mobile_access::mobile_configure,
             mobile_access::mobile_invite,

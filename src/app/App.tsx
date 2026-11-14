@@ -26,6 +26,9 @@ import { checkMobileQueueAction } from "../features/mobile/model/mobileQueue";
 import { checkMobileApproval } from "../features/mobile/model/mobileApproval";
 import { sessionConversationPage } from "../features/agent-app/model/sessionConversation";
 import { useMobileWorkspace } from "../features/mobile/hooks/useMobileWorkspace";
+import { useAsideLink } from "../features/aside-link/hooks/useAsideLink";
+import { ASIDE_HARNESSES } from "../features/aside-link/model/asideModels";
+import { mobileAccountChoice } from "../features/mobile/model/mobileProviderAccounts";
 import { hasMobileAttachments, mobileAttachments } from "../features/mobile/model/mobileAttachments";
 import {
   applyMobileChoice,
@@ -530,6 +533,7 @@ import {
   rememberProject,
   replaceProjectPath,
   sameProjectPath,
+  savePinnedProjects,
 } from "../features/projects/model/recents";
 import {
   applyDetachPaneToTab,
@@ -11787,6 +11791,43 @@ function Workspace({
       const queued = !mono && accepted.queuedMessages?.some((message) => message.id === commandId);
       return { sessionId: session.id, ...(queued ? { queued: commandId } : {}) };
     },
+  });
+
+  // Fork (L-274): Aside's "Ask Aside" panel runs its chats as sessions in the CLI project.
+  useAsideLink({
+    sessions,
+    harnesses: ASIDE_HARNESSES.map((entry) => entry.harness).filter(isHarnessAvailable),
+    start: async (choice) => {
+      const cwd = await invoke<string>("aside_link_project");
+      // Pinned on first use only, so unpinning it later sticks.
+      const pinned = loadPinnedProjects();
+      if (!loadRecents().some((project) => sameProjectPath(project.path, cwd)) && !pinned.some((path) => sameProjectPath(path, cwd)))
+        savePinnedProjects([...pinned, cwd]);
+      setRecents(rememberProject(cwd));
+      const model = resolveModel(choice.harness, choice.model);
+      const session: Session = {
+        ...mobileNewSession(cwd, sessionDefaults?.runtimeMode),
+        id: choice.sessionId,
+        harness: model.harness,
+        model: model.id,
+        modelSettings: mergeModelSettings(model, choice.modelSettings),
+        providerAccountId: mobileAccountChoice(model.harness, cwd, {}),
+      };
+      // A placeholder title, so the first send seeds and generates one as the composer does.
+      session.title = HARNESS_LABEL[session.harness];
+      updateSessionState(sessionsRef, setSessions, (current) => [...current, session]);
+      if (!submitSessionRef.current(session.id, choice.text, [], { appRequestId: choice.requestId }))
+        throw new Error("MonoCode could not start this chat");
+      await upsertSession(sessionsRef.current.find((current) => current.id === session.id) ?? session);
+    },
+    send: async (sessionId, text, requestId) => {
+      const session = await ensureOpenSessionRef.current(sessionId);
+      if (!session || session.worktreeRemoved) throw new Error("Session is no longer available");
+      if (!submitSessionRef.current(session.id, text, [], { appRequestId: requestId, followsUp: true }))
+        throw new Error("Session could not take the message");
+      await upsertSession(sessionsRef.current.find((current) => current.id === session.id) ?? session);
+    },
+    stop: (sessionId) => void onStop(sessionId),
   });
 
   const appReceipts = useRef(

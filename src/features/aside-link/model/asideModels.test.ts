@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import type { AgentModel } from "../../sessions/model/models";
+import type { HarnessId } from "../../sessions/model/session";
+import { asideEffort, asideModelId, asideProviders, parseAsideModelId } from "./asideModels";
+
+const effort = (values: string[]) => ({
+  id: "effort",
+  label: "Effort",
+  kind: "select" as const,
+  value: values[0],
+  options: values.map((value) => ({ value, label: value })),
+});
+const CATALOG: Partial<Record<HarnessId, AgentModel[]>> = {
+  claude: [
+    {
+      id: "claude:opus-5-5",
+      harness: "claude",
+      name: "Claude Opus 5.5",
+      contextWindow: 1_000_000,
+      settings: [effort(["low", "medium", "high", "xhigh", "max", "ultracode"])],
+    },
+    { id: "claude:locked", harness: "claude", name: "Locked", locked: { reason: "plan" } },
+  ],
+  "command-code": [{ id: "cc:plain", harness: "command-code", name: "Plain" }],
+};
+const modelsFor = (harness: HarnessId) => CATALOG[harness] ?? [];
+
+describe("asideProviders", () => {
+  it("lists unlocked models with the Reasoning levels each one offers", () => {
+    const providers = asideProviders(["claude", "command-code", "antigravity-cli"], modelsFor);
+    expect(Object.keys(providers)).toEqual(["monocode-claude", "monocode-command-code"]);
+    const [opus] = providers["monocode-claude"].models;
+    expect(providers["monocode-claude"].models).toHaveLength(1);
+    expect(opus).toMatchObject({
+      id: "claude/claude:opus-5-5",
+      reasoning: true,
+      contextWindow: 1_000_000,
+      thinkingLevelMap: { off: null, minimal: null, low: "low", xhigh: "xhigh", max: "max" },
+      compat: { supportsReasoningEffort: true },
+    });
+    const [plain] = providers["monocode-command-code"].models;
+    expect(plain.reasoning).toBe(false);
+    expect(plain.thinkingLevelMap).toBeUndefined();
+  });
+
+  it("skips harnesses that are not offered", () => {
+    expect(asideProviders(["command-code"], modelsFor)).not.toHaveProperty("monocode-claude");
+  });
+});
+
+describe("model IDs", () => {
+  it("round-trip through Aside and refuse other harnesses", () => {
+    expect(parseAsideModelId(asideModelId("claude", "claude:opus-5-5"))).toEqual({
+      harness: "claude",
+      modelId: "claude:opus-5-5",
+    });
+    expect(parseAsideModelId("codex/gpt")).toBeUndefined();
+    expect(parseAsideModelId("claude/")).toBeUndefined();
+    expect(parseAsideModelId("opus")).toBeUndefined();
+  });
+});
+
+describe("asideEffort", () => {
+  it("keeps only an effort the model offers", () => {
+    const [opus] = CATALOG.claude!;
+    expect(asideEffort(opus, "xhigh")).toBe("xhigh");
+    expect(asideEffort(opus, "minimal")).toBeUndefined();
+    expect(asideEffort(opus, undefined)).toBeUndefined();
+    expect(asideEffort(CATALOG["command-code"]![0], "high")).toBeUndefined();
+  });
+});
