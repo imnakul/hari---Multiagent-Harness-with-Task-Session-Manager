@@ -4,6 +4,8 @@
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <!-- Fork (Hari, L-280): the phone's network type for the computer's Share popover. -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <application>
     <service
       android:name="expo.modules.harilive.HariLiveService"
@@ -15,6 +17,10 @@
     </service>
     <receiver
       android:name="expo.modules.harilive.HariLiveReceiver"
+      android:exported="false" />
+    <!-- Fork (Hari, L-280): Find my phone's Stop. -->
+    <receiver
+      android:name="expo.modules.harilive.HariRingReceiver"
       android:exported="false" />
     <!-- Fork (Hari, L-279): Share. The share sheet's Hari target (also opened
          by the tile to read the clipboard), and the Send clipboard tile. -->

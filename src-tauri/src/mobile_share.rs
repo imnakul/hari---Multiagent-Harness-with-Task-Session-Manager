@@ -551,6 +551,49 @@ pub fn mobile_share_send_files(
     Ok(())
 }
 
+/// Fork (Hari, L-280): offers a file the computer made (a screenshot) to the
+/// one phone that asked for it; it lands in that phone's Share like any file.
+pub(crate) fn offer_file(app: &AppHandle, peer: &str, path: &Path) -> Result<Value, String> {
+    let size = std::fs::metadata(path)
+        .map_err(|_| "Couldn't read the file")?
+        .len();
+    if size > MAX_FILE_BYTES {
+        return Err("The file is over 100 MB".into());
+    }
+    let name = safe_name(
+        &path
+            .file_name()
+            .map_or(String::new(), |n| n.to_string_lossy().into()),
+    );
+    let id = uuid::Uuid::new_v4().to_string();
+    let mime_type = mime_for(&name);
+    crate::mobile_events::push(
+        peer,
+        "share",
+        json!({ "type": "file", "fileId": id, "name": name, "mimeType": mime_type, "size": size }),
+    )?;
+    with(|share| {
+        record(
+            share,
+            Entry {
+                id: id.clone(),
+                direction: Direction::Out,
+                kind: Kind::File,
+                text: None,
+                name: Some(name.clone()),
+                size: Some(size),
+                mime_type: Some(mime_type.into()),
+                path: Some(path.to_string_lossy().into()),
+                device: phone_name(app, peer),
+                at: now_ms(),
+                status: Status::Queued,
+            },
+        )
+    })?;
+    changed(app);
+    Ok(json!({ "fileId": id, "name": name, "size": size }))
+}
+
 /// Removes entries from the history; files on disk stay. No ids: clears it.
 #[tauri::command]
 pub fn mobile_share_remove(

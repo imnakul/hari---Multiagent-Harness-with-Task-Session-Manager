@@ -55,6 +55,17 @@ class HariLiveModule : Module() {
     /** Fork (L-279): opens a saved file in the app the user picks. */
     Function("openFile") { uri: String, mimeType: String -> HariShare.open(context, uri, mimeType) }
 
+    /** Fork (L-280): battery, charging, temperature, storage and network type, for the computer. */
+    Function("phoneStats") { HariPc.stats(context) }
+
+    /** Fork (L-280): Wake-on-LAN magic packets to these cards; how many packets went out. */
+    AsyncFunction("wake") { macs: List<String>, broadcasts: List<String> -> HariPc.wake(macs, broadcasts) }
+
+    /** Fork (L-280): Find my phone. Rings at full alarm volume until stopped (2 minutes at most). */
+    Function("ring") { start: Boolean ->
+      if (start) HariPc.startRing(context) else HariPc.stopRing(context)
+    }
+
     /** Whether this Android draws Live Updates at all (Android 16 and later). */
     Function("supported") { Build.VERSION.SDK_INT >= 36 }
 

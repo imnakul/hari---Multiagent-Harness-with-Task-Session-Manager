@@ -48,6 +48,7 @@ mod mobile_events;
 // Fork (Hari, L-275): the bell's history for the phone.
 mod mobile_notifications;
 // Fork (Hari, L-279): Share between the computer and the phone.
+mod mobile_pc;
 mod mobile_share;
 mod mono;
 #[cfg(target_os = "macos")]
@@ -401,6 +402,10 @@ pub fn run() {
             if let Err(error) = mobile_share::init(app.handle()) {
                 eprintln!("monocode: Share history: {error}");
             }
+            // Fork (Hari, L-280): the phone's chosen apps.
+            if let Err(error) = mobile_pc::init(app.handle()) {
+                eprintln!("monocode: phone apps: {error}");
+            }
             mobile_access::init(app.handle())?;
             reminders::init(app.handle());
             checkpoint::init(app.handle())?;
@@ -470,6 +475,12 @@ pub fn run() {
             mobile_share::mobile_share_send_clipboard,
             mobile_share::mobile_share_send_files,
             mobile_share::mobile_share_remove,
+            mobile_pc::mobile_pc_phone_stats,
+            mobile_pc::mobile_pc_ring,
+            mobile_pc::mobile_pc_apps_list,
+            mobile_pc::mobile_pc_apps_add,
+            mobile_pc::mobile_pc_apps_remove,
+            mobile_pc::mobile_pc_apps_reset,
             mobile_access::mobile_push,
             remote::remote_machines,
             remote::remote_connect,

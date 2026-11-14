@@ -20,6 +20,7 @@ import { LinkStreamSync } from "@/features/link/LinkStreamSync";
 import { NotificationFeedSync } from "@/features/notifications/NotificationFeedSync";
 import { PanelActions } from "@/features/notifications/PanelActions";
 import { ShareSync } from "@/features/share/ShareSync";
+import { PcSync } from "@/features/pc/PcSync";
 import { LiveUpdates } from "@/features/liveUpdates/LiveUpdates";
 import { HariUpdatePrompt } from "@/features/updates/HariUpdatePrompt";
 import { SessionActivity } from "@/features/sessions/SessionActivity";
@@ -189,6 +190,8 @@ function LinkedWorkspace() {
       <LinkStreamSync />
       {/* Fork (Hari, L-279): Share with the computer (after the stream). */}
       <ShareSync />
+      {/* Fork (Hari, L-280): Find my phone, phone stats, Wake-on-LAN cards. */}
+      <PcSync />
       <LiveUpdates />
       <HariUpdatePrompt />
       <SessionActivity />
@@ -239,6 +242,7 @@ function LinkedWorkspace() {
                 {/* Fork (Hari, L-275): the desktop bell's history. */}
                 <Stack.Screen name="notifications" options={screens.modal} />
                 <Stack.Screen name="share" options={screens.modal} />
+                <Stack.Screen name="computer" options={screens.modal} />
                 <Stack.Screen name="changes" options={screens.changes} />
               </Stack>
             </SessionFrame>

@@ -789,6 +789,10 @@ async fn handle(
         if crate::mobile_share::handles(method) {
             break 'locked Err(std::mem::take(&mut params));
         }
+        // Fork (Hari, L-280): the Computer screen, run off the lock.
+        if crate::mobile_pc::handles(method) {
+            break 'locked Err(std::mem::take(&mut params));
+        }
         if crate::mobile_tools::handles(method) {
             break 'locked Err(std::mem::take(&mut params));
         }
@@ -902,6 +906,9 @@ async fn handle(
         Ok(receiver) => receiver,
         Err(params) if crate::mobile_share::handles(method) => {
             return crate::mobile_share::handle(app, peer, method, params).await
+        }
+        Err(params) if crate::mobile_pc::handles(method) => {
+            return crate::mobile_pc::handle(app, peer, method, params).await
         }
         Err(params) => return crate::mobile_tools::handle(app, method, params).await,
     };

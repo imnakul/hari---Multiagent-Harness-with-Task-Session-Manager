@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Plus, SmartPhone, Trash2 } from "../../../shared/ui/icons";
 import { PairPhoneDialog } from "./PairPhoneDialog";
+import { PhoneAppsSettings } from "./PhoneAppsSettings";
 
 type Device = { id: string; name: string; fingerprint: string };
 type Status = {
@@ -270,6 +271,9 @@ export function MobileSettings() {
           Pair your iPhone or Android phone to get started.
         </div>
       ) : null}
+
+      {/* Fork (Hari, L-280): apps the paired phone can control. */}
+      {devices.length > 0 ? <PhoneAppsSettings /> : null}
 
       {error && (
         <p

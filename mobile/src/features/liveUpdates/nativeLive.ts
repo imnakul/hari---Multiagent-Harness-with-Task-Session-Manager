@@ -26,6 +26,10 @@ type HariLiveModule = {
   takeShared?(): string;
   saveToDownloads?(source: string, name: string, mimeType: string): Promise<string>;
   openFile?(uri: string, mimeType: string): boolean;
+  /** Fork (L-280); missing in builds before it. */
+  phoneStats?(): Record<string, unknown>;
+  wake?(macs: string[], broadcasts: string[]): Promise<number>;
+  ring?(start: boolean): void;
   supported(): boolean;
   canPostPromoted(): boolean;
   openPromotedSettings(): boolean;
@@ -126,6 +130,34 @@ export function openNativeFile(uri: string, mimeType: string): boolean {
   }
 }
 export const openBatterySettings = () => native?.openBatterySettings();
+
+/** Fork (L-280): this phone's battery, temperature, storage and network; null without the module. */
+export function nativePhoneStats(): Record<string, unknown> | null {
+  try {
+    return native?.phoneStats?.() ?? null;
+  } catch (error) {
+    console.warn("Computer: could not read the phone's stats", error);
+    return null;
+  }
+}
+
+/** Fork (L-280): whether this build can send Wake-on-LAN packets. */
+export const canWake = typeof native?.wake === "function";
+
+/** Fork (L-280): Wake-on-LAN magic packets to these cards; how many went out. */
+export async function sendWake(macs: string[], broadcasts: string[]): Promise<number> {
+  if (!native?.wake) throw new Error("Update Hari to wake your computer");
+  return native.wake(macs, broadcasts);
+}
+
+/** Fork (L-280): Find my phone; rings at full alarm volume for up to 2 minutes. */
+export function setNativeRinging(start: boolean) {
+  try {
+    native?.ring?.(start);
+  } catch (error) {
+    console.warn("Find my phone: could not ring", error);
+  }
+}
 
 /** Whether Android lets Hari show Live Updates; checked again on returning
  *  from system settings. */

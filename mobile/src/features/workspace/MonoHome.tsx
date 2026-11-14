@@ -337,6 +337,15 @@ export function MonoHome() {
               size={FOOTER_HEIGHT}
             />
           ) : null}
+          {/* Fork (Hari, L-280): the computer's stats, power and apps. */}
+          {pairing ? (
+            <CircleButton
+              icon="computer"
+              label="Computer"
+              onPress={() => router.push("/computer")}
+              size={FOOTER_HEIGHT}
+            />
+          ) : null}
           <LiquidView
             borderRadius={FOOTER_HEIGHT / 2}
             style={styles.searchFrame}

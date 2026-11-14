@@ -4,7 +4,7 @@ Branch: `nakul/windows-support-upstream-0.16.0`
 Base: `62a2a762` (plus uncommitted L-265 to L-276)
 Created: 2026-11-14 15:36 (IST) · Updated: 2026-11-14 (scope added, Share choices answered)
 Tier: Large (protocol change on the phone link, new phone and desktop screens, Android service change)
-Status: Progress — Phases 1–3 built (L-277, L-278, L-279); Phases 4–5 next.
+Status: Progress — Phases 1–4 built (L-277, L-278, L-279, L-280); Phase 5 next.
 
 ## Idea
 Today the phone asks the computer on a timer (every 5 s in view, every 15 s in the background
@@ -227,6 +227,58 @@ Manual check (phone + computer; not for an agent inside MonoCode):
 8. Turn the computer's app off, send a text from the phone → "waiting"; open the app → it arrives and the row turns done. Send a file while off → failed; tap it after the app is back → it goes.
 9. Remove a row by swiping, then Clear all on both sides; saved files stay.
 
+## Phase 4 — Computer (L-280)
+- **Phone screen "Computer"** (Home footer, beside Share): the computer's stats, the Controls
+  (Monitor off, Lock, Hibernate (confirmed), Screenshot), the chosen apps (Open, Close,
+  Minimize, Maximize, Restart), the running apps (sort by CPU, RAM or name; Close; End,
+  confirmed), and **Wake computer** when the link is down. Stats refresh every 3 s while the
+  screen is open; nothing is sampled otherwise.
+- **Requests** (phone → computer, answered at once): `pc.stats` → `{cpu, gpu, memory:{used,total},
+  disks:[{name,free,total}], network:{down,up}, uptime}` (rates are per second; null until two
+  readings exist); `pc.apps` → `[{pid, identity, name, title, cpu, memory, windows}]`;
+  `pc.app {action: close|end|minimize|maximize, pid, identity, sentAt}`;
+  `pc.power {action: monitorOff|lock|hibernate, sentAt}`; `pc.screenshot` → offers the PNG to
+  that phone through Share; `pc.shortcuts` → the chosen apps with `running`;
+  `pc.shortcut {id, action: open|close|minimize|maximize|restart, sentAt}`; `pc.wakeInfo` →
+  `[{name, mac, broadcast}]` for wired and Wi-Fi cards that are up; `phone.stats {…}`.
+- **Stale commands:** anything that changes the computer carries `sentAt`; the computer refuses
+  it when more than 60 s off its own clock (the Telegram bot's rule). Power actions answer
+  first and act half a second later, so the phone sees "done".
+- **Safety:** an app is matched by pid *and* its start time (`identity`), so a reused pid is
+  never hit. Hari can't close or end itself from the phone (Restart reopens it); End refuses
+  Windows' own shell processes (explorer, dwm, csrss, winlogon, svchost, pid ≤ 4).
+- **Chosen apps** live in `phone-apps.json` and are edited in Settings → Phone (add an .exe,
+  remove, reset). Defaults: Hari, Claude and ChatGPT (Store apps, found by package name), and
+  Antigravity. Aside isn't installed in a known place: add it with "Add app…". Close asks the
+  windows to close; Restart waits up to 15 s for them to go, then opens it again.
+- **Wake-on-LAN** (phone only): Hari stores the cards it learned per computer and sends a magic
+  packet (6 × 0xFF then the MAC 16 times) to each card's broadcast address and to
+  255.255.255.255, on UDP ports 9 and 7, from its Android module.
+- **Phone stats** (battery, charging, temperature, free storage, network type) are sent with
+  `phone.stats` every 5 s while the computer asks: the desktop's Share popover pushes
+  `stats.want {until}` (a minute ahead, renewed while open) and shows them.
+- **Find my phone:** the popover's "Ring" pushes `ring {action: start|stop, at}`; the phone plays
+  its alarm sound at full alarm volume, looping, with a notification to stop it; it stops by
+  itself after 2 minutes. A ring older than 2 minutes is ignored.
+- **No new dependency.** Not now: GPU temperature (Windows has no general API for it),
+  hibernate in N minutes, wake timer, waking from outside the home network.
+
+## Phase 4 — built (L-280)
+- Computer: `src-tauri/src/mobile_pc.rs` answers the `pc.*` requests and `phone.stats`, keeps the chosen apps in `phone-apps.json` (Settings → Phone → `PhoneAppsSettings.tsx`), and offers screenshots through Share (`mobile_share::offer_file`). The Share popover shows each paired phone's stats (asks with `stats.want` every 45 s while open; greyed after 30 s) and has Find my phone / Stop ringing.
+- Phone: Computer screen (`src/app/computer`, Home footer), polling only while it is open and Hari is in front; `PcSync` rings, sends stats while asked, and learns the network cards whenever the stream comes up (`wakeStore.ts`).
+- Android (`HariPc.kt`): phone stats, the magic packet, the alarm ring with a Stop notification (also on tap or swipe; volume restored after).
+- Changed from the plan: running apps refresh every 9 s (with the chosen apps), stats every 3 s; a running chosen app gets Show as well; the Screenshot result links to Share.
+
+Manual check (phone + computer; not for an agent inside MonoCode):
+1. Phone: Home footer → Computer → CPU, GPU, memory, drives, network and uptime show and change every few seconds.
+2. Monitor off → the screens go dark; Lock → Windows locks; Hibernate → confirm → the computer hibernates.
+3. With the computer hibernated, open Computer → "isn't reachable" → Wake computer (same Wi-Fi; Wake-on-LAN on in BIOS and the network card) → it starts.
+4. Screenshot → a PNG arrives in Share on the phone.
+5. Apps: Claude not running → Open → it opens; then Minimize, Maximize, Restart, Close. Hari's own row has no Close.
+6. Running apps: sort by CPU, RAM, Name; expand one → Close; End asks first; explorer has no End.
+7. Computer: Settings → Phone → Add app… → pick an .exe → it appears on the phone; Remove and Reset work.
+8. Computer: phone icon → the phone's battery, temperature, storage and network show; Find my phone → the phone rings loudly with a Stop notification; Stop ringing on the computer, or Stop on the phone, ends it; it stops by itself after 2 minutes.
+
 ## Todos
 - [x] Share choices answered
 - [x] Phase 1 full spec, build, records (L-277)
@@ -235,5 +287,6 @@ Manual check (phone + computer; not for an agent inside MonoCode):
 - [ ] Phase 2 manual check (list in "Phase 2 — built")
 - [x] Phase 3 build, records (L-279)
 - [ ] Phase 3 manual check (list in "Phase 3 — built")
-- [ ] Phase 4
+- [x] Phase 4 build, records (L-280)
+- [ ] Phase 4 manual check (list in "Phase 4 — built")
 - [ ] Phase 5

@@ -102,7 +102,7 @@ fn validated_targets(
 }
 
 #[cfg(windows)]
-fn signal_verified(pid: u32, identity: &str, _force: bool) -> Result<(), String> {
+pub(crate) fn signal_verified(pid: u32, identity: &str, _force: bool) -> Result<(), String> {
     use windows_sys::Win32::{
         Foundation::{CloseHandle, FILETIME},
         System::Threading::{
@@ -145,7 +145,7 @@ fn signal_verified(pid: u32, identity: &str, _force: bool) -> Result<(), String>
 }
 
 #[cfg(unix)]
-fn signal_verified(pid: u32, identity: &str, force: bool) -> Result<(), String> {
+pub(crate) fn signal_verified(pid: u32, identity: &str, force: bool) -> Result<(), String> {
     let Some(current) = process_metrics::identity(pid) else {
         return Ok(());
     };
@@ -161,7 +161,7 @@ fn signal_verified(pid: u32, identity: &str, force: bool) -> Result<(), String> 
 }
 
 #[cfg(not(any(windows, unix)))]
-fn signal_verified(_pid: u32, _identity: &str, _force: bool) -> Result<(), String> {
+pub(crate) fn signal_verified(_pid: u32, _identity: &str, _force: bool) -> Result<(), String> {
     Err("Stopping individual tools is unavailable on this platform".into())
 }
 
