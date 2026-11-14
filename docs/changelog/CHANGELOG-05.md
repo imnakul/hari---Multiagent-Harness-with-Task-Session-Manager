@@ -1,5 +1,118 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 15:36 IST — Plan: always-open Hari link, Share and a later cloud mailbox
+- Type: docs
+- What: Wrote down the agreed direction for the phone link: one always-open two-way connection, an outbox on each side so nothing is lost, a Share panel, "send to clipboard" both ways with a notification, push for notifications and notes/tasks, and later a cloud mailbox on Nakul's spare Convex account. Local version first.
+- Why: Nakul asked to note these pointers before building, and to build and test the local version before any cloud part.
+- Files: [hari-link-stream-plan.md](../specs/hari-link-stream-plan.md), [SPECS.md](../specs/SPECS.md), [PLANNED.md](../PLANNED.md)
+- Commit: uncommitted
+- Update: Share choices answered (files, text and links both ways; DownloadsHari; history of 100). Added notification Approve/Deny/Reply buttons, Wake-on-LAN, find my phone, a Quick Settings "Send clipboard" tile, PC and phone stats with closing busy apps, PC control from the Telegram bot (monitor off, hibernate, apps), notes/tasks sync and 5 build phases. Later: reminders and AI in the Share panel.
+- Verified: docs only
+
+## 2026-11-14 15:04 IST — The Windows app installs as Hari (L-276)
+- Type: chore
+- What: The Windows release installer is now named Hari and adds "Hari" to the Start menu, Desktop and Installed apps. Updating from MonoCode installs Hari next to it (for example `E:InstalledHari`), keeps every setting, chat and account, and swaps MonoCode's shortcuts and Installed apps entry for Hari's. MonoCode's old folder is left on disk. Inside the app the name is still MonoCode.
+- Why: The user agreed to rename the desktop app to Hari, keeping the old install for now.
+- Files: [tauri.hari.conf.json](../../src-tauri/tauri.hari.conf.json), [hari-installer-hooks.nsh](../../src-tauri/windows/hari-installer-hooks.nsh)
+- Commit: uncommitted
+- Verified: typecheck — (no TS change) lint — tests — build ✅ (`npm run build:windows` → `Hari_0.16.0-local43_x64-setup.exe`); install and update checks manual
+
+## 2026-11-14 14:52 IST — Hari: the computer's notifications on the phone (L-275)
+- Type: feature
+- What: Hari now gets the same notifications as the bell on the computer: a reply is ready, an agent needs approval or has a question, an automation ran. A quiet "Watching your computer" entry keeps Hari checking in the background, so they show in the phone's notification panel even with Hari closed. Hari has a Notifications screen (in the drawer and on home): swipe one away, tap to open its chat, Mark all read, Clear all. Each of these changes the computer's bell too. Settings → Notifications on the phone turns background watching, automations, and chats that were open on the computer on or off.
+- Why: Hari's alerts almost never arrived. The phone posted only while out of view but checked the computer only while in view. The user asked for always-on notifications that mirror the desktop panel, with swipe to dismiss and tap to open the chat, without a Live Update.
+- Files: [notificationCenter.ts](../../src/features/notifications/model/notificationCenter.ts), [notifications.ts](../../src/features/notifications/model/notifications.ts), [NotificationBell.tsx](../../src/features/notifications/ui/NotificationBell.tsx), [mobileNotifications.ts](../../src/features/mobile/model/mobileNotifications.ts), [useMobileNotificationFeed.ts](../../src/features/mobile/hooks/useMobileNotificationFeed.ts), [mobile_notifications.rs](../../src-tauri/src/mobile_notifications.rs), [mobile_access.rs](../../src-tauri/src/mobile_access.rs), [lib.rs](../../src-tauri/src/lib.rs), [HariLive.kt](../../mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLive.kt), [HariLiveService.kt](../../mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLiveService.kt), [notificationFeed.ts](../../mobile/src/features/notifications/notificationFeed.ts), [NotificationFeedSync.tsx](../../mobile/src/features/notifications/NotificationFeedSync.tsx), [SessionNotifications.tsx](../../mobile/src/features/notifications/SessionNotifications.tsx), [notifications/index.tsx](../../mobile/src/app/notifications/index.tsx), [settings/index.tsx](../../mobile/src/app/settings/index.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ (desktop and mobile) lint ✅ (mobile; root has no config) tests ✅ Kotlin compile ✅ build — ; phone and desktop checks manual
+
+## 2026-11-14 14:05 IST — Activity: sites start folded (L-274)
+- Type: style
+- What: In Activity → Sites, each website now shows only its time, a bar and how many tabs it had. Click a site to see its tab titles; click again to fold them.
+- Why: The user asked for Sites to be collapsed by default; the tab titles made the column long.
+- Files: [Breakdown.tsx](../../src/features/activity/ui/Breakdown.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests — (no view tests) build —
+
+## 2026-11-14 11:14 IST — Storage page: filter by date (L-273)
+- Type: feature
+- What: Settings → Storage has a "Saved" date filter: All time, Today, Last 7 days, Last 30 days, Older than 30 days, or Custom dates (one day, or a from–to range; leave one end empty for "before" or "since"). The groups, the "Showing N of M files" line and the delete buttons then cover only files saved in those dates, and the confirmation says so.
+- Why: The user asked to filter by a single date or a from–to range before deleting.
+- Files: [attachmentStorage.ts](../../src/features/settings/model/attachmentStorage.ts), [attachmentStorage.test.ts](../../src/features/settings/model/attachmentStorage.test.ts), [StorageSettings.tsx](../../src/features/settings/ui/StorageSettings.tsx), [attachment-storage-plan.md](../specs/attachment-storage-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (full suite 8180 passed) lint — (no config) build —
+
+## 2026-11-14 10:59 IST — Settings → Storage: saved attachments (L-273)
+- Type: feature
+- What: A new Storage page in Settings shows every image and file you pasted into chats, plus the copies Interactive Claude read, with their total size. View them by chat, by project or all together, newest first, with the date and time on each. Click an image to see it full size; copy it, show it in its folder, open the chat it came from, or drag it onto a composer. Delete one file, everything in a chat or project, files no chat uses any more, or everything; each delete asks first and says the images will disappear from those chats.
+- Why: MonoCode keeps every pasted file forever (about 220 MB on this computer) with no way to see or clean them up.
+- Files: [attachment_storage.rs](../../src-tauri/src/attachment_storage.rs), [lib.rs](../../src-tauri/src/lib.rs), [attachmentStorage.ts](../../src/features/settings/model/attachmentStorage.ts), [StorageSettings.tsx](../../src/features/settings/ui/StorageSettings.tsx), [settings.ts](../../src/features/settings/model/settings.ts), [SettingsRail.tsx](../../src/app/shell/SettingsRail.tsx), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), tests beside the model and in the Rust module
+- Commit: uncommitted
+- Verified: typecheck ✅ cargo test ✅ (attachment_storage 3) cargo build ✅ tests ✅ (full suite after index fix; settings 515) lint — (no config) build —
+
+## 2026-11-14 10:36 IST — MCP page shows each Claude account's servers (L-272)
+- Type: feature
+- What: Settings → MCP now lists the MCP servers saved in each Claude account MonoCode manages, beside the ones in your home Claude config. Each row shows which file it comes from. Turning a server on or off, or removing it, changes that account's own file.
+- Why: The page only read the home config, but Claude chats in MonoCode run on an account config, so servers added there (like the Aside computer-use server) didn't show and couldn't be switched off.
+- Files: [mcp.rs](../../src-tauri/src/mcp.rs), [controls.rs](../../src-tauri/src/mcp/controls.rs), [controls/tests.rs](../../src-tauri/src/mcp/controls/tests.rs), [harness.rs](../../src-tauri/src/harness.rs), [McpSettings.tsx](../../src/features/settings/ui/McpSettings.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ cargo test ✅ (mcp 39) cargo build ✅ tests ✅ (settings 511) lint — (no config) build —
+
+## 2026-11-14 10:29 IST — Whiteboard sends images to Interactive Claude (L-271)
+- Type: feature
+- What: When a Whiteboard chat runs on Interactive Claude, the board snapshot and any pasted images now go to Claude, the same as other helpers that can see images. Claude opens those files without asking for approval, but any other file it tries to read still asks. Continue cards also now use only the models you picked in AI helper (part of L-269).
+- Why: The user said Whiteboard with Interactive CLI couldn't take images, so it wasn't much use; and asked that Claude Code never run as a helper unless picked, for Continue cards too.
+- Files: [whiteboardHelper.ts](../../src/integrations/harness/core/whiteboardHelper.ts), [claudeInteractiveHelper.ts](../../src/integrations/harness/providers/claude/claudeInteractiveHelper.ts), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [WhiteboardChat.tsx](../../src/features/whiteboard/ui/WhiteboardChat.tsx), [continueHelper.ts](../../src/integrations/harness/core/continueHelper.ts), tests beside each
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (harness + whiteboard 1553) build —
+
+## 2026-11-14 10:03 IST — Interactive Claude takes PDFs (L-270)
+- Type: feature
+- What: You can now attach a PDF to an Interactive Claude chat. MonoCode saves it and Claude reads it with its own file tool. Word, Excel and other files Claude can't open still show an error.
+- Why: The user asked why PDFs were refused when Interactive only hands Claude a file path anyway. Claude Code's Read tool reads PDFs.
+- Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs)
+- Commit: uncommitted
+- Verified: typecheck ✅ cargo test ✅ lint — (no config) build —
+
+## 2026-11-14 10:03 IST — Helpers use only the models you picked (L-269)
+- Type: fix
+- What: With AI helper set to Choose a model, Session overview and Improve prompt now try only their own model, then the AI helper's main and backup models. If all of them fail, you see the reason instead of another provider (Claude Code, Gemini) quietly doing the work. Automatic still tries every installed provider.
+- Why: The user picked Command Code and OpenCode for helpers, but a failing pick fell through to Claude Code or Gemini, spending their quota without asking.
+- Files: [sessionMetadataHelper.ts](../../src/integrations/harness/core/sessionMetadataHelper.ts), [sessionMetadataHelper.test.ts](../../src/integrations/harness/core/sessionMetadataHelper.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (helpers 397) build —
+
+## 2026-11-14 09:50 IST — Hari: image attachments show as thumbnails (L-268)
+- Type: fix
+- What: In Hari, a message sent with images now shows small thumbnails instead of only "1 attachment". Tapping a thumbnail opens the image full screen. Other files show their name. The computer sends a smaller copy of the image only when the phone asks for it.
+- Why: The user couldn't see or open what they had attached from the phone.
+- Files: [mobileAttachmentPreview.ts](../../src/features/mobile/model/mobileAttachmentPreview.ts), [mobileWorkspace.ts](../../src/features/mobile/model/mobileWorkspace.ts), [useMobileWorkspace.ts](../../src/features/mobile/hooks/useMobileWorkspace.ts), [mobileTranscript.ts](../../src/features/mobile/model/mobileTranscript.ts), [mobile_access.rs](../../src-tauri/src/mobile_access.rs), [MessageAttachments.tsx](../../mobile/src/features/sessions/MessageAttachments.tsx), [attachmentImages.ts](../../mobile/src/features/sessions/attachmentImages.ts), [TranscriptTurn.tsx](../../mobile/src/features/sessions/TranscriptTurn.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ (desktop, Hari) lint ✅ (Hari) tests ✅ build —
+
+## 2026-11-14 09:50 IST — Tool commands unfold on click (L-267)
+- Type: feature
+- What: A long command in a finished tool row still shows on one line, but hovering shows it in full and clicking unfolds it onto several lines. Clicking again folds it.
+- Why: The user saw tool commands always cut off. One line keeps the activity list even and easy to scan, so unfolding is on demand.
+- Files: [AgentTranscript.tsx](../../src/features/sessions/ui/AgentTranscript.tsx), [AgentTranscript.toolWrap.test.ts](../../src/features/sessions/ui/AgentTranscript.toolWrap.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ build —
+
+## 2026-11-14 09:50 IST — Interactive Claude: per-chat Reasoning shown (L-266)
+- Type: feature
+- What: The model picker's Interactive section has a "Reasoning shown" choice: Off, Highlights or Summaries (default). Changing it restarts Claude for that chat with the new setting.
+- Why: The user asked for Claude Code's thinking display setting inside chats. Summaries do not cost extra tokens.
+- Files: [claude_interactive.rs](../../src-tauri/src/claude_interactive.rs), [models.ts](../../src/features/sessions/model/models.ts), [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [ModelPicker.tsx](../../src/features/sessions/ui/ModelPicker.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ cargo check ✅ lint — (no config) tests ✅ build —
+
+## 2026-11-14 09:13 IST — Interactive Claude shows auto-compaction and background tasks (L-265)
+- Type: fix
+- What: In Interactive Claude sessions, an automatic compaction now shows "Compacting context…" and then "Compacted context", so the chat no longer looks stuck. Background tasks Claude leaves running after a reply (Monitor, background commands) now show as "1 task running in background · <name>" under the chat until they finish or the session is stopped.
+- Why: The user saw Interactive Claude look frozen during auto-compaction and lose track of background tasks once a turn ended. Interactive received both hooks but showed nothing for them. A terminal window stealing focus while typing was traced to open Claude Code CLI issues, not MonoCode, so no change was made for it.
+- Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts), [AgentTranscript.tsx](../../src/features/sessions/ui/AgentTranscript.tsx), [AgentTranscript.background.test.ts](../../src/features/sessions/ui/AgentTranscript.background.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ build —
+
 ## 2026-11-14 08:10 IST — Zen: Settings button in the top bar (L-264)
 - Type: feature
 - What: Zen's top-right buttons now include Settings (a gear, after Keep on top). Clicking it leaves Zen, waits for the window to grow back to full size, then opens Settings.

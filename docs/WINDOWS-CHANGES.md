@@ -12,6 +12,7 @@ the top of the table. Do not rewrite older sections.
 
 | Date | Section heading (search this) | Area |
 |---|---|---|
+| 14 Nov 2026 | Release installs as Hari beside the old MonoCode install | installer, NSIS hooks, rename |
 | 11 Nov 2026 | Send Interactive messages as several small pastes so Claude never folds them | Claude Interactive, paste folding |
 | 20 Oct 2026 | Fall back to the prompt screen when native output never goes quiet | ConPTY, paste settlement |
 | 18 Oct 2026 | Verify native process identity before stopping a tool | resources, PID reuse |
@@ -63,6 +64,19 @@ the top of the table. Do not rewrite older sections.
 | 24 Sept 2026 | round 3 landed in tree | upstream merge, CLI notices |
 
 ---
+
+## 14 Nov 2026 - Release installs as Hari beside the old MonoCode install
+
+L-276. `tauri.hari.conf.json` sets `productName` "Hari" and pins `mainBinaryName` "monocode"; the identifier stays `com.monocode.desktop`, so app data, WebView storage, deep links and the notification AUMID are unchanged.
+
+Tauri's NSIS template keys everything on the product name: `Software\Microsoft\Windows\CurrentVersion\Uninstall\<productName>` and `Software\<manufacturer>\<productName>` (install location). A new name is a new install, not an update:
+
+- The in-app updater runs the installer with `/P /UPDATE /ARGS` and no `/D`, so the first Hari install from MonoCode would go to `%LOCALAPPDATA%\Hari`. `NSIS_HOOK_PREINSTALL` (runs before files are copied) points `$INSTDIR` at a `Hari` folder beside the old one when the update would use the default.
+- In update mode the template makes no shortcuts (`CreateOrUpdate*Shortcut` return on `$UpdateMode = 1`). `NSIS_HOOK_POSTINSTALL` turns MonoCode's Start menu and Desktop shortcuts into Hari's (only those whose raw target is the old `monocode.exe`), with `SetLnkAppUserModelId`.
+- MonoCode's uninstaller has a "delete app data" box that removes `%APPDATA%\com.monocode.desktop` (now Hari's data), so the hook deletes MonoCode's uninstall and install-location keys. Its folder is left; delete it by hand once Hari works.
+- Hook macros may use the template's `utils.nsh` macros (`IsShortcutTarget`, `SetLnkAppUserModelId`) and vars (`$UpdateMode`): the hooks file is included early, but macros expand inside `Section Install`.
+
+Checked: local `npm run build:windows` compiled the hooks (`Hari_0.16.0-local43_x64-setup.exe`). The installer was not run on this machine.
 
 ## 11 Nov 2026 - Send Interactive messages as several small pastes so Claude never folds them
 

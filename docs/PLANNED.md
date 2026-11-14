@@ -3,6 +3,18 @@
 Working roadmap for the personal fork. The north star first, the ladder to reach it second,
 current state third, and suggestions/quick wins on top at the end.
 
+## Hari link: always-open stream, Share, then a cloud mailbox — planned 2026-11-14
+
+Spec: [hari-link-stream-plan.md](specs/hari-link-stream-plan.md) (Draft).
+
+- **First, local:** one always-open two-way stream on the existing phone link, an outbox on
+  each side (nothing lost while one side is away), a Share panel for files, text and links,
+  "send to clipboard" both ways with a notification on arrival (no live clipboard sync),
+  notifications and notes/tasks pushed instead of polled. Build and test this first.
+- **Later, cloud:** a mailbox on Nakul's spare Convex account (set aside, enough for personal
+  use) holds the outboxes while the computer is off or unreachable, end-to-end encrypted.
+  Its own spec, only after the local version works.
+
 ## Markdown Live mode (Obsidian-style) — planned 2026-10-23, built 2026-10-26 (L-183)
 
 Built for every editable Markdown view (Notes, Tasks, Session metadata, `.md` files, plan
