@@ -44,6 +44,11 @@ export type ImproveOutcome =
       /** Edit samples that were in the prompt; drop them from memory. */
       usedSamples: number;
       helper: AiHelperTarget;
+      /**
+       * Why earlier helpers were passed over, e.g. "Command Code tried a tool".
+       * Present only when the rewrite came from a fallback.
+       */
+      fallbackReason?: string;
     }
   | { ok: false; cancelled: boolean; message: string };
 
@@ -119,7 +124,14 @@ export async function improvePrompt(input: {
   for (const target of targets) {
     if (input.signal?.aborted)
       return { ok: false, cancelled: true, message: "" };
-    if (!isAvailable(target)) continue;
+    if (!isAvailable(target)) {
+      // A helper the owner picked must not vanish silently behind a fallback.
+      if (target === settings.helper)
+        failures.push(
+          `${HARNESS_TITLE[target.provider]} ${FAILURE_TEXT.unavailable}`,
+        );
+      continue;
+    }
     const result = await runHelperPipeline({
       targets: [target],
       prompt,
@@ -144,10 +156,15 @@ export async function improvePrompt(input: {
           : { styles: [], terms: [], rules: [] },
         usedSamples: samples.length,
         helper: target,
+        ...(failures.length > 0 ? { fallbackReason: failures.join(", ") } : {}),
       };
     }
     if (result.kind === "cancelled")
       return { ok: false, cancelled: true, message: "" };
+    // The strip shows only the short kind; keep the provider's own words for debugging.
+    console.warn(
+      `[prompt-improve] ${target.provider} failed (${result.kind}): ${result.message}`,
+    );
     failures.push(
       `${HARNESS_TITLE[target.provider]} ${FAILURE_TEXT[result.kind]}`,
     );

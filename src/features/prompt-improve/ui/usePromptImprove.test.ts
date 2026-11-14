@@ -112,6 +112,17 @@ afterEach(() => {
 });
 
 describe("usePromptImprove (L-252)", () => {
+  it("keeps why a fallback helper wrote the rewrite (L-262)", async () => {
+    await render();
+    await act(async () => hook.trigger());
+    await finishRun({ ...ok(), fallbackReason: "Command Code tried a tool" });
+    expect(hook.view).toMatchObject({
+      kind: "applied",
+      helper: HARNESS_TITLE.claude,
+      fallbackReason: "Command Code tried a tool",
+    });
+  });
+
   it("replaces the text in place and keeps the original one click away", async () => {
     await render();
     await act(async () => hook.trigger());

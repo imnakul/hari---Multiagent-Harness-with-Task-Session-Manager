@@ -93,6 +93,42 @@ describe("improvePrompt (L-252)", () => {
     });
   });
 
+  it("says why the chosen helper was passed over when a fallback rewrites", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const run = vi.fn(async (target: AiHelperTarget) => {
+      if (target.provider === "claude")
+        throw new Error("AI helper tried to use a tool");
+      return "<prompt>Fix src/a.ts.</prompt>";
+    });
+    const outcome = await improvePrompt({ ...base, run });
+    expect(outcome).toMatchObject({
+      ok: true,
+      helper: codex,
+      fallbackReason: `${HARNESS_TITLE.claude} tried a tool`,
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("claude failed (tool-attempt)"),
+    );
+    warn.mockRestore();
+  });
+
+  it("names a chosen helper that is unavailable instead of skipping it silently", async () => {
+    const chosen: AiHelperTarget = { provider: "command-code", model: "meta/muse-ember" };
+    const run = vi.fn(async () => "<prompt>Fix src/a.ts.</prompt>");
+    const outcome = await improvePrompt({
+      ...base,
+      settings: { ...DEFAULT_PROMPT_IMPROVE, helper: chosen },
+      targets: [chosen, codex],
+      isAvailable: (target) => target !== chosen,
+      run,
+    });
+    expect(outcome).toMatchObject({
+      ok: true,
+      helper: codex,
+      fallbackReason: `${HARNESS_TITLE["command-code"]} is not available`,
+    });
+  });
+
   it("explains every failure and leaves the text unchanged", async () => {
     const run = vi.fn(async (target: AiHelperTarget) => {
       if (target.provider === "claude") throw new Error("401 unauthorized");

@@ -272,9 +272,16 @@ export function ImprovePromptStrip({
         className="flex items-center gap-1 px-3 pt-2 text-[11px] text-content/55"
       >
         <Sparkles aria-hidden className="size-3 shrink-0" strokeWidth={1.7} />
-        <span className="mr-1 truncate">
+        <span
+          className="mr-1 truncate"
+          title={
+            view.showing === "rewrite" && view.fallbackReason
+              ? `Used ${view.helper} because ${view.fallbackReason}.`
+              : undefined
+          }
+        >
           {view.showing === "rewrite"
-            ? `Rewritten by ${view.helper}`
+            ? `Rewritten by ${view.helper}${view.fallbackReason ? ` · ${view.fallbackReason}` : ""}`
             : "Showing your original"}
         </span>
         <OriginalToggle improve={improve} showing={view.showing} />

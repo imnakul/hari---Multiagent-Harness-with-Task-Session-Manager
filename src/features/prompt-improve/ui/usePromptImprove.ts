@@ -66,8 +66,10 @@ export type ImproveView =
       generated: string;
       showing: "rewrite" | "original";
       helper: string;
+      /** Why the chosen helper was passed over, when a fallback wrote this. */
+      fallbackReason?: string;
     }
-  | { kind: "stale"; rewrite: string; helper: string }
+  | { kind: "stale"; rewrite: string; helper: string; fallbackReason?: string }
   | { kind: "failed"; message: string };
 
 export type RuleOffer =
@@ -236,9 +238,12 @@ export function usePromptImprove(options: {
             }),
           );
           const helper = HARNESS_TITLE[outcome.helper.provider];
+          const fallback = outcome.fallbackReason
+            ? { fallbackReason: outcome.fallbackReason }
+            : {};
           // The owner kept typing: their text wins; the rewrite waits in the strip.
           if (latest.current.getText() !== fromText) {
-            finish({ kind: "stale", rewrite: outcome.prompt, helper });
+            finish({ kind: "stale", rewrite: outcome.prompt, helper, ...fallback });
           } else {
             showRewrite(fromText, outcome.prompt);
             finish({
@@ -248,6 +253,7 @@ export function usePromptImprove(options: {
               generated: outcome.prompt,
               showing: "rewrite",
               helper,
+              ...fallback,
             });
           }
           offerRule(cwd);
@@ -329,6 +335,9 @@ export function usePromptImprove(options: {
       generated: previous.rewrite,
       showing: "rewrite",
       helper: previous.helper,
+      ...(previous.fallbackReason
+        ? { fallbackReason: previous.fallbackReason }
+        : {}),
     });
   }, [showRewrite, showView]);
 
