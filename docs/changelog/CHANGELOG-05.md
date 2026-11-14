@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 08:10 IST — Zen: Settings button in the top bar (L-264)
+- Type: feature
+- What: Zen's top-right buttons now include Settings (a gear, after Keep on top). Clicking it leaves Zen, waits for the window to grow back to full size, then opens Settings.
+- Why: The user asked for a Settings button in Zen. Settings is a full page that Zen's narrow panel can't hold, so it opens in the normal window, like Focus mode's Settings button.
+- Files: [ZenView.tsx](../../src/features/zen/ui/ZenView.tsx), [App.tsx](../../src/app/App.tsx), [ZenView.test.ts](../../src/features/zen/ui/ZenView.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (zen 34) build —
+
+## 2026-11-13 22:51 IST — Settings model dropdowns show Free and locked models (L-263)
+- Type: fix
+- What: The model dropdowns in Settings (AI helper, Improve prompt, Session overview and each provider's default model) now show the Free pill and a lock like the chat picker does. Locked models are greyed, say why on hover (e.g. "Locked: Needs Goat plan") and can't be picked.
+- Why: The user saw no Free badge and no lock in the Command Code model list. The chat picker had them since L-259, but the Settings dropdowns built their options from the model name only and dropped both.
+- Files: [ModelBadges.tsx](../../src/features/sessions/ui/ModelBadges.tsx), [SelectMenu.tsx](../../src/features/sessions/ui/SelectMenu.tsx), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [modelOptionMarks.test.ts](../../src/features/sessions/ui/modelOptionMarks.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (settings, sessions, prompt-improve: 2606) build —
+
+## 2026-11-13 22:45 IST — Improve prompt says why it used another helper (L-262)
+- Type: fix
+- What: When the AI helper chosen for Improve prompt fails and another one writes the rewrite, the strip now says so, e.g. "Rewritten by Gemini · Command Code tried a tool", with the full reason on hover. A chosen helper that is not available is named too, and each failure is logged to the developer console with the provider's own error.
+- Why: The user picked Command Code (Muse Ember) for Improve prompt but Gemini wrote the rewrite with no explanation. The helper code works against the real CLI in tests, so the in-app failure could not be reproduced; this makes its reason visible.
+- Files: [promptImproveHelper.ts](../../src/integrations/harness/core/promptImproveHelper.ts), [usePromptImprove.ts](../../src/features/prompt-improve/ui/usePromptImprove.ts), [PromptImproveControls.tsx](../../src/features/prompt-improve/ui/PromptImproveControls.tsx), tests
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (prompt-improve 69) build —
+
 ## 2026-11-12 16:33 IST — Command Code headless with every model; Free and locked models; copy and drag of sent images (L-258 to L-261)
 - Type: feature
 - What: Command Code chats now run the CLI directly for each message and continue the same conversation, so the model picker lists every model the Go plan can use (Muse Ember included). Models from other plans show greyed with a lock and a reason ("Needs Pro plan", "Pay per use") and can't be picked; free models carry a Free pill. Access is Read only or Full access; Plan never edits. Copying a sent message now includes its images after a restart, and a sent image or file can be dragged onto any chat's composer to attach it again.
