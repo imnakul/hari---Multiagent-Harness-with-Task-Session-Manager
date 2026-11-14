@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ConnectionsSettings } from "../../connections/ui/ConnectionsSettings";
 import { MobileSettings } from "../../mobile/ui/MobileSettings";
+import { AsideLinkSettings } from "../../aside-link/ui/AsideLinkSettings";
 import {
   useActivePaneStyle,
   useInactivePaneDim,
@@ -865,6 +866,7 @@ export function SettingsView({
                 <div className="flex flex-col gap-10">
                   <ConnectionsSettings />
                   <MobileSettings />
+                  <AsideLinkSettings />
                 </div>
               ) : null}
               {section === "appearance" ? (

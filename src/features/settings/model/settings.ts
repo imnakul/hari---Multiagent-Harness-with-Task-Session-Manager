@@ -227,6 +227,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "mobile phone iphone qr pair code router device",
   },
   {
+    id: "aside-link",
+    section: "connections",
+    label: "Aside browser",
+    keywords: "aside ask browser side panel hari models port",
+  },
+  {
     id: "remote-machines",
     section: "connections",
     label: "Your machines",

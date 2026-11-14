@@ -65,13 +65,14 @@
 - Commit: uncommitted
 - Verified: typecheck ✅ (desktop and mobile) lint ✅ (mobile; root has no config) tests ✅ Kotlin compile ✅ build — ; phone and desktop checks manual
 
-## 2026-11-14 14:05 IST — Activity: sites start folded (L-274)
+## 2026-11-14 14:05 IST — Activity: sites start folded (L-282)
 - Type: style
 - What: In Activity → Sites, each website now shows only its time, a bar and how many tabs it had. Click a site to see its tab titles; click again to fold them.
 - Why: The user asked for Sites to be collapsed by default; the tab titles made the column long.
 - Files: [Breakdown.tsx](../../src/features/activity/ui/Breakdown.tsx)
 - Commit: uncommitted
 - Verified: typecheck ✅ lint — (no config) tests — (no view tests) build —
+- Renumbered: was L-274 until 2026-11-14 19:30, when the Aside link (published as L-274 in 0.16.0-local44) merged in.
 
 ## 2026-11-14 11:14 IST — Storage page: filter by date (L-273)
 - Type: feature
@@ -152,6 +153,14 @@
 - Files: [claudeInteractive.ts](../../src/integrations/harness/providers/claude/claudeInteractive.ts), [claudeInteractive.test.ts](../../src/integrations/harness/providers/claude/claudeInteractive.test.ts), [AgentTranscript.tsx](../../src/features/sessions/ui/AgentTranscript.tsx), [AgentTranscript.background.test.ts](../../src/features/sessions/ui/AgentTranscript.background.test.ts)
 - Commit: uncommitted
 - Verified: typecheck ✅ lint — (no config) tests ✅ build —
+
+## 2026-11-14 06:17 IST — Aside's Ask Aside panel can use MonoCode's CLIs (L-274)
+- Type: feature
+- What: MonoCode can now answer Aside's "Ask Aside" side panel. Turn it on in Settings → Connections → Aside browser and press "Add models to Aside"; Aside then lists "Hari · Claude", "Hari · Command Code" and "Hari · Antigravity" models. Each Aside chat runs here as a conversation in a pinned project named CLI, streams its reply (and tool steps as thinking) back to Aside, follows Aside's Reasoning setting, and stops when Aside stops. Aside's chat titles and memory requests are answered locally without running a model.
+- Why: The user wanted Ask Aside to use the Claude Code, Command Code and Antigravity subscriptions they already run in MonoCode instead of Aside's own providers, and to see those chats in MonoCode.
+- Files: [aside_link.rs](../../src-tauri/src/aside_link.rs), [lib.rs](../../src-tauri/src/lib.rs), [aside-link](../../src/features/aside-link), [App.tsx](../../src/app/App.tsx), [SettingsView.tsx](../../src/features/settings/ui/SettingsView.tsx), [settings.ts](../../src/features/settings/model/settings.ts), [aside-link-plan.md](../specs/aside-link-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint — (no config) tests ✅ (vitest 8173) cargo test aside_link ✅ (7) build —
 
 ## 2026-11-14 08:10 IST — Zen: Settings button in the top bar (L-264)
 - Type: feature

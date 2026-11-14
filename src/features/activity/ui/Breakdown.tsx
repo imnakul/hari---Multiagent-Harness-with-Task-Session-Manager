@@ -142,7 +142,7 @@ export function SitesBreakdown({ aw }: { aw: AwSummary | null }): ReactElement |
 type AwSite = AwSummary["sites"][number];
 
 /**
- * One website. Its tab titles start folded (fork, L-274) so the list stays a
+ * One website. Its tab titles start folded (fork, L-282) so the list stays a
  * short ranking of sites; the row opens them.
  */
 function SiteRow({ site, max }: { site: AwSite; max: number }): ReactElement {
