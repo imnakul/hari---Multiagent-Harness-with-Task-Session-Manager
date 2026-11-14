@@ -101,6 +101,38 @@ describe("classifyAsideRequest", () => {
     });
   });
 
+  it("answers Aside's memory dreaming pass locally, by its chat ID or its prompt", () => {
+    const dream = [
+      { role: "system", content: "You are Aside's memory dreaming pass. Tidy the store." },
+      { role: "user", content: "Run a dreaming pass over the current memory store." },
+    ];
+    expect(turn(dream)).toEqual({ kind: "dream" });
+    const request = parseAsideRequest({
+      model: "claude/opus",
+      tools,
+      messages: [SYSTEM, { role: "user", content: "Run a pass." }],
+    });
+    expect(classifyAsideRequest(request, "aside:aux:memory-dream")).toEqual({ kind: "dream" });
+    expect(classifyAsideRequest(request, "chat-1").kind).toBe("turn");
+  });
+
+  it("tells a side panel chat from one an agent started with aside exec", () => {
+    const panel = turn([
+      SYSTEM,
+      {
+        role: "user",
+        content:
+          "<system_message>You're being opened as a sidepanel alongside user's current tab.</system_message>",
+      },
+      { role: "user", content: "what is this?" },
+    ]);
+    expect(panel).toMatchObject({ kind: "turn", fromPanel: true });
+    expect(turn([SYSTEM, { role: "user", content: "open tabs" }])).toMatchObject({
+      kind: "turn",
+      fromPanel: false,
+    });
+  });
+
   it("refuses a request that ends with a tool result", () => {
     const work = turn([
       SYSTEM,

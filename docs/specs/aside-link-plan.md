@@ -101,6 +101,12 @@ harnesses; account switching per model (default account per harness).
   `browser_view.rs`, `claude_interactive.rs`, `fs.rs`, `session_panel.rs`, `webview_recovery.rs`, and the
   base's `mod` order in `lib.rs`). `aside_link.rs` is formatted.
 
+- 2026-11-14 (L-283): Aside's picker shows the provider **key**, not its `name`, so `monocode-claude` read as "monocode". Keys are now `hari-claude-interactive` (per account when there are several), `hari-command-code`, `hari-antigravity`.
+- 2026-11-14 (L-283): a Command Code session in the CLI project ran `aside exec "…"` in a shell. Without `-m`, Aside uses its default model (a Hari one), so each call came back as a new MonoCode chat and some delegated again; the parent hit Command Code's 30-minute turn limit. A new chat without the side panel note that arrives while another link turn runs is now refused with a message, and the guide forbids `aside exec`/`aside task` without `-m`.
+- 2026-11-14 (L-283): Aside's background pass `aside:aux:memory-dream` ("You are Aside's memory dreaming pass.") was starting sessions; it is answered "No changes." locally. Models now set `compat.sendSessionAffinityHeaders`, so the daemon sends `x-session-affinity` (Aside's chat ID), which scopes the conversation key.
+- Limitation: a message sent from MonoCode into an Aside chat's session does not appear in Aside; Aside keeps its own history and has no way to be told.
+- Not Aside: "Antigravity CLI returned a different conversation while resuming" on a normal session came from agy no longer holding that conversation locally (older conversations were gone from `~/.gemini/antigravity-cli/`); follow-up proposed separately.
+
 ## Learnings
 
 - tiny_http's chunked writer buffers 8 KB before sending, which holds streamed tokens back. The link writes its

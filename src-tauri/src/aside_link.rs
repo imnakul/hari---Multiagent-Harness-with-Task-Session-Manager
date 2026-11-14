@@ -24,7 +24,13 @@ const MAX_IN_FLIGHT: usize = 8;
 const KEEPALIVE: Duration = Duration::from_secs(5);
 /// A turn that sends nothing for this long is given up on.
 const IDLE_LIMIT: Duration = Duration::from_secs(20 * 60);
-const PROVIDER_PREFIX: &str = "monocode-";
+/// Aside's model picker shows the provider key, so it reads "hari-…" (L-283).
+const PROVIDER_PREFIX: &str = "hari-";
+/// Keys written before L-283; replaced on the next "Add models to Aside".
+const LEGACY_PREFIX: &str = "monocode-";
+/// Aside names its chat here when a model sets `compat.sendSessionAffinityHeaders`.
+const SESSION_HEADER: &str = "x-session-affinity";
+const MAX_SESSION_ID: usize = 128;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -185,6 +191,24 @@ fn authorized(request: &tiny_http::Request, key: &str) -> bool {
     })
 }
 
+/// Aside's chat ID, when it sent a plain short one; anything else is ignored.
+fn aside_session(request: &tiny_http::Request) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv(SESSION_HEADER))
+        .map(|header| header.value.as_str().trim().to_string())
+        .filter(|value| plain_session_id(value))
+}
+
+fn plain_session_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_SESSION_ID
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '.'))
+}
+
 fn json_response(status: u16, body: &Value) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
     tiny_http::Response::from_data(body.to_string().into_bytes())
         .with_status_code(status)
@@ -252,7 +276,8 @@ fn handle(app: &AppHandle, link: &AsideLink, mut request: tiny_http::Request) {
                 _ => return respond(request, 400, error_body("Expected a JSON object")),
             };
             let stream = body["stream"] == true;
-            let (id, window, receiver) = match open(app, link, body, stream) {
+            let session = aside_session(&request);
+            let (id, window, receiver) = match open(app, link, body, stream, session) {
                 Ok(opened) => opened,
                 Err((status, message)) => return respond(request, status, error_body(&message)),
             };
@@ -280,6 +305,7 @@ fn open(
     link: &AsideLink,
     body: Value,
     stream: bool,
+    session: Option<String>,
 ) -> Result<(String, String, mpsc::Receiver<Piece>), (u16, String)> {
     let mut inner = link
         .inner
@@ -305,7 +331,7 @@ fn open(
         .emit_to(
             window.as_str(),
             "monocode-aside-request",
-            json!({ "id": id, "stream": stream, "body": body }),
+            json!({ "id": id, "stream": stream, "body": body, "session": session }),
         )
         .is_err()
     {
@@ -523,7 +549,7 @@ fn merge_providers(
     let target = entry
         .as_object_mut()
         .ok_or("Aside's models.json has no providers object")?;
-    target.retain(|name, _| !name.starts_with(PROVIDER_PREFIX));
+    target.retain(|name, _| !name.starts_with(PROVIDER_PREFIX) && !name.starts_with(LEGACY_PREFIX));
     for (name, provider) in providers {
         let valid_name = name.starts_with(PROVIDER_PREFIX)
             && name.len() <= 64
@@ -604,7 +630,11 @@ This folder holds chats started from the Ask Aside panel in the user's Aside bro
 Each message names the page the user has open.\n\n\
 - To read or act on that page, use the `aside` MCP server's `repl` tool.\n\
 - To operate other apps on this computer, use the `aside-cu` MCP server's `repl` tool when it is available.\n\
-- Never use the `aside` MCP server's `exec` tool: it would ask this same chat to answer itself.\n";
+- Never use the `aside` MCP server's `exec` tool: it would ask this same chat to answer itself.\n\
+- Never run `aside exec` or `aside task` in a shell without `-m` naming one of Aside's own models: \
+without it Aside uses its default model, which may be this same Hari chat, and the request loops back here.\n";
+/// Every guide MonoCode wrote starts with this; such a file is kept current.
+const GUIDE_HEADING: &str = "# Aside chats\n";
 
 /// The folder Aside's chats run in, set up on first use.
 #[tauri::command]
@@ -620,11 +650,25 @@ pub fn aside_link_project(link: State<'_, AsideLink>) -> Result<String, String> 
         ),
     ];
     for (path, contents) in files {
-        if !path.exists() {
+        let current = std::fs::read_to_string(&path).ok();
+        if needs_write(current.as_deref(), &contents) {
             std::fs::write(&path, contents).map_err(|e| e.to_string())?;
         }
     }
     Ok(crate::fs::path_to_js(project))
+}
+
+/// A missing file is written; an older guide MonoCode wrote is brought up to
+/// date; anything the user wrote instead is left alone.
+fn needs_write(current: Option<&str>, contents: &str) -> bool {
+    match current {
+        None => true,
+        Some(text) => {
+            text != contents
+                && text.starts_with(GUIDE_HEADING)
+                && contents.starts_with(GUIDE_HEADING)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -632,18 +676,19 @@ mod tests {
     use super::*;
 
     fn providers() -> Map<String, Value> {
-        json!({ "monocode-claude": { "name": "Hari · Claude", "models": [{ "id": "opus" }] } })
+        json!({ "hari-claude-interactive": { "name": "Hari · Claude", "models": [{ "id": "opus" }] } })
             .as_object()
             .unwrap()
             .clone()
     }
 
     #[test]
-    fn merging_replaces_older_monocode_providers_and_keeps_the_rest() {
+    fn merging_replaces_older_hari_and_monocode_providers_and_keeps_the_rest() {
         let existing = json!({
             "providers": {
                 "openrouter": { "baseUrl": "https://openrouter.ai/api/v1", "models": [] },
-                "monocode-old": { "models": [] }
+                "monocode-claude": { "models": [] },
+                "hari-old": { "models": [] }
             },
             "other": 1
         });
@@ -651,21 +696,22 @@ mod tests {
             merge_providers(existing, &providers(), "http://127.0.0.1:4518/v1", "k").unwrap();
         let list = merged["providers"].as_object().unwrap();
         assert!(list.contains_key("openrouter"));
-        assert!(!list.contains_key("monocode-old"));
-        assert_eq!(
-            list["monocode-claude"]["baseUrl"],
-            "http://127.0.0.1:4518/v1"
-        );
-        assert_eq!(list["monocode-claude"]["apiKey"], "k");
-        assert_eq!(list["monocode-claude"]["api"], "openai-completions");
+        assert!(!list.contains_key("monocode-claude"));
+        assert!(!list.contains_key("hari-old"));
+        let claude = &list["hari-claude-interactive"];
+        assert_eq!(claude["baseUrl"], "http://127.0.0.1:4518/v1");
+        assert_eq!(claude["apiKey"], "k");
+        assert_eq!(claude["api"], "openai-completions");
         assert_eq!(merged["other"], 1);
     }
 
     #[test]
-    fn merging_refuses_names_outside_monocode_and_providers_without_models() {
+    fn merging_refuses_names_outside_hari_and_providers_without_models() {
         let foreign = json!({ "openrouter": { "models": [] } });
         assert!(merge_providers(Value::Null, foreign.as_object().unwrap(), "u", "k").is_err());
-        let bare = json!({ "monocode-x": { "name": "x" } });
+        let legacy = json!({ "monocode-claude": { "models": [] } });
+        assert!(merge_providers(Value::Null, legacy.as_object().unwrap(), "u", "k").is_err());
+        let bare = json!({ "hari-x": { "name": "x" } });
         assert!(merge_providers(Value::Null, bare.as_object().unwrap(), "u", "k").is_err());
         assert!(merge_providers(json!([]), &providers(), "u", "k").is_err());
     }
@@ -673,7 +719,29 @@ mod tests {
     #[test]
     fn merging_an_empty_file_creates_the_providers_object() {
         let merged = merge_providers(Value::Null, &providers(), "u", "k").unwrap();
-        assert!(merged["providers"]["monocode-claude"].is_object());
+        assert!(merged["providers"]["hari-claude-interactive"].is_object());
+    }
+
+    #[test]
+    fn the_guide_is_kept_current_but_a_users_file_is_not_replaced() {
+        assert!(needs_write(None, PROJECT_GUIDE));
+        assert!(!needs_write(Some(PROJECT_GUIDE), PROJECT_GUIDE));
+        assert!(needs_write(
+            Some("# Aside chats\n\nolder words\n"),
+            PROJECT_GUIDE
+        ));
+        assert!(!needs_write(Some("# My own notes\n"), PROJECT_GUIDE));
+        assert!(!needs_write(Some("{}"), "@AGENTS.md\n"));
+    }
+
+    #[test]
+    fn session_ids_are_plain_and_short() {
+        assert!(plain_session_id("aside:aux:memory-dream"));
+        assert!(plain_session_id("0b6d3c1e-5f9a-4c1e-9d2b-7a3f1c2e4d5f"));
+        assert!(!plain_session_id(""));
+        assert!(!plain_session_id("a b"));
+        assert!(!plain_session_id("<script>"));
+        assert!(!plain_session_id(&"a".repeat(MAX_SESSION_ID + 1)));
     }
 
     #[test]

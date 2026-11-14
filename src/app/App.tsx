@@ -11819,7 +11819,12 @@ function Workspace({
         harness: model.harness,
         model: model.id,
         modelSettings: mergeModelSettings(model, choice.modelSettings),
-        providerAccountId: mobileAccountChoice(model.harness, cwd, {}),
+        // The Aside model names the account when the user has several (L-283).
+        providerAccountId: mobileAccountChoice(
+          model.harness,
+          cwd,
+          choice.providerAccountId ? { providerAccountId: choice.providerAccountId } : {},
+        ),
       };
       // A placeholder title, so the first send seeds and generates one as the composer does.
       session.title = HARNESS_LABEL[session.harness];

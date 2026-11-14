@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-14 19:53 IST — Aside link: clear names, Claude accounts, no session floods (L-283)
+- Type: fix
+- What: Aside's model picker now shows `hari-claude-interactive`, `hari-command-code` and `hari-antigravity` instead of `monocode-…`. With more than one Claude account in MonoCode, each account is its own entry (`hari-claude-interactive-<account name>`) and its chats run on that account. "Add models to Aside" replaces the old `monocode-…` entries. When an agent in an Aside chat ran `aside exec` without `-m`, Aside sent that request back to Hari, which started another session each time (Command Code made several and then timed out after 30 minutes); such a request now gets a short answer telling the agent to use `repl` or `aside exec -m <Aside model>`, and the CLI project's guide says the same. Aside's background memory "dreaming" pass is answered locally instead of starting a session. Aside now sends its chat ID, which keeps two chats that start alike apart.
+- Why: User report: names showed `monocode`, no Interactive or account; a single Ask Aside chat with Command Code created many sessions and then stopped without doing the task.
+- Files: [asideModels.ts](../../src/features/aside-link/model/asideModels.ts), [asideRequest.ts](../../src/features/aside-link/model/asideRequest.ts), [useAsideLink.ts](../../src/features/aside-link/hooks/useAsideLink.ts), [AsideLinkSettings.tsx](../../src/features/aside-link/ui/AsideLinkSettings.tsx), [App.tsx](../../src/app/App.tsx), [aside_link.rs](../../src-tauri/src/aside_link.rs), tests beside them
+- Commit: uncommitted
+- Verified: typecheck ✅ (root) lint — (root has no ESLint config) tests ✅ (aside-link 26 incl. 5 new, Rust aside_link 9 incl. 2 new) rustfmt ✅; Aside and desktop checks manual
+
 ## 2026-11-14 19:21 IST — Tasks and Notes offline on the phone (L-281)
 - Type: feature
 - What: Hari now keeps a copy of the computer's Tasks and Notes. When the computer is off or out of reach, the Tasks and Notes screens still open, with a "Computer not connected" line, and notes read before (plus the 20 newest) open in full. New tasks, ticking or moving tasks, and note edits made then wait on the phone and go to the computer when it's back. If the same task or note was changed on the computer later, the computer's copy stays (the note editor offers Reload or Keep mine); something deleted on the computer stays deleted. The phone's copy refreshes by itself whenever the computer's Tasks or Notes change.

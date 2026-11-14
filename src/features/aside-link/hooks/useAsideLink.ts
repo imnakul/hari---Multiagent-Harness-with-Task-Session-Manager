@@ -8,6 +8,10 @@ import {
 } from "../../sessions/model/models";
 import type { HarnessId, Session } from "../../sessions/model/session";
 import {
+  providerAccounts,
+  supportsAccountProfiles,
+} from "../../providers/model/providerAccounts";
+import {
   classifyAsideRequest,
   parseAsideRequest,
   promptWithHistory,
@@ -18,6 +22,7 @@ import {
   asideEffort,
   asideProviders,
   parseAsideModelId,
+  type AsideAccount,
   type AsideHarness,
 } from "../model/asideModels";
 import {
@@ -34,6 +39,8 @@ export type AsideStart = {
   harness: HarnessId;
   model: string;
   modelSettings: Record<string, string>;
+  /** The account the Aside model names; otherwise the project's selected one. */
+  providerAccountId?: string;
   text: string;
   requestId: string;
 };
@@ -48,7 +55,8 @@ type Options = {
   stop: (sessionId: string) => void;
 };
 
-type RequestEvent = { id: string; stream: boolean; body: unknown };
+/** `session` is Aside's chat ID (`x-session-affinity`), checked by the Rust side. */
+type RequestEvent = { id: string; stream: boolean; body: unknown; session?: unknown };
 
 type Turn = {
   sessionId: string;
@@ -61,6 +69,21 @@ type Turn = {
 /** How long a turn may take to start before Aside is told it failed. */
 const START_LIMIT_MS = 90_000;
 const MEMORY_ANSWER = "No new memories.";
+const DREAM_ANSWER = "No changes.";
+/**
+ * An agent in an Aside chat that runs `aside exec` without `-m` gets Aside's
+ * default model, often a Hari one, so the chat comes back here as a new chat
+ * and can fan out into many sessions.
+ */
+const LOOP_ANSWER =
+  "Hari didn't run this chat: it arrived while another Hari chat was working and wasn't sent from the Aside side panel, so it looks like an agent asked Aside to answer itself (`aside exec`). Agents should use Aside's `repl` tool, or `aside exec -m <an Aside model>`. To start a chat yourself, send it from the side panel.";
+
+/** MonoCode's accounts for a harness, as Aside providers name them. */
+export function asideAccounts(harness: AsideHarness): AsideAccount[] {
+  return supportsAccountProfiles(harness)
+    ? providerAccounts(harness).map(({ id, label }) => ({ id, label }))
+    : [];
+}
 
 /**
  * Writes one Aside reply in order. Pushes are chained so a slow IPC call never
@@ -151,7 +174,9 @@ export function useAsideLink(options: Options): void {
 
   const harnessKey = options.harnesses.join(",");
   useEffect(() => {
-    const models = Object.values(asideProviders(current.current.harnesses, modelsFor)).flatMap(
+    const models = Object.values(
+      asideProviders(current.current.harnesses, modelsFor, asideAccounts),
+    ).flatMap(
       (provider) => provider.models.map((model) => model.id),
     );
     const attach = () =>
@@ -171,14 +196,23 @@ export function useAsideLink(options: Options): void {
       request: AsideRequest,
       work: Extract<AsideWork, { kind: "turn" }>,
       reply: Reply,
+      session: string | undefined,
     ) => {
       const choice = parseAsideModelId(request.model);
       const model = choice && catalogModel(choice.harness, choice.modelId);
       if (!choice || !model)
         throw new Error("This model is no longer in MonoCode. Use “Add models to Aside” again.");
+      if (!work.priorTexts.length && !work.fromPanel && live.size > 0) {
+        reply.say(LOOP_ANSWER);
+        reply.finish();
+        return;
+      }
       const store = window.localStorage;
+      // Aside's chat ID, when sent, keeps two chats that open alike apart.
+      const scope = session ? `${request.model}
+${session}` : request.model;
       const known = work.priorTexts.length
-        ? findConversation(store, await conversationKey(request.model, work.priorTexts))
+        ? findConversation(store, await conversationKey(scope, work.priorTexts))
         : undefined;
       const requestId = `aside:${id}`;
       let sessionId = known;
@@ -202,11 +236,12 @@ export function useAsideLink(options: Options): void {
             ...(effort && setting ? { [setting.id]: effort } : {}),
             ...(choice.harness === "claude" ? { claudeExecution: "interactive" } : {}),
           },
+          ...(choice.accountId ? { providerAccountId: choice.accountId } : {}),
           text: promptWithHistory(work.prompt, work.priorTexts.length ? work.history : ""),
           requestId,
         });
       }
-      rememberConversation(store, await conversationKey(request.model, work.texts), sessionId);
+      rememberConversation(store, await conversationKey(scope, work.texts), sessionId);
       if (work.droppedImages)
         reply.say("", "• Images aren't sent to MonoCode yet; answering from the text.\n");
       if (disposed || reply.gone) return;
@@ -214,7 +249,8 @@ export function useAsideLink(options: Options): void {
       pump.current();
     };
 
-    const handle = async ({ id, stream, body }: RequestEvent) => {
+    const handle = async ({ id, stream, body, session: rawSession }: RequestEvent) => {
+      const session = typeof rawSession === "string" && rawSession ? rawSession : undefined;
       const model =
         body && typeof body === "object" && "model" in body && typeof body.model === "string"
           ? body.model
@@ -226,10 +262,16 @@ export function useAsideLink(options: Options): void {
       });
       try {
         const request = parseAsideRequest(body);
-        const work = classifyAsideRequest(request);
-        if (work.kind === "turn") return await runTurn(id, request, work, reply);
+        const work = classifyAsideRequest(request, session);
+        if (work.kind === "turn") return await runTurn(id, request, work, reply, session);
         reply.say(
-          work.kind === "title" ? work.title : work.kind === "memory" ? MEMORY_ANSWER : work.message,
+          work.kind === "title"
+            ? work.title
+            : work.kind === "memory"
+              ? MEMORY_ANSWER
+              : work.kind === "dream"
+                ? DREAM_ANSWER
+                : work.message,
         );
       } catch (error) {
         reply.say(`⚠ ${errorText(error)}`);

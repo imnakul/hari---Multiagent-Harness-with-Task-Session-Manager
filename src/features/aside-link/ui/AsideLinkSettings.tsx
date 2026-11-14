@@ -7,6 +7,7 @@ import {
 } from "../../../integrations/harness/core/availabilityState";
 import { Toggle } from "../../../shared/ui/Toggle";
 import { modelsFor } from "../../sessions/model/models";
+import { asideAccounts } from "../hooks/useAsideLink";
 import { ASIDE_HARNESSES, asideProviders } from "../model/asideModels";
 import { parseLinkStatus, parsePort, type LinkStatus } from "../model/asideSettings";
 
@@ -79,7 +80,7 @@ export function AsideLinkSettings(): ReactElement {
 
   const portValue = parsePort(port);
   const portError = port.trim() && portValue === null ? "Use a port from 1024 to 65535." : "";
-  const providers = asideProviders(harnesses, modelsFor);
+  const providers = asideProviders(harnesses, modelsFor, asideAccounts);
   const modelCount = Object.values(providers).reduce((sum, entry) => sum + entry.models.length, 0);
   const line = status ? statusLine(status) : null;
 
@@ -87,7 +88,7 @@ export function AsideLinkSettings(): ReactElement {
     act(async () => {
       const result = await invoke<{ accounts: number }>("aside_link_write_models", { providers });
       const accounts = result.accounts === 1 ? "your Aside account" : `${result.accounts} Aside accounts`;
-      return `Added ${modelCount} models to ${accounts}. Pick a “Hari” model in Ask Aside.`;
+      return `Added ${modelCount} models to ${accounts}. Pick a model under “hari-…” in Ask Aside.`;
     });
 
   return (
@@ -128,7 +129,7 @@ export function AsideLinkSettings(): ReactElement {
               {ASIDE_HARNESSES.filter((entry) => harnesses.includes(entry.harness))
                 .map((entry) => entry.name.replace("Hari · ", ""))
                 .join(", ")}
-              . Add them again after changing the port or installing a CLI.
+              . Add them again after changing the port, installing a CLI or adding a Claude account.
             </div>
             <button
               type="button"

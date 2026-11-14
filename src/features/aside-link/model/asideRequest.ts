@@ -30,6 +30,8 @@ export type AsideRequest = {
 export type AsideWork =
   | { kind: "title"; title: string }
   | { kind: "memory" }
+  /** Aside's background pass that tidies its memories; nothing to change. */
+  | { kind: "dream" }
   | {
       kind: "turn";
       /** Every real user text in order, the newest last; keys the conversation. */
@@ -41,6 +43,11 @@ export type AsideWork =
       /** Earlier exchanges, for a chat MonoCode has no session for. */
       history: string;
       droppedImages: boolean;
+      /**
+       * Sent from Aside's side panel with the open tab. A chat started by
+       * `aside exec` (an agent delegating to Aside) has no such note.
+       */
+      fromPanel: boolean;
     }
   | { kind: "unsupported"; message: string };
 
@@ -50,6 +57,9 @@ const PAGE_NOTE = "<system_message>";
 const MEMORIES = "<recalled_memories>";
 const MEMORY_TASK = "You are now acting as the memory extraction subagent";
 const TITLE_TASK = "You name conversations";
+const DREAM_TASK = "You are Aside's memory dreaming pass";
+const DREAM_SESSION = "aside:aux:memory-dream";
+const PANEL_NOTE = "You're being opened as a sidepanel";
 /** Aside asks for a title with a tiny budget and no tools. */
 const TITLE_MAX_TOKENS = 256;
 const MAX_PROMPT = 100_000;
@@ -141,7 +151,11 @@ function keepEnd(text: string, limit: number): string {
   return text.length <= limit ? text : `…${text.slice(text.length - limit)}`;
 }
 
-export function classifyAsideRequest(request: AsideRequest): AsideWork {
+/**
+ * @param session Aside's own chat ID from its `x-session-affinity` header,
+ * when the model asks for it; background passes are named `aside:aux:…`.
+ */
+export function classifyAsideRequest(request: AsideRequest, session?: string): AsideWork {
   const { messages } = request;
   const system = messages
     .filter((message) => message.role === "system" || message.role === "developer")
@@ -150,6 +164,8 @@ export function classifyAsideRequest(request: AsideRequest): AsideWork {
   const users = messages.filter(isUserText);
   const lastUser = users[users.length - 1];
   if (lastUser?.text.trimStart().startsWith(MEMORY_TASK)) return { kind: "memory" };
+  if (session === DREAM_SESSION || system.trimStart().startsWith(DREAM_TASK))
+    return { kind: "dream" };
   if (
     system.trimStart().startsWith(TITLE_TASK) ||
     (request.toolCount === 0 &&
@@ -199,6 +215,9 @@ export function classifyAsideRequest(request: AsideRequest): AsideWork {
     prompt,
     history: keepEnd(history, MAX_HISTORY),
     droppedImages: turn.some((message) => message.hasImage),
+    fromPanel: messages.some(
+      (message) => message.role === "user" && message.text.includes(PANEL_NOTE),
+    ),
   };
 }
 
