@@ -5,7 +5,7 @@
 - What: Hari (Android) has a Share bubble, off until turned on in Settings → Share. It floats over other apps; one tap sends what you copied (text, a link or a picture) to the computer and shows ✓ (or the picture) with Undo for 4 seconds. The same clipboard again wiggles and says Already sent. Drag to move (snaps to a side, never sends); hold for Send again, Open Share or Hide bubble. It hides while Hari is open.
 - Why: User request 2026-11-15 ("Build it all": phone floating bubble that sends the clipboard on tap, with a setting to turn it on or off).
 - Files: see L-321 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: not yet
+- Commit: fb6a6f4f (released in 0.16.0-local55 with L-318..L-320)
 - Verified: phone typecheck ✅ lint ✅ tests ✅ (324; the known `watchFrames` file fails as before), `shareModel` test for ids and Undo ✅, Kotlin `:hari-live:compileDebugKotlin` ✅ with no warnings in the new code. Needs the new APK and a check on the phone.
 
 ## 2026-11-15 20:59 IST — Share bar: send to the phone from over any app (L-320)
