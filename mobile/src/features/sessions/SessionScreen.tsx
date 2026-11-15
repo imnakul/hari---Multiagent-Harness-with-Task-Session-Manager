@@ -31,6 +31,7 @@ import {
 import Animated, {
   Easing,
   interpolate,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -39,6 +40,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { liftHeld } from "@/features/sessions/liftHold";
 import { BackdropReading } from "@/features/wallpaper/Backdrop";
 import { isReadingPath } from "@/features/wallpaper/reading";
 import { CircleButton } from "@/ui/CircleButton";
@@ -773,7 +775,12 @@ export function SessionFrame({
  * `onMove` reports the keyboard's position every frame instead, and
  * `onInteractive` follows a drag. `offset` is how much less than the keyboard
  * height to rise, as KeyboardStickyView's `offset.opened`.
+ * Fork (Hari, L-309): while a picker holds the lift (`liftHeld`) it stays
+ * put, then glides to where the keyboard is.
  */
+/** A held lift's glide to the keyboard, as the keyboard's own slide. */
+const LIFT_SETTLE = { duration: 250, easing: Easing.out(Easing.cubic) };
+
 export function useKeyboardLift(offset: number, owner?: RefObject<TextInput | null>) {
   const height = useSharedValue(0);
   const progress = useSharedValue(0);
@@ -804,12 +811,26 @@ export function useKeyboardLift(offset: number, owner?: RefObject<TextInput | nu
     });
     return () => subscription.remove();
   }, [height, progress, settledHeight, owned]);
+  // Where the keyboard is, also while a picker holds the lift.
+  const keyboardHeight = useSharedValue(0);
+  const keyboardProgress = useSharedValue(0);
   const follow = (e: { height: number; progress: number }) => {
     "worklet";
     if (!owned.get()) return;
+    keyboardHeight.set(e.height);
+    keyboardProgress.set(e.progress);
+    if (liftHeld.get()) return;
     height.set(e.height);
     progress.set(e.progress);
   };
+  useAnimatedReaction(
+    () => liftHeld.get(),
+    (held, was) => {
+      if (held || !was) return;
+      height.set(withTiming(keyboardHeight.get(), LIFT_SETTLE));
+      progress.set(withTiming(keyboardProgress.get(), LIFT_SETTLE));
+    },
+  );
   useKeyboardHandler(
     {
       onStart: (e) => {

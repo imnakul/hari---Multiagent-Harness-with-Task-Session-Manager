@@ -36,6 +36,7 @@ import {
   type Attachment,
   type Picked,
 } from "./attachments";
+import { withLiftHeld } from "./liftHold";
 import { readDraft, writeDraft } from "./drafts";
 import { FullImageViewer } from "./MessageAttachments";
 import { DictationBar } from "./DictationBar";
@@ -319,7 +320,8 @@ export function Composer({
       return;
     }
     try {
-      const picked = await pick(room);
+      // Fork (Hari, L-309): the composer stays put under the picker.
+      const picked = await withLiftHeld(() => pick(room));
       if (!picked.length) return;
       // Fork (Hari, L-235): shown at once, a spinner on each until it's read
       // or scaled down, rather than nothing until all of them are.

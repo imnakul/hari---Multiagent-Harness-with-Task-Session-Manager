@@ -237,6 +237,9 @@ vi.mock("@/features/liveUpdates/nativeLive", () => ({ openNativeFile: vi.fn() })
 vi.mock("expo-file-system", () => ({ File: class {} }));
 vi.mock("@/features/sessions/MessageAttachments", () => ({ FullImageViewer: () => null }));
 vi.mock("@/ui/Icon", () => ({ Icon: () => null }));
+vi.mock("@/features/sessions/liftHold", () => ({
+  withLiftHeld: <T,>(run: () => Promise<T>) => run(),
+}));
 vi.mock("@/ui/LiquidView", () => ({ LiquidView: () => null }));
 vi.mock("@/ui/theme", () => ({
   useColors: () => ({}),

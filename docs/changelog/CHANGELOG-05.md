@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 14:35 IST — Hari's chat box stays put when Photo Library opens (L-309)
+- Type: fix
+- What: On Android, opening Photo Library, Camera or Files from the + menu dropped the keyboard at once, so the chat box fell in one frame just before the picker covered it. The chat box now stays where it is under the picker, then glides to the keyboard's place (up if it comes back, down if not) when you return.
+- Why: User report 2026-11-15.
+- Files: see L-309 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local50 commit
+- Verified: phone typecheck ✅ lint ✅ (`tests/Composer.test.tsx` keeps its earlier display-name lint error) Composer tests ✅ (8). Phone check manual.
+
 ## 2026-11-15 14:27 IST — Hari usage shows the real time left; refresh in the header (L-308)
 - Type: fix
 - What: The phone's usage (Settings → Usage and the model picker) showed the 5-hour limit as "reset due" with the old window's numbers, because it reused the computer's saved reading until a manual refresh. It now asks for a new reading when a window has ended since the last one or the reading is over 5 minutes old, so it shows the time left (e.g. "5h · 4h 30m"). On the Usage page the refresh button moved into the header beside "Usage", turns into a spinner while it asks, and the intro line is gone.
