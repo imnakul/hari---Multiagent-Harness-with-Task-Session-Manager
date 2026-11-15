@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 16:42 IST — Update downloads from GitHub Pages (L-315)
+- Type: feature
+- What: the release build now puts the new installer and APK on GitHub Pages, checks both can be downloaded, and only then writes the update files with Pages links (the release keeps a copy and its links are used if Pages fails). Turned on Pages (built by Actions) with a `hari-v*` tag rule on the `github-pages` environment, and removed the dead custom domain devnakul.me from `imnakul.github.io`, which sent every Pages address there.
+- Why: GitHub release downloads were very slow on the user's network; Pages has about 100 GB a month with no card.
+- Files: see L-315 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local53 commit
+- Verified: workflow edited; first real check is the local53 release run. Download speed on phone and PC manual.
+
 ## 2026-11-15 16:27 IST — Hari chats no longer hang on the spinner; Quit Hari; Launch on startup (L-312..L-314)
 - Type: fix, feature
 - What: L-312: a long chat opened from a notification could stay on its spinner. The phone sent the hidden chat to its end once to have its newest rows drawn; when the computer's fresh copy replaced the one kept on the phone, or a running reply grew, the new end was never drawn and the chat waited for it. It now goes again whenever the chat changes before it shows, goes on once the end is drawn and the screen is full, and shows the chat at its end within 1.5 s regardless. L-313: Quit Hari in Settings and on the always-on notification (Android). L-314: Launch on startup for the desktop app, starting in the tray (Windows).

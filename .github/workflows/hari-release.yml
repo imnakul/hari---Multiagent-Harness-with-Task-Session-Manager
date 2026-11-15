@@ -2,6 +2,8 @@
 # phone APK. Runs only when asked: push a tag hari-v<version> (the version in
 # package.json), or run it by hand from the Actions tab.
 # The desktop's updater and the phone read the files of the latest release.
+# Fork (L-315): the installer and APK they point to are served from GitHub
+# Pages (release downloads were very slow for us); the release keeps a copy.
 name: Hari release
 
 on:
@@ -194,27 +196,75 @@ jobs:
     name: Publish release
     needs: [version, windows, android]
     runs-on: ubuntu-latest
+    # Fork (L-315): Pages takes publishes from hari-v* tags (environment rule).
+    environment:
+      name: github-pages
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+      # Fork (L-315): only this version's installer and APK go on Pages (each
+      # publish replaces the site), and before the manifests that point there.
+      - name: Stage Pages site
+        run: |
+          mkdir -p site
+          cp artifacts/*-setup.exe artifacts/*.apk site/
+          echo "<!doctype html><title>Hari downloads</title><p>Hari ${{ needs.version.outputs.version }} update files.</p>" > site/index.html
+          ls -la site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - name: Publish to Pages
+        id: pages
+        uses: actions/deploy-pages@v5
+        # A failed publish must not stop the release: its own links are used.
+        continue-on-error: true
+      - name: Check the Pages files
+        id: mirror
+        if: steps.pages.outcome == 'success'
+        env:
+          PAGE_URL: ${{ steps.pages.outputs.page_url }}
+        run: |
+          base="${PAGE_URL%/}"
+          base="${base/#http:/https:}"
+          for file in site/*-setup.exe site/*.apk; do
+            name="$(basename "$file")"
+            url="$base/$(node -p 'encodeURIComponent(process.argv[1])' "$name")"
+            ok=""
+            for try in 1 2 3 4 5 6; do
+              if curl -fsSIL "$url" >/dev/null; then ok=1; break; fi
+              echo "Not on Pages yet: $url (try $try of 6)"
+              sleep 20
+            done
+            if [ -z "$ok" ]; then echo "Pages missing $name; using release links"; exit 0; fi
+          done
+          echo "base=$base" >> "$GITHUB_OUTPUT"
       - name: Write update manifests
         env:
           VERSION: ${{ needs.version.outputs.version }}
           TAG: ${{ needs.version.outputs.tag }}
           NOTES: ${{ inputs.notes }}
+          MIRROR: ${{ steps.mirror.outputs.base }}
         run: |
           node - <<'EOF'
           const fs = require("fs");
           const { versionCode } = require("./mobile/app.config.js");
-          const { VERSION, TAG, NOTES, REPO_URL } = process.env;
+          const { VERSION, TAG, NOTES, REPO_URL, MIRROR } = process.env;
           const files = fs.readdirSync("artifacts");
           const exe = files.find((name) => name.endsWith("-setup.exe"));
           const apk = files.find((name) => name.endsWith(".apk"));
           if (!exe || !apk) throw new Error(`Missing release files: ${files.join(", ")}`);
-          const download = (name) => `${REPO_URL}/releases/download/${TAG}/${encodeURIComponent(name)}`;
+          // Fork (L-315): from Pages once checked there; the release's own otherwise.
+          const download = (name) => MIRROR
+            ? `${MIRROR}/${encodeURIComponent(name)}`
+            : `${REPO_URL}/releases/download/${TAG}/${encodeURIComponent(name)}`;
+          console.log(`Downloads from ${MIRROR || "the release"}`);
           const notes = NOTES?.trim() || `Hari ${VERSION}`;
           const windows = {
             signature: fs.readFileSync(`artifacts/${exe}.sig`, "utf8").trim(),
