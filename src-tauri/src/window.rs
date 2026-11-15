@@ -21,6 +21,8 @@ static WINDOW_COUNTER: AtomicU32 = AtomicU32::new(1);
 pub const QUICK_COMPOSER_LABEL: &str = "quick-composer";
 pub const QUICK_COMPOSER_GIT_LABEL: &str = "quick-composer-git";
 pub const MONO_CHAT_PREFIX: &str = "mono-chat-";
+/// Fork (L-320): the floating Share bar, not a workspace either.
+pub const SHARE_BAR_LABEL: &str = "share-bar";
 static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
 
 const QUIT_POLL: &str = "quit_poll";
@@ -275,6 +277,7 @@ pub fn destroy_window(window: Window) -> Result<(), String> {
 pub fn is_workspace_window(label: &str) -> bool {
     label != QUICK_COMPOSER_LABEL
         && label != QUICK_COMPOSER_GIT_LABEL
+        && label != SHARE_BAR_LABEL
         && label != "mono-chat"
         && !label.starts_with(MONO_CHAT_PREFIX)
 }
@@ -697,6 +700,7 @@ mod tests {
         assert!(!is_workspace_window("mono-chat-second"));
         assert!(!is_workspace_window(QUICK_COMPOSER_LABEL));
         assert!(!is_workspace_window(QUICK_COMPOSER_GIT_LABEL));
+        assert!(!is_workspace_window(SHARE_BAR_LABEL));
     }
 
     #[test]

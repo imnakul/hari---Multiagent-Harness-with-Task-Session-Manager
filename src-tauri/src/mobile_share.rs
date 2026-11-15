@@ -705,7 +705,10 @@ fn only_one_phone_name(app: &AppHandle) -> Option<String> {
 }
 
 fn check_window(window: &Window) -> Result<(), String> {
-    if crate::window::is_workspace_window(window.label()) {
+    // Fork (L-320): the floating Share bar sends too.
+    if crate::window::is_workspace_window(window.label())
+        || window.label() == crate::window::SHARE_BAR_LABEL
+    {
         Ok(())
     } else {
         Err("Only workspace windows can use Share".into())

@@ -1406,6 +1406,41 @@ export function saveQuickComposerShortcut(value: string) {
   }
 }
 
+const SHARE_BAR_ENABLED_KEY = "monocode.shareBarEnabled";
+const SHARE_BAR_SHORTCUT_KEY = "monocode.shareBarShortcut";
+/** Fork (L-320): the Share bar's row in Shortcuts. */
+export const SHARE_BAR_COMMAND = "App: Share Bar";
+/** Ctrl+Alt+H, in the spelling tauri-plugin-global-shortcut accepts. */
+export const SHARE_BAR_DEFAULT_SHORTCUT = "Control+Option+KeyH";
+
+export function loadShareBarEnabled(): boolean {
+  return readFlag(SHARE_BAR_ENABLED_KEY) ?? true;
+}
+
+export function saveShareBarEnabled(value: boolean): void {
+  writeFlag(SHARE_BAR_ENABLED_KEY, value);
+}
+
+export function loadShareBarShortcut(): string {
+  try {
+    const value = localStorage.getItem(SHARE_BAR_SHORTCUT_KEY);
+    return value && isGlobalShortcut(value) ? value : SHARE_BAR_DEFAULT_SHORTCUT;
+  } catch {
+    return SHARE_BAR_DEFAULT_SHORTCUT;
+  }
+}
+
+/** @throws when another command already owns the chord. */
+export function saveShareBarShortcut(value: string): void {
+  if (!isGlobalShortcut(value)) return;
+  const shortcut = validateKeybindingShortcut(SHARE_BAR_COMMAND, value);
+  try {
+    localStorage.setItem(SHARE_BAR_SHORTCUT_KEY, shortcut);
+  } catch {
+    // private mode / quota
+  }
+}
+
 const LIVE_AGENTS_ENABLED_KEY = "monocode.liveAgentsEnabled";
 
 export const LIVE_AGENTS_ENABLED_DEFAULT = true;
@@ -2190,6 +2225,10 @@ export const KEYBINDINGS: KeybindingRow[] = [
         },
       ]
     : []),
+  // Fork (L-320): the floating Share bar (Windows only).
+  ...(IS_WIN
+    ? [{ command: SHARE_BAR_COMMAND, keys: `${MOD}${ALT}H`, when: "Anywhere" }]
+    : []),
   { command: "App: Toggle Sidebar", keys: `${MOD}B`, when: "Always" },
   {
     command: "App: Toggle Session Sidebar",
@@ -2395,7 +2434,9 @@ function shortcutOwners(): Map<string, string> {
     const chords =
       row.command === QUICK_COMPOSER_COMMAND
         ? [loadQuickComposerShortcut()]
-        : defaultShortcutsFor(row.command);
+        : row.command === SHARE_BAR_COMMAND
+          ? [loadShareBarShortcut()]
+          : defaultShortcutsFor(row.command);
     for (const chord of chords) owners.set(chord, row.command);
   }
   for (const [command, override] of Object.entries(loadKeybindingOverrides())) {
@@ -2573,6 +2614,14 @@ export function currentKeybindings(): KeybindingRow[] {
         ...row,
         keys: loadQuickComposerEnabled()
           ? quickComposerShortcutLabel(loadQuickComposerShortcut())
+          : "Disabled",
+      };
+    }
+    if (row.command === SHARE_BAR_COMMAND) {
+      return {
+        ...row,
+        keys: loadShareBarEnabled()
+          ? quickComposerShortcutLabel(loadShareBarShortcut())
           : "Disabled",
       };
     }

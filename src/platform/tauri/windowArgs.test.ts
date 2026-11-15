@@ -66,9 +66,9 @@ describe("Tauri window arguments (L-218)", () => {
     for (const file of files) {
       file.text.split(/\r?\n/).forEach((line, index) => {
         if (!/get_webview_window\(|webview_windows\(\)/.test(line)) return;
-        // The composer panels, and macOS code turning a checked `Window` back
-        // into its webview window, are fine.
-        if (/QUICK_COMPOSER(_GIT)?_LABEL/.test(line)) return;
+        // The composer panels, the Share bar (L-320, its own window), and macOS
+        // code turning a checked `Window` back into its webview window, are fine.
+        if (/QUICK_COMPOSER(_GIT)?_LABEL|SHARE_BAR_LABEL/.test(line)) return;
         if (/\.get_webview_window\((window|page)\.label\(\)\)/.test(line)) return;
         // Startup in lib.rs, before any Browser page exists.
         if (file.name === "lib.rs" && line.includes('app.get_webview_window("main")')) {

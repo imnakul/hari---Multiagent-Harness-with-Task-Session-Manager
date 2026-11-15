@@ -1,11 +1,19 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 20:59 IST — Share bar: send to the phone from over any app (L-320)
+- Type: feature
+- What: Ctrl+Alt+H opens a small glass window that floats above every app with Share's composer in it. Type, paste (text, links, pictures) or drop files on it and Send; it stays open and shows ✓ Sent, and closes with its × or the shortcut. It remembers where it was and how big, and moves back on screen when a monitor is unplugged. The shortcut can be changed or turned off in Settings → Shortcuts ("App: Share Bar"); a chord another app holds shows "Shortcut taken".
+- Why: User request 2026-11-15 ("Build it all": desktop floating Share bar).
+- Files: see L-320 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: not yet
+- Verified: Rust `share_bar` tests ✅ (5) `window::tests` ✅, rustfmt ✅, clippy clean in the changed files; desktop typecheck ✅, tests ✅ (settings, mobile, platform, quick-composer: 801), `vite build` ✅ (`share-bar.html` built). The window itself needs a manual check on the desktop.
+
 ## 2026-11-15 20:48 IST — Minimal mode, Restart and Shut down from the phone (L-318, L-319)
 - Type: feature
 - What: Hari's Control tab has a second row of tiles. Minimal asks first (naming the apps it will close), then sets Windows power mode to Best power efficiency, turns the monitor off and asks the apps picked in Settings → Connections → Minimal mode to close; tapping it again restores the power mode, reopens those apps and turns the monitor on. Restart and Shut down each ask first and don't force apps closed.
 - Why: User request 2026-11-15 (locked: Minimal mode 1A, Restart and Shut down 2A).
 - Files: see L-318 and L-319 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: not yet
+- Commit: 3c7b8f1e
 - Verified: Rust `mobile_pc` tests ✅ (14, five new; the read-only power-mode check passes here), phone typecheck ✅ lint ✅ `pcModel` tests ✅ (13), desktop typecheck ✅ `src/features/mobile` tests ✅ (85). Phone tiles and the real power change need a manual check (new phone JS; no new APK native code).
 
 ## 2026-11-15 19:14 IST — Share stays in step on both sides; one card per message (L-317)

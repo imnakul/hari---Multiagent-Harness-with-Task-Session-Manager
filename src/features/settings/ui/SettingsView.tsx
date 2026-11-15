@@ -550,6 +550,12 @@ import {
   validateKeybindingShortcut,
   saveQuickComposerEnabled,
   saveQuickComposerShortcut,
+  loadShareBarEnabled,
+  loadShareBarShortcut,
+  saveShareBarEnabled,
+  saveShareBarShortcut,
+  SHARE_BAR_COMMAND,
+  SHARE_BAR_DEFAULT_SHORTCUT,
   subscribeKeybindings,
   type KeybindingOverride,
   saveTabAnimationsEnabled,
@@ -581,6 +587,7 @@ import {
   type OpeningBehavior,
 } from "../model/openingBehavior";
 import { setQuickComposerShortcut } from "../../quick-composer/model/quickComposer";
+import { setShareBarShortcut } from "../../mobile/model/shareBar";
 import {
   isGlobalShortcut,
   QUICK_COMPOSER_DEFAULT_SHORTCUT,
@@ -4791,6 +4798,45 @@ function QuickComposerShortcutEditor() {
   );
 }
 
+/**
+ * Fork (L-320): the floating Share bar's global shortcut. The OS claim comes
+ * first so a chord another app holds ("Shortcut taken") is never saved.
+ */
+function ShareBarShortcutEditor() {
+  const [shortcut, setShortcut] = useState(loadShareBarShortcut);
+  const [enabled, setEnabled] = useState(loadShareBarEnabled);
+  const apply = async (next: string) => {
+    if (!isGlobalShortcut(next))
+      throw new Error("The Share bar needs Ctrl, Win or Alt as a global hotkey");
+    validateKeybindingShortcut(SHARE_BAR_COMMAND, next);
+    if (enabled) await setShareBarShortcut(true, next);
+    saveShareBarShortcut(next);
+    setShortcut(next);
+  };
+  const reset = async () => {
+    validateKeybindingShortcut(SHARE_BAR_COMMAND, SHARE_BAR_DEFAULT_SHORTCUT);
+    await setShareBarShortcut(true, SHARE_BAR_DEFAULT_SHORTCUT);
+    saveShareBarEnabled(true);
+    saveShareBarShortcut(SHARE_BAR_DEFAULT_SHORTCUT);
+    setShortcut(SHARE_BAR_DEFAULT_SHORTCUT);
+    setEnabled(true);
+  };
+  return (
+    <ShortcutEditor
+      name="Share bar"
+      display={enabled ? quickComposerShortcutLabel(shortcut) : null}
+      resetVisible={!enabled || shortcut !== SHARE_BAR_DEFAULT_SHORTCUT}
+      onApply={apply}
+      onDisable={async () => {
+        await setShareBarShortcut(false);
+        saveShareBarEnabled(false);
+        setEnabled(false);
+      }}
+      onReset={reset}
+    />
+  );
+}
+
 function KeybindingShortcutEditor({
   command,
   display,
@@ -4889,6 +4935,8 @@ function KeybindingsPage() {
                 </span>
               ) : row.command === "App: Quick Composer" ? (
                 <QuickComposerShortcutEditor />
+              ) : row.command === SHARE_BAR_COMMAND ? (
+                <ShareBarShortcutEditor />
               ) : (
                 <KeybindingShortcutEditor
                   command={row.command}

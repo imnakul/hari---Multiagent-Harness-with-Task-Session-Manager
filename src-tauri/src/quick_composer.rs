@@ -144,11 +144,19 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     std::thread::spawn(screenshots::cleanup_abandoned);
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
-            .with_handler(|app, _shortcut, event: ShortcutEvent| {
+            .with_handler(|app, shortcut, event: ShortcutEvent| {
                 if event.state == ShortcutState::Pressed {
                     // Defer work off the native keyboard callback before
                     // entering Tauri's main-thread event loop.
                     let app = app.clone();
+                    // Fork (L-320): the Share bar's chord goes to the Share bar.
+                    #[cfg(target_os = "windows")]
+                    if crate::share_bar::owns(&app, shortcut) {
+                        std::thread::spawn(move || crate::share_bar::toggle(&app));
+                        return;
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    let _ = shortcut;
                     std::thread::spawn(move || toggle(&app));
                 }
             })

@@ -848,6 +848,7 @@ import {
   recordAutomationNotification,
 } from "../features/notifications/model/notificationCenter";
 import { useQuickComposerLaunches } from "../features/quick-composer/hooks/useQuickComposerLaunches";
+import { useShareBarShortcut } from "../features/mobile/hooks/useShareBarShortcut";
 import type { QuickLaunch } from "../features/quick-composer/model/quickComposer";
 import { claimInboxAutomationRuns } from "../features/automations/model/automationEvents";
 import {
@@ -11486,6 +11487,8 @@ function Workspace({
     [appendTab, submitSession, onSaveDraft],
   );
   useQuickComposerLaunches(launchQuickSession);
+  // Fork (L-320): the floating Share bar's global shortcut.
+  useShareBarShortcut();
   const launchQuickSessionRef = useRef(launchQuickSession);
   launchQuickSessionRef.current = launchQuickSession;
   const submitSessionRef = useRef(submitSession);

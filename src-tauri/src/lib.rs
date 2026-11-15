@@ -86,6 +86,8 @@ mod session_import;
 mod session_metadata;
 mod session_panel;
 mod session_store;
+#[cfg(target_os = "windows")]
+mod share_bar;
 mod skills;
 pub mod ssh_askpass;
 #[cfg(target_os = "windows")]
@@ -469,6 +471,8 @@ pub fn run() {
             {
                 quick_composer::init(app.handle())?;
             }
+            #[cfg(target_os = "windows")]
+            share_bar::init(app.handle());
             #[cfg(target_os = "macos")]
             {
                 mono_chat::init(app.handle())?;
@@ -920,6 +924,10 @@ pub fn run() {
             startup::startup_launch_set,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             quick_composer::quick_composer_set_enabled,
+            #[cfg(target_os = "windows")]
+            share_bar::share_bar_set_enabled,
+            #[cfg(target_os = "windows")]
+            share_bar::share_bar_hide,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             quick_composer::quick_composer_prepare,
             #[cfg(any(target_os = "macos", target_os = "windows"))]

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" class="quick-composer">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Share to phone</title>
+    <!-- Fork (L-320): the floating Share bar. Same fonts as index.html. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* The window is clear; the card draws the only surface. */
+      html.quick-composer,
+      html.quick-composer body,
+      html.quick-composer #root {
+        background: transparent !important;
+        height: 100%;
+        overflow: clip;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/features/mobile/share-bar/main.tsx"></script>
+  </body>
+</html>

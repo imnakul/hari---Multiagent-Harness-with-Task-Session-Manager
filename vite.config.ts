@@ -75,6 +75,8 @@ export default defineConfig(async ({ mode }) => {
         input: {
           main: "index.html",
           quickComposer: "quick-composer.html",
+          // Fork (L-320): the floating Share bar.
+          shareBar: "share-bar.html",
           monoChat: "mono-chat.html",
           ...(mode.startsWith("benchmark")
             ? { workspaceBenchmark: "tests/browser/workspace-performance.html" }
