@@ -1,0 +1,349 @@
+/* ── Reset ───────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+img,
+video,
+svg {
+  display: block;
+  max-width: 100%;
+}
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+ul,
+ol {
+  list-style: none;
+  padding: 0;
+}
+code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+::selection {
+  background: var(--teal-soft);
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.skip {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 14px;
+  transform: translateY(-160%);
+}
+.skip:focus-visible {
+  transform: none;
+}
+
+/* ── Layout ──────────────────────────────────────────── */
+.wrap {
+  width: 100%;
+  max-width: calc(var(--page) + var(--gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.wrap-wide {
+  width: 100%;
+  max-width: calc(1280px + var(--gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.page {
+  position: relative;
+}
+.section {
+  padding-top: clamp(88px, 12vw, 168px);
+}
+
+/* ── Materials ───────────────────────────────────────── */
+/* Live glass: blurs what is behind it. Use for a handful of large surfaces. */
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow-1);
+}
+/* Frost: tint, grain and a light edge with no live blur, for repeated items
+   (the same trick Hari's hover sidebar uses to stay smooth). */
+.frost {
+  background-color: var(--frost);
+  background-image: var(--grain);
+  background-size: 140px;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
+}
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Type ────────────────────────────────────────────── */
+.serif {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.1em;
+  letter-spacing: -0.012em;
+  line-height: 0.9;
+  color: var(--display-accent);
+  padding-right: 0.04em;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 18px;
+}
+.eyebrow-num {
+  color: var(--accent);
+}
+.eyebrow-num::after {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  margin-left: 10px;
+  vertical-align: middle;
+  background: var(--line-strong);
+}
+.h2 {
+  font-size: clamp(2rem, 4.2vw, 3.3rem);
+  line-height: 1.04;
+  letter-spacing: -0.036em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+.h2-xl {
+  font-size: clamp(2.4rem, 5.8vw, 4.6rem);
+  letter-spacing: -0.042em;
+  line-height: 1;
+}
+.lede {
+  margin-top: 20px;
+  font-size: clamp(1.02rem, 1.25vw, 1.14rem);
+  line-height: 1.62;
+  color: var(--ink-2);
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+.lede-sm {
+  font-size: 1rem;
+  max-width: 42ch;
+}
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 550;
+  font-size: 14.5px;
+}
+.text-link svg {
+  transition: transform 200ms var(--ease-out);
+}
+.logo {
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    color 200ms ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn-primary {
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 1px 2px rgb(0 0 0 / 0.12),
+    0 10px 24px -10px rgb(0 0 0 / 0.4);
+}
+.btn-ghost {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
+}
+.btn-sm {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13.5px;
+}
+.btn-lg {
+  height: 50px;
+  padding: 0 24px;
+  font-size: 15.5px;
+}
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.icon-btn:active {
+  transform: scale(0.94);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      0 1px 2px rgb(0 0 0 / 0.12),
+      0 14px 30px -10px rgb(0 0 0 / 0.5);
+  }
+  .btn-ghost:hover {
+    background: var(--glass-strong);
+  }
+  .icon-btn:hover {
+    background: var(--frost-hover);
+    color: var(--ink);
+  }
+  .text-link:hover svg {
+    transform: translate(2px, -2px);
+  }
+}
+
+/* ── Reveal choreography ─────────────────────────────── */
+/* Lead moves most, support less, decoration only fades. Seen once per visit. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 700ms var(--ease-out) var(--d, 0ms),
+    transform 800ms var(--ease-out) var(--d, 0ms);
+}
+[data-reveal="lead"] {
+  transform: translateY(22px);
+  filter: blur(6px);
+  transition:
+    opacity 800ms var(--ease-out) var(--d, 0ms),
+    transform 900ms var(--ease-out) var(--d, 0ms),
+    filter 800ms var(--ease-out) var(--d, 0ms);
+}
+[data-reveal="fade"] {
+  transform: none;
+}
+[data-reveal="stage"] {
+  transform: translateY(48px) scale(0.985);
+  transition:
+    opacity 900ms var(--ease-out) var(--d, 0ms),
+    transform 1100ms var(--ease-out) var(--d, 0ms);
+}
+[data-reveal="media"] {
+  transform: translateY(20px);
+  clip-path: inset(0 0 14% 0 round 22px);
+  transition:
+    opacity 700ms var(--ease-out) var(--d, 0ms),
+    transform 900ms var(--ease-out) var(--d, 0ms),
+    clip-path 900ms var(--ease-out) var(--d, 0ms);
+}
+[data-reveal="group"] {
+  opacity: 1;
+  transform: none;
+}
+[data-reveal="group"] > * {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 600ms var(--ease-out) var(--d, 0ms),
+    transform 700ms var(--ease-out) var(--d, 0ms);
+}
+[data-reveal][data-in],
+[data-reveal="group"][data-in] > * {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+/* Ends outside the box so the frame's shadow is not cut off. */
+[data-reveal="media"][data-in] {
+  clip-path: inset(-80px -80px -80px -80px round 22px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal],
+  [data-reveal="group"] > * {
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    transition: opacity 300ms ease !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
