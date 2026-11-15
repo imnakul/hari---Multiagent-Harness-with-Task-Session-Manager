@@ -14,6 +14,9 @@ import {
 // kept on the phone only.
 
 const KEY = "hari.share.history";
+/** Fork (Hari, L-317): ids removed on this phone, newest last. */
+const REMOVED_KEY = "hari.share.removed";
+const MAX_REMOVED = 500;
 
 function load(): PhoneShareEntry[] {
   try {
@@ -58,6 +61,27 @@ export function setShareProgress(id: string, progress: number) {
 /** Removes these from the history (all of them with none given). Saved files stay. */
 export function removeShares(ids?: string[]) {
   commit(ids ? current().filter((entry) => !ids.includes(entry.id)) : []);
+}
+
+/** Fork (Hari, L-317): ids removed here, so filling in from the computer skips them. */
+export function removedShareIds(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(Storage.getItemSync(REMOVED_KEY) ?? "[]");
+    return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function rememberRemovedShares(ids: readonly string[]) {
+  if (!ids.length) return;
+  const kept = [...removedShareIds()].filter((id) => !ids.includes(id));
+  Storage.setItemSync(REMOVED_KEY, JSON.stringify([...kept, ...ids].slice(-MAX_REMOVED)));
+}
+
+/** Fork (Hari, L-317): the history with these added (see `fillShareHistory`). */
+export function replaceShareHistory(next: PhoneShareEntry[]) {
+  if (next !== current()) commit(next);
 }
 
 /** Fork (L-290): pins or saves these (or takes the pin or save off). */

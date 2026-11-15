@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 19:14 IST — Share stays in step on both sides; one card per message (L-317)
+- Type: feature + fix
+- What: the phone fills its Share history in from the computer on each connect (all of it after a reinstall, with a loader the first time); Remove travels both ways, and the phone remembers what it removed so a fill-in won't bring it back; a file without an ending gets one from its type (the phone when sending, the computer on receipt, from the first bytes when the type is generic); the phone opens files in their default app; phone link cards use the full width; the computer's Share message is one card with Copy (Save and Pin on hover) at the bottom left and the time at the bottom right, the other actions in the right-click menu.
+- Why: User report 2026-11-15 (history gone after reinstall, Remove on one side only, gallery pictures with no ending, an app chooser every time, narrow link cards, a card inside a card).
+- Files: see L-317 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: not yet; testing first
+- Verified: Rust `mobile_share` tests ✅ (11), phone typecheck ✅ lint ✅ tests ✅ (31), desktop typecheck ✅ `src/features/mobile` tests ✅ (84). `cargo clippy -D warnings` fails only in files this change doesn't touch (attachment_storage, claude_interactive, harness, mobile_router). The direct open on the phone needs a new APK.
+
+## 2026-11-15 17:17 IST — Phone takes updates from GitHub Pages; version stays in view (L-315 fix)
+- Type: fix
+- What: local53 put a GitHub Pages link in `hari-android.json`, and the phone accepts only github.com links there, so it dropped the update and showed Up to date. The phone now also accepts an APK on the repo owner’s GitHub Pages (`imnakul.github.io`, https only). Phones on local53 or older need one reinstall by hand (user’s choice: keep Pages links rather than a GitHub fallback). The Updates row now shows the installed version beside Up to date.
+- Why: User report 2026-11-15 (phone on local50 or older showed Up to date with no version).
+- Files: `mobile/src/features/updates/hariUpdate.ts` (`pagesHost`), `useHariUpdate.ts`, `HariUpdateCard.tsx`, `mobile/tests/hariUpdate.test.ts`
+- Commit: not yet; testing first
+- Verified: phone typecheck ✅ lint ✅ `hariUpdate` tests ✅ (6, one new). The desktop updater is not affected (it checks the signature, not the address).
+
+## 2026-11-15 17:12 IST — Desktop window keeps its see-through glass (L-314 fix)
+- Type: fix
+- What: since local52 the desktop window was created hidden on Windows (`"visible": false`) so a sign-in launch would not flash; the window then lost its see-through glass and the Share panel showed as a black, solid panel. The window is created visible again; a sign-in launch hides it at once in setup.
+- Why: User report 2026-11-15 (black panel on local53).
+- Files: `src-tauri/tauri.windows.conf.json`, `src-tauri/src/lib.rs` (comment), L-314 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: not yet; testing in dev mode first
+- Verified: `cargo check` ✅. Cause found by elimination (the only window change since local50); confirm in dev mode.
+
 ## 2026-11-15 16:58 IST — Hari Share composer at the bottom (L-316)
 - Type: feature
 - What: the phone's Share page now reads as a session's chat: messages oldest first with the newest at the bottom, the page opens at its end and follows new messages when it is there, and the composer is docked at the bottom, riding on the keyboard (the session's keyboard lift). The filters, Delete all and the pin bar stay fixed at the top. The file picker holds the composer in place as it opens (as L-309).

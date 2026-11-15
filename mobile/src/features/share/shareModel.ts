@@ -51,9 +51,10 @@ export type PhoneShareEntry = {
   saved?: boolean;
 };
 
-/** Fork (L-290): a pin, save or Delete all made on the other device. */
+/** Fork (L-290): a pin, save or Delete all made on the other device; L-317: or a remove. */
 export type ShareMeta =
   | { type: "meta"; action: "pin" | "unpin" | "save" | "unsave"; ids: string[] }
+  | { type: "meta"; action: "remove"; ids: string[] }
   | { type: "meta"; action: "clear" };
 
 /** A `share` item from the computer. */
@@ -125,8 +126,9 @@ export function parseShareMeta(payload: unknown): ShareMeta | null {
   if (field(payload, "type") !== "meta") return null;
   const action = field(payload, "action");
   if (action === "clear") return { type: "meta", action };
-  const known = META_ACTIONS.find((candidate) => candidate === action);
   const ids = field(payload, "ids");
+  if (action === "remove") return Array.isArray(ids) ? { type: "meta", action, ids: ids.filter(isId) } : null;
+  const known = META_ACTIONS.find((candidate) => candidate === action);
   if (!known || !Array.isArray(ids)) return null;
   return { type: "meta", action: known, ids: ids.filter(isId) };
 }
@@ -254,6 +256,45 @@ function parseEntry(raw: unknown): PhoneShareEntry | null {
   return entry;
 }
 
+/**
+ * Fork (Hari, L-317): the computer's history (`share.history`, already in
+ * this phone's directions) as entries here. A file the computer sent can be
+ * fetched again while it still offers it; a file this phone sent is kept by
+ * name (the phone's own copy isn't known any more).
+ */
+export function parseComputerHistory(raw: unknown): PhoneShareEntry[] {
+  const entries = field(raw, "entries");
+  if (!Array.isArray(entries)) return [];
+  return entries.flatMap((item): PhoneShareEntry[] => {
+    const file = field(item, "kind") === "file";
+    const incoming = field(item, "direction") === "in";
+    const status = file && incoming ? (field(item, "offered") === true ? "offered" : "failed") : "done";
+    const entry = parseEntry({
+      ...(typeof item === "object" && item !== null ? item : {}),
+      status,
+      ...(file && incoming ? { fileId: field(item, "id") } : {}),
+      ...(status === "failed" ? { error: "No longer on the computer" } : {}),
+    });
+    return entry ? [entry] : [];
+  });
+}
+
+/**
+ * Fork (Hari, L-317): adds what the computer has and this phone lacks,
+ * except what was removed here; newest first, trimmed as usual. Unchanged
+ * (the same array) when there is nothing to add.
+ */
+export function fillShareHistory(
+  history: PhoneShareEntry[],
+  computer: PhoneShareEntry[],
+  removed: ReadonlySet<string>,
+): PhoneShareEntry[] {
+  const have = new Set(history.map((entry) => entry.id));
+  const missing = computer.filter((entry) => !have.has(entry.id) && !removed.has(entry.id));
+  if (!missing.length) return history;
+  return trimShareHistory([...history, ...missing].sort((a, b) => b.at - a.at));
+}
+
 export function parseShareHistory(raw: unknown): PhoneShareEntry[] {
   return Array.isArray(raw)
     ? raw.map(parseEntry).filter((entry): entry is PhoneShareEntry => entry !== null)
@@ -325,6 +366,25 @@ export function formatShareSize(bytes: number): string {
 }
 
 /** A name safe to save under: no folders, no characters Android or Windows refuse. */
+const EXTENSION_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/heic": "heic",
+  "image/heif": "heic", "video/mp4": "mp4", "video/quicktime": "mov", "video/x-matroska": "mkv",
+  "video/webm": "webm", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/wav": "wav", "audio/ogg": "ogg",
+  "application/pdf": "pdf", "application/zip": "zip", "text/plain": "txt",
+  "application/vnd.android.package-archive": "apk",
+};
+
+/**
+ * Fork (Hari, L-317): a name with an ending. A gallery can share a picture as
+ * "image_8623"; with its type known it goes as "image_8623.jpg", so the
+ * computer knows what it is.
+ */
+export function withExtension(name: string, mimeType: string): string {
+  if (/\.[A-Za-z0-9]{1,15}$/.test(name)) return name;
+  const ext = EXTENSION_BY_MIME[mimeType.split(";")[0].trim().toLowerCase()];
+  return ext ? `${name}.${ext}` : name;
+}
+
 export function safeFileName(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";
   const cleaned = base

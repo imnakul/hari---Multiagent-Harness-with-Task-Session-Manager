@@ -414,12 +414,15 @@ export function WebLinkCardLink({
   url,
   label,
   chipWhenUnavailable = true,
+  bare = false,
 }: {
   url: string;
   /** The link's own words; null for a bare URL. */
   label: string | null;
   /** False for a card under its line, whose chip is already in the text. */
   chipWhenUnavailable?: boolean;
+  /** Fork (Hari, L-317): no border or fill of its own, inside a message that already has them. */
+  bare?: boolean;
 }) {
   const style = useLinkCardStyle();
   const look = CARD_LOOKS[style];
@@ -454,7 +457,11 @@ export function WebLinkCardLink({
       ref={ref}
       data-link-card={url}
       data-card-style={style}
-      className={`my-1 flex max-w-full overflow-hidden rounded-lg border border-stroke bg-content/[0.03] text-content transition-colors duration-100 ease-out hover:bg-content/[0.06] ${look.card}`}
+      className={`flex max-w-full overflow-hidden text-content ${
+        bare
+          ? "rounded-xl"
+          : "my-1 rounded-lg border border-stroke bg-content/[0.03] transition-colors duration-100 ease-out hover:bg-content/[0.06]"
+      } ${look.card}`}
     >
       {style === "large" ? image : null}
       <span

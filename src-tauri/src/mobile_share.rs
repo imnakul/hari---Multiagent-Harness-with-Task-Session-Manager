@@ -25,11 +25,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
-const METHODS: [&str; 4] = [
+const METHODS: [&str; 5] = [
     "share.upload",
     "share.download",
     "share.uploadStatus",
     "share.filesResult",
+    "share.history",
 ];
 const FILE: &str = "share-history.json";
 const MAX_HISTORY: usize = 100;
@@ -475,7 +476,25 @@ fn apply_meta(app: &AppHandle, payload: &Value) -> Result<(), String> {
         changed(app);
         return Ok(());
     }
-    let ids: Vec<String> = payload["ids"]
+    // Fork (Hari, L-317): removed from the history on the phone.
+    if action == "remove" {
+        let ids = meta_ids(payload);
+        with(|share| {
+            share.entries.retain(|entry| !ids.contains(&entry.id));
+            save(share);
+        })?;
+        changed(app);
+        return Ok(());
+    }
+    let ids = meta_ids(payload);
+    let (pinned, saved) = meta_flags(action).ok_or("Unsupported share")?;
+    mark_local(&ids, pinned, saved)?;
+    changed(app);
+    Ok(())
+}
+
+fn meta_ids(payload: &Value) -> Vec<String> {
+    payload["ids"]
         .as_array()
         .map(|ids| {
             ids.iter()
@@ -484,11 +503,7 @@ fn apply_meta(app: &AppHandle, payload: &Value) -> Result<(), String> {
                 .map(str::to_string)
                 .collect()
         })
-        .unwrap_or_default();
-    let (pinned, saved) = meta_flags(action).ok_or("Unsupported share")?;
-    mark_local(&ids, pinned, saved)?;
-    changed(app);
-    Ok(())
+        .unwrap_or_default()
 }
 
 /// "pin" → (Some(true), None), and so on.
@@ -966,14 +981,150 @@ pub fn mobile_share_remove(
 ) -> Result<(), String> {
     check_window(&window)?;
     with(|share| {
-        match ids {
+        match &ids {
             Some(ids) => share.entries.retain(|entry| !ids.contains(&entry.id)),
             None => share.entries.clear(),
         }
         save(share);
     })?;
     changed(&app);
+    // Fork (Hari, L-317): gone from the phone too (waits while it is away).
+    if let Some(ids) = ids {
+        let ids: Vec<String> = ids.into_iter().filter(|id| valid_id(id)).collect();
+        if !ids.is_empty() {
+            push_meta(
+                &app,
+                json!({ "type": "meta", "action": "remove", "ids": ids }),
+            );
+        }
+    }
     Ok(())
+}
+
+/// Fork (Hari, L-317): the history as the phone sees it (its directions
+/// swapped), for a phone filling in what it lacks, as after a reinstall. A
+/// file sent to the phone says whether it can still be fetched. No paths.
+fn history_for_phone() -> Result<Value, String> {
+    let now = now_ms();
+    with(|share| {
+        let entries: Vec<Value> = share
+            .entries
+            .iter()
+            .map(|entry| {
+                let mut value = json!({
+                    "id": entry.id,
+                    "direction": if entry.direction == Direction::In { "out" } else { "in" },
+                    "kind": entry.kind,
+                    "at": entry.at,
+                });
+                if let Some(text) = &entry.text {
+                    value["text"] = json!(text);
+                }
+                if let Some(name) = &entry.name {
+                    value["name"] = json!(name);
+                }
+                if let Some(size) = entry.size {
+                    value["size"] = json!(size);
+                }
+                if let Some(mime_type) = &entry.mime_type {
+                    value["mimeType"] = json!(mime_type);
+                }
+                if let Some(group_id) = &entry.group_id {
+                    value["groupId"] = json!(group_id);
+                }
+                if entry.pinned {
+                    value["pinned"] = json!(true);
+                }
+                if entry.saved {
+                    value["saved"] = json!(true);
+                }
+                if entry.kind == Kind::File && entry.direction == Direction::Out {
+                    let offered = now.saturating_sub(entry.at) <= OFFER_AGE_MS
+                        && entry
+                            .path
+                            .as_deref()
+                            .is_some_and(|path| Path::new(path).is_file());
+                    value["offered"] = json!(offered);
+                }
+                value
+            })
+            .collect();
+        json!({ "entries": entries })
+    })
+}
+
+/// Fork (Hari, L-317): the name with an ending when it has none: from the
+/// type the phone gave, else from the file's first bytes; and the type, from
+/// those bytes when the phone gave a generic one.
+fn with_extension(name: &str, mime_type: &str, file: &Path) -> (String, String) {
+    let sniffed = || {
+        let mut head = [0u8; 16];
+        let read = std::fs::File::open(file)
+            .and_then(|mut file| file.read(&mut head))
+            .unwrap_or(0);
+        sniff_mime(&head[..read])
+    };
+    let mime_type = if mime_type == "application/octet-stream" {
+        sniffed().unwrap_or(mime_type).to_string()
+    } else {
+        mime_type.to_string()
+    };
+    if !split_extension(name).1.is_empty() {
+        return (name.to_string(), mime_type);
+    }
+    match extension_for(&mime_type) {
+        Some(ext) => (safe_name(&format!("{name}{ext}")), mime_type),
+        None => (name.to_string(), mime_type),
+    }
+}
+
+/// A picture, video or PDF's type from its first bytes.
+fn sniff_mime(head: &[u8]) -> Option<&'static str> {
+    if head.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else if head.starts_with(b"\x89PNG") {
+        Some("image/png")
+    } else if head.starts_with(b"GIF8") {
+        Some("image/gif")
+    } else if head.starts_with(b"RIFF") && head.get(8..12) == Some(b"WEBP") {
+        Some("image/webp")
+    } else if head.get(4..8) == Some(b"ftyp") {
+        match head.get(8..12) {
+            Some(b"heic") | Some(b"heix") | Some(b"mif1") => Some("image/heic"),
+            Some(b"qt  ") => Some("video/quicktime"),
+            _ => Some("video/mp4"),
+        }
+    } else if head.starts_with(b"%PDF") {
+        Some("application/pdf")
+    } else {
+        None
+    }
+}
+
+/// The usual ending for a type, the other way round from `mime_for`.
+fn extension_for(mime_type: &str) -> Option<&'static str> {
+    Some(
+        match mime_type.split(';').next().unwrap_or_default().trim() {
+            "image/jpeg" | "image/jpg" => ".jpg",
+            "image/png" => ".png",
+            "image/gif" => ".gif",
+            "image/webp" => ".webp",
+            "image/heic" | "image/heif" => ".heic",
+            "video/mp4" => ".mp4",
+            "video/quicktime" => ".mov",
+            "video/webm" => ".webm",
+            "video/x-matroska" => ".mkv",
+            "audio/mpeg" => ".mp3",
+            "audio/mp4" => ".m4a",
+            "audio/wav" => ".wav",
+            "audio/ogg" => ".ogg",
+            "application/pdf" => ".pdf",
+            "application/zip" => ".zip",
+            "text/plain" => ".txt",
+            "application/vnd.android.package-archive" => ".apk",
+            _ => return None,
+        },
+    )
 }
 
 /// A common type for a file name, so the phone can open it; else a generic one.
@@ -1028,6 +1179,7 @@ pub(crate) async fn handle(
         "share.download" => download(&app, &params),
         "share.uploadStatus" => upload_status(&peer, &params),
         "share.filesResult" => files_result(&params),
+        "share.history" => history_for_phone(),
         _ => Err("Unsupported mobile operation".into()),
     })
     .await
@@ -1227,7 +1379,10 @@ fn upload(app: &AppHandle, peer: &str, params: &Value) -> Result<Value, String> 
     let Some(done) = share.uploads.remove(file_id) else {
         return Err("Upload lost".into());
     };
-    let target = free_path(&dir, &done.name);
+    // Fork (Hari, L-317): a name with no ending (a gallery's "image_8623")
+    // gets one, so Windows knows the file and Share shows the picture.
+    let (name, mime_type) = with_extension(&done.name, &done.mime_type, &done.part);
+    let target = free_path(&dir, &name);
     std::fs::rename(&done.part, &target).map_err(|error| {
         let _ = std::fs::remove_file(&done.part);
         format!("Couldn't save the file: {error}")
@@ -1241,7 +1396,7 @@ fn upload(app: &AppHandle, peer: &str, params: &Value) -> Result<Value, String> 
         Entry {
             name: Some(saved_name.clone()),
             size: Some(size),
-            mime_type: Some(done.mime_type),
+            mime_type: Some(mime_type),
             path: Some(target.to_string_lossy().into()),
             device: device.clone(),
             group_id: done.group_id,
@@ -1364,6 +1519,37 @@ mod tests {
         assert!(share.entries.iter().any(|entry| entry.id == "0"));
         assert!(share.entries.iter().any(|entry| entry.id == "1"));
         assert!(!share.entries.iter().any(|entry| entry.id == "2"));
+    }
+
+    #[test]
+    fn a_name_with_no_ending_gets_one() {
+        let dir = std::env::temp_dir().join(format!("hari-ext-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let jpeg = dir.join("a.part");
+        std::fs::write(&jpeg, [0xFF, 0xD8, 0xFF, 0xE0, 0, 0]).unwrap();
+        // From the type the phone gave.
+        assert_eq!(
+            with_extension("image_8623", "image/jpeg", &jpeg),
+            ("image_8623.jpg".to_string(), "image/jpeg".to_string())
+        );
+        // A generic type: from the first bytes.
+        assert_eq!(
+            with_extension("image_8623", "application/octet-stream", &jpeg),
+            ("image_8623.jpg".to_string(), "image/jpeg".to_string())
+        );
+        // An ending already there stays.
+        assert_eq!(
+            with_extension("notes.md", "text/markdown", &jpeg).0,
+            "notes.md"
+        );
+        // Nothing known: as it was.
+        let other = dir.join("b.part");
+        std::fs::write(&other, b"hello").unwrap();
+        assert_eq!(
+            with_extension("blob", "application/octet-stream", &other).0,
+            "blob"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

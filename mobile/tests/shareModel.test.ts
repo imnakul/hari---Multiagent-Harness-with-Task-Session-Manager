@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fillShareHistory,
+  parseComputerHistory,
+  parseShareMeta,
+  withExtension,
   addShareEntry,
   base64ToBytes,
   bytesToBase64,
@@ -211,5 +215,59 @@ describe("shareDay (L-288)", () => {
   });
   it("dates anything older", () => {
     expect(shareDay(new Date(2026, 10, 1).getTime(), now)).not.toMatch(/Today|Yesterday/);
+  });
+});
+
+describe("filling in from the computer (L-317)", () => {
+  const reply = {
+    entries: [
+      { id: "t1", direction: "out", kind: "text", at: 3, text: "hi", pinned: true },
+      { id: "f1", direction: "in", kind: "file", at: 2, name: "a.jpg", size: 5, offered: true },
+      { id: "f2", direction: "in", kind: "file", at: 1, name: "b.pdf", offered: false },
+      { id: "f3", direction: "out", kind: "file", at: 0, name: "c.png" },
+      { id: "bad", direction: "in", kind: "file", at: 0 },
+    ],
+  };
+
+  it("maps the computer's history to entries here", () => {
+    const entries = parseComputerHistory(reply);
+    expect(entries.map((entry) => [entry.id, entry.status])).toEqual([
+      ["t1", "done"],
+      ["f1", "offered"],
+      ["f2", "failed"],
+      ["f3", "done"],
+    ]);
+    expect(entries[0].pinned).toBe(true);
+    expect(entries[1].fileId).toBe("f1");
+    expect(entries[2].error).toBe("No longer on the computer");
+    expect(entries[3].fileId).toBeUndefined();
+    expect(parseComputerHistory(null)).toEqual([]);
+  });
+
+  it("adds only what is missing and was not removed here", () => {
+    const computer = parseComputerHistory(reply);
+    const local = [{ id: "t1", direction: "out" as const, kind: "text" as const, at: 3, status: "done" as const, text: "mine" }];
+    const filled = fillShareHistory(local, computer, new Set(["f2"]));
+    expect(filled.map((entry) => entry.id)).toEqual(["t1", "f1", "f3"]);
+    expect(filled[0].text).toBe("mine");
+    const same = fillShareHistory(filled, computer, new Set(["f2"]));
+    expect(same).toBe(filled);
+  });
+
+  it("reads a remove from the other device", () => {
+    expect(parseShareMeta({ type: "meta", action: "remove", ids: ["a", 3] })).toEqual({
+      type: "meta",
+      action: "remove",
+      ids: ["a"],
+    });
+  });
+});
+
+describe("withExtension (L-317)", () => {
+  it("adds an ending from the type when there is none", () => {
+    expect(withExtension("image_8623", "image/jpeg")).toBe("image_8623.jpg");
+    expect(withExtension("clip", "video/mp4; codecs=avc1")).toBe("clip.mp4");
+    expect(withExtension("photo.png", "image/jpeg")).toBe("photo.png");
+    expect(withExtension("blob", "application/octet-stream")).toBe("blob");
   });
 });

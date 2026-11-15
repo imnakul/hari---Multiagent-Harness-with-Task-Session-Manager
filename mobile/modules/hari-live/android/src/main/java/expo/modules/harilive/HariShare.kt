@@ -158,13 +158,13 @@ internal object HariShare {
     return target.toString()
   }
 
-  /** Opens a saved file in the app the user picks for its type. */
+  /** Opens a saved file in the default app for its type (Android asks once if there is none; L-317). */
   fun open(context: Context, uri: String, mimeType: String): Boolean =
     try {
       val view = Intent(Intent.ACTION_VIEW)
         .setDataAndType(Uri.parse(uri), mimeType)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-      context.startActivity(Intent.createChooser(view, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      context.startActivity(view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
       true
     } catch (error: Exception) {
       Log.w(TAG, "Could not open a saved file", error)

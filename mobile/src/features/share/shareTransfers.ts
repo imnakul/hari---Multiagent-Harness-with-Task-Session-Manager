@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { Directory, File, FileMode, Paths } from "expo-file-system";
 import * as Notifications from "expo-notifications";
+import { useSyncExternalStore } from "react";
 import { AppState, Linking, Platform } from "react-native";
 
 import { makeCommandId } from "@/features/connection/nativeLink";
@@ -18,9 +19,11 @@ import {
 import {
   autoDownloads,
   bytesToBase64,
+  fillShareHistory,
   formatShareSize,
   kindForText,
   metaChange,
+  parseComputerHistory,
   parseDownloadPiece,
   parseIncomingShare,
   parsePendingShares,
@@ -29,6 +32,7 @@ import {
   receivedFiles,
   safeFileName,
   splitForClear,
+  withExtension,
   AUTO_DOWNLOAD_BYTES,
   MAX_SHARE_FILE_BYTES,
   MAX_SHARE_TEXT,
@@ -39,6 +43,10 @@ import {
   markShares,
   patchShare,
   recordShare,
+  rememberRemovedShares,
+  removedShareIds,
+  removeShares,
+  replaceShareHistory,
   replaceShares,
   setShareProgress,
   shareHistory,
@@ -175,6 +183,7 @@ export async function receiveShare(payload: unknown, command: Command): Promise<
   const meta = parseShareMeta(payload);
   if (meta) {
     if (meta.action === "clear") clearLocal();
+    else if (meta.action === "remove") removeShares(meta.ids);
     else markShares(meta.ids, metaChange(meta.action));
     return;
   }
@@ -360,7 +369,8 @@ export function sendShareFile(file: ShareFile, command: Command, groupId?: strin
     id,
     direction: "out",
     kind: "file",
-    name: safeFileName(file.name),
+    // Fork (Hari, L-317): with an ending, so the computer knows the file.
+    name: withExtension(safeFileName(file.name), file.mimeType),
     size: file.size,
     mimeType: file.mimeType,
     uri: file.uri,
@@ -503,6 +513,45 @@ export function pinShares(ids: string[], pinned: boolean) {
   sendMeta({ action: pinned ? "pin" : "unpin", ids });
 }
 
+/** Fork (Hari, L-317): removes messages from the history here and on the computer. Files stay. */
+export function removeSharesEverywhere(ids: string[]) {
+  removeShares(ids);
+  rememberRemovedShares(ids);
+  sendMeta({ action: "remove", ids });
+}
+
+/** Fork (Hari, L-317): whether the history is being filled in from the computer (shown only when it was empty). */
+let filling = false;
+const fillListeners = new Set<() => void>();
+function setFilling(next: boolean) {
+  filling = next;
+  for (const listener of fillListeners) listener();
+}
+export function useShareHistoryFilling(): boolean {
+  return useSyncExternalStore((listener) => {
+    fillListeners.add(listener);
+    return () => fillListeners.delete(listener);
+  }, () => filling);
+}
+
+/**
+ * Fork (Hari, L-317): on each connect, adds what the computer has and this
+ * phone lacks (all of it after a reinstall). Messages removed here stay gone.
+ */
+export async function fillShareHistoryFromComputer(command: Command): Promise<void> {
+  const empty = shareHistory().length === 0;
+  if (empty) setFilling(true);
+  try {
+    const computer = parseComputerHistory(await command<unknown>("share.history"));
+    replaceShareHistory(fillShareHistory(shareHistory(), computer, removedShareIds()));
+  } catch (reason) {
+    // An older computer has no `share.history`; nothing to fill in.
+    console.warn("Share: could not fill in the history", reason);
+  } finally {
+    if (empty) setFilling(false);
+  }
+}
+
 /** Fork (L-290): saves or unsaves messages here and on the computer. */
 export function saveShares(ids: string[], saved: boolean) {
   markShares(ids, { saved });
@@ -512,6 +561,7 @@ export function saveShares(ids: string[], saved: boolean) {
 /** Deletes everything but pinned and saved messages on this phone, with the files it received. */
 function clearLocal(): number {
   const { keep, gone } = splitForClear(shareHistory());
+  rememberRemovedShares(gone.map((entry) => entry.id));
   const files = receivedFiles(gone);
   deleteSavedFiles(files.flatMap((entry) => (entry.uri ? [entry.uri] : [])));
   try {

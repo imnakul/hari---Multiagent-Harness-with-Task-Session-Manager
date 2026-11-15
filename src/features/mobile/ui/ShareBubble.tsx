@@ -185,8 +185,8 @@ const isPicture = (entry: ShareEntry) => entry.kind === "file" && isImagePath(en
  * Fork (Hari, L-287, L-290): one Share message as a chat bubble: a single
  * item, or files sent together (pictures in a grid, other files listed under
  * it) with their caption. From the phone on the left, to the phone on the
- * right; the time sits in the bubble's corner. Copy stays visible under the
- * bubble; pin, save and remove show on hover.
+ * right. L-317: one card: Copy at its bottom left (Save and Pin join it on
+ * hover), the time at its bottom right; the rest is in the right-click menu.
  */
 export function ShareBubble({
   row,
@@ -249,6 +249,9 @@ export function ShareBubble({
       ? [{ kind: "item", id: "note", label: "Add to notes", icon: <FilePlusCorner className={ICON} aria-hidden /> } as const]
       : []),
     ...(body ? [{ kind: "item", id: "task", label: "Add task", icon: <CheckCircle className={ICON} aria-hidden /> } as const] : []),
+    ...(link && paired
+      ? [{ kind: "item", id: "phone", label: "Open on phone", icon: <Send className={ICON} aria-hidden /> } as const]
+      : []),
     { kind: "item", id: "pin", label: pinned ? "Unpin" : "Pin", icon: pinned ? <PinOff className={ICON} aria-hidden /> : <Pin className={ICON} aria-hidden /> },
     { kind: "item", id: "save", label: saved ? "Unsave" : "Save", icon: <Bookmark className={ICON} aria-hidden /> },
     { kind: "sep" },
@@ -259,6 +262,8 @@ export function ShareBubble({
     if (id === "copy") run(copyAll);
     else if (id === "note") run(addNote);
     else if (id === "task") run(addTask);
+    else if (id === "phone" && link)
+      run(() => invoke<void>("mobile_share_send_text", { text: link, clipboard: false, open: true }));
     else if (id === "pin") mark({ pinned: !pinned });
     else if (id === "save") mark({ saved: !saved });
     else if (id === "remove") remove();
@@ -271,11 +276,11 @@ export function ShareBubble({
       className={`group/bubble flex flex-col ${outgoing ? "items-end" : "items-start"}`}
     >
       <div
-        className={`relative max-w-[min(30rem,88%)] overflow-hidden rounded-2xl border-[0.5px] ${
+        className={`relative ${link ? "w-[min(30rem,88%)]" : "max-w-[min(30rem,88%)]"} overflow-hidden rounded-2xl border-[0.5px] ${
           outgoing
             ? "share-bubble-out rounded-br-md"
             : "rounded-bl-md border-content/10 bg-content/[0.05]"
-        } ${pictures.length || videos.length ? "p-1" : "px-3 py-2"}`}
+        } ${pictures.length || videos.length ? "p-1" : "px-3 pb-1 pt-2"}`}
       >
         {pictures.length === 1 && pictures[0]?.path ? (
           <ShareImage path={pictures[0].path} label={pictures[0].name ?? "picture"} tile={false} />
@@ -330,7 +335,15 @@ export function ShareBubble({
         {texts.map((entry) =>
           entry.kind === "link" && entry.text ? (
             <div key={entry.id} className={pictures.length || videos.length ? "px-2 pt-1" : ""}>
-              <WebLinkCardLink url={entry.text.trim()} label={null} />
+              {/* Fork (Hari, L-317): the card opens its page; no separate Open button. */}
+              <button
+                type="button"
+                title={entry.text.trim()}
+                onClick={() => openWebLink(entry.text?.trim() ?? "")}
+                className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+              >
+                <WebLinkCardLink url={entry.text.trim()} label={null} bare />
+              </button>
             </div>
           ) : (
             <div key={entry.id} className={pictures.length || videos.length || files.length ? "px-2 pt-1" : ""}>
@@ -338,75 +351,51 @@ export function ShareBubble({
             </div>
           ),
         )}
-        <span
-          className={`float-right ml-3 mt-0.5 flex items-center gap-1 text-[10.5px] tabular-nums ${
-            (pictures.length || videos.length) && !texts.length && !files.length
-              ? "absolute bottom-2 right-2.5 rounded-full bg-black/45 px-1.5 py-px text-white/90"
-              : "text-content/40"
-          }`}
-        >
-          {pinned ? <Pin className="size-3" strokeWidth={1.75} aria-label="Pinned" /> : null}
-          {saved ? <Bookmark className="size-3" strokeWidth={1.75} aria-label="Saved" /> : null}
-          {last ? shareTime(last.at) : null}
-          {waiting ? " · waiting" : null}
-        </span>
-      </div>
-      {/* Fork (Hari, L-302): Copy stays; the rest slide in from the right on
-          hover and back out on leave (transform and opacity only). Remove is
-          in the right-click menu. */}
-      <div className={`mt-0.5 flex items-center gap-0.5 px-0.5 ${outgoing ? "flex-row-reverse" : ""}`}>
-        <FlashIcon
-          icon={<Copy className={ICON} strokeWidth={1.75} aria-hidden />}
-          label={copyable ? "Copy" : pictures.length ? "Copy picture" : "Copy paths"}
-          onRun={copyAll}
-          onError={onError}
-        />
-        <span
-          className={`flex items-center gap-0.5 ${outgoing ? "flex-row-reverse" : ""} pointer-events-none translate-x-2 opacity-0 transition-[transform,opacity] duration-150 ease-out group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:translate-x-0 group-focus-within/bubble:opacity-100 group-hover/bubble:pointer-events-auto group-hover/bubble:translate-x-0 group-hover/bubble:opacity-100 motion-reduce:transition-none`}
-        >
-          {notesEnabled && body ? (
-            <FlashIcon icon={<FilePlusCorner className={ICON} strokeWidth={1.75} aria-hidden />} label="Add to notes" onRun={addNote} onError={onError} />
-          ) : null}
-          {body ? (
-            <FlashIcon icon={<CheckCircle className={ICON} strokeWidth={1.75} aria-hidden />} label="Add task" onRun={addTask} onError={onError} />
-          ) : null}
-          {link && paired ? (
+        {/* Fork (Hari, L-317): inside the card: Copy at the bottom left, with
+            Save and Pin sliding in beside it on hover (transform and opacity
+            only); the time at the bottom right. Everything else is in the
+            right-click menu; clicking the picture, file or link opens it. */}
+        <div className={`mt-1 flex items-center gap-3 ${pictures.length || videos.length ? "px-1.5 pb-0.5" : "-mx-1"}`}>
+          <span className="flex items-center gap-0.5">
             <FlashIcon
-              icon={<Send className={ICON} strokeWidth={1.75} aria-hidden />}
-              label="Open on phone"
-              onRun={() => invoke<void>("mobile_share_send_text", { text: link, clipboard: false, open: true })}
+              icon={<Copy className={ICON} strokeWidth={1.75} aria-hidden />}
+              label={copyable ? "Copy" : pictures.length ? "Copy picture" : "Copy paths"}
+              onRun={copyAll}
               onError={onError}
             />
-          ) : null}
-          {link ? (
-            <button type="button" title="Open" aria-label="Open link" onClick={() => openWebLink(link)} className={ICON_BUTTON}>
-              <Send className={`${ICON} rotate-[-45deg]`} strokeWidth={1.75} aria-hidden />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            title={pinned ? "Unpin" : "Pin"}
-            aria-label={pinned ? "Unpin" : "Pin"}
-            onClick={() => mark({ pinned: !pinned })}
-            className={ICON_BUTTON}
-          >
-            {pinned ? (
-              <PinOff className={ICON} strokeWidth={1.75} aria-hidden />
-            ) : (
-              <Pin className={ICON} strokeWidth={1.75} aria-hidden />
-            )}
-          </button>
-          <button
-            type="button"
-            title={saved ? "Unsave" : "Save (kept when the history is full or deleted)"}
-            aria-label={saved ? "Unsave" : "Save"}
-            aria-pressed={saved}
-            onClick={() => mark({ saved: !saved })}
-            className={`${ICON_BUTTON} ${saved ? "text-accent" : ""}`}
-          >
-            <Bookmark className={ICON} strokeWidth={1.75} aria-hidden />
-          </button>
-        </span>
+            <span className="pointer-events-none flex -translate-x-1 items-center gap-0.5 opacity-0 transition-[transform,opacity] duration-150 ease-out group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:translate-x-0 group-focus-within/bubble:opacity-100 group-hover/bubble:pointer-events-auto group-hover/bubble:translate-x-0 group-hover/bubble:opacity-100 motion-reduce:transition-none">
+              <button
+                type="button"
+                title={saved ? "Unsave" : "Save (kept when the history is full or deleted)"}
+                aria-label={saved ? "Unsave" : "Save"}
+                aria-pressed={saved}
+                onClick={() => mark({ saved: !saved })}
+                className={ICON_BUTTON}
+              >
+                <Bookmark className={ICON} strokeWidth={1.75} aria-hidden />
+              </button>
+              <button
+                type="button"
+                title={pinned ? "Unpin" : "Pin"}
+                aria-label={pinned ? "Unpin" : "Pin"}
+                onClick={() => mark({ pinned: !pinned })}
+                className={ICON_BUTTON}
+              >
+                {pinned ? (
+                  <PinOff className={ICON} strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <Pin className={ICON} strokeWidth={1.75} aria-hidden />
+                )}
+              </button>
+            </span>
+          </span>
+          <span className="ml-auto flex items-center gap-1 text-[10.5px] tabular-nums text-content/40">
+            {pinned ? <Pin className="size-3" strokeWidth={1.75} aria-label="Pinned" /> : null}
+            {saved ? <Bookmark className="size-3" strokeWidth={1.75} aria-label="Saved" /> : null}
+            {last ? shareTime(last.at) : null}
+            {waiting ? " · waiting" : null}
+          </span>
+        </div>
       </div>
       {menu ? (
         <ExplorerMenu

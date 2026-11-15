@@ -40,17 +40,19 @@ import {
   type ShareRow,
 } from "@/features/share/shareModel";
 import { readShareDraft, writeShareFiles, writeShareText } from "@/features/share/shareDraft";
-import { removeShares, useShareHistory } from "@/features/share/shareStore";
+import { useShareHistory } from "@/features/share/shareStore";
 import {
   clearAllShares,
   fetchShareFile,
   openOnComputer,
   pinShares,
+  removeSharesEverywhere,
   retryShare,
   saveShares,
   sendShareGroup,
   sendShareText,
   shareStorage,
+  useShareHistoryFilling,
   type ShareFile,
 } from "@/features/share/shareTransfers";
 import { LinkCard } from "@/features/tools/LinkCard";
@@ -100,6 +102,8 @@ export function SharePanel() {
   const styles = useStyles();
   const { pairing, command, catalog } = useConnection();
   const history = useShareHistory();
+  const filling = useShareHistoryFilling();
+  const colors = useColors();
   const [savedOnly, setSavedOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -177,7 +181,8 @@ export function SharePanel() {
   const remove = (row: ShareRow) => {
     void Haptics.selectionAsync();
     setSelected(null);
-    removeShares(row.items.map((item) => item.id));
+    // Fork (Hari, L-317): gone from the computer's history too.
+    removeSharesEverywhere(row.items.map((item) => item.id));
   };
 
   const clearAll = () => {
@@ -285,7 +290,13 @@ export function SharePanel() {
             : "Texts wait until your computer is on. Update Hari to save files to Downloads."}
         </Text>
 
-        {history.length ? null : (
+        {/* Fork (Hari, L-317): the one-time fill-in after a reinstall. */}
+        {!history.length && filling ? (
+          <View style={styles.filling}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <Text style={styles.fillingText}>Loading history from your computer…</Text>
+          </View>
+        ) : history.length ? null : (
           <Notice
             title="Nothing shared yet"
             text="Send something from here, from any app’s share menu, or with the “Send clipboard” Quick Settings tile."
@@ -600,6 +611,8 @@ function ShareBubble({
             styles.bubble,
             mine ? styles.bubbleMine : styles.bubbleTheirs,
             pictures.length > 0 && styles.bubblePicture,
+            // Fork (Hari, L-317): a link's card at full width, as on the computer.
+            texts.some((item) => item.kind === "link") && styles.bubbleLink,
             failed && styles.bubbleFailed,
             selected && styles.bubbleSelected,
           ]}
@@ -1105,6 +1118,9 @@ const useStyles = themedStyles((colors) => ({
   },
   bubbleTheirs: { backgroundColor: colors.surface, borderBottomLeftRadius: 6 },
   bubbleMine: { backgroundColor: withAlpha(colors.accent, 0.16), borderBottomRightRadius: 6 },
+  bubbleLink: { width: "86%" },
+  filling: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 24 },
+  fillingText: { color: colors.muted, fontSize: 14 },
   // L-310: a thin frame, as the desktop's 4 px reads on a computer screen.
   bubblePicture: { padding: 2, overflow: "hidden" },
   bubbleFailed: { borderWidth: 1, borderColor: withAlpha(colors.deletions, 0.5) },

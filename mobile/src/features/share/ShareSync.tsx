@@ -5,7 +5,12 @@ import { useConnection } from "@/features/connection/ConnectionProvider";
 import { onLinkItem, onLinkOutboxSettled } from "@/features/link/linkStream";
 import { onLiveEvent } from "@/features/liveUpdates/nativeLive";
 
-import { receiveShare, sendPendingShares, settleSentShares } from "./shareTransfers";
+import {
+  fillShareHistoryFromComputer,
+  receiveShare,
+  sendPendingShares,
+  settleSentShares,
+} from "./shareTransfers";
 
 /**
  * Fork (Hari, L-279): Share's background half. Takes the computer's `share`
@@ -15,7 +20,7 @@ import { receiveShare, sendPendingShares, settleSentShares } from "./shareTransf
  * LinkStreamSync, so the stream is set up before it sends.
  */
 export function ShareSync(): null {
-  const { pairing, command } = useConnection();
+  const { pairing, connected, command } = useConnection();
   const fingerprint = pairing?.desktop.fingerprint ?? null;
   useEffect(() => {
     if (!fingerprint) return;
@@ -36,5 +41,10 @@ export function ShareSync(): null {
       appState.remove();
     };
   }, [fingerprint, command]);
+  // Fork (Hari, L-317): on each connect, fill in what the computer has and
+  // this phone lacks (everything after a reinstall).
+  useEffect(() => {
+    if (fingerprint && connected) void fillShareHistoryFromComputer(command);
+  }, [fingerprint, connected, command]);
   return null;
 }
