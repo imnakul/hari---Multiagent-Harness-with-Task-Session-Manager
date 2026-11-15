@@ -5,7 +5,7 @@
 - What: Check for updates now says Couldn't check (with Open the release page) when the newest release can't be read, instead of Up to date.
 - Why: User report 2026-11-15: the phone said latest, did not show its version and did not see local55. Cause: the L-315 fix (accept APKs on GitHub Pages, show the installed version) landed after the local54 tag, so local54 and older reject local55's Pages link and reported that as Up to date. Those builds need local55 installed by hand once; from local55 on, updates work in the app.
 - Files: [hariUpdate.ts](../../mobile/src/features/updates/hariUpdate.ts), [useHariUpdate.ts](../../mobile/src/features/updates/useHariUpdate.ts), [hariUpdate.test.ts](../../mobile/tests/hariUpdate.test.ts)
-- Commit: uncommitted
+- Commit: 66bac951
 - Verified: phone typecheck ✅ lint ✅ `hariUpdate` tests ✅ (7)
 
 ## 2026-11-15 21:09 IST — Share bubble: send the clipboard from over any app (L-321)
