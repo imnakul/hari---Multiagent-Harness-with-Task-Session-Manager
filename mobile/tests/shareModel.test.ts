@@ -180,6 +180,23 @@ describe("parsePendingShares", () => {
     ]);
     expect(parsePendingShares("x")).toEqual([]);
   });
+
+  it("keeps the Share bubble's ids and its Undo (L-321)", () => {
+    expect(
+      parsePendingShares([
+        { type: "clipboard", text: "copied", id: "0b6c-4f1e" },
+        { type: "file", uri: "file:///cache/hari-share/2/b.png", name: "b.png", mimeType: "image/png", size: 7, id: "a1" },
+        { type: "text", text: "bad id", id: "no spaces allowed" },
+        { type: "undo", ids: ["0b6c-4f1e", "not valid!"] },
+        { type: "undo", ids: [] },
+      ]),
+    ).toEqual([
+      { type: "clipboard", text: "copied", id: "0b6c-4f1e" },
+      { type: "file", uri: "file:///cache/hari-share/2/b.png", name: "b.png", mimeType: "image/png", size: 7, id: "a1" },
+      { type: "text", text: "bad id" },
+      { type: "undo", ids: ["0b6c-4f1e"] },
+    ]);
+  });
 });
 
 describe("shareThumbnail (L-288)", () => {

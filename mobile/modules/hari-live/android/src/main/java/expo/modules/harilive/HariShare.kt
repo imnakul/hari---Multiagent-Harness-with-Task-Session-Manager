@@ -66,6 +66,28 @@ internal object HariShare {
       value
     }
 
+  /**
+   * Fork (L-321): drops one waiting item by its id (the bubble's Undo);
+   * false when the app already took it.
+   */
+  fun removePending(context: Context, id: String): Boolean =
+    synchronized(lock) {
+      val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      val list = try {
+        JSONArray(prefs.getString(KEY, "[]"))
+      } catch (_: Exception) {
+        JSONArray()
+      }
+      val kept = JSONArray()
+      var found = false
+      for (index in 0 until list.length()) {
+        val item = list.optJSONObject(index)
+        if (item?.optString("id") == id) found = true else kept.put(list.get(index))
+      }
+      if (found) prefs.edit().putString(KEY, kept.toString()).apply()
+      found
+    }
+
   fun text(type: String, text: String): JSONObject =
     JSONObject().put("type", type).put("text", text.take(MAX_TEXT))
 
@@ -232,6 +254,12 @@ class HariShareActivity : Activity() {
     super.onWindowFocusChanged(hasFocus)
     if (!hasFocus || clipboardRead || intent?.action != HariShare.ACTION_CLIPBOARD) return
     clipboardRead = true
+    // Fork (L-321): the Share bubble's tap: text, a link or a picture, with its feedback.
+    if (intent.getBooleanExtra(HariBubble.EXTRA_FROM_BUBBLE, false)) {
+      HariBubble.send(this, HariBubble.readClip(this), intent.getBooleanExtra(HariBubble.EXTRA_FORCE, false))
+      finish()
+      return
+    }
     val clipboard = getSystemService(ClipboardManager::class.java)
     val text = try {
       clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()

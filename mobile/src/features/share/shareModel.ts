@@ -458,19 +458,31 @@ export function parseUploadAnswer(raw: unknown): { received: number; done: boole
   return { received, done };
 }
 
-/** A file shared to Hari (share sheet or the Quick Settings tile), from the native side. */
+/**
+ * What the share sheet, the Quick Settings tile or the Share bubble left for
+ * Hari, from the native side. Fork (L-321): the bubble gives each its `id`
+ * (so its Undo can find it), and leaves an `undo` for one already taken.
+ */
 export type PendingShare =
-  | { type: "text"; text: string }
-  | { type: "clipboard"; text: string }
-  | { type: "file"; uri: string; name: string; mimeType: string; size: number };
+  | { type: "text"; text: string; id?: string }
+  | { type: "clipboard"; text: string; id?: string }
+  | { type: "file"; uri: string; name: string; mimeType: string; size: number; id?: string }
+  | { type: "undo"; ids: string[] };
 
 export function parsePendingShares(raw: unknown): PendingShare[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item: unknown): PendingShare[] => {
     const type = field(item, "type");
+    const id = optionalId(field(item, "id"));
+    const withId = id ? { id } : {};
+    if (type === "undo") {
+      const ids = field(item, "ids");
+      const valid = Array.isArray(ids) ? ids.filter(isId) : [];
+      return valid.length ? [{ type, ids: valid }] : [];
+    }
     if (type === "text" || type === "clipboard") {
       const text = field(item, "text");
-      return typeof text === "string" && text.trim() ? [{ type, text: text.slice(0, MAX_SHARE_TEXT) }] : [];
+      return typeof text === "string" && text.trim() ? [{ type, text: text.slice(0, MAX_SHARE_TEXT), ...withId }] : [];
     }
     if (type === "file") {
       const uri = field(item, "uri");
@@ -485,6 +497,7 @@ export function parsePendingShares(raw: unknown): PendingShare[] {
           name: safeFileName(typeof name === "string" ? name : "file"),
           mimeType: typeof mimeType === "string" && mimeType.includes("/") ? mimeType : "application/octet-stream",
           size,
+          ...withId,
         },
       ];
     }

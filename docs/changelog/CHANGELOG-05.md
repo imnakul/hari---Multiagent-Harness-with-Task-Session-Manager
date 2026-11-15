@@ -1,11 +1,19 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 21:09 IST — Share bubble: send the clipboard from over any app (L-321)
+- Type: feature
+- What: Hari (Android) has a Share bubble, off until turned on in Settings → Share. It floats over other apps; one tap sends what you copied (text, a link or a picture) to the computer and shows ✓ (or the picture) with Undo for 4 seconds. The same clipboard again wiggles and says Already sent. Drag to move (snaps to a side, never sends); hold for Send again, Open Share or Hide bubble. It hides while Hari is open.
+- Why: User request 2026-11-15 ("Build it all": phone floating bubble that sends the clipboard on tap, with a setting to turn it on or off).
+- Files: see L-321 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: not yet
+- Verified: phone typecheck ✅ lint ✅ tests ✅ (324; the known `watchFrames` file fails as before), `shareModel` test for ids and Undo ✅, Kotlin `:hari-live:compileDebugKotlin` ✅ with no warnings in the new code. Needs the new APK and a check on the phone.
+
 ## 2026-11-15 20:59 IST — Share bar: send to the phone from over any app (L-320)
 - Type: feature
 - What: Ctrl+Alt+H opens a small glass window that floats above every app with Share's composer in it. Type, paste (text, links, pictures) or drop files on it and Send; it stays open and shows ✓ Sent, and closes with its × or the shortcut. It remembers where it was and how big, and moves back on screen when a monitor is unplugged. The shortcut can be changed or turned off in Settings → Shortcuts ("App: Share Bar"); a chord another app holds shows "Shortcut taken".
 - Why: User request 2026-11-15 ("Build it all": desktop floating Share bar).
 - Files: see L-320 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: not yet
+- Commit: 9d83bda9
 - Verified: Rust `share_bar` tests ✅ (5) `window::tests` ✅, rustfmt ✅, clippy clean in the changed files; desktop typecheck ✅, tests ✅ (settings, mobile, platform, quick-composer: 801), `vite build` ✅ (`share-bar.html` built). The window itself needs a manual check on the desktop.
 
 ## 2026-11-15 20:48 IST — Minimal mode, Restart and Shut down from the phone (L-318, L-319)

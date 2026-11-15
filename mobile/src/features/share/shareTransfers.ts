@@ -316,12 +316,11 @@ function queueText(entryId: string, kind: "text" | "link" | "clipboard", text: s
  * Sends text, a link or the clipboard to the computer. Recorded as failed
  * (to try again) when there's no link yet.
  */
-export function sendShareText(text: string, clipboard: boolean, groupId?: string) {
+export function sendShareText(text: string, clipboard: boolean, groupId?: string, id = makeCommandId()) {
   const body = text.slice(0, MAX_SHARE_TEXT);
   if (!body.trim()) return;
   const kind = clipboard ? "clipboard" : kindForText(body);
   const at = Date.now();
-  const id = makeCommandId();
   const group = groupId ? { groupId } : {};
   try {
     const outboxId = queueText(id, kind, body, group);
@@ -362,8 +361,7 @@ export function settleSentShares(answer: SendAnswer) {
 }
 
 /** Sends a file to the computer's Downloads\Hari. */
-export function sendShareFile(file: ShareFile, command: Command, groupId?: string) {
-  const id = makeCommandId();
+export function sendShareFile(file: ShareFile, command: Command, groupId?: string, id = makeCommandId()) {
   const tooLarge = file.size > MAX_SHARE_FILE_BYTES;
   recordShare({
     id,
@@ -482,7 +480,7 @@ async function upload(id: string, command: Command) {
   }
 }
 
-/** Sends what the share sheet and the Quick Settings tile left for Hari. */
+/** Sends what the share sheet, the Quick Settings tile and the Share bubble (L-321) left for Hari. */
 export function sendPendingShares(command: Command) {
   const raw = takeNativeShared();
   if (!raw) return;
@@ -493,8 +491,10 @@ export function sendPendingShares(command: Command) {
     return;
   }
   for (const item of parsePendingShares(parsed)) {
-    if (item.type === "file") sendShareFile(item, command);
-    else sendShareText(item.text, item.type === "clipboard");
+    // Fork (L-321): the bubble's Undo, for one sent already: removed on both sides.
+    if (item.type === "undo") removeSharesEverywhere(item.ids);
+    else if (item.type === "file") sendShareFile(item, command, undefined, item.id);
+    else sendShareText(item.text, item.type === "clipboard", undefined, item.id);
   }
 }
 

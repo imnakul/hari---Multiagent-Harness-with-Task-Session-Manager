@@ -20,7 +20,17 @@ class HariLiveModule : Module() {
     Events("onAction")
 
     // A new run: drop cards a killed run left behind (they would never end).
-    OnCreate { appContext.reactContext?.let { HariLive.clearStale(it) } }
+    OnCreate {
+      appContext.reactContext?.let {
+        HariLive.clearStale(it)
+        // Fork (L-321): the Share bubble comes back if it was on.
+        HariBubble.restore(it.applicationContext)
+      }
+    }
+
+    // Fork (L-321): the Share bubble steps aside while Hari is in front.
+    OnActivityEntersForeground { HariBubble.setAppInFront(true) }
+    OnActivityEntersBackground { HariBubble.setAppInFront(false) }
 
     OnStartObserving { HariLive.listen { event -> sendEvent("onAction", event) } }
     OnStopObserving { HariLive.listen(null) }
@@ -49,6 +59,18 @@ class HariLiveModule : Module() {
 
     /** Fork (L-279): what the share sheet and the tile left for the app (JSON); emptied. */
     Function("takeShared") { HariShare.take(context) }
+
+    /** Fork (L-321): the Share bubble: { enabled, permitted } ("Display over other apps"). */
+    Function("bubbleState") { HariBubble.state(context) }
+
+    /**
+     * Fork (L-321): turns the Share bubble on or off; `color` (#rrggbb) tints
+     * it. False when turning on needs "Display over other apps" first.
+     */
+    Function("setBubble") { on: Boolean, color: String? -> HariBubble.setEnabled(context, on, color) }
+
+    /** Fork (L-321): the system page for "Display over other apps". */
+    Function("openOverlaySettings") { HariBubble.openOverlaySettings(context) }
 
     /** Fork (L-279): moves a file from Hari's cache into Download/Hari; its content URI. */
     AsyncFunction("saveToDownloads") { source: String, name: String, mimeType: String ->

@@ -29,12 +29,14 @@ import {
   openPromotedSettings,
   phoneFiles,
   quitHari,
+  shareBubble,
   useAllFilesAllowed,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
 import { useHaptics } from "@/features/settings/haptics";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
+import { useShareBubble } from "@/features/share/useShareBubble";
 import { HariUpdateRows } from "@/features/updates/HariUpdateCard";
 import { updatesSupported } from "@/features/updates/useHariUpdate";
 import { projectForRoute } from "@/features/workspace/routing";
@@ -159,6 +161,8 @@ export default function SettingsScreen() {
       {liveAvailable ? <LiveUpdateSettings /> : null}
 
       <ComputerSettings />
+
+      {shareBubble ? <ShareBubbleSettings /> : null}
 
       <Text style={styles.heading}>Preferences</Text>
       <View style={styles.card}>
@@ -404,6 +408,46 @@ function ComputerSettings() {
             : "Turn on All files access for Hari to browse this phone's storage from the computer's Share panel."}
         </Text>
       ) : null}
+    </>
+  );
+}
+
+/**
+ * Fork (Hari, L-321): the Share bubble, a small button over other apps that
+ * sends the clipboard to the computer. Off until turned on.
+ */
+function ShareBubbleSettings() {
+  const colors = useColors();
+  const styles = useStyles();
+  const [{ enabled, permitted }, turn] = useShareBubble(colors.accent);
+  return (
+    <>
+      <Text style={styles.heading}>Share</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon="clipboard"
+          label="Share bubble"
+          onPress={() => turn(!enabled)}
+          accessory={
+            <AccentSwitch
+              accessibilityLabel="Share bubble"
+              value={enabled}
+              onValueChange={turn}
+            />
+          }
+        />
+      </View>
+      {enabled && !permitted ? (
+        <Text style={styles.note} onPress={() => void shareBubble?.openSettings()}>
+          Allow Display over other apps for Hari to show the bubble.{" "}
+          <Text style={{ color: colors.accent }}>Open settings</Text>
+        </Text>
+      ) : (
+        <Text style={styles.note}>
+          A small button over your other apps. Tap it to send what you copied to your
+          computer, hold it for more, drag it to move. It hides while Hari is open.
+        </Text>
+      )}
     </>
   );
 }
