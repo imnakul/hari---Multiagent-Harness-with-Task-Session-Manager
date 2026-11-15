@@ -60,6 +60,8 @@ import PencilEdit01Icon from "@hugeicons/core-free-icons/PencilEdit01Icon";
 import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
 import Robot01Icon from "@hugeicons/core-free-icons/Robot01Icon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
+import Leaf01Icon from "@hugeicons/core-free-icons/Leaf01Icon";
+import RotateClockwiseIcon from "@hugeicons/core-free-icons/RotateClockwiseIcon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
 import Shield01Icon from "@hugeicons/core-free-icons/Shield01Icon";
@@ -175,6 +177,9 @@ const icons = {
   music: MusicNote01Icon,
   volume: VolumeHighIcon,
   volumeOff: VolumeOffIcon,
+  // Fork (Hari, L-318, L-319): Minimal mode, Restart.
+  leaf: Leaf01Icon,
+  restart: RotateClockwiseIcon,
 };
 
 export type IconName = keyof typeof icons;

@@ -39,6 +39,7 @@ export function DeviceControls({
   say,
   active,
   power,
+  system,
   files,
   after,
 }: {
@@ -46,6 +47,8 @@ export function DeviceControls({
   active: boolean;
   /** The first row's three tiles. */
   power: ReactNode;
+  /** Fork (L-318, L-319): the second row: Minimal mode, Restart, Shut down. */
+  system?: ReactNode;
   /** The last row's last tile. */
   files: ReactNode;
   /** Under the tiles (Open Share after a screenshot). */
@@ -162,6 +165,7 @@ export function DeviceControls({
     return (
       <View style={styles.block}>
         <TileRow>{power}</TileRow>
+        {system ? <TileRow>{system}</TileRow> : null}
         {after}
         <TileRow>
           {files}
@@ -180,6 +184,7 @@ export function DeviceControls({
     <>
       <View style={styles.block}>
         <TileRow>{power}</TileRow>
+        {system ? <TileRow>{system}</TileRow> : null}
         <TileRow>
           <Tile
             icon={mic ? "micOff" : "micOn"}

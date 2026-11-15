@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mergePhoneStats,
+  parseMinimalSettings,
   parsePhoneApps,
   parsePhoneStats,
   parsePhoneStatsList,
@@ -78,5 +79,22 @@ describe("parsePhoneApps", () => {
       { id: "self", name: "Hari", detail: "This app" },
       { id: "y", name: "Y", detail: "" },
     ]);
+  });
+});
+
+describe("parseMinimalSettings (L-318)", () => {
+  it("keeps whole rows and drops the rest", () => {
+    expect(
+      parseMinimalSettings({
+        apps: [{ name: "Teams", exe: "ms-teams.exe" }, { name: "", exe: "x.exe" }],
+        running: [{ name: "Spotify", exe: "Spotify.exe", title: "Spotify Premium" }, { exe: "y.exe" }],
+        active: true,
+      }),
+    ).toEqual({
+      apps: [{ name: "Teams", exe: "ms-teams.exe" }],
+      running: [{ name: "Spotify", exe: "Spotify.exe", title: "Spotify Premium" }],
+      active: true,
+    });
+    expect(parseMinimalSettings(null)).toEqual({ apps: [], running: [], active: false });
   });
 });

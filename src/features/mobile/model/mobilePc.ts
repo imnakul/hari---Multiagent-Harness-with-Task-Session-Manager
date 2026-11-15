@@ -127,3 +127,26 @@ export function parsePhoneApps(raw: unknown): PhoneApp[] {
       : [];
   });
 }
+
+/** Fork (L-318): an app Minimal mode closes, by its program file name. */
+export type MinimalApp = { name: string; exe: string; title?: string };
+export type MinimalSettings = { apps: MinimalApp[]; running: MinimalApp[]; active: boolean };
+
+const minimalApps = (raw: unknown): MinimalApp[] => {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.flatMap((item: unknown): MinimalApp[] => {
+    const name = field(item, "name");
+    const exe = field(item, "exe");
+    const title = field(item, "title");
+    if (typeof name !== "string" || !name || typeof exe !== "string" || !exe) return [];
+    return [typeof title === "string" && title ? { name, exe, title } : { name, exe }];
+  });
+};
+
+export function parseMinimalSettings(raw: unknown): MinimalSettings {
+  return {
+    apps: minimalApps(field(raw, "apps")),
+    running: minimalApps(field(raw, "running")),
+    active: field(raw, "active") === true,
+  };
+}

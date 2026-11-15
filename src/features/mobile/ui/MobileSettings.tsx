@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Plus, SmartPhone, Trash2 } from "../../../shared/ui/icons";
 import { PairPhoneDialog } from "./PairPhoneDialog";
+import { MinimalModeSettings } from "./MinimalModeSettings";
 import { PhoneAppsSettings } from "./PhoneAppsSettings";
 
 type Device = { id: string; name: string; fingerprint: string };
@@ -274,6 +275,8 @@ export function MobileSettings() {
 
       {/* Fork (Hari, L-280): apps the paired phone can control. */}
       {devices.length > 0 ? <PhoneAppsSettings /> : null}
+      {/* Fork (Hari, L-318): apps Minimal mode closes. */}
+      {devices.length > 0 ? <MinimalModeSettings /> : null}
 
       {error && (
         <p

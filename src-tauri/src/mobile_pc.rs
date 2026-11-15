@@ -2,7 +2,8 @@
 //!
 //! - **Phone → computer** requests: stats (`pc.stats`), apps with a window
 //!   (`pc.apps`) and Close/End/Minimize/Maximize on one (`pc.app`), power
-//!   (`pc.power`: monitor off, lock, hibernate), a screenshot offered through
+//!   (`pc.power`: monitor off, lock, hibernate, restart, shut down), Minimal
+//!   mode (`pc.minimal`, L-318), a screenshot offered through
 //!   Share (`pc.screenshot`), the chosen apps (`pc.shortcuts`, `pc.shortcut`),
 //!   the network cards Wake-on-LAN needs (`pc.wakeInfo`), and the phone's own
 //!   stats (`phone.stats`), and extra screen dimming (`pc.dim`, L-307).
@@ -27,7 +28,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
-const METHODS: [&str; 17] = [
+#[path = "mobile_pc_minimal.rs"]
+pub(crate) mod minimal;
+
+const METHODS: [&str; 18] = [
     "pc.stats",
     "pc.apps",
     "pc.app",
@@ -45,6 +49,7 @@ const METHODS: [&str; 17] = [
     "pc.files.list",
     "pc.files.offer",
     "pc.dim",
+    "pc.minimal",
 ];
 /// How far a command's `sentAt` may be from this clock (either way).
 const STALE_MS: u64 = 60_000;
@@ -167,6 +172,9 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
         .app_data_dir()
         .map_err(|e| e.to_string())?
         .join(SHORTCUTS_FILE);
+    if let Some(dir) = path.parent() {
+        minimal::init(dir)?;
+    }
     let shortcuts = std::fs::read(&path)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Vec<Shortcut>>(&bytes).ok())
@@ -272,7 +280,8 @@ fn run(app: &AppHandle, peer: &str, method: &str, params: &Value) -> Result<Valu
         "pc.wakeInfo" => Ok(json!({ "cards": native::wake_cards() })),
         "phone.stats" => phone_stats(app, peer, params),
         // Fork (Hari, L-292..L-297): readings need no time; changes do.
-        "pc.audio" | "pc.media" | "pc.camera" | "pc.bluetooth" | "pc.idleHibernate" | "pc.dim" => {
+        "pc.audio" | "pc.media" | "pc.camera" | "pc.bluetooth" | "pc.idleHibernate" | "pc.dim"
+        | "pc.minimal" => {
             if changes(method, params) {
                 fresh(params, now_ms())?;
             }
@@ -296,6 +305,7 @@ fn changes(method: &str, params: &Value) -> bool {
         "pc.bluetooth" => &["on"],
         "pc.idleHibernate" => &["armed"],
         "pc.dim" => &["level"],
+        "pc.minimal" => &["on"],
         _ => &[],
     };
     keys.iter().any(|key| !params[*key].is_null())
@@ -309,6 +319,7 @@ fn extra(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String>
         "pc.camera" => x::camera(params),
         "pc.bluetooth" => x::bluetooth(params),
         "pc.dim" => crate::screen_dim::dim(params),
+        "pc.minimal" => minimal::phone(params),
         _ => x::idle_hibernate(app, params),
     }
 }
@@ -395,6 +406,8 @@ fn stats() -> Result<Value, String> {
         "uptime": native::uptime_seconds(),
         // Fork (L-288): the phone shows Monitor on in place of Monitor off.
         "monitorOff": monitor_off_now(),
+        // Fork (L-318): the phone's Minimal tile.
+        "minimal": minimal::is_on(),
     }))
 }
 
@@ -556,6 +569,9 @@ fn power(action: &str) -> Result<Value, String> {
         "monitorOn" => native::monitor_on,
         "lock" => native::lock,
         "hibernate" => native::hibernate,
+        // Fork (L-319): the phone asks first; apps may still ask to save.
+        "restart" => native::restart,
+        "shutdown" => native::shut_down,
         _ => return Err("Unsupported action".into()),
     };
     std::thread::spawn(move || {
@@ -1299,6 +1315,25 @@ mod native {
             .map_err(|e| e.to_string())
     }
 
+    /// Fork (L-319): `shutdown /r` and `/s` at once, without forcing apps
+    /// shut (a /t over 0 would add /f), so unsaved work can still ask.
+    pub fn restart() -> Result<(), String> {
+        shutdown_now("/r")
+    }
+
+    pub fn shut_down() -> Result<(), String> {
+        shutdown_now("/s")
+    }
+
+    fn shutdown_now(kind: &str) -> Result<(), String> {
+        Command::new(system32("shutdown.exe"))
+            .args([kind, "/t", "0"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
     pub fn launch(exe: &Path) -> Result<(), String> {
         let mut command = Command::new(exe);
         if let Some(dir) = exe.parent() {
@@ -1563,6 +1598,12 @@ mod native {
         Err(ONLY_WINDOWS.into())
     }
     pub fn hibernate() -> Result<(), String> {
+        Err(ONLY_WINDOWS.into())
+    }
+    pub fn restart() -> Result<(), String> {
+        Err(ONLY_WINDOWS.into())
+    }
+    pub fn shut_down() -> Result<(), String> {
         Err(ONLY_WINDOWS.into())
     }
     pub fn launch(_exe: &Path) -> Result<(), String> {

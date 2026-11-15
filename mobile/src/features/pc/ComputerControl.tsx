@@ -10,6 +10,7 @@ import {
   formatBytes,
   formatRate,
   formatUptime,
+  parseMinimalApps,
   parsePcApps,
   parsePcShortcuts,
   parsePcStats,
@@ -68,6 +69,8 @@ const answerNote = (raw: unknown): string | undefined => {
  * L-307: the controls come first, as control-centre tiles and sliders, then
  * Stats, Running apps and Apps; nothing is asked of the computer while the
  * hub shows Share (`active` false).
+ * L-318, L-319: a second row: Minimal mode (asks first, lists the apps it
+ * closes; a second tap undoes it), Restart and Shut down (each asks first).
  */
 export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => void; active: boolean }) {
   const styles = useStyles();
@@ -191,6 +194,64 @@ export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => vo
       { text: "Hibernate", style: "destructive", onPress: () => void power("hibernate", "Hibernating") },
     ]);
 
+  const restart = () =>
+    Alert.alert(
+      "Restart the computer?",
+      "Apps with unsaved work can ask to save first. Hari reconnects once you sign in to Windows.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Restart", style: "destructive", onPress: () => void power("restart", "Restarting") },
+      ],
+    );
+
+  const shutDown = () =>
+    Alert.alert(
+      "Shut down the computer?",
+      canWake
+        ? "Apps with unsaved work can ask to save first. Wake computer may not start it again from off; that depends on its network card."
+        : "Apps with unsaved work can ask to save first. Start it again with its power button.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Shut down", style: "destructive", onPress: () => void power("shutdown", "Shutting down") },
+      ],
+    );
+
+  const setMinimal = async (on: boolean) => {
+    if (!(await run("minimal", "pc.minimal", { on }, on ? "Minimal mode on" : "Minimal mode off"))) return;
+    setStats((current) => (current ? { ...current, minimal: on, monitorOff: on ? true : current.monitorOff } : current));
+    if (on) monitorPress.current = { off: true, at: Date.now() };
+  };
+
+  // Asks first, naming the apps it will close (picked in MonoCode's Settings).
+  const minimal = async () => {
+    if (stats?.minimal) {
+      void setMinimal(false);
+      return;
+    }
+    setBusy("minimal");
+    let apps: string[] = [];
+    try {
+      apps = parseMinimalApps(await command<unknown>("pc.minimal", {}));
+    } catch (reason) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      say(pcError(reason), true);
+      return;
+    } finally {
+      setBusy(null);
+    }
+    const closing = apps.length
+      ? `Closes ${apps.join(", ")} (they can ask to save).`
+      : "Closes no apps: pick them in MonoCode → Settings → Connections.";
+    Alert.alert(
+      "Turn on Minimal mode?",
+      `${closing} Sets power mode to Best power efficiency and turns the monitor off. MonoCode and the network stay on. Tap Minimal again to undo it all.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Turn on", onPress: () => void setMinimal(true) },
+      ],
+    );
+  };
+
   const screenshot = async () => {
     setBusy("screenshot");
     try {
@@ -292,6 +353,21 @@ export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => vo
               />
               <Tile icon="moon" label="Hibernate" state="Asks first" busy={busy === "power.hibernate"} onPress={hibernate} />
               <Tile icon="image" label="Screenshot" state="To Share" busy={busy === "screenshot"} onPress={() => void screenshot()} />
+            </>
+          }
+          system={
+            <>
+              <Tile
+                icon="leaf"
+                label="Minimal"
+                state={stats ? (stats.minimal ? "On" : "Off") : "…"}
+                on={stats ? stats.minimal === true : false}
+                disabled={!stats}
+                busy={busy === "minimal"}
+                onPress={() => void minimal()}
+              />
+              <Tile icon="restart" label="Restart" state="Asks first" busy={busy === "power.restart"} onPress={restart} />
+              <Tile icon="power" label="Shut down" state="Asks first" busy={busy === "power.shutdown"} onPress={shutDown} />
             </>
           }
           files={<Tile icon="drive" label="Files" state="Browse" onPress={() => router.push("/computer/files")} />}

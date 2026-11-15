@@ -14,6 +14,8 @@ export type PcStats = {
   uptime?: number;
   /** Fork (L-288): off from the phone, with no input on the computer since. */
   monitorOff?: boolean;
+  /** Fork (L-318): Minimal mode is on (from the phone). */
+  minimal?: boolean;
 };
 
 export type PcApp = {
@@ -39,7 +41,7 @@ export type AppSort = "cpu" | "memory" | "name";
 
 /** Changes the computer: refused there when `sentAt` is over a minute off. */
 export type PcAction = "close" | "end" | "minimize" | "maximize";
-export type PowerAction = "monitorOff" | "monitorOn" | "lock" | "hibernate";
+export type PowerAction = "monitorOff" | "monitorOn" | "lock" | "hibernate" | "restart" | "shutdown";
 export type ShortcutAction = "open" | "close" | "minimize" | "maximize" | "restart";
 
 /** A ring older than this is ignored (the phone was off when it was sent). */
@@ -71,6 +73,7 @@ export function parsePcStats(raw: unknown): PcStats {
   if (down !== undefined || up !== undefined) stats.network = { down, up };
   if (uptime !== undefined) stats.uptime = uptime;
   if (field(raw, "monitorOff") === true) stats.monitorOff = true;
+  if (field(raw, "minimal") === true) stats.minimal = true;
   for (const disk of list(field(raw, "disks"))) {
     const name = text(field(disk, "name"));
     const free = number(field(disk, "free"));
@@ -101,6 +104,11 @@ export function parsePcApps(raw: unknown): PcApp[] {
       },
     ];
   });
+}
+
+/** Fork (L-318): the names of the apps Minimal mode closes. */
+export function parseMinimalApps(raw: unknown): string[] {
+  return list(field(raw, "apps")).filter((name): name is string => typeof name === "string" && name.length > 0);
 }
 
 export function parsePcShortcuts(raw: unknown): PcShortcut[] {

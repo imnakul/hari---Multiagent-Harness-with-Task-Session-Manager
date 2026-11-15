@@ -5,6 +5,7 @@ import {
   formatUptime,
   parsePcApps,
   parsePcShortcuts,
+  parseMinimalApps,
   parsePcStats,
   parseRing,
   parseWakeCards,
@@ -46,6 +47,15 @@ describe("parsePcStats", () => {
   it("reads nothing from a malformed answer", () => {
     expect(parsePcStats(null)).toEqual({ disks: [] });
     expect(parsePcStats({ memory: { used: 20, total: 10 } })).toEqual({ disks: [] });
+  });
+});
+
+describe("Minimal mode (L-318)", () => {
+  it("reads the tile state and the app names", () => {
+    expect(parsePcStats({ minimal: true }).minimal).toBe(true);
+    expect(parsePcStats({ minimal: "on" }).minimal).toBeUndefined();
+    expect(parseMinimalApps({ apps: ["Teams", 3, "", "Spotify"] })).toEqual(["Teams", "Spotify"]);
+    expect(parseMinimalApps(null)).toEqual([]);
   });
 });
 
