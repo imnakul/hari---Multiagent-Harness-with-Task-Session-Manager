@@ -12,6 +12,7 @@ import {
 import {
   getCachedRateLimits,
   loadRateLimits,
+  rateLimitRefreshDue,
   setCachedRateLimits,
 } from "../../providers/model/rateLimitsCache";
 import { loadShowRemainingUsage } from "../../settings/model/displayPrefs";
@@ -55,6 +56,29 @@ export function mobileUsageSnapshot(
   };
 }
 
+/**
+ * Fork (Hari, L-308): whether the phone should get a new reading instead of
+ * the saved one: a limit's window has ended since it was read (its numbers
+ * are from the old window, and there's no time left to show), or the reading
+ * is older than the footer's own refresh gap.
+ */
+export function usageOutdated(limits: ProviderRateLimits | undefined, now: number): boolean {
+  if (!limits) return false;
+  const ended = [limits.session, limits.weekly, limits.monthly].some(
+    (window) => window?.resetsAt != null && window.resetsAt <= now,
+  );
+  return ended || rateLimitRefreshDue(limits, now);
+}
+
+/** Reuses the desktop footer's cache unless asked to, or it's outdated (L-308). */
+function loadFresh(provider: RateLimitProvider, accountId: string, refresh: boolean) {
+  return loadRateLimits(
+    provider,
+    accountId,
+    refresh || usageOutdated(getCachedRateLimits(provider, accountId), Date.now()),
+  );
+}
+
 /** Uses the same cache as the desktop footer; only an explicit refresh probes again. */
 export async function mobileAccountUsage(provider: unknown, refresh = false) {
   if (provider !== "claude" && provider !== "codex")
@@ -65,7 +89,7 @@ export async function mobileAccountUsage(provider: unknown, refresh = false) {
   const snapshots = await Promise.all(
     accounts.map(async (account) => {
       const previous = getCachedRateLimits(provider, account.id);
-      const limits = await loadRateLimits(provider, account.id, refresh);
+      const limits = await loadFresh(provider, account.id, refresh);
       const snapshot =
         limits.status === "error" &&
         !limits.session &&
@@ -134,7 +158,7 @@ export async function mobileAllUsage(refresh = false) {
   }
   const singles = await Promise.all(
     SINGLE_LOGIN.map(async ({ provider, label }) => {
-      const limits = await loadRateLimits(provider, "default", refresh).catch(() => null);
+      const limits = await loadFresh(provider, "default", refresh).catch(() => null);
       return { provider, label, limits };
     }),
   );
@@ -150,7 +174,7 @@ export async function mobileAllUsage(refresh = false) {
   // under the same account key as the bottom bar so the two share a cache.
   const agKey =
     runtimeProviderBinaryPath("antigravity-cli") ?? getCustomBinary("antigravity-cli") ?? "default";
-  const ag = await loadRateLimits("antigravity-cli", agKey, refresh).catch(() => null);
+  const ag = await loadFresh("antigravity-cli", agKey, refresh).catch(() => null);
   if (ag && ag.status !== "unavailable") {
     const groups = ag.modelGroups ?? [];
     const label = "Antigravity";

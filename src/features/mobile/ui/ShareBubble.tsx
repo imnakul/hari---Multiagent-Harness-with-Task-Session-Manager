@@ -273,7 +273,7 @@ export function ShareBubble({
       <div
         className={`relative max-w-[min(30rem,88%)] overflow-hidden rounded-2xl border-[0.5px] ${
           outgoing
-            ? "rounded-br-md border-accent/25 bg-accent/[0.12]"
+            ? "share-bubble-out rounded-br-md"
             : "rounded-bl-md border-content/10 bg-content/[0.05]"
         } ${pictures.length || videos.length ? "p-1" : "px-3 py-2"}`}
       >

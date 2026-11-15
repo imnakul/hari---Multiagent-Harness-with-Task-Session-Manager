@@ -4,7 +4,7 @@ import { ActivityIndicator, Alert, AppState, Pressable, StyleSheet, Text, View }
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { canWake } from "@/features/liveUpdates/nativeLive";
-import { Chip, Control, Meter, Section, Segments } from "@/features/pc/ComputerParts";
+import { Chip, Meter, Section, Segments, Tile } from "@/features/pc/ComputerParts";
 import { DeviceControls } from "@/features/pc/DeviceControls";
 import {
   formatBytes,
@@ -65,8 +65,11 @@ const answerNote = (raw: unknown): string | undefined => {
  * fold (closed at first); Lock moved off (Hibernate and Monitor off stay);
  * sound, media, camera, Bluetooth, Hibernate when idle and the computer's
  * files below.
+ * L-307: the controls come first, as control-centre tiles and sliders, then
+ * Stats, Running apps and Apps; nothing is asked of the computer while the
+ * hub shows Share (`active` false).
  */
-export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
+export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => void; active: boolean }) {
   const styles = useStyles();
   const colors = useColors();
   const { pairing, command } = useConnection();
@@ -123,7 +126,7 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
 
   useFocusEffect(
     useCallback(() => {
-      if (!fingerprint) return;
+      if (!fingerprint || !active) return;
       let statsTimer: ReturnType<typeof setInterval> | null = null;
       let appsTimer: ReturnType<typeof setInterval> | null = null;
       const start = () => {
@@ -147,7 +150,7 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
         stop();
         appState.remove();
       };
-    }, [fingerprint, loadStats, loadLists]),
+    }, [fingerprint, active, loadStats, loadLists]),
   );
 
   if (!pairing)
@@ -273,6 +276,36 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
       ) : null}
 
       {reachable !== false ? (
+        <DeviceControls
+          say={say}
+          active={active}
+          power={
+            <>
+              <Tile
+                icon={stats?.monitorOff ? "computerOff" : "monitor"}
+                label="Monitor"
+                state={stats ? (stats.monitorOff ? "Off" : "On") : "…"}
+                on={stats ? !stats.monitorOff : false}
+                disabled={!stats}
+                busy={busy === "power.monitorOn" || busy === "power.monitorOff"}
+                onPress={() => void monitor(!stats?.monitorOff)}
+              />
+              <Tile icon="moon" label="Hibernate" state="Asks first" busy={busy === "power.hibernate"} onPress={hibernate} />
+              <Tile icon="image" label="Screenshot" state="To Share" busy={busy === "screenshot"} onPress={() => void screenshot()} />
+            </>
+          }
+          files={<Tile icon="drive" label="Files" state="Browse" onPress={() => router.push("/computer/files")} />}
+          after={
+            busy === null && note?.text === "Screenshot on its way to Share" ? (
+              <Pressable accessibilityRole="link" onPress={onOpenShare} hitSlop={8} style={styles.shareLink}>
+                <Text style={styles.link}>Open Share</Text>
+              </Pressable>
+            ) : null
+          }
+        />
+      ) : null}
+
+      {reachable !== false ? (
         <Section title="Stats" right={stats?.uptime !== undefined ? <Text style={styles.aside}>Up {formatUptime(stats.uptime)}</Text> : null}>
           {stats ? (
             <View style={styles.stats}>
@@ -309,66 +342,6 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
           ) : (
             <View style={styles.skeleton} accessibilityLabel="Loading stats" />
           )}
-        </Section>
-      ) : null}
-
-      <View style={styles.controls}>
-        {stats?.monitorOff ? (
-          <Control icon="monitor" label="Monitor on" busy={busy === "power.monitorOn"} disabled={reachable === false} onPress={() => void monitor(false)} />
-        ) : (
-          <Control icon="computerOff" label="Monitor off" busy={busy === "power.monitorOff"} disabled={reachable === false} onPress={() => void monitor(true)} />
-        )}
-        <Control icon="moon" label="Hibernate" busy={busy === "power.hibernate"} disabled={reachable === false} onPress={hibernate} />
-        <Control icon="image" label="Screenshot" busy={busy === "screenshot"} disabled={reachable === false} onPress={() => void screenshot()} />
-      </View>
-      {busy === null && note?.text === "Screenshot on its way to Share" ? (
-        <Pressable accessibilityRole="link" onPress={onOpenShare} hitSlop={8} style={styles.shareLink}>
-          <Text style={styles.link}>Open Share</Text>
-        </Pressable>
-      ) : null}
-
-      {reachable !== false && shortcuts?.length ? (
-        <Section title="Apps" fold={{ open: appsOpen, onToggle: () => setAppsOpen(!appsOpen), count: shortcuts.length }}>
-          {shortcuts.map((shortcut, index) => {
-            const expanded = openShortcut === shortcut.id;
-            const working = busy === `shortcut.${shortcut.id}`;
-            return (
-              <View key={shortcut.id}>
-                {index > 0 ? <View style={styles.divider} /> : null}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded }}
-                  accessibilityLabel={`${shortcut.name}, ${shortcut.running ? "running" : shortcut.found ? "not running" : "not found on the computer"}`}
-                  onPress={() => setOpenShortcut(expanded ? null : shortcut.id)}
-                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                >
-                  <View style={[styles.dot, shortcut.running && styles.dotOn]} />
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {shortcut.name}
-                  </Text>
-                  <Text style={styles.rowMeta}>{shortcut.running ? "Running" : shortcut.found ? "" : "Not found"}</Text>
-                  {working ? <ActivityIndicator size="small" color={colors.muted} accessibilityLabel="Working" /> : null}
-                </Pressable>
-                {expanded ? (
-                  <View style={styles.chips}>
-                    {shortcut.running ? (
-                      <>
-                        <Chip label="Show" disabled={working} onPress={() => void shortcutAction(shortcut, "open", "Shown")} />
-                        <Chip label="Minimize" disabled={working} onPress={() => void shortcutAction(shortcut, "minimize", "Minimized")} />
-                        <Chip label="Maximize" disabled={working} onPress={() => void shortcutAction(shortcut, "maximize", "Maximized")} />
-                        <Chip label="Restart" disabled={working} onPress={() => void shortcutAction(shortcut, "restart", "Restarting")} />
-                        {shortcut.self ? null : (
-                          <Chip label="Close" danger disabled={working} onPress={() => void shortcutAction(shortcut, "close", "Closed")} />
-                        )}
-                      </>
-                    ) : (
-                      <Chip label="Open" disabled={working || !shortcut.found} onPress={() => void shortcutAction(shortcut, "open", "Opening")} />
-                    )}
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
         </Section>
       ) : null}
 
@@ -429,23 +402,51 @@ export function ComputerControl({ onOpenShare }: { onOpenShare: () => void }) {
         </Section>
       ) : null}
 
-      <DeviceControls say={say} reachable={reachable} />
-
-      {reachable !== false ? (
-        <Section title="Files">
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/computer/files")}
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          >
-            <Icon name="drive" size={20} color={colors.accent} />
-            <Text style={styles.rowTitle}>Browse the computer’s files</Text>
-            <View style={styles.rowEnd}>
-              <Icon name="chevronRight" size={16} color={colors.muted} />
-            </View>
-          </Pressable>
+      {reachable !== false && shortcuts?.length ? (
+        <Section title="Apps" fold={{ open: appsOpen, onToggle: () => setAppsOpen(!appsOpen), count: shortcuts.length }}>
+          {shortcuts.map((shortcut, index) => {
+            const expanded = openShortcut === shortcut.id;
+            const working = busy === `shortcut.${shortcut.id}`;
+            return (
+              <View key={shortcut.id}>
+                {index > 0 ? <View style={styles.divider} /> : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded }}
+                  accessibilityLabel={`${shortcut.name}, ${shortcut.running ? "running" : shortcut.found ? "not running" : "not found on the computer"}`}
+                  onPress={() => setOpenShortcut(expanded ? null : shortcut.id)}
+                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                >
+                  <View style={[styles.dot, shortcut.running && styles.dotOn]} />
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {shortcut.name}
+                  </Text>
+                  <Text style={styles.rowMeta}>{shortcut.running ? "Running" : shortcut.found ? "" : "Not found"}</Text>
+                  {working ? <ActivityIndicator size="small" color={colors.muted} accessibilityLabel="Working" /> : null}
+                </Pressable>
+                {expanded ? (
+                  <View style={styles.chips}>
+                    {shortcut.running ? (
+                      <>
+                        <Chip label="Show" disabled={working} onPress={() => void shortcutAction(shortcut, "open", "Shown")} />
+                        <Chip label="Minimize" disabled={working} onPress={() => void shortcutAction(shortcut, "minimize", "Minimized")} />
+                        <Chip label="Maximize" disabled={working} onPress={() => void shortcutAction(shortcut, "maximize", "Maximized")} />
+                        <Chip label="Restart" disabled={working} onPress={() => void shortcutAction(shortcut, "restart", "Restarting")} />
+                        {shortcut.self ? null : (
+                          <Chip label="Close" danger disabled={working} onPress={() => void shortcutAction(shortcut, "close", "Closed")} />
+                        )}
+                      </>
+                    ) : (
+                      <Chip label="Open" disabled={working || !shortcut.found} onPress={() => void shortcutAction(shortcut, "open", "Opening")} />
+                    )}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
         </Section>
       ) : null}
+
     </SettingsPage>
   );
 }
@@ -500,14 +501,12 @@ const useStyles = themedStyles((colors) => ({
   networkValue: { color: colors.content, fontSize: 14, fontVariant: ["tabular-nums"] },
   disks: { gap: 14 },
   skeleton: { height: 120, backgroundColor: colors.surface, opacity: 0.6 },
-  controls: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
   shareLink: { alignSelf: "flex-start", minHeight: 40, justifyContent: "center", paddingHorizontal: 4 },
   link: { color: colors.accent, fontSize: 15, fontWeight: "600" },
   divider: { height: StyleSheet.hairlineWidth, marginLeft: 14, backgroundColor: colors.stroke },
   row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, paddingHorizontal: 14 },
   appRow: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 8 },
   appText: { flex: 1, minWidth: 0, gap: 2 },
-  rowEnd: { marginLeft: "auto" },
   rowTitle: { flexShrink: 1, color: colors.content, fontSize: 15 },
   rowMeta: { marginLeft: "auto", color: colors.muted, fontSize: 13 },
   appMeta: { color: colors.muted, fontSize: 13, fontVariant: ["tabular-nums"] },

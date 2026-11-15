@@ -54,6 +54,7 @@ mod mobile_pc;
 mod mobile_pc_extra;
 mod mobile_share;
 mod mono;
+// Fork (Hari, L-307): extra dimming of the screens from the phone.
 #[cfg(target_os = "macos")]
 mod mono_chat;
 mod mono_transcript;
@@ -78,6 +79,7 @@ mod reminders;
 mod remote;
 mod remote_ssh;
 mod resources;
+mod screen_dim;
 mod search;
 mod session_board;
 mod session_import;

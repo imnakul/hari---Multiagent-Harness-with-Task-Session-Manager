@@ -1419,6 +1419,23 @@ html.has-user-accent .user-message-bubble {
   border-color: color-mix(in srgb, var(--user-accent-color) 30%, transparent);
 }
 
+/* Fork (Hari, L-306): the Share panel uses the accent chosen in Appearance
+   (as the chat's bubbles and send button do), and what you sent looks like
+   your own chat messages. */
+html.has-user-accent .share-panel {
+  --color-accent: var(--user-accent-color);
+}
+
+.share-bubble-out {
+  background: color-mix(in srgb, var(--color-content) 10%, transparent);
+  border-color: transparent;
+}
+
+html.has-user-accent .share-bubble-out {
+  background: color-mix(in srgb, var(--user-accent-color) 24%, transparent);
+  border-color: color-mix(in srgb, var(--user-accent-color) 30%, transparent);
+}
+
 /*
  * A freshly sent /operator turn lights up once: the bubble blooms with a warm
  * halo, a golden sheen sweeps across it, and sparkles drift up from a glow at

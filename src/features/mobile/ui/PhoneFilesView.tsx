@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { ChevronLeft, File, Folder, LoaderCircle, RefreshCw } from "../../../shared/ui/icons";
 import { formatFileSize } from "../../files/model/filePreview";
 import { parsePhoneFolder, type PhoneFolder } from "../model/phoneFiles";
@@ -9,19 +9,32 @@ import { SHARE_SMALL_BUTTON, shareErrorMessage } from "./PhoneStatus";
  * Fork (Hari, L-297): the phone's storage, browsed from the computer. Folders
  * open on click; ticked files are sent to the computer and arrive in Share.
  * Needs All files access for Hari on the phone.
+ *
+ * Fork (L-306): back goes up a folder, and from the top back to Share.
+ * Refresh always works: it asks again, and an older answer that arrives
+ * late is ignored. While the phone is asked, the list says so.
  */
-export function PhoneFilesView({ onError }: { onError: (error: string) => void }): JSX.Element {
+export function PhoneFilesView({
+  onError,
+  onBack,
+}: {
+  onError: (error: string) => void;
+  onBack: () => void;
+}): JSX.Element {
   const [folder, setFolder] = useState<PhoneFolder | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [sent, setSent] = useState<number | null>(null);
+  const latest = useRef(0);
 
   const open = useCallback((path: string, offset = 0) => {
+    const ask = ++latest.current;
     setLoading(true);
     setError(null);
     invoke<unknown>("mobile_phone_files_list", { path, offset })
       .then((raw) => {
+        if (ask !== latest.current) return;
         const next = parsePhoneFolder(raw);
         if (!next) throw new Error("The phone sent a list this computer can't read. Update Hari.");
         setFolder((current) =>
@@ -31,8 +44,12 @@ export function PhoneFilesView({ onError }: { onError: (error: string) => void }
         );
         if (offset === 0) setPicked([]);
       })
-      .catch((reason: unknown) => setError(shareErrorMessage(reason)))
-      .finally(() => setLoading(false));
+      .catch((reason: unknown) => {
+        if (ask === latest.current) setError(shareErrorMessage(reason));
+      })
+      .finally(() => {
+        if (ask === latest.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => open(""), [open]);
@@ -53,27 +70,28 @@ export function PhoneFilesView({ onError }: { onError: (error: string) => void }
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-stroke px-2 text-[12px]">
         <button
           type="button"
-          disabled={!folder?.parent || loading}
-          aria-label="Up one folder"
-          title="Up one folder"
-          onClick={() => folder?.parent && open(folder.parent)}
-          className="grid size-6 place-items-center rounded-md text-content/55 hover:bg-content/10 hover:text-content disabled:opacity-35"
+          aria-label={folder?.parent ? "Up one folder" : "Back to Share"}
+          title={folder?.parent ? "Up one folder" : "Back to Share"}
+          onClick={() => (folder?.parent ? open(folder.parent) : onBack())}
+          className="grid size-6 place-items-center rounded-md text-content/55 hover:bg-content/10 hover:text-content"
         >
           <ChevronLeft className="size-3.5" strokeWidth={1.75} aria-hidden />
         </button>
         <span className="min-w-0 flex-1 truncate text-content/70" title={folder?.path}>
           {folder ? folder.label : "Phone"}
         </span>
-        {loading ? <LoaderCircle className="size-3.5 animate-spin text-content/45" aria-label="Loading" /> : null}
         <button
           type="button"
-          aria-label="Refresh"
-          title="Refresh"
-          disabled={loading}
+          aria-label={loading ? "Refreshing" : "Refresh"}
+          title={loading ? "Asking the phone… (click to ask again)" : "Refresh"}
           onClick={() => open(folder?.path ?? "")}
           className="grid size-6 place-items-center rounded-md text-content/55 hover:bg-content/10 hover:text-content"
         >
-          <RefreshCw className="size-3.5" strokeWidth={1.75} aria-hidden />
+          {loading ? (
+            <LoaderCircle className="size-3.5 animate-spin" strokeWidth={1.75} aria-hidden />
+          ) : (
+            <RefreshCw className="size-3.5" strokeWidth={1.75} aria-hidden />
+          )}
         </button>
       </div>
 
@@ -85,7 +103,15 @@ export function PhoneFilesView({ onError }: { onError: (error: string) => void }
               Try again
             </button>
           </div>
-        ) : folder && folder.items.length === 0 ? (
+        ) : !folder ? (
+          <p
+            role="status"
+            className="mx-auto mt-10 flex max-w-xs items-center justify-center gap-2 px-3 text-center text-[12.5px] text-content/55"
+          >
+            <LoaderCircle className="size-3.5 shrink-0 animate-spin" aria-hidden />
+            Asking the phone for its files…
+          </p>
+        ) : folder.items.length === 0 ? (
           <p className="mt-10 text-center text-[12.5px] text-content/45">This folder is empty.</p>
         ) : (
           <ul>

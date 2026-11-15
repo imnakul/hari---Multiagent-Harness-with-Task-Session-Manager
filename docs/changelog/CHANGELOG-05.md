@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 14:27 IST — Hari usage shows the real time left; refresh in the header (L-308)
+- Type: fix
+- What: The phone's usage (Settings → Usage and the model picker) showed the 5-hour limit as "reset due" with the old window's numbers, because it reused the computer's saved reading until a manual refresh. It now asks for a new reading when a window has ended since the last one or the reading is over 5 minutes old, so it shows the time left (e.g. "5h · 4h 30m"). On the Usage page the refresh button moved into the header beside "Usage", turns into a spinner while it asks, and the intro line is gone.
+- Why: User request 2026-11-15.
+- Files: see L-308 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local49 commit
+- Verified: desktop typecheck ✅ tests ✅ (`src/features/mobile`: 84); phone typecheck ✅ lint ✅. Phone check manual.
+
+## 2026-11-15 14:20 IST — Hari's Control tab as a control centre, swipe between Share and Control, extra screen dimming (L-307)
+- Type: feature
+- What: The phone's Control tab opens on its controls with no gap at the top. Square tiles like a phone's control centre: Monitor, Hibernate, Screenshot; Microphone, Sound, Camera; Bluetooth, Hibernate when idle, Files; a switch tile fills with the accent when on. Volume and a new Brightness are wide sliders you drag; the output device is a menu; what's playing is a full-width box with Previous, Play/Pause and Next. Stats, Running apps and Apps follow. A sideways swipe anywhere moves between Share and Control, the header switch following the finger (a drag on a slider stays the slider's). Brightness dims all the computer's screens below their own lowest setting, down to 20%: a see-through black layer over each monitor that clicks pass through, left out of screenshots and screen sharing, gone when MonoCode quits (Windows only).
+- Why: User request 2026-11-15 (Suggest).
+- Files: see L-307 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local49 commit
+- Verified: phone typecheck ✅ lint ✅; desktop typecheck ✅ tests ✅ (`src/features/mobile`, `src/shared/ui`: 122); Rust `cargo check` ✅, `screen_dim` and `mobile_pc` tests ✅. Phone and desktop checks manual.
+
+## 2026-11-15 13:18 IST — Desktop Share panel: clear like the chats, your accent, the chat's composer, smooth slide, gliding tabs, Phone files back and refresh (L-306)
+- Type: fix
+- What: The docked Share panel no longer sits on a frosted layer (the blur flattened the wallpaper into grey); it's clear like the chats beside it, and frosted only when it floats over another view. Your own messages and the panel's buttons follow the accent chosen in Appearance instead of the theme's blue. The composer is the chat's box with Share's own labelled buttons (Attach, Clipboard, Open there or To clipboard, Send), all one size, Send in your accent. The panel slides with transform and opacity, so the chat isn't laid out again on every frame. Every tab switcher (`SegmentedSwitch`) now glides its selected background to the new tab. Phone files: back goes up a folder and, from the top, back to Share; Refresh always asks again (a late older answer is ignored) and turns into a spinner while it waits, and the list says it's asking the phone instead of staying blank.
+- Why: User report 2026-11-15 — L-302 hadn't delivered the glass look, theme colours, chat composer, smooth slide or gliding tabs, and Phone files' back and refresh did nothing.
+- Files: see L-306 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local49 commit
+- Verified: typecheck ✅ tests ✅ (desktop 8234; one test failed in the first full run and not in a second; MonoSidebar.test.ts logs an unhandled Tauri error, also without this change). Desktop checks manual.
+
 ## 2026-11-15 10:25 IST — Share in the background, glass Share panel, Claude's terminal and clearer notifications on the phone (L-299 to L-305)
 - Type: feature
 - What: Android's share sheet sends to the computer without bringing Hari up (a background task), and Windows Explorer gets "Share with Hari" (right-click → Show more options, and Send to), which sends files to the phone without showing MonoCode. The desktop Share panel is glass, uses the tab switcher, shows a light placeholder while it slides, draws messages like chat, slides Notes, Task, Pin and Save in on hover, and has a right-click menu with Remove. On the phone: messages in Share get Copy, Notes, Task, Pin and Save underneath (no swipe-to-delete); the unsent Share text survives restarts; the composer holds its own text so long prompts don't lag; + grows a small menu up out of the button; attachments in the composer open on tap; the loading cover is clear; "Claude is busy on your computer" shows Claude's terminal with Esc, Enter, Return to chat and Stop Claude; notifications read "Project · Chat" / "Finished · Opus 5.5" and a swipe marks them read on both sides. AGENTS.md gains the rule to reuse components and keep the glass look.

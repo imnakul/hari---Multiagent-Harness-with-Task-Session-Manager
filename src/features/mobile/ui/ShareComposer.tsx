@@ -30,6 +30,9 @@ const isWebLink = (text: string) => /^https?:\/\/\S+$/i.test(text.trim());
  * dropped) wait above the box with an × until Send, which sends them as one
  * group with the typed text as their caption. Enter sends, Shift+Enter adds a
  * line. A lone web link can also be sent and opened on the phone.
+ *
+ * Fork (L-306): the chat composer's frosted box, with Share's own labelled
+ * buttons, all one height; Send in the accent (the chat's send colours).
  */
 export function ShareComposer({
   busy,
@@ -77,9 +80,10 @@ export function ShareComposer({
       if (paths.length) onStage([...staged, ...paths.filter((path) => !staged.includes(path))]);
     });
 
+  const textToClipboard = hasDraft && !staged.length;
   return (
-    <div className="shrink-0 border-t border-stroke p-2.5">
-      <div className="rounded-xl border border-content/10 bg-content/[0.03] transition-colors focus-within:border-accent/50">
+    <div className="shrink-0 px-2.5 pb-2.5 pt-1">
+      <div data-composer-box className="relative z-10 rounded-lg border border-content/10 has-focus:border-content/20">
         {staged.length ? (
           <ul aria-label="Files to send" className="flex flex-wrap gap-1.5 px-2 pt-2">
             {staged.map((path) => (
@@ -123,19 +127,19 @@ export function ShareComposer({
               onStage([...staged, ...paths]);
             });
           }}
-          rows={2}
+          rows={1}
           aria-label={staged.length ? "Caption" : "Text or a link for your phone"}
-          placeholder={staged.length ? "Add a caption" : "Text or a link. Paste or drop files to attach them."}
-          className="block max-h-40 min-h-[3.25rem] w-full resize-none bg-transparent px-3 py-2 text-[13px] text-content placeholder:text-content/40 focus:outline-none"
+          placeholder={staged.length ? "Add a caption" : "Text or a link for your phone…"}
+          className="scrollbar-none relative block max-h-40 w-full resize-none bg-transparent px-3 py-3 font-sans text-sm leading-5.5 text-content outline-none placeholder:text-content/40"
         />
         <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
           <button
             type="button"
             disabled={busy}
-            title="Attach files"
+            title="Attach files (or paste or drop them)"
             aria-label="Attach files"
             onClick={pickFiles}
-            className={SHARE_SMALL_BUTTON}
+            className={`${SHARE_SMALL_BUTTON} w-7 justify-center px-0`}
           >
             <Paperclip className="size-3.5" strokeWidth={1.75} aria-hidden />
           </button>
@@ -161,7 +165,7 @@ export function ShareComposer({
                 <ExternalLink className="size-3.5" strokeWidth={1.75} aria-hidden />
                 Open there
               </button>
-            ) : hasDraft && !staged.length ? (
+            ) : textToClipboard ? (
               <button
                 type="button"
                 disabled={busy}
@@ -169,6 +173,7 @@ export function ShareComposer({
                 onClick={() => send("clipboard")}
                 className={SHARE_SMALL_BUTTON}
               >
+                <Copy className="size-3.5" strokeWidth={1.75} aria-hidden />
                 To clipboard
               </button>
             ) : null}
@@ -177,7 +182,7 @@ export function ShareComposer({
               disabled={busy || !canSend}
               title="Send (Enter)"
               onClick={() => send("send")}
-              className={`${SHARE_SMALL_BUTTON} border-accent/40 bg-accent/15 text-content hover:bg-accent/25`}
+              className={`${SHARE_SMALL_BUTTON} primary-action border-transparent`}
             >
               <Send className="size-3.5" strokeWidth={1.75} aria-hidden />
               Send

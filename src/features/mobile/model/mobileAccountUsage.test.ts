@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderRateLimits } from "../../providers/model/rateLimits";
-import { mobileAccountUsage, mobileUsageSnapshot } from "./mobileAccountUsage";
+import { mobileAccountUsage, mobileUsageSnapshot, usageOutdated } from "./mobileAccountUsage";
 
 const desktop = vi.hoisted(() => ({
   load: vi.fn(),
@@ -13,6 +13,8 @@ vi.mock("../../providers/model/rateLimitsCache", () => ({
   loadRateLimits: desktop.load,
   getCachedRateLimits: desktop.cached,
   setCachedRateLimits: desktop.save,
+  rateLimitRefreshDue: (limits: ProviderRateLimits, at: number) =>
+    limits.status !== "idle" && limits.status !== "fetching" && at - limits.updatedAt >= 5 * 60_000,
 }));
 vi.mock("../../settings/model/displayPrefs", () => ({
   loadShowRemainingUsage: desktop.remaining,
@@ -33,7 +35,13 @@ const snapshot = (
   ...overrides,
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
   vi.clearAllMocks();
   localStorage.clear();
   localStorage.setItem(
@@ -143,5 +151,20 @@ describe("mobile account usage", () => {
       "default",
       expect.objectContaining({ status: "error", session: snapshot().session }),
     );
+  });
+
+  it("reads again once a limit's window has ended or the reading is old (L-308)", async () => {
+    expect(usageOutdated(snapshot(), now)).toBe(false);
+    expect(usageOutdated(snapshot(), now + 3_600_000)).toBe(true);
+    expect(usageOutdated(snapshot({ updatedAt: now - 6 * 60_000 }), now)).toBe(true);
+    expect(usageOutdated(snapshot({ status: "idle", session: null, weekly: null }), now)).toBe(false);
+    desktop.cached.mockReturnValue(
+      snapshot({ session: { usedPercent: 44, windowMinutes: 300, resetsAt: now - 60_000 } }),
+    );
+    await mobileAccountUsage("codex");
+    expect(desktop.load.mock.calls).toEqual([
+      ["codex", "default", true],
+      ["codex", "account-work", true],
+    ]);
   });
 });

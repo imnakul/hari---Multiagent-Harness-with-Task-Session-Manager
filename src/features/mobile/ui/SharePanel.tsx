@@ -311,7 +311,7 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
       </header>
 
       {phoneFiles ? (
-        <PhoneFilesView onError={setError} />
+        <PhoneFilesView onError={setError} onBack={() => setPhoneFiles(false)} />
       ) : (
         <>
           {storageOpen ? <StorageStrip busy={busy} attempt={attempt} onDone={load} /> : null}
@@ -435,6 +435,7 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
     <SlidePanel
       open={open}
       appear
+      motion="slide"
       className={overlay ? "fixed bottom-0 right-0 top-10 z-40 justify-end" : ""}
       onMoving={(moving) => setStill(!moving)}
       onGone={() => setMounted(false)}
@@ -443,9 +444,13 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
         ref={frame}
         aria-label="Share panel"
         style={{ width: Math.min(width, max) }}
-        className="relative isolate my-2 mr-2 flex min-w-0 shrink-0 flex-col overflow-hidden rounded-xl border border-content/10 text-content shadow-xl"
+        className={`share-panel relative isolate my-2 mr-2 flex min-w-0 shrink-0 flex-col overflow-hidden rounded-xl border border-content/10 text-content ${
+          overlay ? "shadow-xl" : "bg-content/[0.02]"
+        }`}
       >
-        <GlassBackdrop />
+        {/* Fork (L-306): docked, the panel is clear over the wallpaper like the
+            chats beside it; over another view it needs the frosted glass. */}
+        {overlay ? <GlassBackdrop /> : null}
         <ResizeHandle
           label="Resize Share panel"
           value={width}

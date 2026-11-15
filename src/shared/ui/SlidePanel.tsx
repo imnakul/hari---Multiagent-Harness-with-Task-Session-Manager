@@ -3,6 +3,8 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 export const SLIDE_IN_MS = 220;
 export const SLIDE_OUT_MS = 180;
 const EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
+/** Just past the right edge, margin included. */
+const OFFSCREEN = "translateX(calc(100% + 0.5rem))";
 
 function reducedMotion(): boolean {
   return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
@@ -23,10 +25,15 @@ function panelWidth(box: HTMLElement): number {
  * until the slide out ends, then calls `onGone`. Toggling mid-slide reverses
  * from where it is. At rest the wrapper hugs the panel, so resizing stays
  * instant. Reduced motion: no slide. On mount it slides only with `appear`.
+ *
+ * Fork (L-306): `motion="slide"` moves only the panel (transform and opacity),
+ * so nothing beside it is laid out again while it moves: the chat takes its
+ * new width once, as the slide in starts or after the slide out ends.
  */
 export function SlidePanel({
   open,
   appear = false,
+  motion = "width",
   className = "",
   beforeLeave,
   onMoving,
@@ -35,6 +42,7 @@ export function SlidePanel({
 }: {
   open: boolean;
   appear?: boolean;
+  motion?: "width" | "slide";
   className?: string;
   /** Runs before the slide out starts (the Browser freezes its page). */
   beforeLeave?: () => Promise<void>;
@@ -56,12 +64,19 @@ export function SlidePanel({
     const changed = shownOpen.current === null ? appear : shownOpen.current !== open;
     shownOpen.current = open;
     const animate = changed && !reducedMotion();
+    const panel = motion === "slide" ? (node.firstElementChild as HTMLElement | null) : null;
     let timer = 0;
     let cancelled = false;
     const rest = () => {
       node.style.transition = "";
       node.style.width = "";
       node.style.overflow = "";
+      if (panel) {
+        panel.style.transition = "";
+        panel.style.transform = "";
+        panel.style.opacity = "";
+        panel.style.willChange = "";
+      }
     };
     const slide = (to: number, ms: number, done: () => void) => {
       const from = node.getBoundingClientRect().width;
@@ -73,6 +88,21 @@ export function SlidePanel({
       node.style.width = `${to}px`;
       timer = window.setTimeout(done, ms);
     };
+    // A fresh slide in starts past the right edge; one already moving turns
+    // around from where it is.
+    const glide = (target: HTMLElement, show: boolean, ms: number, done: () => void) => {
+      if (show && !target.style.transform) {
+        target.style.transition = "none";
+        target.style.transform = OFFSCREEN;
+        target.style.opacity = "0";
+        void target.offsetWidth;
+      }
+      target.style.willChange = "transform, opacity";
+      target.style.transition = `transform ${ms}ms ${EASE}, opacity ${ms}ms ${EASE}`;
+      target.style.transform = show ? "translateX(0)" : OFFSCREEN;
+      target.style.opacity = show ? "1" : "0";
+      timer = window.setTimeout(done, ms);
+    };
 
     if (open) {
       if (!animate) {
@@ -81,10 +111,12 @@ export function SlidePanel({
         return;
       }
       latest.current.onMoving?.(true);
-      slide(panelWidth(node), SLIDE_IN_MS, () => {
+      const settle = () => {
         rest();
         latest.current.onMoving?.(false);
-      });
+      };
+      if (panel) glide(panel, true, SLIDE_IN_MS, settle);
+      else slide(panelWidth(node), SLIDE_IN_MS, settle);
       return () => {
         cancelled = true;
         window.clearTimeout(timer);
@@ -98,13 +130,14 @@ export function SlidePanel({
     }
     void (latest.current.beforeLeave?.() ?? Promise.resolve()).then(() => {
       if (cancelled) return;
-      slide(0, SLIDE_OUT_MS, () => latest.current.onGone());
+      if (panel) glide(panel, false, SLIDE_OUT_MS, () => latest.current.onGone());
+      else slide(0, SLIDE_OUT_MS, () => latest.current.onGone());
     });
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-    // `appear` matters on mount only.
+    // `appear` and `motion` matter on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

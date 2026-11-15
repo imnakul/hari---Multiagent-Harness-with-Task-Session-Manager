@@ -5,7 +5,7 @@
 //!   (`pc.power`: monitor off, lock, hibernate), a screenshot offered through
 //!   Share (`pc.screenshot`), the chosen apps (`pc.shortcuts`, `pc.shortcut`),
 //!   the network cards Wake-on-LAN needs (`pc.wakeInfo`), and the phone's own
-//!   stats (`phone.stats`).
+//!   stats (`phone.stats`), and extra screen dimming (`pc.dim`, L-307).
 //! - **Computer → phone** items on the stream: `stats.want {until}` (send your
 //!   stats until then) and `ring {action, at}` (Find my phone).
 //!
@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
-const METHODS: [&str; 16] = [
+const METHODS: [&str; 17] = [
     "pc.stats",
     "pc.apps",
     "pc.app",
@@ -44,6 +44,7 @@ const METHODS: [&str; 16] = [
     "pc.idleHibernate",
     "pc.files.list",
     "pc.files.offer",
+    "pc.dim",
 ];
 /// How far a command's `sentAt` may be from this clock (either way).
 const STALE_MS: u64 = 60_000;
@@ -271,7 +272,7 @@ fn run(app: &AppHandle, peer: &str, method: &str, params: &Value) -> Result<Valu
         "pc.wakeInfo" => Ok(json!({ "cards": native::wake_cards() })),
         "phone.stats" => phone_stats(app, peer, params),
         // Fork (Hari, L-292..L-297): readings need no time; changes do.
-        "pc.audio" | "pc.media" | "pc.camera" | "pc.bluetooth" | "pc.idleHibernate" => {
+        "pc.audio" | "pc.media" | "pc.camera" | "pc.bluetooth" | "pc.idleHibernate" | "pc.dim" => {
             if changes(method, params) {
                 fresh(params, now_ms())?;
             }
@@ -294,6 +295,7 @@ fn changes(method: &str, params: &Value) -> bool {
         "pc.camera" => &["allowed"],
         "pc.bluetooth" => &["on"],
         "pc.idleHibernate" => &["armed"],
+        "pc.dim" => &["level"],
         _ => &[],
     };
     keys.iter().any(|key| !params[*key].is_null())
@@ -306,6 +308,7 @@ fn extra(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String>
         "pc.media" => x::media(params),
         "pc.camera" => x::camera(params),
         "pc.bluetooth" => x::bluetooth(params),
+        "pc.dim" => crate::screen_dim::dim(params),
         _ => x::idle_hibernate(app, params),
     }
 }

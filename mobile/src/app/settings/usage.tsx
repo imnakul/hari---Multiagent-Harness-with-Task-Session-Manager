@@ -1,12 +1,13 @@
+import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
+import { HeaderButton } from "@/features/files/codeScreen";
 import { AccountUsage } from "@/features/models/AccountPicker";
 import type { AccountUsageSnapshot } from "@/features/models/useAccountUsage";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
-import { Icon } from "@/ui/Icon";
 import { radii, themedStyles, useColors } from "@/ui/theme";
 
 type UsageProvider = {
@@ -19,6 +20,8 @@ type UsageProvider = {
  * Fork (Hari, L-296): Settings → Usage. Every provider and account with
  * usage on the computer — 5-hour, weekly and (Command Code, OpenCode Go)
  * monthly — with a refresh button and pull to refresh.
+ * L-308: the refresh button sits in the header, beside the title, and turns
+ * into a spinner while it asks; no intro line above the providers.
  */
 export default function UsageScreen() {
   const colors = useColors();
@@ -61,23 +64,18 @@ export default function UsageScreen() {
 
   return (
     <SettingsPage onRefresh={() => load(true)} refreshing={loading && providers !== null}>
-      <View style={styles.top}>
-        <Text style={styles.intro}>Plan usage from the computer’s signed-in providers.</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh usage"
-          disabled={loading}
-          onPress={() => load(true)}
-          hitSlop={8}
-          style={({ pressed }) => [styles.refresh, pressed && { opacity: 0.6 }]}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.muted} />
-          ) : (
-            <Icon name="refresh" size={18} color={colors.muted} />
-          )}
-        </Pressable>
-      </View>
+      <Stack.Screen
+        options={{
+          headerRight: () =>
+            loading ? (
+              <View style={styles.refresh} accessibilityLabel="Refreshing usage">
+                <ActivityIndicator size="small" color={colors.content} />
+              </View>
+            ) : (
+              <HeaderButton icon="refresh" label="Refresh usage" onPress={() => load(true)} />
+            ),
+        }}
+      />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {!connected && !providers ? <Text style={styles.intro}>Connect to your computer to see usage.</Text> : null}
       {providers && providers.length === 0 ? (
@@ -111,9 +109,8 @@ export default function UsageScreen() {
 }
 
 const useStyles = themedStyles((colors) => ({
-  top: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 16, marginTop: 8 },
   intro: { flex: 1, color: colors.muted, fontSize: 13, lineHeight: 18, marginHorizontal: 16, marginTop: 8 },
-  refresh: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  refresh: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   error: { color: colors.deletions, fontSize: 13, marginHorizontal: 16, marginTop: 12 },
   heading: { color: colors.muted, fontSize: 15, marginTop: 24, marginBottom: 8, marginLeft: 16 },
   card: { backgroundColor: colors.surface, borderRadius: radii.card, paddingHorizontal: 16 },
