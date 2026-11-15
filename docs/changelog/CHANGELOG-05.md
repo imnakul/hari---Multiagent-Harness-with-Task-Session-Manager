@@ -1,5 +1,14 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 15:32 IST — Phone shares no longer freeze the computer; Share always in Hari's drawer (L-310, L-311)
+- Type: fix
+- What: L-310: the computer handled the phone's outbox while holding its phone-service lock, and a shared text or link then looked up the phone's name under that same lock, so the service waited on itself for good. The phone showed "Reconnecting to desktop" with the computer on, shares stayed in the outbox, and MonoCode's window froze (its status commands wait on that lock). The outbox now runs off the lock. Share history had no phone-to-computer text at all, so every such share since L-279 hit it. L-311: the drawer keeps Share once paired, with Wake computer added while offline; Back closes a picture opened from the chat box; Share's picture frame is thinner.
+- Why: User report 2026-11-15 (a link shared from Brave, then the computer stuck).
+- Files: see L-310 and L-311 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local51 commit
+- Verified: `cargo check` ✅; phone typecheck ✅ lint ✅ Composer tests ✅ (8). Phone and computer checks manual.
+- Note: GitHub's download server gave this PC about 11 KB/s (Cloudflare about 6 MB/s), which is why updates failed on both devices.
+
 ## 2026-11-15 14:35 IST — Hari's chat box stays put when Photo Library opens (L-309)
 - Type: fix
 - What: On Android, opening Photo Library, Camera or Files from the + menu dropped the keyboard at once, so the chat box fell in one frame just before the picker covered it. The chat box now stays where it is under the picker, then glides to the keyboard's place (up if it comes back, down if not) when you return.

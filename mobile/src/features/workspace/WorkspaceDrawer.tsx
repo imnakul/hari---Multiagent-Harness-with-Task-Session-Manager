@@ -90,8 +90,8 @@ export function WorkspaceDrawer() {
   const colors = useColors();
   const styles = useStyles();
   const { projects, monos: roster } = useWorkspace();
-  const { pairing, catalog, connected } = useConnection();
-  // Fork (Hari, L-290): Computer while the desktop answers; Wake while it can't.
+  const { pairing, catalog } = useConnection();
+  // Fork (Hari, L-290, L-310): Wake joins Share while the desktop can't be reached.
   const offline = useOffline();
   // Fork (Hari, L-275): shown once the desktop answers; older ones can't.
   const feed = useFeed();
@@ -260,9 +260,10 @@ export function WorkspaceDrawer() {
                   onPress={() => openModal("/notifications")}
                 />
               ) : null}
-              {/* Fork (Hari, L-288, L-290): the Computer hub (Share | Control) while the computer answers,
-                  Wake-on-LAN in its place once it can't be reached. */}
-              {pairing && connected ? (
+              {/* Fork (Hari, L-288, L-290): the Computer hub (Share | Control).
+                  L-310: always there once paired, as Share keeps an outbox for
+                  an offline computer; Wake-on-LAN joins it once it can't be reached. */}
+              {pairing ? (
                 <ToolRow icon="share" label="Share" onPress={() => openModal("/computer?tab=share")} />
               ) : null}
               {offline && canWake ? (

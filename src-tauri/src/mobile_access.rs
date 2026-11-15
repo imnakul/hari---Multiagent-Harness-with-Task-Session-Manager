@@ -801,9 +801,11 @@ async fn handle(
         if crate::mobile_notifications::handles(method) {
             return crate::mobile_notifications::handle(app, method, &params);
         }
-        // Fork (Hari, L-277): acks and the phone's outbox.
+        // Fork (Hari, L-277): acks and the phone's outbox. Run off the lock
+        // (L-310): a shared text looks up the phone's name, which takes this
+        // lock again, and the service stopped answering for good.
         if crate::mobile_events::handles(method) {
-            return crate::mobile_events::handle(app, peer, method, &params);
+            break 'locked Err(std::mem::take(&mut params));
         }
         if ![
             "conversation.read",
@@ -916,6 +918,9 @@ async fn handle(
         }
         Err(params) if crate::mobile_pc::handles(method) => {
             return crate::mobile_pc::handle(app, peer, method, params).await
+        }
+        Err(params) if crate::mobile_events::handles(method) => {
+            return crate::mobile_events::handle(app, peer, method, &params)
         }
         Err(params) => return crate::mobile_tools::handle(app, method, params).await,
     };

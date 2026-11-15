@@ -14,17 +14,28 @@ export const liftHeld = makeMutable(false);
 const SETTLE_MS = 450;
 let holder = 0;
 
-/** Runs a picker with the composer held where it is (Android only). */
-export async function withLiftHeld<T>(run: () => Promise<T>): Promise<T> {
-  if (Platform.OS !== "android") return run();
+/**
+ * Holds the composer where it is until the returned release is called
+ * (Android only). L-310: the composer's full-screen image uses it too.
+ */
+export function holdLift(): () => void {
+  if (Platform.OS !== "android") return () => {};
   const mine = ++holder;
   liftHeld.set(true);
+  return () => {
+    setTimeout(() => {
+      // A later hold keeps its own.
+      if (holder === mine) liftHeld.set(false);
+    }, SETTLE_MS);
+  };
+}
+
+/** Runs a picker with the composer held where it is (Android only). */
+export async function withLiftHeld<T>(run: () => Promise<T>): Promise<T> {
+  const release = holdLift();
   try {
     return await run();
   } finally {
-    setTimeout(() => {
-      // A later picker keeps its own hold.
-      if (holder === mine) liftHeld.set(false);
-    }, SETTLE_MS);
+    release();
   }
 }

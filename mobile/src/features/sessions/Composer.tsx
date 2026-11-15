@@ -3,7 +3,7 @@ import { Button, Host, HStack, Menu, Spacer } from "@expo/ui/swift-ui";
 import { useNavigation } from "expo-router";
 import { accessibilityLabel, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Linking, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import { ActivityIndicator, Alert, Keyboard, Linking, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -36,7 +36,7 @@ import {
   type Attachment,
   type Picked,
 } from "./attachments";
-import { withLiftHeld } from "./liftHold";
+import { holdLift, withLiftHeld } from "./liftHold";
 import { readDraft, writeDraft } from "./drafts";
 import { FullImageViewer } from "./MessageAttachments";
 import { DictationBar } from "./DictationBar";
@@ -697,11 +697,25 @@ function AttachmentChip({
   const colors = useColors();
   const image = isImage(attachment);
   const [viewing, setViewing] = useState(false);
+  const release = useRef<(() => void) | null>(null);
+  useEffect(() => () => release.current?.(), []);
+  const closeViewer = () => {
+    release.current?.();
+    release.current = null;
+    setViewing(false);
+  };
   // Fork (Hari, L-299): a tap opens it, a picture full screen and a file in
   // the app the phone picks for it.
   const open = () => {
     if (attachment.preparing) return;
     if (image) {
+      // L-310: a keyboard left open behind the picture took the first Back,
+      // so Back seemed not to close it. The composer holds its place under it.
+      if (Platform.OS === "android" && Keyboard.isVisible()) {
+        release.current?.();
+        release.current = holdLift();
+        Keyboard.dismiss();
+      }
       setViewing(true);
       return;
     }
@@ -752,7 +766,7 @@ function AttachmentChip({
         <Icon name="close" size={10} color={colors.content} />
       </Pressable>
       {viewing ? (
-        <FullImageViewer uri={attachment.uri} name={attachment.name} onClose={() => setViewing(false)} />
+        <FullImageViewer uri={attachment.uri} name={attachment.name} onClose={closeViewer} />
       ) : null}
     </Pressable>
   );

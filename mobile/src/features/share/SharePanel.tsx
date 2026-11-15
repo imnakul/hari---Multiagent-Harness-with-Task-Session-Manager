@@ -1017,14 +1017,15 @@ const useStyles = themedStyles((colors) => ({
   },
   bubbleTheirs: { backgroundColor: colors.surface, borderBottomLeftRadius: 6 },
   bubbleMine: { backgroundColor: withAlpha(colors.accent, 0.16), borderBottomRightRadius: 6 },
-  bubblePicture: { padding: 4, overflow: "hidden" },
+  // L-310: a thin frame, as the desktop's 4 px reads on a computer screen.
+  bubblePicture: { padding: 2, overflow: "hidden" },
   bubbleFailed: { borderWidth: 1, borderColor: withAlpha(colors.deletions, 0.5) },
   bubbleSelected: { borderWidth: 1.5, borderColor: colors.accent },
   bubbleHead: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   textBlock: { gap: 6 },
   caption: { paddingHorizontal: 8, paddingTop: 2 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 4, maxWidth: GRID_CELL * 2 + 4 },
-  picture: { borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.stroke },
+  picture: { borderRadius: 16, borderCurve: "continuous", backgroundColor: colors.stroke },
   fileLine: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44, paddingVertical: 2 },
   fileIcon: {
     width: 36,
