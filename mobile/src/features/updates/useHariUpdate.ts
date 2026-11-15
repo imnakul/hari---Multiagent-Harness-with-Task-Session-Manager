@@ -9,11 +9,10 @@ import { useSyncExternalStore } from "react";
 import { Linking, Platform } from "react-native";
 
 import {
+  checkResult,
   installedBuild,
   launchCheckDue,
   manifestUrl,
-  newerRelease,
-  parseHariManifest,
   releasesUrl,
   type HariRelease,
 } from "./hariUpdate";
@@ -75,10 +74,11 @@ export async function checkForHariUpdate(quiet = false): Promise<HariRelease | u
       return;
     }
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
-    const release = newerRelease(installed, parseHariManifest(await response.json(), installed.repo));
+    const result = checkResult(installed, await response.json());
+    if (result.kind === "unreadable") throw new Error("Couldn't read the update");
     void Storage.setItem(LAST_CHECK_KEY, String(Date.now()));
-    set(release ? { status: "available", release } : { status: "current" });
-    return release;
+    set(result.kind === "newer" ? { status: "available", release: result.release } : { status: "current" });
+    return result.kind === "newer" ? result.release : undefined;
   } catch (error) {
     await shown;
     set(

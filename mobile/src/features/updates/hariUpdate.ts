@@ -80,6 +80,23 @@ export function newerRelease(
   return release && release.versionCode > installed.versionCode ? release : undefined;
 }
 
+/**
+ * What a check found. Fork (Hari, L-322): a manifest this build cannot read
+ * (or whose APK link it does not accept) is "unreadable", never "current", so
+ * a release the app cannot take is not reported as Up to date.
+ */
+export type HariCheckResult =
+  | { kind: "newer"; release: HariRelease }
+  | { kind: "current" }
+  | { kind: "unreadable" };
+
+export function checkResult(installed: HariBuild, manifest: unknown): HariCheckResult {
+  const release = parseHariManifest(manifest, installed.repo);
+  if (!release) return { kind: "unreadable" };
+  const newer = newerRelease(installed, release);
+  return newer ? { kind: "newer", release: newer } : { kind: "current" };
+}
+
 /** Launch checks run at most this often; the Settings button always checks. */
 export const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 

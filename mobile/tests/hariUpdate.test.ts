@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHECK_INTERVAL_MS,
+  checkResult,
   installedBuild,
   launchCheckDue,
   manifestUrl,
@@ -48,6 +49,19 @@ describe("Hari updates", () => {
     expect(newerRelease(installed, release)).toEqual(release);
     expect(newerRelease({ ...installed, versionCode: 160028 }, release)).toBeUndefined();
     expect(newerRelease(installed, undefined)).toBeUndefined();
+  });
+
+  it("never calls a manifest it cannot read Up to date (L-322)", () => {
+    const installed = { version: "0.16.0-local54", versionCode: 160054, repo };
+    const pages = "https://imnakul.github.io/hari---Multiagent-Harness-with-Task-Session-Manager/Hari.apk";
+    const base = { version: "0.16.0-local55", versionCode: 160055 };
+    expect(checkResult(installed, { ...base, apk: pages })).toEqual({
+      kind: "newer",
+      release: { ...base, apk: pages },
+    });
+    expect(checkResult({ ...installed, versionCode: 160055 }, { ...base, apk: pages })).toEqual({ kind: "current" });
+    expect(checkResult(installed, { ...base, apk: "https://evil.example/Hari.apk" })).toEqual({ kind: "unreadable" });
+    expect(checkResult(installed, { version: "x" })).toEqual({ kind: "unreadable" });
   });
 
   it("knows its own build from the app config", () => {

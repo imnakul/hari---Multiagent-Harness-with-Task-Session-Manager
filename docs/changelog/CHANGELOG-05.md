@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 22:31 IST — Hari update check no longer says Up to date when it cannot read a release (L-322)
+- Type: fix
+- What: Check for updates now says Couldn't check (with Open the release page) when the newest release can't be read, instead of Up to date.
+- Why: User report 2026-11-15: the phone said latest, did not show its version and did not see local55. Cause: the L-315 fix (accept APKs on GitHub Pages, show the installed version) landed after the local54 tag, so local54 and older reject local55's Pages link and reported that as Up to date. Those builds need local55 installed by hand once; from local55 on, updates work in the app.
+- Files: [hariUpdate.ts](../../mobile/src/features/updates/hariUpdate.ts), [useHariUpdate.ts](../../mobile/src/features/updates/useHariUpdate.ts), [hariUpdate.test.ts](../../mobile/tests/hariUpdate.test.ts)
+- Commit: uncommitted
+- Verified: phone typecheck ✅ lint ✅ `hariUpdate` tests ✅ (7)
+
 ## 2026-11-15 21:09 IST — Share bubble: send the clipboard from over any app (L-321)
 - Type: feature
 - What: Hari (Android) has a Share bubble, off until turned on in Settings → Share. It floats over other apps; one tap sends what you copied (text, a link or a picture) to the computer and shows ✓ (or the picture) with Undo for 4 seconds. The same clipboard again wiggles and says Already sent. Drag to move (snaps to a side, never sends); hold for Send again, Open Share or Hide bubble. It hides while Hari is open.
