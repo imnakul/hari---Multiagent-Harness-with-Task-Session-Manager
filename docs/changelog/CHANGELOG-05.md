@@ -1,5 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 10:25 IST — Share in the background, glass Share panel, Claude's terminal and clearer notifications on the phone (L-299 to L-305)
+- Type: feature
+- What: Android's share sheet sends to the computer without bringing Hari up (a background task), and Windows Explorer gets "Share with Hari" (right-click → Show more options, and Send to), which sends files to the phone without showing MonoCode. The desktop Share panel is glass, uses the tab switcher, shows a light placeholder while it slides, draws messages like chat, slides Notes, Task, Pin and Save in on hover, and has a right-click menu with Remove. On the phone: messages in Share get Copy, Notes, Task, Pin and Save underneath (no swipe-to-delete); the unsent Share text survives restarts; the composer holds its own text so long prompts don't lag; + grows a small menu up out of the button; attachments in the composer open on tap; the loading cover is clear; "Claude is busy on your computer" shows Claude's terminal with Esc, Enter, Return to chat and Stop Claude; notifications read "Project · Chat" / "Finished · Opus 5.5" and a swipe marks them read on both sides. AGENTS.md gains the rule to reuse components and keep the glass look.
+- Why: User reports and requests in three Discuss rounds, 2026-11-15 (spec [share-polish-background-send.md](../specs/archive/share-polish-background-send.md)).
+- Files: see L-299 to L-305 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local48 commit
+- Verified: typecheck ✅ (desktop, mobile) lint ✅ (mobile; 2 old warnings in `dictation.ts`) tests ✅ (desktop 8234; one whiteboard icon test timed out in the full run and passes alone; phone 314; Rust mobile_ and share_args 39) rustfmt ✅ cargo check ✅ Kotlin compile ✅. `tests/mobile/watchFrames.test.ts` can't load from the phone config on Windows, as before. Desktop and phone checks manual.
+
+## 2026-11-15 09:05 IST — Hari: Share and Control get their top bar back; Antigravity on the Usage page (L-298, L-296)
+- Type: fix
+- What: On Android, the Computer hub (Share | Control) wasn't counted as a modal, so Hari's own top bar (the side-menu button) was drawn over the hub's Close and Share | Control toggle, and the side menu could open a project under the hub, which then still showed Share. The hub is now a modal like Notifications, Tasks and Notes. Hari → Settings → Usage now lists Antigravity (one row per model family), read with the bottom bar's account key.
+- Why: User report with screenshots; reproduced on the phone over adb (the Close and toggle were present but covered).
+- Files: [SceneFade.tsx](../../mobile/src/ui/SceneFade.tsx), [mobileAccountUsage.ts](../../src/features/mobile/model/mobileAccountUsage.ts)
+- Commit: see the 0.16.0-local48 commit
+- Verified: typecheck ✅ (desktop, mobile) tests ✅ (phone 314; desktop phone link 83); phone check after install: open Share from the side menu → Close and toggle show; Close, then open a project → New | Sessions; Settings → Usage shows Antigravity
+
 ## 2026-11-15 02:59 IST — Share side panel, phone controls for sound, camera and Bluetooth, hibernate when idle, usage and files both ways (L-290 to L-297)
 - Type: feature + fix
 - What:

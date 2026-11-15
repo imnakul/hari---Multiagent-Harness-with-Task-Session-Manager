@@ -1,7 +1,9 @@
 import { BottomSheet, RNHostView } from "@expo/ui";
+import { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useConnection } from "@/features/connection/ConnectionProvider";
 import { Icon } from "@/ui/Icon";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { LiquidView } from "@/ui/LiquidView";
@@ -28,6 +30,46 @@ export function SessionErrorSheet({
   const { bottom } = useSafeAreaInsets();
   const content = sessionErrorContent(message);
   const { stop } = useWorkspace();
+  const { command } = useConnection();
+  const terminalId = content.stopClaude && isPresented ? conversationId : undefined;
+  // Fork (Hari, L-304): Claude's native terminal on the computer, its last
+  // lines read every 1.5 s while the sheet is up. Null until the first read,
+  // and when the computer has no terminal (or predates this).
+  const [terminal, setTerminal] = useState<{ id: string; lines: string[] } | null>(null);
+  const [acting, setActing] = useState(false);
+  useEffect(() => {
+    if (!terminalId) return;
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = async () => {
+      try {
+        const answer = await command<{ terminal?: { lines?: unknown } | null }>("session.terminal", {
+          conversationId: terminalId,
+        });
+        const lines = answer.terminal?.lines;
+        if (live) setTerminal(Array.isArray(lines) ? { id: terminalId, lines: lines.map(String) } : null);
+      } catch {
+        if (live) setTerminal(null);
+      }
+      if (live) timer = setTimeout(read, 1500);
+    };
+    void read();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [terminalId, command]);
+  const shown = terminal && terminal.id === terminalId ? terminal.lines : null;
+  const act = (method: string, params: object, after?: () => void) => {
+    if (!conversationId || acting) return;
+    setActing(true);
+    command(method, { conversationId, ...params })
+      .then(() => after?.())
+      .catch((reason: unknown) =>
+        Alert.alert("Couldn’t do that", reason instanceof Error ? reason.message : String(reason)),
+      )
+      .finally(() => setActing(false));
+  };
   const stopClaude = content.stopClaude && conversationId
     ? () => Alert.alert(
         "Stop Claude?",
@@ -75,7 +117,43 @@ export function SessionErrorSheet({
                 </View>
               </View>
             ) : null}
+            {shown ? (
+              <View accessibilityLabel="Claude’s terminal on your computer" style={styles.terminal}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <Text selectable style={styles.terminalText}>
+                    {shown.length ? shown.join("\n") : " "}
+                  </Text>
+                </ScrollView>
+              </View>
+            ) : null}
           </ScrollView>
+          {shown ? (
+            <View style={styles.keys}>
+              {(["escape", "enter"] as const).map((key) => (
+                <LiquidView
+                  key={key}
+                  onPress={() => act("session.terminalKey", { key })}
+                  accessibilityLabel={key === "escape" ? "Press Esc" : "Press Enter"}
+                  pressedScale={1.03}
+                  style={styles.key}
+                  innerStyle={styles.buttonSurface}
+                >
+                  <Text style={styles.buttonLabel}>{key === "escape" ? "Esc" : "Enter"}</Text>
+                </LiquidView>
+              ))}
+            </View>
+          ) : null}
+          {shown ? (
+            <LiquidView
+              onPress={() => act("session.terminalReturn", {}, onDismiss)}
+              accessibilityLabel="Return to chat"
+              pressedScale={1.03}
+              style={[styles.button, styles.stopButton]}
+              innerStyle={styles.buttonSurface}
+            >
+              <Text style={[styles.buttonLabel, { color: colors.accent }]}>Return to chat</Text>
+            </LiquidView>
+          ) : null}
           {stopClaude ? (
             <LiquidView
               onPress={stopClaude}
@@ -170,6 +248,29 @@ const useStyles = themedStyles((colors) => ({
   },
   stopButton: {
     marginBottom: 10,
+  },
+  terminal: {
+    padding: 12,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    backgroundColor: withAlpha(colors.content, 0.05),
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.stroke,
+  },
+  terminalText: {
+    color: colors.content,
+    fontFamily: "monospace",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  keys: {
+    flexDirection: "row",
+    alignSelf: "stretch",
+    gap: 10,
+    marginBottom: 10,
+  },
+  key: {
+    flex: 1,
   },
   buttonSurface: {
     minHeight: 52,

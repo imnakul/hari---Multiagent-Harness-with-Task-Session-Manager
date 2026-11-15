@@ -45,6 +45,10 @@
         <data android:mimeType="*/*" />
       </intent-filter>
     </activity>
+    <!-- Fork (Hari, L-303): sends what was shared with no window (Headless JS). -->
+    <service
+      android:name="expo.modules.harilive.HariShareTask"
+      android:exported="false" />
     <service
       android:name="expo.modules.harilive.HariClipboardTile"
       android:exported="true"

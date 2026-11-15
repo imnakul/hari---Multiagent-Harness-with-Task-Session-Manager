@@ -204,7 +204,7 @@ function TurnFooter({ turn }: { turn: Turn }) {
   );
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, label = "Copy response" }: { text: string; label?: string }) {
   const colors = useColors();
   const styles = useStyles();
   const [copied, setCopied] = useState(false);
@@ -224,7 +224,7 @@ function CopyButton({ text }: { text: string }) {
         timer.current = setTimeout(() => setCopied(false), 2000);
       }}
       accessibilityRole="button"
-      accessibilityLabel={copied ? "Copied" : "Copy response"}
+      accessibilityLabel={copied ? "Copied" : label}
       hitSlop={6}
       style={({ pressed }) => [styles.footerButton, pressed && styles.footerButtonActive]}
     >
@@ -319,8 +319,12 @@ function UserMessage({
         ) : null}
         {item.reaction ? <Reaction emoji={item.reaction} /> : null}
       </View>
-      {!item.compact && item.at != null ? (
-        <Text style={styles.userTime}>{formatClockTime(item.at)}</Text>
+      {/* Fork (Hari, L-299): Copy under the user's own message too, beside its time. */}
+      {!item.compact && (item.text || item.at != null) ? (
+        <View style={styles.userFooter}>
+          {item.text ? <CopyButton text={item.text} label="Copy message" /> : null}
+          {item.at != null ? <Text style={styles.userTime}>{formatClockTime(item.at)}</Text> : null}
+        </View>
       ) : null}
     </View>
   );
@@ -576,9 +580,14 @@ const useStyles = themedStyles((colors) => ({
     color: withAlpha(colors.content, 0.6),
     fontSize: 13,
   },
-  userTime: {
+  userFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginTop: 4,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
+  },
+  userTime: {
     color: withAlpha(colors.content, 0.4),
     fontSize: 12,
   },

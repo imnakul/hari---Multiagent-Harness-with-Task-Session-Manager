@@ -15,9 +15,12 @@ import {
   feedState,
   loadFeedRecord,
   panelId,
+  panelText,
   parseFeed,
   planPanel,
+  readFeed,
   saveFeedRecord,
+  swipedAway,
   setFeedState,
   type FeedItem,
 } from "./notificationFeed";
@@ -76,7 +79,22 @@ export function NotificationFeedSync() {
   const post = useCallback(async (desktop: string, items: FeedItem[]) => {
     if (Platform.OS !== "android") return;
     const preferences = readFeedPreferences();
-    const plan = planPanel(items, loadFeedRecord(desktop), (item) => {
+    const before = loadFeedRecord(desktop);
+    // Fork (L-305): one swiped out of the panel counts as read, here and on
+    // the computer's bell.
+    const showing = await Notifications.getPresentedNotificationsAsync().then(
+      (shown) => new Set(shown.map((each) => each.request.identifier)),
+      () => null,
+    );
+    const swiped = showing ? swipedAway(items, before.posted, showing) : [];
+    if (swiped.length) {
+      const gone = new Set(swiped);
+      items = items.map((item) => (gone.has(item.id) ? { ...item, read: true } : item));
+      void readFeed(swiped).catch((reason: unknown) => {
+        console.warn("Notifications: could not mark swiped ones read", reason);
+      });
+    }
+    const plan = planPanel(items, before, (item) => {
       if (item.seenOnDesktop && !preferences.seenOnDesktop) return false;
       const kind = category(item);
       return kind === "automations" ? preferences.automations : enabled.current(kind);
@@ -89,12 +107,12 @@ export function NotificationFeedSync() {
     for (const item of [...plan.post].reverse()) {
       // Fork (L-278): Approve/Deny or a reply box, where the entry takes one.
       const buttons = categoryFor(item);
+      const { title, body } = panelText(item);
       await Notifications.scheduleNotificationAsync({
         identifier: panelId(item.id),
         content: {
-          title: item.title || "MonoCode",
-          ...(item.projectName ? { subtitle: item.projectName } : {}),
-          body: item.body,
+          title,
+          body,
           data: panelData(item),
           ...(buttons ? { categoryIdentifier: buttons } : {}),
         },

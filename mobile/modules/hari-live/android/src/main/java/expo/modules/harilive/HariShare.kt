@@ -173,10 +173,12 @@ internal object HariShare {
 
   /**
    * After something was shared: with the app's code running it sends it at
-   * once (a toast says so); otherwise Hari opens on its Share screen.
+   * once; otherwise (L-303) a background task with no window starts it and
+   * sends. A toast says so. Hari opens on its Share screen only if Android
+   * refuses the task.
    */
   fun handOver(activity: Activity, toast: String) {
-    if (HariLive.emit != null) {
+    if (HariLive.emit != null || HariShareTask.start(activity.applicationContext)) {
       Toast.makeText(activity, toast, Toast.LENGTH_SHORT).show()
     } else {
       try {

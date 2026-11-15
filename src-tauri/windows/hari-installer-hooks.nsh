@@ -4,6 +4,7 @@
 ; over to Hari. MonoCode's own folder is left on disk.
 
 !define HARI_OLD_PRODUCT "MonoCode"
+!define HARI_SHARE_KEY "Software\Classes\*\shell\ShareWithHari"
 !define HARI_OLD_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${HARI_OLD_PRODUCT}"
 
 !macro NSIS_HOOK_PREINSTALL
@@ -37,6 +38,14 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  ; Fork (Hari, L-303): Explorer's "Share with Hari" (right-click; on Windows 11
+  ; under Show more options) and Send to > Hari. Each runs Hari with --share;
+  ; the running app sends without showing itself.
+  WriteRegStr HKCU "${HARI_SHARE_KEY}" "" "Share with Hari"
+  WriteRegStr HKCU "${HARI_SHARE_KEY}" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe,0"
+  WriteRegStr HKCU "${HARI_SHARE_KEY}" "MultiSelectModel" "Player"
+  WriteRegStr HKCU "${HARI_SHARE_KEY}\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" --share "%1"'
+  CreateShortcut "$SENDTO\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe" "--share"
   ReadRegStr $R9 SHCTX "Software\${MANUFACTURER}\${HARI_OLD_PRODUCT}" ""
   ${If} $R9 != ""
   ${AndIf} $R9 != $INSTDIR
@@ -47,4 +56,10 @@
     DeleteRegKey SHCTX "${HARI_OLD_UNINSTKEY}"
     DeleteRegKey SHCTX "Software\${MANUFACTURER}\${HARI_OLD_PRODUCT}"
   ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_POSTUNINSTALL
+  ; Fork (Hari, L-303): the Share with Hari and Send to entries go with the app.
+  DeleteRegKey HKCU "${HARI_SHARE_KEY}"
+  Delete "$SENDTO\${PRODUCTNAME}.lnk"
 !macroend

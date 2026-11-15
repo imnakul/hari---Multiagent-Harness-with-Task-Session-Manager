@@ -73,6 +73,19 @@ export const computerHubOptions = (
 });
 
 /**
+ * Fork (Hari, L-299): Computer files under the same header as Share and
+ * Control: the glass Back button and a centred title.
+ */
+export const computerFilesOptions: NativeStackNavigationOptions = {
+  title: "Computer files",
+  headerTitleAlign: "center",
+  headerBackVisible: false,
+  headerLeft: () => (
+    <HeaderButton icon="arrowLeft" label="Back" onPress={() => router.back()} />
+  ),
+};
+
+/**
  * Fork (Hari, L-288): everything to do with the paired computer in one
  * place: Share (the chat-style timeline) and Control (stats, power, apps,
  * Wake), switched by the header toggle a project's New | Sessions uses.

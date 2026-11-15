@@ -3,7 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } from "react";
 import { CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../shared/ui/icons";
+import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
+import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
 import { SlidePanel } from "../../../shared/ui/SlidePanel";
 import { formatFileSize } from "../../files/model/filePreview";
 import { parseShareList, SHARE_CHANGE_EVENT, type ShareList } from "../model/mobileShare";
@@ -315,23 +317,8 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
           {storageOpen ? <StorageStrip busy={busy} attempt={attempt} onDone={load} /> : null}
           <div className="flex shrink-0 flex-col gap-2 border-b border-stroke px-3 py-2">
             {paired ? <PhoneStatus onError={setError} /> : null}
-            <div role="group" aria-label="Show" className="flex flex-wrap items-center gap-1">
-              {SHARE_FILTERS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={filter === option.id}
-                  onClick={() => setFilter(option.id)}
-                  className={`h-6 rounded-full px-2.5 text-[11.5px] transition-[background-color,color,transform] duration-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
-                    filter === option.id
-                      ? "bg-content/[0.12] text-content"
-                      : "text-content/55 hover:bg-content/[0.07] hover:text-content"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            {/* Fork (Hari, L-302): the app's tab switcher, not one-off pills. */}
+            <SegmentedSwitch options={SHARE_FILTERS} value={filter} onChange={setFilter} ariaLabel="Show" />
           </div>
           <PinBar pins={pins} onJump={jumpTo} />
 
@@ -426,6 +413,10 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
   const open = useSharePanelOpen();
   const [mounted, setMounted] = useState(open);
   const [width, setWidth] = useState(readSharePanelWidth);
+  // Fork (Hari, L-302): the history and its pictures load once the slide has
+  // ended, and give way as it starts to close, so the slide has only the
+  // chat beside it to lay out. A skeleton holds the place meanwhile.
+  const [still, setStill] = useState(false);
   const frame = useRef<HTMLElement>(null);
   useEffect(() => {
     if (open) setMounted(true);
@@ -445,14 +436,16 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
       open={open}
       appear
       className={overlay ? "fixed bottom-0 right-0 top-10 z-40 justify-end" : ""}
+      onMoving={(moving) => setStill(!moving)}
       onGone={() => setMounted(false)}
     >
       <aside
         ref={frame}
         aria-label="Share panel"
         style={{ width: Math.min(width, max) }}
-        className="relative my-2 mr-2 flex min-w-0 shrink-0 flex-col overflow-hidden rounded-xl border border-content/10 bg-surface text-content shadow-xl"
+        className="relative isolate my-2 mr-2 flex min-w-0 shrink-0 flex-col overflow-hidden rounded-xl border border-content/10 text-content shadow-xl"
       >
+        <GlassBackdrop />
         <ResizeHandle
           label="Resize Share panel"
           value={width}
@@ -470,9 +463,31 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
             saveSharePanelWidth(next);
           }}
         />
-        <ShareContent onClose={() => setSharePanelOpen(false)} />
+        <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
+          {still ? <ShareContent onClose={() => setSharePanelOpen(false)} /> : <ShareSkeleton />}
+        </div>
       </aside>
     </SlidePanel>
+  );
+}
+
+/** Holds the panel's place while it slides: the header and a few bubbles. */
+function ShareSkeleton(): JSX.Element {
+  return (
+    <div aria-busy="true" aria-label="Share with your phone" className="flex min-h-0 flex-1 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-stroke pl-3">
+        <SmartPhone className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
+        <span className="text-[13px] font-medium text-content">Share</span>
+      </div>
+      <ul className="space-y-3 px-3 py-3">
+        {[0, 1, 2].map((index) => (
+          <li
+            key={index}
+            className={`h-12 w-3/5 rounded-2xl bg-content/[0.06] ${index === 1 ? "ml-auto" : ""}`}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 

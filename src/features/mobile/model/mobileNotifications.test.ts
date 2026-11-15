@@ -48,6 +48,7 @@ describe("phone notification feed (L-275)", () => {
         sessionId: "s1",
         projectId: encodeURIComponent("E:\\repo\\web"),
         projectName: "web",
+        modelName: "opus",
         seenOnDesktop: true,
       },
       { id: "auto", kind: "automationFailed", title: "Nightly", body: "Run failed.", at: 4, read: true },

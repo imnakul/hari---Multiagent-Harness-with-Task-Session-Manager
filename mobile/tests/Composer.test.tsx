@@ -70,10 +70,12 @@ vi.mock("react-native", async () => {
         {children}
       </button>
     ),
+    // The field is uncontrolled (L-299): it starts from `defaultValue`, and
+    // the composer clears it and asks whether it's focused through the ref.
     TextInput: forwardRef<
       HTMLTextAreaElement,
       {
-        value: string;
+        defaultValue?: string;
         placeholder: string;
         editable: boolean;
         onChangeText: (text: string) => void;
@@ -82,8 +84,18 @@ vi.mock("react-native", async () => {
       }
     >((props, ref) => (
       <textarea
-        ref={ref}
-        value={props.value}
+        ref={(node) => {
+          if (node)
+            Object.assign(node, {
+              clear: () => {
+                node.value = "";
+              },
+              isFocused: () => document.activeElement === node,
+            });
+          if (typeof ref === "function") ref(node);
+          else if (ref) ref.current = node;
+        }}
+        defaultValue={props.defaultValue}
         placeholder={props.placeholder}
         disabled={!props.editable}
         onFocus={props.onFocus}
@@ -202,6 +214,28 @@ vi.mock("@/features/sessions/drafts", () => ({
   readDraft: () => ({ text: "", attachments: [] }),
   writeDraft: vi.fn(),
 }));
+// Fork (Hari, L-299): the + menu grows up in place; shown here as its
+// button and its rows, so the test can press each.
+vi.mock("@/ui/DropUpMenu", () => ({
+  DropUpMenu: ({
+    label,
+    actions,
+  }: {
+    label: string;
+    actions: { label: string; onPress: () => void }[];
+  }) => (
+    <div role="menu" aria-label={label}>
+      {actions.map((action) => (
+        <button key={action.label} type="button" onClick={action.onPress}>
+          {action.label}
+        </button>
+      ))}
+    </div>
+  ),
+}));
+vi.mock("@/features/liveUpdates/nativeLive", () => ({ openNativeFile: vi.fn() }));
+vi.mock("expo-file-system", () => ({ File: class {} }));
+vi.mock("@/features/sessions/MessageAttachments", () => ({ FullImageViewer: () => null }));
 vi.mock("@/ui/Icon", () => ({ Icon: () => null }));
 vi.mock("@/ui/LiquidView", () => ({ LiquidView: () => null }));
 vi.mock("@/ui/theme", () => ({
@@ -315,23 +349,15 @@ it("keeps the iOS hit-testing styles unchanged", () => {
   expect(modelTouches()).toBe("");
 });
 
-it("opens a content-sized attachment menu with safe-area padding and retains its actions", async () => {
+it("offers photos, camera and files from the + menu (L-299)", async () => {
   render();
-  await act(async () => button("Add photos or files").click());
-  const scroll = container.querySelector<HTMLElement>("[data-scroll]")!;
-  expect(scroll.style.flexGrow).toBe("0");
-  expect(scroll.parentElement!.style.maxHeight).toBe("80%");
-  expect((scroll.firstElementChild as HTMLElement).style.paddingBottom).toBe(
-    "40px",
-  );
+  expect(button("Add photos or files").getAttribute("role")).toBe("menu");
   await act(async () =>
     [...container.querySelectorAll("button")]
       .find((item) => item.textContent === "Photo Library")!
       .click(),
   );
   expect(runtime.photos).toHaveBeenCalledWith(10);
-  expect(container.querySelector("section")).toBeNull();
-  await act(async () => button("Add photos or files").click());
   await act(async () =>
     [...container.querySelectorAll("button")]
       .find((item) => item.textContent === "Files")!
@@ -339,7 +365,6 @@ it("opens a content-sized attachment menu with safe-area padding and retains its
   );
   expect(runtime.files).toHaveBeenCalledWith(10);
   // Fork (Hari, L-285): a photo taken now.
-  await act(async () => button("Add photos or files").click());
   await act(async () =>
     [...container.querySelectorAll("button")]
       .find((item) => item.textContent === "Camera")!

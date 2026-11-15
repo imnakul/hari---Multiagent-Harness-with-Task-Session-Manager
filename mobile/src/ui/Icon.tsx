@@ -28,8 +28,7 @@ import Camera01Icon from "@hugeicons/core-free-icons/Camera01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CircleIcon from "@hugeicons/core-free-icons/CircleIcon";
 import CheckmarkCircle02Icon from "@hugeicons/core-free-icons/CheckmarkCircle02Icon";
-import NoteAddIcon from "@hugeicons/core-free-icons/NoteAddIcon";
-import TaskAdd01Icon from "@hugeicons/core-free-icons/TaskAdd01Icon";
+import NoteEditIcon from "@hugeicons/core-free-icons/NoteEditIcon";
 import TaskDone01Icon from "@hugeicons/core-free-icons/TaskDone01Icon";
 import ChartBreakoutSquareIcon from "@hugeicons/core-free-icons/ChartBreakoutSquareIcon";
 import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
@@ -144,8 +143,10 @@ const icons = {
   // Fork (Hari, L-236): Tasks and Notes.
   circleDone: CheckmarkCircle02Icon,
   tasks: TaskDone01Icon,
-  taskAdd: TaskAdd01Icon,
-  noteAdd: NoteAddIcon,
+  // Fork (Hari, L-299): a tick for Add task, a pen on a note for Add to notes,
+  // as the desktop tells them apart.
+  taskAdd: CheckmarkCircle02Icon,
+  noteAdd: NoteEditIcon,
   // Fork (Hari, L-279): Share.
   share: ComputerPhoneSyncIcon,
   attachment: Attachment01Icon,

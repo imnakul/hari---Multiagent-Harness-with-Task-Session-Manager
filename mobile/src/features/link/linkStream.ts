@@ -141,7 +141,7 @@ function saveOutbox(fingerprint: string, outbox: OutboxItem[]) {
 
 /** The computer the stream runs for, while it runs. */
 let current: { fingerprint: string; command: Command } | null = null;
-let flushing = false;
+let flushing: Promise<void> | null = null;
 
 /**
  * Queues an item for the computer and sends it now if it can. Kept on the
@@ -189,10 +189,17 @@ export function dropLinkItems(match: (item: OutboxItem) => boolean): void {
 }
 
 /** Sends what waits in the outbox, a batch at a time, until it is empty or the link fails. */
-async function flushOutbox(): Promise<void> {
+function flushOutbox(): Promise<void> {
+  // A second call waits for the send in progress (it runs until the outbox is empty).
+  flushing ??= sendOutbox().finally(() => {
+    flushing = null;
+  });
+  return flushing;
+}
+
+async function sendOutbox(): Promise<void> {
   const link = current;
-  if (!link || flushing) return;
-  flushing = true;
+  if (!link) return;
   try {
     for (;;) {
       const batch = loadOutbox(link.fingerprint).slice(0, OUTBOX_BATCH);
@@ -220,9 +227,28 @@ async function flushOutbox(): Promise<void> {
       for (const listener of settledListeners) listener(answer);
       if (!answer.accepted.length && !answer.rejected.length) return;
     }
-  } finally {
-    flushing = false;
+  } catch (error) {
+    console.warn("Link: could not send the outbox", error);
   }
+}
+
+/**
+ * Fork (Hari, L-303): binds the outbox to this computer with no stream
+ * running (the share sheet's background task), so items can be queued and
+ * sent. Returns the release; a running stream is left as it is.
+ */
+export function bindLinkFor(fingerprint: string, command: Command): () => void {
+  if (current) return () => {};
+  const link = { fingerprint, command };
+  current = link;
+  return () => {
+    if (current === link) current = null;
+  };
+}
+
+/** Fork (Hari, L-303): sends the outbox now; resolves when that send has ended. */
+export function flushLink(): Promise<void> {
+  return flushOutbox();
 }
 
 function emitSignal(kind: string, payload: unknown) {

@@ -76,6 +76,45 @@ export function interactiveTerminalFor(
 ): InteractiveTerminal | undefined {
   return terminals.get(id);
 }
+/** Fork (Hari, L-304): the keys the phone can press in Claude's native terminal. */
+export const PHONE_TERMINAL_KEYS = { escape: "\x1b", enter: "\r" } as const;
+export type PhoneTerminalKey = keyof typeof PHONE_TERMINAL_KEYS;
+const PHONE_TERMINAL_LINES = 18;
+
+/**
+ * Fork (Hari, L-304): what the phone shows of Claude's native terminal when a
+ * message was refused: the screen's last lines (read only), blank ones at the
+ * end dropped. Null when the session has no running terminal.
+ */
+export function interactiveTerminalSnapshot(
+  id: string,
+): { lines: string[]; owner: boolean } | null {
+  const terminal = terminals.get(id);
+  if (!terminal || terminal.stopped) return null;
+  const buffer = terminal.term.buffer.active;
+  const lines: string[] = [];
+  for (let row = 0; row < terminal.term.rows; row++)
+    lines.push(buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "");
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return { lines: lines.slice(-PHONE_TERMINAL_LINES), owner: terminal.owner };
+}
+
+/**
+ * Fork (Hari, L-304): presses Esc or Enter in Claude's native terminal from
+ * the phone, as typing there would: the terminal then holds the input until
+ * Return to chat.
+ */
+export async function pressInteractiveTerminalKey(
+  id: string,
+  key: PhoneTerminalKey,
+): Promise<void> {
+  const terminal = terminals.get(id);
+  if (!terminal || terminal.stopped) throw new Error("Claude's terminal isn't running.");
+  terminal.owner = true;
+  changed();
+  await invoke("claude_interactive_terminal", { sessionId: id, data: PHONE_TERMINAL_KEYS[key] });
+}
+
 export function subscribeInteractiveTerminals(
   listener: () => void,
 ): () => void {

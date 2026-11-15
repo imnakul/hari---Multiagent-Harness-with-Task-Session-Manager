@@ -160,12 +160,34 @@ function ImageViewer({
   file: SentAttachment;
   onClose: () => void;
 }) {
-  const styles = useStyles();
-  const insets = useSafeAreaInsets();
   const full = useAttachmentImage(messageId, file, "full");
   // The thumbnail is already cached, so it fills the screen while the larger one loads.
   const thumb = useAttachmentImage(messageId, file, "thumb");
   const uri = full.status === "ready" ? full.uri : thumb.status === "ready" ? thumb.uri : null;
+  return (
+    <FullImageViewer
+      uri={uri}
+      name={file.name}
+      error={full.status === "error" && !uri ? full.message : null}
+      onClose={onClose}
+    />
+  );
+}
+
+/** Fork (Hari, L-299): an image full screen; the composer's attachments open here too. */
+export function FullImageViewer({
+  uri,
+  name,
+  error = null,
+  onClose,
+}: {
+  uri: string | null;
+  name: string;
+  error?: string | null;
+  onClose: () => void;
+}) {
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View style={styles.viewer}>
@@ -175,12 +197,12 @@ function ImageViewer({
             contentFit="contain"
             cachePolicy="memory"
             style={styles.viewerImage}
-            accessibilityLabel={file.name}
+            accessibilityLabel={name}
           />
         ) : null}
         <View style={[styles.viewerBar, { paddingTop: insets.top + 8 }]}>
           <Text style={styles.viewerName} numberOfLines={1} ellipsizeMode="middle">
-            {file.name}
+            {name}
           </Text>
           <Pressable
             onPress={onClose}
@@ -192,9 +214,9 @@ function ImageViewer({
             <Icon name="close" size={20} color="#ffffff" />
           </Pressable>
         </View>
-        {full.status === "error" && !uri ? (
+        {error ? (
           <Text style={[styles.viewerError, { bottom: insets.bottom + 32 }]} accessibilityRole="alert">
-            {full.message}
+            {error}
           </Text>
         ) : null}
       </View>

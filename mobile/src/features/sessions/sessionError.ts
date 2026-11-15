@@ -28,8 +28,8 @@ export function sessionErrorContent(text: string) {
     return {
       title: "Claude is busy on your computer",
       message: "Your message wasn’t sent. Claude on your computer hasn’t gone back to an empty prompt.",
-      recoveryTitle: "Stop Claude",
-      recovery: "Stops Claude on your computer; your next message starts it again in the same conversation. Anything it’s doing right now is cancelled.",
+      recoveryTitle: "Claude’s terminal",
+      recovery: "Answer what it’s showing with Esc or Enter, then Return to chat once its prompt is empty. Stop Claude cancels what it’s doing; your next message starts it again in the same conversation.",
       stopClaude: true,
     };
   }

@@ -1,18 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
-import { copyText } from "../../../platform/tauri/clipboard";
+import { useEffect, useRef, useState, useSyncExternalStore, type JSX, type MouseEvent, type ReactNode } from "react";
+import { copyImage, copyText } from "../../../platform/tauri/clipboard";
 import { openPathWithDefaultApp, readBinaryFile, revealPath } from "../../../platform/tauri/fs";
 import {
   Bookmark,
   Check,
+  CheckCircle,
   Copy,
   File,
+  FilePlusCorner,
   FolderOpen,
   Pin,
   PinOff,
   Send,
-  X,
+  Trash2,
 } from "../../../shared/ui/icons";
+import { ExplorerMenu, type ExplorerMenuItem } from "../../files/ui/ExplorerMenu";
+import { createNote, noteTitle } from "../../notes";
+import { loadNotesEnabled, subscribeNotesEnabled } from "../../settings/model/settings";
+import { createTask } from "../../tasks/tasks";
 import { openWebLink } from "../../browser/model/openWebLink";
 import { formatFileSize, isImagePath, sniffImageMime } from "../../files/model/filePreview";
 import { AgentMarkdown } from "../../sessions/ui/AgentMarkdown";
@@ -24,6 +30,9 @@ import { shareErrorMessage } from "./PhoneStatus";
 
 const ICON_BUTTON =
   "grid size-6 place-items-center rounded-md text-content/45 transition-[background-color,color,transform] duration-100 hover:bg-content/10 hover:text-content active:scale-[0.94] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60";
+
+/** One size and colour for every icon in a message's row (L-302). */
+const ICON = "size-3.5";
 
 /** An icon button that briefly shows a tick once its action worked. */
 function FlashIcon({
@@ -205,10 +214,60 @@ export function ShareBubble({
     void action().catch((reason: unknown) => onError(shareErrorMessage(reason)));
   const mark = (change: { pinned?: boolean; saved?: boolean }) =>
     run(() => invoke<void>("mobile_share_mark", { ids, ...change }));
+  const remove = () => run(() => invoke<void>("mobile_share_remove", { ids }));
+  const notesEnabled = useSyncExternalStore(subscribeNotesEnabled, loadNotesEnabled, () => true);
+  // Fork (Hari, L-302): what a note or task gets: the text, then each file by
+  // name and where it is on this computer.
+  const fileLines = row.items
+    .filter((entry) => entry.kind === "file")
+    .map((entry) => (entry.path ? `- ${entry.name ?? "file"}: \`${entry.path}\`` : `- ${entry.name ?? "file"}`));
+  const body = [copyable, fileLines.join("\n")].filter(Boolean).join("\n\n");
+  const addNote = () => createNote({ title: noteTitle(body), body }).then(() => undefined);
+  const addTask = () => createTask({ body }).then(() => undefined);
+  // Copy: the words; else a picture as a picture; else the files' paths.
+  const copyAll = async () => {
+    if (copyable) return copyText(copyable);
+    const picture = pictures[0]?.path;
+    if (picture) {
+      const bytes = await readBinaryFile(picture);
+      return copyImage(new Blob([bytes], { type: sniffImageMime(bytes) ?? "image/png" }));
+    }
+    const paths = row.items.map((entry) => entry.path).filter(Boolean).join("\n");
+    return copyText(paths || body);
+  };
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const onContextMenu = (event: MouseEvent<HTMLLIElement>) => {
+    // A link keeps its own menu, and selected text the native one.
+    if ((event.target as Element).closest("a[href]")) return;
+    if (!(window.getSelection()?.isCollapsed ?? true)) return;
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY });
+  };
+  const menuItems: ExplorerMenuItem[] = [
+    { kind: "item", id: "copy", label: pictures.length && !copyable ? "Copy picture" : "Copy", icon: <Copy className={ICON} aria-hidden /> },
+    ...(notesEnabled && body
+      ? [{ kind: "item", id: "note", label: "Add to notes", icon: <FilePlusCorner className={ICON} aria-hidden /> } as const]
+      : []),
+    ...(body ? [{ kind: "item", id: "task", label: "Add task", icon: <CheckCircle className={ICON} aria-hidden /> } as const] : []),
+    { kind: "item", id: "pin", label: pinned ? "Unpin" : "Pin", icon: pinned ? <PinOff className={ICON} aria-hidden /> : <Pin className={ICON} aria-hidden /> },
+    { kind: "item", id: "save", label: saved ? "Unsave" : "Save", icon: <Bookmark className={ICON} aria-hidden /> },
+    { kind: "sep" },
+    { kind: "item", id: "remove", label: "Remove from history", danger: true, icon: <Trash2 className={ICON} aria-hidden /> },
+  ];
+  const pick = (id: string) => {
+    setMenu(null);
+    if (id === "copy") run(copyAll);
+    else if (id === "note") run(addNote);
+    else if (id === "task") run(addTask);
+    else if (id === "pin") mark({ pinned: !pinned });
+    else if (id === "save") mark({ saved: !saved });
+    else if (id === "remove") remove();
+  };
 
   return (
     <li
       data-share-ids={ids.join(" ")}
+      onContextMenu={onContextMenu}
       className={`group/bubble flex flex-col ${outgoing ? "items-end" : "items-start"}`}
     >
       <div
@@ -292,23 +351,37 @@ export function ShareBubble({
           {waiting ? " · waiting" : null}
         </span>
       </div>
+      {/* Fork (Hari, L-302): Copy stays; the rest slide in from the right on
+          hover and back out on leave (transform and opacity only). Remove is
+          in the right-click menu. */}
       <div className={`mt-0.5 flex items-center gap-0.5 px-0.5 ${outgoing ? "flex-row-reverse" : ""}`}>
-        {copyable ? (
-          <FlashIcon
-            icon={<Copy className="size-3.5" strokeWidth={1.75} aria-hidden />}
-            label="Copy"
-            onRun={() => copyText(copyable)}
-            onError={onError}
-          />
-        ) : null}
-        <span className="flex items-center gap-0.5 opacity-0 transition-opacity duration-100 group-hover/bubble:opacity-100 group-focus-within/bubble:opacity-100 motion-reduce:transition-none">
+        <FlashIcon
+          icon={<Copy className={ICON} strokeWidth={1.75} aria-hidden />}
+          label={copyable ? "Copy" : pictures.length ? "Copy picture" : "Copy paths"}
+          onRun={copyAll}
+          onError={onError}
+        />
+        <span
+          className={`flex items-center gap-0.5 ${outgoing ? "flex-row-reverse" : ""} pointer-events-none translate-x-2 opacity-0 transition-[transform,opacity] duration-150 ease-out group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:translate-x-0 group-focus-within/bubble:opacity-100 group-hover/bubble:pointer-events-auto group-hover/bubble:translate-x-0 group-hover/bubble:opacity-100 motion-reduce:transition-none`}
+        >
+          {notesEnabled && body ? (
+            <FlashIcon icon={<FilePlusCorner className={ICON} strokeWidth={1.75} aria-hidden />} label="Add to notes" onRun={addNote} onError={onError} />
+          ) : null}
+          {body ? (
+            <FlashIcon icon={<CheckCircle className={ICON} strokeWidth={1.75} aria-hidden />} label="Add task" onRun={addTask} onError={onError} />
+          ) : null}
           {link && paired ? (
             <FlashIcon
-              icon={<Send className="size-3.5" strokeWidth={1.75} aria-hidden />}
+              icon={<Send className={ICON} strokeWidth={1.75} aria-hidden />}
               label="Open on phone"
               onRun={() => invoke<void>("mobile_share_send_text", { text: link, clipboard: false, open: true })}
               onError={onError}
             />
+          ) : null}
+          {link ? (
+            <button type="button" title="Open" aria-label="Open link" onClick={() => openWebLink(link)} className={ICON_BUTTON}>
+              <Send className={`${ICON} rotate-[-45deg]`} strokeWidth={1.75} aria-hidden />
+            </button>
           ) : null}
           <button
             type="button"
@@ -318,9 +391,9 @@ export function ShareBubble({
             className={ICON_BUTTON}
           >
             {pinned ? (
-              <PinOff className="size-3.5" strokeWidth={1.75} aria-hidden />
+              <PinOff className={ICON} strokeWidth={1.75} aria-hidden />
             ) : (
-              <Pin className="size-3.5" strokeWidth={1.75} aria-hidden />
+              <Pin className={ICON} strokeWidth={1.75} aria-hidden />
             )}
           </button>
           <button
@@ -331,24 +404,20 @@ export function ShareBubble({
             onClick={() => mark({ saved: !saved })}
             className={`${ICON_BUTTON} ${saved ? "text-accent" : ""}`}
           >
-            <Bookmark className="size-3.5" strokeWidth={1.75} aria-hidden />
-          </button>
-          {link ? (
-            <button type="button" title="Open" aria-label="Open link" onClick={() => openWebLink(link)} className={ICON_BUTTON}>
-              <Send className="size-3.5 rotate-[-45deg]" strokeWidth={1.75} aria-hidden />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            title="Remove from history (a file stays where it is)"
-            aria-label="Remove from history"
-            onClick={() => run(() => invoke<void>("mobile_share_remove", { ids }))}
-            className={`${ICON_BUTTON} text-content/30`}
-          >
-            <X className="size-3" strokeWidth={1.75} aria-hidden />
+            <Bookmark className={ICON} strokeWidth={1.75} aria-hidden />
           </button>
         </span>
       </div>
+      {menu ? (
+        <ExplorerMenu
+          x={menu.x}
+          y={menu.y}
+          ariaLabel="Message actions"
+          items={menuItems}
+          onPick={pick}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
     </li>
   );
 }

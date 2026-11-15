@@ -345,6 +345,25 @@ fn should_request_quit(code: Option<i32>) -> bool {
     code.is_some() || cfg!(any(target_os = "linux", target_os = "windows"))
 }
 
+/// Fork (Hari, L-303): the files after `--share` (Explorer's "Share with Hari"
+/// and Send to). None when the app wasn't started for that.
+#[cfg(any(target_os = "windows", test))]
+fn share_args(argv: &[String]) -> Option<Vec<String>> {
+    let at = argv.iter().position(|arg| arg == "--share")?;
+    Some(
+        argv[at + 1..]
+            .iter()
+            .filter(|arg| !arg.is_empty())
+            .cloned()
+            .collect(),
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn launch_share_args() -> Option<Vec<String>> {
+    share_args(&std::env::args().collect::<Vec<_>>())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
@@ -369,7 +388,13 @@ pub fn run() {
     // so a second launch must reopen it instead of starting another instance.
     // Registered first so the duplicate exits before any setup runs.
     #[cfg(target_os = "windows")]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        // Fork (Hari, L-303): Explorer's "Share with Hari" sends without
+        // showing or focusing the app.
+        if let Some(paths) = share_args(&argv) {
+            mobile_share::share_from_explorer(app, paths);
+            return;
+        }
         let _ = window::show_hidden_or_open_new(app);
     }));
     let app = builder
@@ -410,6 +435,15 @@ pub fn run() {
                 eprintln!("monocode: phone apps: {error}");
             }
             mobile_access::init(app.handle())?;
+            // Fork (Hari, L-303): started by "Share with Hari" with the app
+            // closed: it starts minimised and sends.
+            #[cfg(target_os = "windows")]
+            if let Some(paths) = launch_share_args() {
+                if let Some(window) = app.get_window("main") {
+                    let _ = window.minimize();
+                }
+                mobile_share::share_from_explorer(app.handle(), paths);
+            }
             aside_link::init(app.handle())?;
             reminders::init(app.handle());
             checkpoint::init(app.handle())?;
@@ -945,7 +979,7 @@ pub fn run() {
             }
             window::ensure_launch_window_visible(handle);
             #[cfg(target_os = "windows")]
-            {
+            if launch_share_args().is_none() {
                 if let Some(window) = handle.get_window("main") {
                     let _ = window.unminimize();
                     let _ = window.show();
@@ -1031,5 +1065,24 @@ mod tests {
     #[test]
     fn last_window_close_stays_alive_with_dock() {
         assert!(!should_request_quit(None));
+    }
+}
+
+#[cfg(test)]
+mod share_args_tests {
+    use super::share_args;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|arg| arg.to_string()).collect()
+    }
+
+    #[test]
+    fn takes_the_files_after_share() {
+        assert_eq!(
+            share_args(&args(&["hari.exe", "--share", "C:a.txt", "D: c.png"])),
+            Some(args(&["C:a.txt", "D: c.png"]))
+        );
+        assert_eq!(share_args(&args(&["hari.exe", "--share"])), Some(vec![]));
+        assert_eq!(share_args(&args(&["hari.exe"])), None);
     }
 }

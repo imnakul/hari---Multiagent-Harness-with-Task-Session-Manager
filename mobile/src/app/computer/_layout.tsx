@@ -4,8 +4,7 @@ import {
   modalStackOptions,
   sheetScreenLayout,
 } from "@/features/files/codeScreen";
-import { computerHubOptions, hubTabOf } from "@/features/pc/ComputerHub";
-import { androidBackHeader } from "@/ui/AndroidHeader";
+import { computerFilesOptions, computerHubOptions, hubTabOf } from "@/features/pc/ComputerHub";
 import { useColors } from "@/ui/theme";
 
 // Fork (Hari, L-279, L-280, L-290): the Computer hub (Share and Control), as
@@ -22,7 +21,7 @@ export default function ComputerHubLayout() {
         name="index"
         options={({ route }) => computerHubOptions(hubTabOf(route.params))}
       />
-      <Stack.Screen name="files" options={{ title: "Computer files", ...androidBackHeader("Computer files") }} />
+      <Stack.Screen name="files" options={computerFilesOptions} />
     </Stack>
   );
 }

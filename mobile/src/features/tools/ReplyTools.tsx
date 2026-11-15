@@ -102,7 +102,8 @@ export function ReplyToolButtons({ text }: { text: string }) {
 /** How long a button shows its tick after saving. */
 const DONE_MS = 1800;
 
-function ToolButton({
+/** Fork (Hari, L-301): also Share's message footer. */
+export function ToolButton({
   icon,
   label,
   done,

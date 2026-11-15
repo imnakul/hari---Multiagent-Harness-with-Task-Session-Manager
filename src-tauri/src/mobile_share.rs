@@ -786,6 +786,10 @@ pub fn mobile_share_send_files(
     caption: Option<String>,
 ) -> Result<(), String> {
     check_window(&window)?;
+    send_files(&app, paths, caption)
+}
+
+fn send_files(app: &AppHandle, paths: Vec<String>, caption: Option<String>) -> Result<(), String> {
     if paths.is_empty() {
         return Err("Choose a file first".into());
     }
@@ -818,7 +822,7 @@ pub fn mobile_share_send_files(
         files.push((path, name, meta.len()));
     }
     let group_id = (files.len() > 1 || caption.is_some()).then(|| uuid::Uuid::new_v4().to_string());
-    let device = only_one_phone_name(&app);
+    let device = only_one_phone_name(app);
     for (path, name, size) in files {
         let id = uuid::Uuid::new_v4().to_string();
         let mime_type = mime_for(&name);
@@ -826,7 +830,7 @@ pub fn mobile_share_send_files(
         if let Some(group_id) = &group_id {
             payload["groupId"] = json!(group_id);
         }
-        push_to_phones(&app, payload)?;
+        push_to_phones(app, payload)?;
         with(|share| {
             record(
                 share,
@@ -843,10 +847,75 @@ pub fn mobile_share_send_files(
         })?;
     }
     if let Some(caption) = caption {
-        send_text(&app, caption, false, false, group_id)?;
+        send_text(app, caption, false, false, group_id)?;
     }
-    changed(&app);
+    changed(app);
     Ok(())
+}
+
+/// Fork (Hari, L-303): files from Explorer's "Share with Hari" (right-click or
+/// Send to). Each file can arrive in its own launch, so paths are gathered for
+/// half a second and go as one group. Nothing is shown or focused; what can't
+/// go (folders, over 1 GB, no phone) is told in a Windows notification.
+pub(crate) fn share_from_explorer(app: &AppHandle, paths: Vec<String>) {
+    static GATHERED: Mutex<(Vec<String>, bool)> = Mutex::new((Vec::new(), false));
+    let Ok(mut gathered) = GATHERED.lock() else {
+        return;
+    };
+    gathered.0.extend(paths);
+    if gathered.1 {
+        return;
+    }
+    gathered.1 = true;
+    drop(gathered);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let paths = match GATHERED.lock() {
+            Ok(mut gathered) => {
+                gathered.1 = false;
+                std::mem::take(&mut gathered.0)
+            }
+            Err(_) => return,
+        };
+        send_from_explorer(&app, paths);
+    });
+}
+
+fn send_from_explorer(app: &AppHandle, paths: Vec<String>) {
+    let mut seen = std::collections::HashSet::new();
+    let mut files = Vec::new();
+    let mut skipped = Vec::new();
+    for raw in paths {
+        if !seen.insert(raw.to_lowercase()) {
+            continue;
+        }
+        let path = PathBuf::from(&raw);
+        let name = path
+            .file_name()
+            .map_or(raw.clone(), |n| n.to_string_lossy().into());
+        match std::fs::metadata(&path) {
+            Ok(meta) if meta.is_dir() => skipped.push(format!("{name} (a folder)")),
+            Ok(meta) if meta.len() > MAX_FILE_BYTES => skipped.push(format!("{name} (over 1 GB)")),
+            Ok(_) => files.push(raw),
+            Err(_) => skipped.push(format!("{name} (couldn't be read)")),
+        }
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    if !skipped.is_empty() {
+        let title = if skipped.len() == 1 {
+            "Not sent to your phone"
+        } else {
+            "Some files weren't sent"
+        };
+        toast(app, &id, title.into(), skipped.join(", "));
+    }
+    for batch in files.chunks(MAX_FILES_PER_SEND) {
+        if let Err(error) = send_files(app, batch.to_vec(), None) {
+            toast(app, &id, "Couldn't send to your phone".into(), error);
+            return;
+        }
+    }
 }
 
 /// Fork (Hari, L-280): offers a file the computer made (a screenshot) to the

@@ -54,6 +54,9 @@ const MODAL_ROUTES = [
   "/notes",
   // Fork (Hari, L-275).
   "/notifications",
+  // Fork (Hari, L-298): the Computer hub (Share | Control) and its Files.
+  "/computer",
+  "/share",
 ];
 export const isModalRoute = (pathname: string) =>
   MODAL_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));

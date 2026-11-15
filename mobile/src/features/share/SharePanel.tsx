@@ -13,7 +13,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
@@ -32,6 +31,7 @@ import {
   type PhoneShareEntry,
   type ShareRow,
 } from "@/features/share/shareModel";
+import { readShareDraft, writeShareFiles, writeShareText } from "@/features/share/shareDraft";
 import { removeShares, useShareHistory } from "@/features/share/shareStore";
 import {
   clearAllShares,
@@ -46,13 +46,13 @@ import {
   type ShareFile,
 } from "@/features/share/shareTransfers";
 import { LinkCard } from "@/features/tools/LinkCard";
+import { ToolButton } from "@/features/tools/ReplyTools";
+import { createTask, newId, saveNote, titleFrom } from "@/features/tools/tools";
 import type { Command } from "@/features/tools/tools";
 import * as Haptics from "@/ui/haptics";
 import { Icon, type IconName } from "@/ui/Icon";
 import { radii, themedStyles, useColors, useScheme, withAlpha } from "@/ui/theme";
 
-/** How far a bubble slides before letting go removes it. */
-const SWIPE_DISTANCE = 96;
 /** A picture keeps its shape inside this box. */
 const PICTURE_MAX_WIDTH = 240;
 const PICTURE_MAX_HEIGHT = 320;
@@ -283,13 +283,22 @@ function ShareComposer({ command }: { command: ReturnType<typeof useConnection>[
   const colors = useColors();
   const scheme = useScheme();
   const input = useRef<TextInput>(null);
-  const draft = useRef("");
-  const [hasText, setHasText] = useState(false);
-  const [isLink, setIsLink] = useState(false);
-  const [files, setFiles] = useState<ShareFile[]>([]);
+  // Fork (Hari, L-301): what was being written comes back after leaving.
+  const [initial] = useState(readShareDraft);
+  const draft = useRef(initial.text);
+  const [hasText, setHasText] = useState(!!initial.text.trim());
+  const [isLink, setIsLink] = useState(!!initial.text.trim() && kindForText(initial.text.trim()) === "link");
+  const [files, setFilesState] = useState<ShareFile[]>(initial.files);
+  const setFiles = (update: (current: ShareFile[]) => ShareFile[]) =>
+    setFilesState((current) => {
+      const next = update(current);
+      writeShareFiles(next);
+      return next;
+    });
 
   const onChange = (text: string) => {
     draft.current = text;
+    writeShareText(text);
     const filled = !!text.trim();
     if (filled !== hasText) setHasText(filled);
     const link = filled && kindForText(text.trim()) === "link";
@@ -299,9 +308,10 @@ function ShareComposer({ command }: { command: ReturnType<typeof useConnection>[
   const reset = () => {
     input.current?.clear();
     draft.current = "";
+    writeShareText("");
     setHasText(false);
     setIsLink(false);
-    setFiles([]);
+    setFiles(() => []);
   };
 
   const send = () => {
@@ -385,7 +395,7 @@ function ShareComposer({ command }: { command: ReturnType<typeof useConnection>[
       ) : null}
       <TextInput
         ref={input}
-        defaultValue=""
+        defaultValue={initial.text}
         onChangeText={onChange}
         placeholder={files.length ? "Add a caption" : "Text or a link for your computer"}
         placeholderTextColor={colors.muted}
@@ -497,20 +507,10 @@ function ShareBubble({
   const ids = row.items.map((item) => item.id);
   const copyText = texts.map((item) => item.text ?? "").join("\n\n");
   const meta = `${shareCaption(head)} · ${timeOf(head.at)}`;
-  const removeAction = () => (
-    <View style={styles.removeAction}>
-      <Icon name="trash" size={20} color={colors.deletions} />
-    </View>
-  );
+  // Fork (Hari, L-301): no swipe to delete; a swipe here moves between
+  // Computer and Share. Delete is in the long-press row only.
   return (
-    <ReanimatedSwipeable
-      friction={1.5}
-      leftThreshold={SWIPE_DISTANCE}
-      rightThreshold={SWIPE_DISTANCE}
-      renderLeftActions={removeAction}
-      renderRightActions={removeAction}
-      onSwipeableOpen={onRemove}
-    >
+    <View>
       <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
         <View
           style={[
@@ -584,19 +584,139 @@ function ShareBubble({
           )}
         </View>
       </View>
+      <MessageActions
+        row={row}
+        mine={mine}
+        pinned={pinned}
+        saved={saved}
+        copyText={copyText}
+        copied={!!copiedId && ids.includes(copiedId)}
+        cards={cards}
+        onCopy={() => onCopy(head.id, copyText)}
+      />
       {selected ? (
         <Animated.View
           entering={FadeIn.duration(140)}
           exiting={FadeOut.duration(120)}
           style={[styles.actions, mine && styles.actionsMine]}
         >
-          <BubbleAction icon="pin" label={pinned ? "Unpin" : "Pin"} onPress={() => pinShares(ids, !pinned)} />
-          <BubbleAction icon="bookmark" label={saved ? "Unsave" : "Save"} onPress={() => saveShares(ids, !saved)} />
-          {copyText ? <BubbleAction icon="copy" label="Copy" onPress={() => onCopy(head.id, copyText)} /> : null}
           <BubbleAction icon="trash" label="Delete" destructive onPress={onRemove} />
         </Animated.View>
       ) : null}
-    </ReanimatedSwipeable>
+    </View>
+  );
+}
+
+/**
+ * Fork (Hari, L-301): under every message, as under a chat reply: Copy, Add
+ * to notes, Add task (when the computer has them), Pin and Save.
+ */
+function MessageActions({
+  row,
+  mine,
+  pinned,
+  saved,
+  copyText,
+  copied,
+  cards,
+  onCopy,
+}: {
+  row: ShareRow;
+  mine: boolean;
+  pinned: boolean;
+  saved: boolean;
+  copyText: string;
+  copied: boolean;
+  cards: Command | null;
+  onCopy: () => void;
+}) {
+  const styles = useStyles();
+  const colors = useColors();
+  const ids = row.items.map((item) => item.id);
+  // Words for a note or task: the text, else the files by name.
+  const body =
+    copyText ||
+    row.items
+      .filter((item) => item.kind === "file")
+      .map((item) => item.name ?? "File")
+      .join(", ");
+  const tint = withAlpha(colors.content, 0.4);
+  const copyAll = async () => {
+    if (copyText) {
+      onCopy();
+      return;
+    }
+    // A picture copies as a picture; other files by name.
+    const picture = row.items.find((item) => isPicture(item) && item.uri);
+    try {
+      if (picture?.uri) {
+        await Clipboard.setImageAsync(await new File(picture.uri).base64());
+      } else {
+        await Clipboard.setStringAsync(body);
+      }
+      void Haptics.selectionAsync();
+    } catch (reason) {
+      Alert.alert("Couldn’t copy it", why(reason));
+    }
+  };
+  return (
+    <View style={[styles.messageActions, mine && styles.actionsMine]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={copied ? "Copied" : "Copy"}
+        hitSlop={6}
+        onPress={() => void copyAll()}
+        style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
+      >
+        <Icon name={copied ? "check" : "copy"} size={16} color={tint} />
+      </Pressable>
+      {cards && body ? (
+        <>
+          <ToolButton
+            icon="noteAdd"
+            label="Add to notes"
+            done="Saved to notes"
+            run={async () => {
+              const saved = await saveNote(cards, {
+                id: newId(),
+                title: titleFrom(body),
+                body,
+                baseUpdatedAt: null,
+                finalize: true,
+              });
+              if (saved.conflict) throw new Error("The note couldn’t be saved. Try again.");
+            }}
+          />
+          <ToolButton icon="taskAdd" label="Add task" done="Task added" run={() => createTask(cards, { body })} />
+        </>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={pinned ? "Unpin" : "Pin"}
+        accessibilityState={{ selected: pinned }}
+        hitSlop={6}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          pinShares(ids, !pinned);
+        }}
+        style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
+      >
+        <Icon name="pin" size={16} color={pinned ? colors.accent : tint} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={saved ? "Unsave" : "Save"}
+        accessibilityState={{ selected: saved }}
+        hitSlop={6}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          saveShares(ids, !saved);
+        }}
+        style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
+      >
+        <Icon name="bookmark" size={16} color={saved ? colors.accent : tint} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -944,13 +1064,9 @@ const useStyles = themedStyles((colors) => ({
     backgroundColor: colors.surface,
   },
   bubbleActionLabel: { fontSize: 13, fontWeight: "600" },
-  removeAction: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    borderRadius: 18,
-    backgroundColor: withAlpha(colors.deletions, 0.14),
-  },
+  messageActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, paddingTop: 2, paddingBottom: 6 },
+  messageAction: { padding: 4, borderRadius: 6 },
+  messageActionPressed: { backgroundColor: withAlpha(colors.content, 0.08) },
   notice: { alignItems: "center", gap: 8, marginTop: 48, paddingHorizontal: 24 },
   noticeTitle: { color: colors.content, fontSize: 17, fontWeight: "600", textAlign: "center" },
   noticeText: { color: colors.muted, fontSize: 15, lineHeight: 21, textAlign: "center" },

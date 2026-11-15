@@ -42,6 +42,21 @@ load reminders" appeared), and `get_webview_window` / `webview_windows()` skip i
   `npx vitest run src/platform/tauri/windowArgs.test.ts`; if it fails, convert the new
   code, don't widen the allowlist unless the command is composer-only.
 
+## UI: reuse what exists, keep the glass look
+
+When building any screen, panel, menu or control, on desktop or in Hari:
+
+- Reuse existing components before writing new ones. Desktop: `src/shared/ui` (`SegmentedSwitch`
+  for tabs and filters, `Popover`, `Modal`, `SlidePanel`, `ImageLightbox`, `icons.tsx`) and
+  `GlassBackdrop` from `src/app/shell`. Hari: `mobile/src/ui` (`SegmentedSwitch`, `ChoiceMenu`,
+  `CircleButton`, `ModalSheet`, `LiquidView`, `GradualBlur`, `Icon`, `theme.ts`).
+- New surfaces use the app's transparent, glass look over the wallpaper, not a solid fill
+  (`bg-surface`, `colors.background`, `colors.sheet`), unless a solid fill is needed to read text.
+- Use the theme's colours, sizes and type; no one-off pills, colours or icon sizes. Icons in one
+  row share one size and colour.
+- Animate with transform and opacity, not width, height or position, and load heavy content
+  after an opening animation ends.
+
 ## Desktop UI verification from MonoCode
 
 Do not assign native desktop UI inspection or smoke tests to an agent running

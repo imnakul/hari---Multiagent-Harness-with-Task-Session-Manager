@@ -5,6 +5,7 @@
  * or reading one there changes the bell too.
  */
 import { projectName } from "../../../shared/lib/paths";
+import { findModel } from "../../sessions/model/models";
 import {
   dismissAllCenterNotifications,
   dismissCenterNotifications,
@@ -26,6 +27,9 @@ export type MobileNotification = {
   sessionId?: string;
   projectId?: string;
   projectName?: string;
+  /** Fork (Hari, L-305): the model's display name ("Opus 5.5"), for the
+   *  phone's notification. */
+  modelName?: string;
   /** Recorded while the chat was open on the computer (hidden from the bell). */
   seenOnDesktop?: boolean;
   /** Fork (Hari, L-278): the approval or question it asks, so the phone's
@@ -53,6 +57,7 @@ export function mobileNotificationFeed(
     ...(item.cwd
       ? { projectId: mobileProjectId(item.cwd), projectName: projectName(item.cwd) }
       : {}),
+    ...(item.model ? { modelName: findModel(item.model)?.name ?? item.model } : {}),
     ...(item.seenOnDesktop ? { seenOnDesktop: true } : {}),
     ...requestOf(item),
   }));

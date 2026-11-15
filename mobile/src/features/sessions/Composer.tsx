@@ -1,9 +1,9 @@
-import { ChoiceMenu } from "@/ui/ChoiceMenu";
+import { DropUpMenu } from "@/ui/DropUpMenu";
 import { Button, Host, HStack, Menu, Spacer } from "@expo/ui/swift-ui";
 import { useNavigation } from "expo-router";
 import { accessibilityLabel, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Linking, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Platform, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -17,6 +17,8 @@ import Animated, {
 import { PulsingDot, useOffline } from "@/features/connection/ConnectionNotice";
 import type { Harness } from "@/features/workspace/types";
 import { FileTypeIcon } from "@/features/files/FileTypeIcon";
+import { openNativeFile } from "@/features/liveUpdates/nativeLive";
+import { File } from "expo-file-system";
 import { Icon, type IconName } from "@/ui/Icon";
 import { LiquidView } from "@/ui/LiquidView";
 import { themedStyles, useColors, useScheme } from "@/ui/theme";
@@ -35,6 +37,7 @@ import {
   type Picked,
 } from "./attachments";
 import { readDraft, writeDraft } from "./drafts";
+import { FullImageViewer } from "./MessageAttachments";
 import { DictationBar } from "./DictationBar";
 import { canDictate, insertDictation } from "./dictation";
 import { TypingPostureFocus } from "./TypingPostureFocus";
@@ -140,21 +143,57 @@ export function Composer({
   // person can keep writing. An error waits until it's back.
   const blocked = !offline && !!notice;
   const input = useRef<TextInput>(null);
-  const [text, setText] = useState(() => readDraft(draftKey).text);
+  // Fork (Hari, L-300): the field holds its own words (uncontrolled). A
+  // keystroke no longer re-renders the composer, only a change in what the
+  // words decide (empty or not, sendable or not); a long prompt typed for
+  // minutes stayed smooth only until the controlled field fell behind.
+  const [initialText] = useState(() => readDraft(draftKey).text);
+  const textRef = useRef(initialText);
+  const [hasWords, setHasWords] = useState(initialText.length > 0);
+  const [sendableWords, setSendableWords] = useState(initialText.trim().length > 0);
+  // Code-set words (dictation, a failed send's restore) remount the field
+  // with them; the native field has no plain "set text" call.
+  const [field, setField] = useState({ key: 0, seed: initialText, focus: false });
+  const measureRef = useRef<((text: string) => void) | null>(null);
   const [sending, setSending] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>(() => readDraft(draftKey).attachments);
+  const keptAttachments = useRef(attachments);
+  const keep = (words: string, files: Attachment[]) =>
+    writeDraft(draftKey, { text: words, attachments: files.filter((item) => !item.preparing) });
+  const onTextChanged = (next: string) => {
+    textRef.current = next;
+    setHasWords(next.length > 0);
+    setSendableWords(next.trim().length > 0);
+    measureRef.current?.(next);
+    keep(next, keptAttachments.current);
+  };
+  const setFieldText = (next: string) => {
+    onTextChanged(next);
+    if (next === "") {
+      input.current?.clear();
+      return;
+    }
+    setField((current) => ({
+      key: current.key + 1,
+      seed: next,
+      focus: input.current?.isFocused() ?? false,
+    }));
+  };
   // Kept per chat as it changes; photos still being prepared aren't kept.
   useEffect(() => {
-    writeDraft(draftKey, { text, attachments: attachments.filter((item) => !item.preparing) });
-  }, [draftKey, text, attachments]);
+    keptAttachments.current = attachments;
+    keep(textRef.current, attachments);
+    // `keep` reads the chat's key, fixed for this composer (keyed per chat).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachments]);
   const preparing = attachments.some((item) => item.preparing);
   const [inputHeight, setInputHeight] = useState(INPUT_MIN);
   const [dictating, setDictating] = useState(false);
   // Where dictated words go: the cursor, or the selection they replace.
   const selection = useRef({ start: 0, end: 0 });
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !sending && !preparing;
+  const canSend = (sendableWords || attachments.length > 0) && !sending && !preparing;
   // A draft, in words or files, keeps the card open.
-  const hasText = text.length > 0 || attachments.length > 0;
+  const hasText = hasWords || attachments.length > 0;
   // A compact draft past the pill's one line, measured at the pill's width so
   // the wider row it moves to can't fold it straight back.
   const [wraps, setWraps] = useState(false);
@@ -268,11 +307,9 @@ export function Composer({
   const endDictation = (words: string | null) => {
     setDictating(false);
     if (!words) return;
-    setText((current) => {
-      const next = insertDictation(current, words, selection.current);
-      selection.current = { start: next.cursor, end: next.cursor };
-      return next.text;
-    });
+    const next = insertDictation(textRef.current, words, selection.current);
+    selection.current = { start: next.cursor, end: next.cursor };
+    setFieldText(next.text);
   };
 
   const attach = async (pick: (room: number) => Promise<Picked[]>) => {
@@ -333,10 +370,10 @@ export function Composer({
       Alert.alert("Message not sent", problem);
       return;
     }
-    const message = text.trim();
+    const message = textRef.current.trim();
     const files = attachments;
     setSending(true);
-    setText("");
+    setFieldText("");
     setAttachments([]);
     morph(false);
     if (!compact) {
@@ -346,7 +383,7 @@ export function Composer({
     try {
       await onSend(message, files);
     } catch (reason) {
-      setText((current) => current || message);
+      if (!textRef.current) setFieldText(message);
       setAttachments((current) => (current.length ? current : files));
       Alert.alert("Message not sent", reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -415,11 +452,13 @@ export function Composer({
 
       <Animated.View style={[styles.inputSlot, inputStyle, fieldShown]}>
         <TextInput
+          key={field.key}
           ref={input}
           nativeID={COMPOSER_INPUT_ID}
-          value={text}
+          defaultValue={field.seed}
+          autoFocus={field.focus}
           editable={!dictating && !blocked}
-          onChangeText={setText}
+          onChangeText={onTextChanged}
           onSelectionChange={(event) => {
             selection.current = event.nativeEvent.selection;
           }}
@@ -484,14 +523,12 @@ export function Composer({
 
       {compact ? (
         // Lays the draft out at the pill field's width, unseen, to tell when it wraps.
-        <Text
-          aria-hidden
-          pointerEvents="none"
+        <MeasureText
+          initial={initialText}
+          setterRef={measureRef}
           style={[styles.input, styles.measure]}
-          onTextLayout={(event) => setWraps(event.nativeEvent.lines.length > 1)}
-        >
-          {text || " "}
-        </Text>
+          onLines={(lines) => setWraps(lines > 1)}
+        />
       ) : null}
 
       {compact ? null : (
@@ -557,6 +594,40 @@ export function Composer({
 }
 
 /**
+ * Fork (Hari, L-300): lays the draft out unseen, to tell when it wraps. Holds
+ * the words itself, so only this re-renders as they change.
+ */
+function MeasureText({
+  initial,
+  setterRef,
+  style,
+  onLines,
+}: {
+  initial: string;
+  setterRef: { current: ((text: string) => void) | null };
+  style: StyleProp<TextStyle>;
+  onLines: (lines: number) => void;
+}) {
+  const [text, setText] = useState(initial);
+  useEffect(() => {
+    setterRef.current = setText;
+    return () => {
+      setterRef.current = null;
+    };
+  }, [setterRef]);
+  return (
+    <Text
+      aria-hidden
+      pointerEvents="none"
+      style={style}
+      onTextLayout={(event) => onLines(event.nativeEvent.lines.length)}
+    >
+      {text || " "}
+    </Text>
+  );
+}
+
+/**
  * The add button: a native menu to attach photos, a new camera shot (fork,
  * Hari, L-285) or files. The menu lies
  * over the button, its label an invisible box of the button's size, as in
@@ -574,13 +645,15 @@ function AddMenu({
   const styles = useStyles();
   const colors = useColors();
   if (Platform.OS === "android") return (
-    <ChoiceMenu label="Add photos or files" actions={[
+    // Fork (Hari, L-299): grows up out of the button in place, no sheet, so
+    // the keyboard stays up and the composer doesn't jump.
+    <DropUpMenu label="Add photos or files" actions={[
       { label: "Photo Library", icon: "image", onPress: onPhotos },
       { label: "Camera", icon: "camera", onPress: onCamera },
       { label: "Files", icon: "folder", onPress: onFiles },
     ]}>
       <View style={styles.round}><Icon name="add" size={18} color={colors.content} /></View>
-    </ChoiceMenu>
+    </DropUpMenu>
   );
   return (
     <View>
@@ -621,8 +694,31 @@ function AttachmentChip({
   const styles = useStyles();
   const colors = useColors();
   const image = isImage(attachment);
+  const [viewing, setViewing] = useState(false);
+  // Fork (Hari, L-299): a tap opens it, a picture full screen and a file in
+  // the app the phone picks for it.
+  const open = () => {
+    if (attachment.preparing) return;
+    if (image) {
+      setViewing(true);
+      return;
+    }
+    let uri = attachment.uri;
+    try {
+      if (Platform.OS === "android" && uri.startsWith("file:")) uri = new File(uri).contentUri;
+    } catch {
+      // Tries the plain path.
+    }
+    if (!openNativeFile(uri, attachment.mimeType || "application/octet-stream"))
+      Alert.alert("Couldn’t open the file", "No app on this phone opens this kind of file.");
+  };
   return (
-    <View style={image ? styles.thumb : styles.fileChip}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${attachment.name}`}
+      onPress={open}
+      style={({ pressed }) => [image ? styles.thumb : styles.fileChip, pressed && styles.pressed]}
+    >
       {image ? (
         <>
           <Image source={{ uri: attachment.uri }} style={styles.thumbImage} resizeMode="cover" />
@@ -653,7 +749,10 @@ function AttachmentChip({
       >
         <Icon name="close" size={10} color={colors.content} />
       </Pressable>
-    </View>
+      {viewing ? (
+        <FullImageViewer uri={attachment.uri} name={attachment.name} onClose={() => setViewing(false)} />
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -840,6 +939,8 @@ const useStyles = themedStyles((colors) => ({
   },
   leading: {
     left: EDGE,
+    // Over the field and Send, so the add menu's tap-outside layer covers them.
+    zIndex: 2,
   },
   trailing: {
     right: EDGE,

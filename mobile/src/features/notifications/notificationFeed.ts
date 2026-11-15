@@ -29,6 +29,8 @@ export type FeedItem = {
   /** The phone's id for the chat's project (the same one the catalog uses). */
   projectId?: string;
   projectName?: string;
+  /** Fork (L-305): the model's display name ("Opus 5.5"). */
+  modelName?: string;
   /** Recorded while the chat was open on the computer. */
   seenOnDesktop?: boolean;
   /** Fork (L-278): the approval or question it asks, for the panel's buttons. */
@@ -110,6 +112,7 @@ function parseItem(value: unknown): FeedItem | null {
   const sessionId = optional("sessionId");
   const projectId = optional("projectId");
   const projectName = optional("projectName");
+  const modelName = optional("modelName");
   const requestId = field("requestId");
   return {
     id,
@@ -121,6 +124,7 @@ function parseItem(value: unknown): FeedItem | null {
     ...(sessionId ? { sessionId } : {}),
     ...(projectId ? { projectId } : {}),
     ...(projectName ? { projectName } : {}),
+    ...(modelName ? { modelName } : {}),
     ...(field("seenOnDesktop") === true ? { seenOnDesktop: true } : {}),
     ...(typeof requestId === "number" && Number.isSafeInteger(requestId) && requestId >= 0
       ? { requestId }
@@ -138,6 +142,38 @@ export function parseFeed(value: unknown): { available: boolean; items: FeedItem
     available,
     items: items.map(parseItem).filter((item): item is FeedItem => item !== null),
   };
+}
+
+const ACTION: Record<FeedKind, string> = {
+  finished: "Finished",
+  approval: "Needs approval",
+  question: "Asks a question",
+  automationSucceeded: "Automation done",
+  automationFailed: "Automation failed",
+};
+
+/**
+ * Fork (Hari, L-305): how an entry reads in Android's panel, so it's clear at
+ * a glance which chat it is and what it wants: "Project · Chat", then
+ * "Action · Model" and the start of the reply.
+ */
+export function panelText(item: FeedItem): { title: string; body: string } {
+  const title = [item.projectName, item.title].filter(Boolean).join(" · ") || "MonoCode";
+  const action = [ACTION[item.kind], item.modelName].filter(Boolean).join(" · ");
+  return { title, body: item.body ? `${action}\n${item.body}` : action };
+}
+
+/**
+ * Fork (Hari, L-305): the entries the user swiped out of Android's panel:
+ * posted, still unread, and no longer showing.
+ */
+export function swipedAway(
+  items: readonly FeedItem[],
+  posted: readonly string[],
+  showing: ReadonlySet<string>,
+): string[] {
+  const unread = new Set(items.filter((item) => !item.read).map((item) => item.id));
+  return posted.filter((id) => unread.has(id) && !showing.has(panelId(id)));
 }
 
 /** The entries to show: those for chats open on the computer only if wanted. */

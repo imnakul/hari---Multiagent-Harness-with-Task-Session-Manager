@@ -127,7 +127,7 @@ export function ChoiceMenu({
   );
 }
 
-function MenuRow({ action, onPress }: { action: MenuAction; onPress: () => void }) {
+export function MenuRow({ action, onPress }: { action: MenuAction; onPress: () => void }) {
   const styles = useStyles();
   const colors = useColors();
   const tint = action.destructive ? colors.deletions : colors.content;

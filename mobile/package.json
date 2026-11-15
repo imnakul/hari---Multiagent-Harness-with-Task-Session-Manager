@@ -1,6 +1,6 @@
 {
   "name": "monocode-mobile",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.25",

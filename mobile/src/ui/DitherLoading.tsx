@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useContext, useEffect } from "react";
 import { Image, PixelRatio, StyleSheet } from "react-native";
 import { scheduleOnRN } from "react-native-worklets";
 import Animated, {
@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { encodePng } from "@/features/background/dither";
+import { Backdrop, BackdropReading, useBackdrop } from "@/features/wallpaper/Backdrop";
 
 import { traceSwitch } from "./ScenePager";
 import { useColors } from "./theme";
@@ -140,6 +141,10 @@ export function DitherLoading({
   onGone?: () => void;
 }) {
   const colors = useColors();
+  // Fork (Hari, L-299): over the wallpaper, as the screen it covers draws it,
+  // not a solid page; the solid page only without a wallpaper.
+  const reading = useContext(BackdropReading) ?? false;
+  const wallpaper = useBackdrop(reading) !== null;
   const reduced = useReducedMotion();
   const source = strip();
   const turn = useSharedValue(0);
@@ -179,8 +184,9 @@ export function DitherLoading({
     <Animated.View
       accessibilityLabel="Loading"
       pointerEvents="none"
-      style={[styles.fill, { backgroundColor: colors.background }, groundStyle]}
+      style={[styles.fill, wallpaper ? null : { backgroundColor: colors.background }, groundStyle]}
     >
+      {wallpaper ? <Backdrop reading={reading} /> : null}
       <Animated.View style={[styles.window, ringStyle]}>
         <Animated.View style={[styles.strip, frameStyle]}>
           <Image

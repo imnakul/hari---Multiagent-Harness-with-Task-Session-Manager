@@ -593,7 +593,12 @@ import {
 import {
   hasInteractiveClaude,
   interactiveClaudeExternalTurn,
+  returnInteractiveClaudeToChat,
 } from "../integrations/harness/providers/claude/claudeInteractive";
+import {
+  interactiveTerminalSnapshot,
+  pressInteractiveTerminalKey,
+} from "../integrations/harness/providers/claude/claudeInteractiveTerminal";
 import { emptyProviderListState } from "../features/provider-sessions/model/conversationStore";
 import { CloudSessionDialog } from "../features/provider-sessions/ui/CloudSessionDialog";
 import { useCloudRecords } from "../features/provider-sessions/ui/useCloudRecords";
@@ -11726,6 +11731,21 @@ function Workspace({
           resume: mobileUsageActions.current!.resume,
           setAutomatic: mobileUsageActions.current!.automatic,
         });
+        return { sessionId: session.id };
+      }
+      // Fork (Hari, L-304): "Claude is busy on your computer" on the phone:
+      // the native terminal's last lines, Esc / Enter, and Return to chat.
+      if (method === "session.terminal") {
+        return { sessionId: session.id, terminal: interactiveTerminalSnapshot(session.id) };
+      }
+      if (method === "session.terminalKey") {
+        const key = String(params.key ?? "");
+        if (key !== "escape" && key !== "enter") throw new Error("Unknown key");
+        await pressInteractiveTerminalKey(session.id, key);
+        return { sessionId: session.id };
+      }
+      if (method === "session.terminalReturn") {
+        await returnInteractiveClaudeToChat(session.id);
         return { sessionId: session.id };
       }
       if (method === "session.cancel") {

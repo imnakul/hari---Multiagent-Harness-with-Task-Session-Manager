@@ -15,6 +15,8 @@ import {
   setCachedRateLimits,
 } from "../../providers/model/rateLimitsCache";
 import { loadShowRemainingUsage } from "../../settings/model/displayPrefs";
+import { runtimeProviderBinaryPath } from "../../providers/model/providerBinaryPaths";
+import { getCustomBinary } from "../../../integrations/harness/core/customBinary";
 
 /** The footer's presentation, without credentials or provider-specific payloads. */
 export function mobileUsageSnapshot(
@@ -142,6 +144,30 @@ export async function mobileAllUsage(refresh = false) {
       provider,
       label,
       accounts: [{ id: "default", label, usage: mobileUsageSnapshot(limits, now(), showRemaining) }],
+    });
+  }
+  // Antigravity CLI: one row per model family (Gemini, Claude & GPT), read
+  // under the same account key as the bottom bar so the two share a cache.
+  const agKey =
+    runtimeProviderBinaryPath("antigravity-cli") ?? getCustomBinary("antigravity-cli") ?? "default";
+  const ag = await loadRateLimits("antigravity-cli", agKey, refresh).catch(() => null);
+  if (ag && ag.status !== "unavailable") {
+    const groups = ag.modelGroups ?? [];
+    const label = "Antigravity";
+    providers.push({
+      provider: "antigravity-cli",
+      label,
+      accounts: groups.length
+        ? groups.map((group) => ({
+            id: group.name,
+            label: group.name,
+            usage: mobileUsageSnapshot(
+              { ...ag, session: group.session ?? null, weekly: group.weekly ?? null },
+              now(),
+              showRemaining,
+            ),
+          }))
+        : [{ id: "default", label, usage: mobileUsageSnapshot(ag, now(), showRemaining) }],
     });
   }
   return { providers };

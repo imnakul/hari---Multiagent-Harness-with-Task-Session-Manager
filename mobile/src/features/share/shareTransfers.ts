@@ -72,6 +72,11 @@ function enqueue(task: () => Promise<void>) {
   queue = queue.then(task).catch((reason: unknown) => console.warn("Share: a transfer failed", reason));
 }
 
+/** Fork (Hari, L-303): resolves once every file asked for so far has moved (or failed). */
+export function shareTransfersIdle(): Promise<void> {
+  return queue;
+}
+
 /** Big transfers keep the screen on (the app shows "Keep Hari open"). */
 async function awake<T>(size: number, task: () => Promise<T>): Promise<T> {
   const big = size > AUTO_DOWNLOAD_BYTES;

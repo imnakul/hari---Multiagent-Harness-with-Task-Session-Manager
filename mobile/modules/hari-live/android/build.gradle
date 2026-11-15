@@ -8,3 +8,7 @@ android {
   namespace 'expo.modules.harilive'
   defaultConfig { versionCode 1; versionName '0.1.0' }
 }
+// Fork (Hari, L-303): the share sheet's background task (HeadlessJsTaskService).
+dependencies {
+  implementation 'com.facebook.react:react-android'
+}
