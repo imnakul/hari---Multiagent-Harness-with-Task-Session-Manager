@@ -88,12 +88,12 @@ mod session_panel;
 mod session_store;
 mod skills;
 pub mod ssh_askpass;
+#[cfg(target_os = "windows")]
+mod startup;
 mod tasks;
 mod tool_detail;
 #[cfg(target_os = "macos")]
 mod trackpad_zoom;
-#[cfg(target_os = "windows")]
-mod startup;
 #[cfg(target_os = "windows")]
 mod tray;
 mod webview_recovery;
@@ -490,7 +490,8 @@ pub fn run() {
                     window::prepare_windows_window(window.as_ref());
                     webview_recovery::install(&window);
                     // Fork (Hari, L-314): started at sign-in, it stays in
-                    // the tray (the window opens hidden on Windows).
+                    // the tray: hidden here, at once. Not hidden in the window config: a
+                    // window created hidden lost its see-through glass (L-314 fix).
                     if startup::at_sign_in(&std::env::args().collect::<Vec<_>>()) {
                         let _ = window.hide();
                     } else {

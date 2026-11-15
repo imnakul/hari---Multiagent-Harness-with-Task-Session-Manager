@@ -33,7 +33,12 @@ pub fn startup_launch_set(app: AppHandle, on: bool) -> Result<(), String> {
         return Err("Launch on startup works in the installed app".into());
     }
     let launch = app.autolaunch();
-    if on { launch.enable() } else { launch.disable() }.map_err(|error| error.to_string())
+    if on {
+        launch.enable()
+    } else {
+        launch.disable()
+    }
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -45,6 +50,10 @@ mod tests {
         let argv = |args: &[&str]| args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
         assert!(at_sign_in(&argv(&["hari.exe", ARG])));
         assert!(!at_sign_in(&argv(&["hari.exe"])));
-        assert!(!at_sign_in(&argv(&["hari.exe", "--share", r"C:\files\--autostart.txt"])));
+        assert!(!at_sign_in(&argv(&[
+            "hari.exe",
+            "--share",
+            r"C:\files\--autostart.txt"
+        ])));
     }
 }

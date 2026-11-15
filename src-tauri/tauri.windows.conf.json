@@ -13,8 +13,7 @@
         "transparent": true,
         "backgroundColor": "#00000000",
         "backgroundThrottling": "throttle",
-        "shadow": false,
-        "visible": false
+        "shadow": false
       }
     ]
   },
