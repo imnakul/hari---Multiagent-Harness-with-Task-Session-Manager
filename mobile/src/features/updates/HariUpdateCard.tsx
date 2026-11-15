@@ -38,7 +38,8 @@ export function HariUpdateRows({ divider }: { divider: React.ReactNode }) {
       <SettingsRow
         icon="refresh"
         label="Check for updates"
-        value={status ?? installed.version}
+        // Fork (Hari, L-315 fix): the installed version stays in view after a check.
+        value={update.status === "current" ? `Up to date · ${installed.version}` : (status ?? installed.version)}
         showChevron={false}
         accessory={
           update.status === "checking" ? (

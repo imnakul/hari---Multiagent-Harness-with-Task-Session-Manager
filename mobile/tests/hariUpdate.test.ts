@@ -32,6 +32,16 @@ describe("Hari updates", () => {
     expect(parseHariManifest({ version: "x", versionCode: 1, apk: "not a url" })).toBeUndefined();
   });
 
+  it("takes an APK on the repo owner's GitHub Pages", () => {
+    const pages = "https://imnakul.github.io/hari---Multiagent-Harness-with-Task-Session-Manager/Hari.apk";
+    const base = { version: "0.16.0-local55", versionCode: 160055 };
+    expect(parseHariManifest({ ...base, apk: pages }, repo)).toEqual({ ...base, apk: pages });
+    expect(parseHariManifest({ ...base, apk: "https://someone.github.io/Hari.apk" }, repo)).toBeUndefined();
+    expect(parseHariManifest({ ...base, apk: "http://imnakul.github.io/Hari.apk" }, repo)).toBeUndefined();
+    // Without the repo, only GitHub itself.
+    expect(parseHariManifest({ ...base, apk: pages })).toBeUndefined();
+  });
+
   it("offers only a higher build number", () => {
     const installed = { version: "0.16.0-local27", versionCode: 160027, repo };
     const release = parseHariManifest({ version: "0.16.0-local28", versionCode: 160028, apk });

@@ -21,20 +21,36 @@ export function releasesUrl(repo: string) {
   return `https://github.com/${repo}/releases/latest`;
 }
 
-/** The manifest, if it is well formed and its APK is a GitHub https link. */
-export function parseHariManifest(value: unknown): HariRelease | undefined {
+/** An https link on GitHub, or on the repo owner's GitHub Pages when `pages` is given. */
+function githubLink(value: unknown, pages?: string): URL | undefined {
+  if (typeof value !== "string") return;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (url.protocol !== "https:") return;
+  return url.hostname === "github.com" || (pages !== undefined && url.hostname === pages) ? url : undefined;
+}
+
+/** Where the repo owner's GitHub Pages live: `<owner>.github.io`. */
+export function pagesHost(repo: string) {
+  return `${repo.split("/")[0].toLowerCase()}.github.io`;
+}
+
+/**
+ * The manifest, if it is well formed and its APK is a GitHub https link.
+ * Fork (Hari, L-315 fix): or on the repo owner's GitHub Pages, where releases
+ * put the APK (builds up to local53 take only github.com: reinstall once).
+ */
+export function parseHariManifest(value: unknown, repo?: string): HariRelease | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const raw = value as Record<string, unknown>;
   if (typeof raw.version !== "string" || !raw.version) return;
   if (typeof raw.versionCode !== "number" || !Number.isInteger(raw.versionCode)) return;
-  if (typeof raw.apk !== "string") return;
-  let apk: URL;
-  try {
-    apk = new URL(raw.apk);
-  } catch {
-    return;
-  }
-  if (apk.protocol !== "https:" || apk.hostname !== "github.com") return;
+  const apk = githubLink(raw.apk, repo ? pagesHost(repo) : undefined);
+  if (!apk) return;
   return {
     version: raw.version,
     versionCode: raw.versionCode,

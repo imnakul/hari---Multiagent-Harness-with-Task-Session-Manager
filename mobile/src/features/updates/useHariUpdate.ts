@@ -75,7 +75,7 @@ export async function checkForHariUpdate(quiet = false): Promise<HariRelease | u
       return;
     }
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
-    const release = newerRelease(installed, parseHariManifest(await response.json()));
+    const release = newerRelease(installed, parseHariManifest(await response.json(), installed.repo));
     void Storage.setItem(LAST_CHECK_KEY, String(Date.now()));
     set(release ? { status: "available", release } : { status: "current" });
     return release;
