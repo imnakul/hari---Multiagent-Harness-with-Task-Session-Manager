@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { File } from "expo-file-system";
 import { Image } from "expo-image";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,12 +13,19 @@ import {
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
+import { KeyboardChatScrollView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { canSaveToDownloads, openNativeFile } from "@/features/liveUpdates/nativeLive";
+import { withLiftHeld } from "@/features/sessions/liftHold";
 import { Markdown } from "@/features/sessions/Markdown";
+import { useKeyboardLift } from "@/features/sessions/SessionScreen";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import {
   formatShareSize,
@@ -73,6 +81,11 @@ const timeOf = (at: number) =>
 
 const isPicture = (entry: PhoneShareEntry) => shareThumbnail(entry) !== null;
 
+/** Fork (Hari, L-316): the composer's gap above the keyboard, as in a session. */
+const KEYBOARD_GAP = 8;
+/** Within this of the end, the chat counts as at its end and follows new messages. */
+const AT_END = 80;
+
 /**
  * Fork (Hari, L-279): text, links, the clipboard and files between this phone
  * and the paired computer. L-288: a chat with the computer, by day.
@@ -80,6 +93,8 @@ const isPicture = (entry: PhoneShareEntry) => shareThumbnail(entry) !== null;
  * one message, text reads as Markdown, links show cards, messages can be
  * pinned (bar at the top) and saved (never roll off), big files from the
  * computer wait for Download, and Delete all frees this phone's space.
+ * L-316: laid out as a session's chat: oldest at the top, newest at the
+ * bottom, and the composer at the bottom, riding on the keyboard.
  */
 export function SharePanel() {
   const styles = useStyles();
@@ -91,9 +106,19 @@ export function SharePanel() {
   const [pinIndex, setPinIndex] = useState(0);
   const scroll = useRef<ScrollView>(null);
   const rowsAt = useRef(new Map<string, number>());
+  const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
+  const composerBottom = Math.max(insets.bottom, 12);
+  const keyboardOffset = composerBottom - KEYBOARD_GAP;
+  const keyboardLift = useKeyboardLift(keyboardOffset);
+  // Opens at its end and follows new messages there; not when scrolled back.
+  const atEnd = useRef(true);
+  const placed = useRef(false);
+  const composerHeight = useRef(0);
 
+  // Oldest first, as a chat reads (the history is newest first).
   const rows = useMemo(() => {
-    const all = shareRows(history);
+    const all = shareRows(history).reverse();
     return savedOnly ? all.filter((row) => row.items.some((item) => item.saved)) : all;
   }, [history, savedOnly]);
   const pinned = useMemo(
@@ -190,85 +215,132 @@ export function SharePanel() {
   const storage = shareStorage();
   const pinRow = pinned.length ? pinned[pinIndex % pinned.length] : null;
 
+  const toEnd = (animated: boolean) => scroll.current?.scrollToEnd({ animated });
+  const onScroll = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement, contentInset } = nativeEvent;
+    const below = contentSize.height + (contentInset?.bottom ?? 0) - contentOffset.y - layoutMeasurement.height;
+    atEnd.current = below < AT_END;
+  };
+  const onContentSizeChange = () => {
+    if (!placed.current) {
+      placed.current = true;
+      toEnd(false);
+      return;
+    }
+    if (atEnd.current) toEnd(true);
+  };
+  // A composer growing past a line (or a file waiting in it) keeps the end in view.
+  const onComposerLayout = ({ nativeEvent }: LayoutChangeEvent) => {
+    const height = Math.round(nativeEvent.layout.height);
+    if (height === composerHeight.current) return;
+    composerHeight.current = height;
+    if (atEnd.current) requestAnimationFrame(() => toEnd(false));
+  };
+
   return (
-    <SettingsPage
-      scrollRef={scroll}
-      header={
-        pinRow ? (
+    <View style={[styles.chat, { paddingTop: headerHeight + 8 }]}>
+      <View style={styles.top}>
+        {history.length ? (
+          <View style={styles.toolbar}>
+            <Chip label="All" active={!savedOnly} onPress={() => setSavedOnly(false)} />
+            <Chip label="Saved" icon="bookmark" active={savedOnly} onPress={() => setSavedOnly(true)} />
+            <View style={styles.spacer} />
+            <Text style={styles.storage} numberOfLines={1}>
+              {formatShareSize(storage.historyBytes + storage.filesBytes)}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete all"
+              onPress={clearAll}
+              hitSlop={8}
+              style={({ pressed }) => [styles.toolbarButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.clearLabel}>Delete all</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {pinRow ? (
           <PinBar row={pinRow} count={pinned.length} index={pinIndex % pinned.length} onPress={jumpToPin} />
-        ) : undefined
-      }
-    >
-      <ShareComposer command={command} />
-      <Text style={styles.hint}>
-        {canSaveToDownloads
-          ? "Files from your computer save to Download/Hari; big ones wait for Download. Keep Hari open while files move."
-          : "Texts wait until your computer is on. Update Hari to save files to Downloads."}
-      </Text>
+        ) : null}
+      </View>
 
-      {history.length ? (
-        <View style={styles.toolbar}>
-          <Chip label="All" active={!savedOnly} onPress={() => setSavedOnly(false)} />
-          <Chip label="Saved" icon="bookmark" active={savedOnly} onPress={() => setSavedOnly(true)} />
-          <View style={styles.spacer} />
-          <Text style={styles.storage} numberOfLines={1}>
-            {formatShareSize(storage.historyBytes + storage.filesBytes)}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Delete all"
-            onPress={clearAll}
-            hitSlop={8}
-            style={({ pressed }) => [styles.toolbarButton, pressed && styles.pressed]}
-          >
-            <Text style={styles.clearLabel}>Delete all</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Notice
-          title="Nothing shared yet"
-          text="Send something from here, from any app’s share menu, or with the “Send clipboard” Quick Settings tile."
+      <KeyboardChatScrollView
+        ref={scroll}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        keyboardLiftBehavior="whenAtEnd"
+        offset={keyboardOffset}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={32}
+        onScroll={onScroll}
+        onContentSizeChange={onContentSizeChange}
+      >
+        <Text style={styles.hint}>
+          {canSaveToDownloads
+            ? "Files from your computer save to Download/Hari; big ones wait for Download. Keep Hari open while files move."
+            : "Texts wait until your computer is on. Update Hari to save files to Downloads."}
+        </Text>
+
+        {history.length ? null : (
+          <Notice
+            title="Nothing shared yet"
+            text="Send something from here, from any app’s share menu, or with the “Send clipboard” Quick Settings tile."
+          />
+        )}
+        {savedOnly && !rows.length ? (
+          <Text style={styles.empty}>Long-press a message and tap Save to keep it here.</Text>
+        ) : null}
+
+        {rows.map((row, index) => {
+          const head = row.items[row.items.length - 1];
+          const day = shareDay(head.at);
+          const previous = rows[index - 1];
+          const newDay = !previous || shareDay(previous.items[previous.items.length - 1].at) !== day;
+          return (
+            <Animated.View
+              key={row.key}
+              exiting={FadeOut.duration(160)}
+              layout={LinearTransition.duration(200)}
+              onLayout={({ nativeEvent }) => rowsAt.current.set(row.key, nativeEvent.layout.y)}
+            >
+              {newDay ? (
+                <Text style={styles.day} accessibilityRole="header">
+                  {day}
+                </Text>
+              ) : null}
+              <ShareBubble
+                row={row}
+                copiedId={copiedId}
+                selected={selected === row.key}
+                cards={cards}
+                cardStyle={catalog.linkPreviews?.cardStyle ?? "compact"}
+                onOpen={open}
+                onSelect={() => {
+                  void Haptics.selectionAsync();
+                  setSelected((current) => (current === row.key ? null : row.key));
+                }}
+                onRemove={() => remove(row)}
+                onCopy={copy}
+              />
+            </Animated.View>
+          );
+        })}
+      </KeyboardChatScrollView>
+
+      <Animated.View style={[keyboardLift, { paddingBottom: composerBottom }]} onLayout={onComposerLayout}>
+        <ShareComposer
+          command={command}
+          onSent={() => {
+            atEnd.current = true;
+            requestAnimationFrame(() => toEnd(true));
+          }}
         />
-      )}
-      {savedOnly && !rows.length ? (
-        <Text style={styles.empty}>Long-press a message and tap Save to keep it here.</Text>
-      ) : null}
-
-      {rows.map((row, index) => {
-        const head = row.items[row.items.length - 1];
-        const day = shareDay(head.at);
-        const previous = rows[index - 1];
-        const newDay = !previous || shareDay(previous.items[previous.items.length - 1].at) !== day;
-        return (
-          <Animated.View
-            key={row.key}
-            exiting={FadeOut.duration(160)}
-            layout={LinearTransition.duration(200)}
-            onLayout={({ nativeEvent }) => rowsAt.current.set(row.key, nativeEvent.layout.y)}
-          >
-            {newDay ? (
-              <Text style={styles.day} accessibilityRole="header">
-                {day}
-              </Text>
-            ) : null}
-            <ShareBubble
-              row={row}
-              copiedId={copiedId}
-              selected={selected === row.key}
-              cards={cards}
-              cardStyle={catalog.linkPreviews?.cardStyle ?? "compact"}
-              onOpen={open}
-              onSelect={() => {
-                void Haptics.selectionAsync();
-                setSelected((current) => (current === row.key ? null : row.key));
-              }}
-              onRemove={() => remove(row)}
-              onCopy={copy}
-            />
-          </Animated.View>
-        );
-      })}
-    </SettingsPage>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -278,7 +350,14 @@ export function SharePanel() {
  * Files wait above it until Send, then go as one message with the text as
  * their caption.
  */
-function ShareComposer({ command }: { command: ReturnType<typeof useConnection>["command"] }) {
+function ShareComposer({
+  command,
+  onSent,
+}: {
+  command: ReturnType<typeof useConnection>["command"];
+  /** The chat goes to its end, to show what was sent. */
+  onSent: () => void;
+}) {
   const styles = useStyles();
   const colors = useColors();
   const scheme = useScheme();
@@ -319,6 +398,7 @@ function ShareComposer({ command }: { command: ReturnType<typeof useConnection>[
     if (files.length) sendShareGroup(files, draft.current, command);
     else sendShareText(draft.current, false);
     reset();
+    onSent();
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -326,6 +406,7 @@ function ShareComposer({ command }: { command: ReturnType<typeof useConnection>[
     try {
       openOnComputer(draft.current);
       reset();
+      onSent();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (reason) {
       Alert.alert("Couldn’t open it there", why(reason));
@@ -339,12 +420,14 @@ function ShareComposer({ command }: { command: ReturnType<typeof useConnection>[
       return;
     }
     sendShareText(text, true);
+    onSent();
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const pickFiles = async () => {
     try {
-      const picked = await File.pickFileAsync({ multipleFiles: true });
+      // Fork (Hari, L-316): on the keyboard now, so it stays put as the picker opens (L-309).
+      const picked = await withLiftHeld(() => File.pickFileAsync({ multipleFiles: true }));
       if (picked.canceled) return;
       const chosen = picked.result.map((file) => ({
         uri: file.uri,
@@ -900,6 +983,7 @@ function Notice({ title, text }: { title: string; text: string }) {
 
 const useStyles = themedStyles((colors) => ({
   composer: {
+    marginHorizontal: 12,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     borderCurve: "continuous",
@@ -961,8 +1045,12 @@ const useStyles = themedStyles((colors) => ({
   },
   pressedScale: { transform: [{ scale: 0.96 }], opacity: 0.85 },
   disabled: { opacity: 0.4 },
+  chat: { flex: 1 },
+  top: { paddingHorizontal: 20, gap: 8 },
+  list: { flex: 1 },
+  listContent: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
   hint: { color: colors.muted, fontSize: 13, lineHeight: 18, marginTop: 8, paddingHorizontal: 4 },
-  toolbar: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 20, paddingHorizontal: 4 },
+  toolbar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 4 },
   chip: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 16:58 IST — Hari Share composer at the bottom (L-316)
+- Type: feature
+- What: the phone's Share page now reads as a session's chat: messages oldest first with the newest at the bottom, the page opens at its end and follows new messages when it is there, and the composer is docked at the bottom, riding on the keyboard (the session's keyboard lift). The filters, Delete all and the pin bar stay fixed at the top. The file picker holds the composer in place as it opens (as L-309).
+- Why: User request 2026-11-15.
+- Files: see L-316 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local54 commit
+- Verified: phone typecheck ✅ lint ✅ `shareModel` tests ✅ (21). Phone check manual.
+
 ## 2026-11-15 16:42 IST — Update downloads from GitHub Pages (L-315)
 - Type: feature
 - What: the release build now puts the new installer and APK on GitHub Pages, checks both can be downloaded, and only then writes the update files with Pages links (the release keeps a copy and its links are used if Pages fails). Turned on Pages (built by Actions) with a `hari-v*` tag rule on the `github-pages` environment, and removed the dead custom domain devnakul.me from `imnakul.github.io`, which sent every Pages address there.
