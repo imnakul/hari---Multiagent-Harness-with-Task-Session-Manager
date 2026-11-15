@@ -1274,6 +1274,24 @@ function GeneralPage({
   const [quickComposerError, setQuickComposerError] = useState<string | null>(
     null,
   );
+  // Fork (Hari, L-314): read from Windows; null in dev builds, which never
+  // add themselves to the sign-in programs.
+  const [launchOnStartup, setLaunchOnStartup] = useState<boolean | null>(null);
+  const [launchOnStartupError, setLaunchOnStartupError] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!IS_WIN) return;
+    let cancelled = false;
+    void invoke<boolean | null>("startup_launch_get")
+      .then((on) => {
+        if (!cancelled) setLaunchOnStartup(on);
+      })
+      .catch((error: unknown) => console.warn("Launch on startup: could not read it", error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // The user may flip the switch in System Settings and come back: re-read
   // the OS state whenever the window regains focus while the toggle is on.
@@ -1365,6 +1383,15 @@ function GeneralPage({
   const onCloseToTray = (next: boolean) => {
     saveCloseToTray(next);
     setCloseToTray(next);
+  };
+
+  const onLaunchOnStartup = (next: boolean) => {
+    setLaunchOnStartupError(null);
+    setLaunchOnStartup(next);
+    void invoke("startup_launch_set", { on: next }).catch((error: unknown) => {
+      setLaunchOnStartup(!next);
+      setLaunchOnStartupError(String(error));
+    });
   };
 
   return (
@@ -1587,6 +1614,24 @@ function GeneralPage({
               label="Close to tray"
               on={closeToTray}
               onChange={onCloseToTray}
+            />
+          </Row>
+        )}
+        {IS_WIN && launchOnStartup !== null && (
+          <Row
+            id="launch-on-startup"
+            label="Launch on startup"
+            description="Start MonoCode in the tray when you sign in to Windows, so your phone can reach this computer without opening a window."
+          >
+            {launchOnStartupError ? (
+              <span className="text-[12px] text-content/45">
+                {launchOnStartupError}
+              </span>
+            ) : null}
+            <Toggle
+              label="Launch on startup"
+              on={launchOnStartup}
+              onChange={onLaunchOnStartup}
             />
           </Row>
         )}

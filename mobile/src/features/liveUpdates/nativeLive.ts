@@ -22,6 +22,8 @@ type HariLiveModule = {
   setWatching(on: boolean): void;
   /** Fork (L-277); missing in builds before it. */
   setStreamLive?(on: boolean): void;
+  /** Fork (L-313); missing in builds before it. */
+  quit?(): void;
   /** Fork (L-279); missing in builds before it. */
   takeShared?(): string;
   saveToDownloads?(source: string, name: string, mimeType: string): Promise<string>;
@@ -100,6 +102,21 @@ export function setLiveStreamLive(on: boolean) {
     native?.setStreamLive?.(on);
   } catch (error) {
     console.warn("Background watching: could not change the tick", error);
+  }
+}
+
+/** Fork (Hari, L-313): whether this build can quit itself (Android). */
+export const canQuit = typeof native?.quit === "function";
+
+/**
+ * Fork (Hari, L-313): closes Hari: the always-on notification, the session
+ * cards and the link to the computer stop, until Hari is opened again.
+ */
+export function quitHari() {
+  try {
+    native?.quit?.();
+  } catch (error) {
+    console.warn("Quit: could not close Hari", error);
   }
 }
 

@@ -62,6 +62,8 @@ const REVEAL_RISE = 10;
 const LOADING_AFTER = 250;
 /** Rows FlatList draws on mount; past them it draws only near where the list is. */
 const INITIAL_ROWS = 25;
+/** Whatever it still waits for, a chat shows this long after its turns are drawn (L-312). */
+const SHOW_WITHIN = 1500;
 const NO_TURNS: Turn[] = [];
 
 /**
@@ -163,8 +165,9 @@ export function Transcript({
   // animated when a new message arrives.
   const pendingScroll = useRef<"instant" | "animated" | null>("instant");
   const scrollFrame = useRef<number | null>(null);
-  // Whether the hidden list was sent to its end to have its last rows drawn.
-  const reached = useRef(false);
+  // What the hidden list held when last sent to its end to have its last rows
+  // drawn: it goes again once that changes (L-312).
+  const reached = useRef<{ turns: Turn[]; height: number } | null>(null);
   useEffect(() => () => {
     if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
   }, []);
@@ -250,7 +253,7 @@ export function Transcript({
     if (anchoring.current === null && anchorIndex >= 0)
       anchoring.current = busy || !!anchorId?.startsWith("pending:");
     const anchored = !agent && !!anchoring.current;
-    firstUserAnchor.current = anchored && anchorIndex === 0;
+    firstUserAnchor.current = false;
     if (viewportHeight.current === 0) return;
     if (anchorIndex < 0) {
       // Nothing to anchor: show what there is where it is.
@@ -260,37 +263,50 @@ export function Transcript({
     }
     const below = turns.slice(anchorIndex);
     let belowHeight = GAP * (below.length - 1);
-    for (const [offset, turn] of below.entries()) {
+    let missing = false;
+    for (const turn of below) {
       const height = heights.current.get(turn.id);
-      // Wait until every row from the anchor down has been measured.
-      if (height === undefined) {
-        // Fork (Hari, L-248): FlatList draws the first INITIAL_ROWS rows,
-        // then only those within some screens of where it is: the top, until
-        // the first scroll. The desktop sends the latest 30 turns (more after
-        // paging), so with long ones the newest rows were never drawn and the
-        // chat waited for them behind its spinner until the reader scrolled.
-        // Send the still-hidden list to its end once so they are drawn.
-        if (!settled && !reached.current && anchorIndex + offset >= INITIAL_ROWS) {
-          const scroll = list.current?.getNativeScrollRef() as
-            ScrollView | null | undefined;
-          if (scroll) {
-            reached.current = true;
-            scroll.scrollToEnd({ animated: false });
-          }
-        }
-        return;
-      }
-      belowHeight += height;
+      if (height === undefined) missing = true;
+      else belowHeight += height;
     }
+    // The room left under the anchor. Once what is measured from it down
+    // leaves none, there is no blank space, whatever the rest measure.
+    const room =
+      viewportHeight.current - (paddingTop - ANCHOR_LIFT) - belowHeight - paddingBottom;
+    const fills = room <= 0;
+    if (missing) {
+      const last = turns.length - 1;
+      const endDrawn = heights.current.has(turns[last].id);
+      // Fork (Hari, L-248): FlatList draws the first INITIAL_ROWS rows,
+      // then only those within some screens of where it is: the top, until
+      // the first scroll. The desktop sends the latest 30 turns (more after
+      // paging), so with long ones the newest rows were never drawn and the
+      // chat waited for them behind its spinner until the reader scrolled.
+      // Send the still-hidden list to its end so they are drawn. L-312: and
+      // again whenever it changes before it shows. It went once, so when the
+      // desktop's fresh copy replaced the one kept on the phone, or a running
+      // reply grew, the rows past where it went were never drawn and a chat
+      // opened from a notification waited behind its spinner for good.
+      if (!settled && !endDrawn && last >= INITIAL_ROWS) {
+        const scroll = list.current?.getNativeScrollRef() as
+          ScrollView | null | undefined;
+        const sent = reached.current;
+        if (scroll && (sent?.turns !== turns || sent.height !== contentHeight.current)) {
+          reached.current = { turns, height: contentHeight.current };
+          scroll.scrollToEnd({ animated: false });
+        }
+      }
+      // Wait for every row from the anchor down, or (L-312) for the end, when
+      // what is measured below the anchor already fills the screen: the rows
+      // between, far from where the list is, may not be drawn until a scroll.
+      if (!endDrawn || (anchored && !fills)) return;
+    }
+    // A conversation's first message rests under the header, unless its
+    // reply already fills the screen: it opens at the reply's end, as later
+    // messages' do (L-312: it opened at the top of a long-running reply).
+    firstUserAnchor.current = anchored && anchorIndex === 0 && !fills;
     if (moving.current === 0)
-      slack.set(
-        !anchored
-          ? Number.NEGATIVE_INFINITY
-          : viewportHeight.current -
-              (paddingTop - ANCHOR_LIFT) -
-              belowHeight -
-              paddingBottom,
-      );
+      slack.set(!anchored ? Number.NEGATIVE_INFINITY : room);
 
     // A new conversation initially inherits the empty screen's header insets.
     // Wait for both native content layout and the bottom inset to catch up:
@@ -329,6 +345,22 @@ export function Transcript({
       });
     });
   };
+
+  // Fork (Hari, L-312): a chat never waits behind its spinner for long. If
+  // its rows are still being placed by then, it shows at its newest messages.
+  useEffect(() => {
+    if (!hasTurns || settled) return;
+    const timer = setTimeout(() => {
+      if (__DEV__)
+        console.log(`[mobile] transcript still placing after ${SHOW_WITHIN}ms; shown at its end`);
+      pendingScroll.current = null;
+      const scroll = list.current?.getNativeScrollRef() as
+        ScrollView | null | undefined;
+      scroll?.scrollToEnd({ animated: false });
+      setSettled(true);
+    }, SHOW_WITHIN);
+    return () => clearTimeout(timer);
+  }, [hasTurns, settled]);
 
   // Anchor once per user message, before layout callbacks run. The desktop
   // replaces a local pending message with a new ID; that is the same send,

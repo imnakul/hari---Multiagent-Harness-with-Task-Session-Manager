@@ -390,6 +390,13 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
           label: "Close to tray",
           keywords: "minimize background quit exit window taskbar windows",
         },
+        // Fork (Hari, L-314).
+        {
+          id: "launch-on-startup",
+          section: "general" as const,
+          label: "Launch on startup",
+          keywords: "startup login sign in boot autostart open automatically tray windows",
+        },
       ]
     : []),
   {

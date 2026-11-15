@@ -39,6 +39,9 @@ class HariLiveModule : Module() {
       HariLive.setWatching(context, on)
     }
 
+    /** Fork (L-313): Quit: stops the service and its notifications, closes the app. */
+    Function("quit") { HariLive.quit(context) }
+
     /** Fork (L-277): the event stream is open, so the service ticks rarely. */
     Function("setStreamLive") { on: Boolean ->
       HariLive.setStreamLive(on)

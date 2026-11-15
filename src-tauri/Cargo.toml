@@ -63,6 +63,8 @@ windows = { version = "0.62", features = ["UI_Notifications", "Media_Control", "
 webview2-com = "0.38"
 # Same windows-core webview2-com uses, for COM casts and strings in the Browser (L-207).
 windows-core = "0.61"
+# Fork (Hari, L-314): Launch on startup. Pinned: 2.6 and later need tauri 2.12.
+tauri-plugin-autostart = "=2.5.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }

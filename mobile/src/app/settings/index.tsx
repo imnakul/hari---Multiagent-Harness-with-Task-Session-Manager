@@ -22,11 +22,13 @@ import { useOpenSessionAfterStarting } from "@/features/settings/newSessions";
 import { useLivePreferences } from "@/features/settings/liveUpdates";
 import { useFeedPreferences } from "@/features/settings/notificationFeed";
 import {
+  canQuit,
   liveAvailable,
   livePromotable,
   openBatterySettings,
   openPromotedSettings,
   phoneFiles,
+  quitHari,
   useAllFilesAllowed,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
@@ -288,6 +290,24 @@ export default function SettingsScreen() {
           onPress={disconnect}
         />
       </View>
+
+      {/* Fork (Hari, L-313): Android keeps Hari running for its always-on
+          notification; this closes it until it's opened again. */}
+      {canQuit ? (
+        <>
+          <View style={[styles.card, styles.lastCard]}>
+            <SettingsRow
+              icon="power"
+              label="Quit Hari"
+              showChevron={false}
+              onPress={quitHari}
+            />
+          </View>
+          <Text style={styles.note}>
+            Closes Hari and its always-on notification. Opening Hari turns them back on.
+          </Text>
+        </>
+      ) : null}
 
       {connection.error ? (
         <Text style={styles.error}>{connection.error}</Text>

@@ -58,10 +58,13 @@ vi.mock("react-native-keyboard-controller", () => ({
   KeyboardGestureArea: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   useKeyboardHandler: (handler: typeof layout.keyboardHandler) => { layout.keyboardHandler = handler; },
 }));
+// Fork (L-309): the composer held where it is while a picker is open.
+vi.mock("@/features/sessions/liftHold", () => ({ liftHeld: { get: () => false } }));
 vi.mock("react-native-reanimated", () => ({
   default: { View: ({ children }: { children?: ReactNode }) => <div>{children}</div> },
   Easing: { out: () => {}, cubic: () => {} },
   interpolate: () => 0,
+  useAnimatedReaction: () => {},
   useAnimatedStyle: (read: () => object) => read(),
   useSharedValue: (initial: number) =>
     useState(() => {

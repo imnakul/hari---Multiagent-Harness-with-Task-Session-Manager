@@ -1,5 +1,14 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-15 16:27 IST — Hari chats no longer hang on the spinner; Quit Hari; Launch on startup (L-312..L-314)
+- Type: fix, feature
+- What: L-312: a long chat opened from a notification could stay on its spinner. The phone sent the hidden chat to its end once to have its newest rows drawn; when the computer's fresh copy replaced the one kept on the phone, or a running reply grew, the new end was never drawn and the chat waited for it. It now goes again whenever the chat changes before it shows, goes on once the end is drawn and the screen is full, and shows the chat at its end within 1.5 s regardless. L-313: Quit Hari in Settings and on the always-on notification (Android). L-314: Launch on startup for the desktop app, starting in the tray (Windows).
+- Why: User report and requests 2026-11-15.
+- Files: see L-312 to L-314 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: see the 0.16.0-local52 commit
+- Verified: phone typecheck ✅ lint ✅ Transcript tests ✅ (17; the 3 new ones fail without the fix) SessionScreen tests ✅ (mock fixed for L-309); Android `compileDebugKotlin` ✅; `cargo check` ✅ `cargo test startup::` ✅; desktop typecheck ✅ settings tests ✅. Phone and desktop checks manual.
+- Note: `tests/mobile/watchFrames.test.ts` fails to load from the phone's test run before and after this change.
+
 ## 2026-11-15 15:32 IST — Phone shares no longer freeze the computer; Share always in Hari's drawer (L-310, L-311)
 - Type: fix
 - What: L-310: the computer handled the phone's outbox while holding its phone-service lock, and a shared text or link then looked up the phone's name under that same lock, so the service waited on itself for good. The phone showed "Reconnecting to desktop" with the computer on, shares stayed in the outbox, and MonoCode's window froze (its status commands wait on that lock). The outbox now runs off the lock. Share history had no phone-to-computer text at all, so every such share since L-279 hit it. L-311: the drawer keeps Share once paired, with Wake computer added while offline; Back closes a picture opened from the chat box; Share's picture frame is thinner.

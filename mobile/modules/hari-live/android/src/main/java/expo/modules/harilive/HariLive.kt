@@ -1,5 +1,6 @@
 package expo.modules.harilive
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -67,8 +69,13 @@ internal object HariLive {
   private const val STREAM_TICK_MS = 120_000L
   private const val WATCH_ID = 7299
   private const val WATCH_URL = "monocode://notifications"
+  // Fork (Hari, L-313): the always-on notification's Quit, and how long Quit
+  // leaves writes on their way to storage (the share outbox) to finish.
+  const val QUIT = "quit"
+  private const val QUIT_MS = 600L
 
   private val main = Handler(Looper.getMainLooper())
+  private var quitting = false
 
   // Only touched on the main thread.
   var cards: List<LiveCard> = emptyList()
@@ -107,6 +114,7 @@ internal object HariLive {
   fun update(context: Context, next: List<LiveCard>) {
     val app = context.applicationContext
     main.post {
+      if (quitting) return@post
       // Runs outside React Native: anything thrown here would close the app,
       // and it would close again on every launch while a session runs. A card
       // Android or the phone maker rejects turns Live Updates off instead.
@@ -124,6 +132,7 @@ internal object HariLive {
   fun setWatching(context: Context, on: Boolean) {
     val app = context.applicationContext
     main.post {
+      if (quitting) return@post
       // Run even when unchanged: the app calls this as it opens, which
       // starts the service again if Android stopped it.
       watching = on
@@ -191,6 +200,31 @@ internal object HariLive {
       Log.w(TAG, "Could not clear Live Update cards", error)
     }
     posted = emptySet()
+  }
+
+  /**
+   * Fork (Hari, L-313): Quit, from Settings or the always-on notification.
+   * The notification, the session cards and the service go, then the app
+   * closes: its window leaves the recent apps and its process ends, taking
+   * the link to the computer with it. Opening Hari turns them back on.
+   */
+  fun quit(context: Context) {
+    val app = context.applicationContext
+    main.post {
+      // The app may still post cards or watch again before its process ends.
+      quitting = true
+      cards = emptyList()
+      watching = false
+      service?.finish()
+      app.getSystemService(NotificationManager::class.java)?.cancel(WATCH_ID)
+      clearAll(app)
+      try {
+        app.getSystemService(ActivityManager::class.java)?.appTasks?.forEach { it.finishAndRemoveTask() }
+      } catch (error: Exception) {
+        Log.w(TAG, "Could not close Hari's window", error)
+      }
+      main.postDelayed({ Process.killProcess(Process.myPid()) }, QUIT_MS)
+    }
   }
 
   fun dispatch(event: Map<String, Any?>) {
@@ -325,6 +359,14 @@ internal object HariLive {
       .setShowWhen(false)
       .setCategory(Notification.CATEGORY_SERVICE)
       .setContentIntent(openIntent(context, WATCH_URL, "watch"))
+      // Fork (L-313): closes Hari and this notification until it opens again.
+      .addAction(
+        Notification.Action.Builder(
+          Icon.createWithResource(context, R.drawable.hari_live_icon),
+          "Quit",
+          broadcast(context, QUIT, Intent().putExtra(EXTRA_KIND, QUIT)),
+        ).build(),
+      )
       .build()
   }
 

@@ -9,9 +9,11 @@ const scrollToEnd = vi.hoisted(() => vi.fn());
 const native = vi.hoisted(() => ({
   scrollTo: vi.fn(), dismissKeyboard: vi.fn(), top: 156, bottom: 106,
   focused: true, pushedIn: true,
-  // When set, the list draws only this many rows until sent to its end, as
-  // FlatList does with rows far below where it is.
+  // When set, the list draws only this many rows, and those up to where its
+  // end was when last sent there, as FlatList does with rows far below where
+  // it is. With `stuck`, being sent there draws nothing more.
   rows: null as number | null,
+  stuck: false,
 }));
 type ListProps = {
   data: Turn[];
@@ -52,15 +54,17 @@ vi.mock("react-native", async () => {
   };
   const FlatList = forwardRef((props: ListProps, ref) => {
     listProps = props;
-    const [reached, setReached] = useState(false);
+    const [reached, setReached] = useState(0);
     useImperativeHandle(ref, () => ({ getNativeScrollRef: () => ({
       scrollToEnd: (options: unknown) => {
         scrollToEnd(options);
-        if (native.rows !== null) setReached(true);
+        if (native.rows !== null && !native.stuck) setReached(props.data.length);
       },
       scrollTo: native.scrollTo,
     }) }));
-    const drawn = native.rows === null || reached ? props.data : props.data.slice(0, native.rows);
+    const drawn = native.rows === null
+      ? props.data
+      : props.data.slice(0, Math.max(native.rows, reached));
     useLayoutEffect(() => {
       props.onLayout({ nativeEvent: { layout: { height: 800 } } });
     }, [props.onLayout]);
@@ -180,6 +184,7 @@ describe("transcript anchoring", () => {
     native.focused = true;
     native.pushedIn = true;
     native.rows = null;
+    native.stuck = false;
     vi.stubGlobal("__DEV__", false);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       frames.set(++frameId, callback);
@@ -253,6 +258,45 @@ describe("transcript anchoring", () => {
     expect(container.textContent).toContain("turn-29");
     expect(scrollToEnd).toHaveBeenLastCalledWith({ animated: false });
     expect(container.querySelector("[data-loading]")).toBeNull();
+  });
+
+  it("is sent to its end again when newer rows land past where it went", () => {
+    // A chat opened from a notification shows the turns kept on the phone and
+    // goes to their end; then the desktop's newer ones land past it (L-312).
+    native.rows = 25;
+    const kept = Array.from({ length: 30 }, (_, index) => userTurn(`turn-${index}`, `Message ${index}`));
+    render(kept);
+    const newer = Array.from({ length: 5 }, (_, index) => userTurn(`turn-${30 + index}`, `Message ${30 + index}`));
+    render([...kept, ...newer]);
+    flushFrames();
+    expect(container.textContent).toContain("turn-34");
+  });
+
+  it("shows a chat still placing its rows at its end after a moment", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      native.rows = 25;
+      native.stuck = true;
+      const loading = () => container.querySelector("[data-loading]");
+      render(Array.from({ length: 30 }, (_, index) => userTurn(`turn-${index}`, `Message ${index}`)));
+      flushFrames();
+      act(() => vi.advanceTimersByTime(300));
+      expect(loading()).not.toBeNull();
+      scrollToEnd.mockClear();
+      act(() => vi.advanceTimersByTime(1300));
+      expect(loading()).toBeNull();
+      expect(scrollToEnd).toHaveBeenCalledExactlyOnceWith({ animated: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens a working chat whose first reply fills the screen at its end", () => {
+    const steps = Array.from({ length: 20 }, (_, index) => ({ type: "text" as const, id: `step-${index}`, text: "Working" }));
+    render([{ id: "only", items: [{ type: "user", id: "only", text: "Go" }, ...steps] }], true);
+    flushFrames();
+    expect(native.scrollTo).not.toHaveBeenCalled();
+    expect(scrollToEnd).toHaveBeenLastCalledWith({ animated: false });
   });
 
   it("shows a spinner while turns it already has are still being placed", () => {

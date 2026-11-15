@@ -93,6 +93,8 @@ mod tool_detail;
 #[cfg(target_os = "macos")]
 mod trackpad_zoom;
 #[cfg(target_os = "windows")]
+mod startup;
+#[cfg(target_os = "windows")]
 mod tray;
 mod webview_recovery;
 mod window;
@@ -397,8 +399,18 @@ pub fn run() {
             mobile_share::share_from_explorer(app, paths);
             return;
         }
+        // Fork (Hari, L-314): a sign-in launch with Hari already running.
+        if startup::at_sign_in(&argv) {
+            return;
+        }
         let _ = window::show_hidden_or_open_new(app);
     }));
+    // Fork (Hari, L-314): Launch on startup (the Settings switch).
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        Some(vec![startup::ARG]),
+    ));
     let app = builder
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -477,8 +489,14 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     window::prepare_windows_window(window.as_ref());
                     webview_recovery::install(&window);
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                    // Fork (Hari, L-314): started at sign-in, it stays in
+                    // the tray (the window opens hidden on Windows).
+                    if startup::at_sign_in(&std::env::args().collect::<Vec<_>>()) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
                 }
             }
             Ok(())
@@ -892,6 +910,10 @@ pub fn run() {
             zen_window::zen_window_widen,
             zen_window::zen_window_narrow,
             webview_recovery::take_webview_recovery,
+            #[cfg(target_os = "windows")]
+            startup::startup_launch_get,
+            #[cfg(target_os = "windows")]
+            startup::startup_launch_set,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             quick_composer::quick_composer_set_enabled,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -979,9 +1001,16 @@ pub fn run() {
                 #[cfg(debug_assertions)]
                 macos::prefer_bundle_dock_icon();
             }
-            window::ensure_launch_window_visible(handle);
+            // Fork (Hari, L-314): started at sign-in, it stays in the tray.
             #[cfg(target_os = "windows")]
-            if launch_share_args().is_none() {
+            let at_sign_in = startup::at_sign_in(&std::env::args().collect::<Vec<_>>());
+            #[cfg(not(target_os = "windows"))]
+            let at_sign_in = false;
+            if !at_sign_in {
+                window::ensure_launch_window_visible(handle);
+            }
+            #[cfg(target_os = "windows")]
+            if launch_share_args().is_none() && !at_sign_in {
                 if let Some(window) = handle.get_window("main") {
                     let _ = window.unminimize();
                     let _ = window.show();

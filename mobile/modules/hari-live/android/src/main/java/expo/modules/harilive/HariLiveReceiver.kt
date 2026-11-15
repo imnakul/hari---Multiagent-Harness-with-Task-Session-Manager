@@ -7,11 +7,13 @@ import android.content.Intent
 /**
  * Fork (Hari, L-239): a Live Update's Stop, Approve or Deny, or the user
  * swiping the card away, passed to the app, which asks the computer.
+ * Fork (L-313): the always-on notification's Quit closes Hari here.
  */
 class HariLiveReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     if (intent.action != HariLive.ACTION) return
     val kind = intent.getStringExtra(HariLive.EXTRA_KIND) ?: return
+    if (kind == HariLive.QUIT) return HariLive.quit(context)
     val event = mutableMapOf<String, Any?>("action" to kind)
     intent.getStringExtra(HariLive.EXTRA_SESSION)?.let { event["sessionId"] = it }
     intent.getStringArrayExtra(HariLive.EXTRA_SESSIONS)?.let { event["sessionIds"] = it.toList() }
