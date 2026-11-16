@@ -6,23 +6,22 @@ const KEY = "monocode.fileViewMode";
 // window still open in that view when localStorage is unavailable.
 let unsaved: MarkdownViewMode | null = null;
 
-/** Reads a stored view; anything unknown means "no choice yet". */
+/**
+ * Reads a stored view; anything unknown means "no choice yet". "live" was
+ * saved before Live mode was removed (L-324) and now opens Preview.
+ */
 export function parseFileViewMode(stored: string | null): MarkdownViewMode | null {
-  return stored === "live" || stored === "preview" || stored === "source"
-    ? stored
-    : null;
+  if (stored === "live") return "preview";
+  return stored === "preview" || stored === "source" ? stored : null;
 }
 
-/**
- * The view a previewable file opens in until that file gets its own choice:
- * the last one picked, else Live (files without Live, like SVG, show Preview).
- */
+/** The view a previewable file opens in: the last one picked, else Preview. */
 export function loadFileViewMode(): MarkdownViewMode {
   if (unsaved) return unsaved;
   try {
-    return parseFileViewMode(localStorage.getItem(KEY)) ?? "live";
+    return parseFileViewMode(localStorage.getItem(KEY)) ?? "preview";
   } catch {
-    return "live";
+    return "preview";
   }
 }
 

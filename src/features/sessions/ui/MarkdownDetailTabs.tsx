@@ -1,14 +1,14 @@
 import type { ReactElement, ReactNode } from "react";
 import { MarkdownCopyButton } from "./MarkdownCopyButton";
 import {
-  markdownModeTabs,
+  MARKDOWN_MODE_TABS,
   markdownModeTabTitle,
   type MarkdownViewMode,
 } from "./MarkdownModeToggle";
 import { MARKDOWN_EDIT_ARIA_SHORTCUT } from "./useMarkdownEditGestures";
 
 /**
- * Underline Live/Preview/Source tab strip with a copy button, shared by
+ * Underline Preview/Source tab strip with a copy button, shared by
  * Notes, Tasks and Session metadata (bodies drawn by `MarkdownEditorPanel`).
  */
 export function MarkdownDetailTabs({
@@ -17,7 +17,7 @@ export function MarkdownDetailTabs({
   markdown,
   label,
   actions,
-  liveAvailable = true,
+  editable = true,
 }: {
   mode: MarkdownViewMode;
   onChange: (mode: MarkdownViewMode) => void;
@@ -25,8 +25,8 @@ export function MarkdownDetailTabs({
   label: string;
   /** Extra toolbar buttons shown before Copy. */
   actions?: ReactNode;
-  /** Offer the Live tab; true wherever the body is editable. */
-  liveAvailable?: boolean;
+  /** The body can be edited: tabs name the Preview/Source shortcut. */
+  editable?: boolean;
 }): ReactElement {
   return (
     <div className="flex items-center justify-between border-b border-stroke">
@@ -35,12 +35,12 @@ export function MarkdownDetailTabs({
         aria-label={label}
         className="flex h-9 items-stretch gap-4"
       >
-        {markdownModeTabs(liveAvailable).map((tab) => (
+        {MARKDOWN_MODE_TABS.map((tab) => (
           <DetailTab
             key={tab.mode}
             label={tab.label}
-            title={markdownModeTabTitle(tab.label, liveAvailable)}
-            shortcut={liveAvailable}
+            title={markdownModeTabTitle(tab.label, editable)}
+            shortcut={editable}
             selected={mode === tab.mode}
             onSelect={() => onChange(tab.mode)}
           />

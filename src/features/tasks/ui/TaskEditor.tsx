@@ -89,8 +89,8 @@ export function TaskEditor({
   const editorRef = useRef<MarkdownCaretTarget | null>(null);
   const lock = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
-  // Live is the default view: read and edit in one place.
-  const [mode, setMode] = useMarkdownMode(`task:${task.id}`, "live");
+  // Opens in Preview; a blank one opens in Source, ready to type.
+  const [mode, setMode] = useMarkdownMode(`task:${task.id}`, "preview");
   const title = edits.title ?? task.title;
   const body = edits.body ?? task.body;
   const tags = edits.tags ?? task.tags;
@@ -275,7 +275,7 @@ export function TaskEditor({
   }, [autoFocusTitle, task.id]);
   useEffect(() => {
     alive.current = true;
-    if (!task.body.trim() && task.title === "Untitled") setMode("live");
+    if (!task.body.trim() && task.title === "Untitled") setMode("source");
     return () => {
       alive.current = false;
       clearTimeout(timer.current);

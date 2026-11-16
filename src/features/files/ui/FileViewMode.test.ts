@@ -103,7 +103,7 @@ describe("previewable file view mode", () => {
       },
       { timeout: 5000 },
     );
-    const tab = (label: "Live" | "Preview" | "Source") =>
+    const tab = (label: "Preview" | "Source") =>
       [
         ...container.querySelectorAll<HTMLButtonElement>(
           '[aria-label="Markdown view"] [role="tab"]',
@@ -114,7 +114,7 @@ describe("previewable file view mode", () => {
         container.querySelector(
           '[aria-label="Markdown view"] [role="tab"][aria-selected="true"]',
         )?.textContent,
-      choose: (label: "Live" | "Preview" | "Source") =>
+      choose: (label: "Preview" | "Source") =>
         act(async () => tab(label).click()),
       rerender: () =>
         act(async () => root.render(paneElement(pane, path, options))),
@@ -123,8 +123,7 @@ describe("previewable file view mode", () => {
 
   it("opens a new Markdown file in the view chosen last", async () => {
     const first = await open("/repo/first.md");
-    // Live is the default until a view is chosen.
-    expect(first.selected()).toBe("Live");
+    expect(first.selected()).toBe("Preview");
     await first.choose("Source");
 
     const next = await open("/repo/next.md");
@@ -149,7 +148,7 @@ describe("previewable file view mode", () => {
     await open1.choose("Source");
 
     await open2.rerender();
-    expect(open2.selected()).toBe("Live");
+    expect(open2.selected()).toBe("Preview");
   });
 
   it("opens in the view saved by an earlier run", async () => {
@@ -172,15 +171,12 @@ describe("previewable file view mode", () => {
     const next = await open("/repo/unsaved-next.md");
     expect(next.selected()).toBe("Source");
     // The in-memory choice lasts for the module; leave it at the default.
-    await next.choose("Live");
+    await next.choose("Preview");
   });
 
-  it("does not change the file default when navigation opens the editor", async () => {
-    const reading = await open("/repo/reading.md");
-    await reading.choose("Preview");
-    // Navigation needs the editor: from Preview it switches to Live.
+  it("does not change the file default when navigation opens the source", async () => {
     const linked = await open("/repo/linked.md", { line: 1 });
-    await vi.waitFor(() => expect(linked.selected()).toBe("Live"));
+    await vi.waitFor(() => expect(linked.selected()).toBe("Source"));
 
     const next = await open("/repo/unlinked.md");
     expect(next.selected()).toBe("Preview");

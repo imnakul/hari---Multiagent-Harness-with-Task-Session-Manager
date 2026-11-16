@@ -1,24 +1,22 @@
 import {
   useCallback,
-  useEffect,
   type ReactElement,
   type ReactNode,
   type RefObject,
 } from "react";
 import { textareaCaretTarget, type MarkdownCaretTarget } from "./markdownCaret";
-import { MarkdownLiveEditor, preloadMarkdownLiveEditor } from "./MarkdownLiveEditor";
 import type { MarkdownViewMode } from "./MarkdownModeToggle";
 import { MarkdownSourceEditor } from "./MarkdownSourceEditor";
 import { useMarkdownEditGestures } from "./useMarkdownEditGestures";
 
 /**
- * Body of an editable Markdown field in its current view: Live (formatted
- * editing), Preview (rendered, double-click to edit there) or Source (raw
- * text). Pair it with `MarkdownDetailTabs`. Every editable Markdown body uses
- * this, so Live, the double-click and Ctrl+E behave the same everywhere.
+ * Body of an editable Markdown field in its current view: Preview (rendered,
+ * double-click to edit there) or Source (raw text). Pair it with
+ * `MarkdownDetailTabs`. Every editable Markdown body uses this, so the
+ * double-click and Ctrl+E behave the same everywhere.
  *
- * `caretRef` always points at the editor on screen (Live or Source), for
- * image insertion and the "edit here" gestures.
+ * `caretRef` points at the Source editor while it shows, for image insertion
+ * and the "edit here" gestures.
  */
 export function MarkdownEditorPanel({
   mode,
@@ -53,7 +51,7 @@ export function MarkdownEditorPanel({
   lineNumbers?: boolean;
   /** Height floor for every view, so the area does not jump on switching. */
   minHeightClass?: string;
-  /** Inset for Live and Preview (Source pads itself). */
+  /** Inset for Preview (Source pads itself). */
   paddingClass?: string;
   /** Right inset of Source text without line numbers. */
   sourceEndPadClass?: string;
@@ -63,9 +61,8 @@ export function MarkdownEditorPanel({
     onModeChange,
     markdown: value,
     caretRef,
-    liveAvailable: true,
+    editable: true,
   });
-  useEffect(preloadMarkdownLiveEditor, []);
   const sourceField = useCallback(
     (field: HTMLTextAreaElement | null) => {
       if (field) caretRef.current = textareaCaretTarget(field);
@@ -76,17 +73,7 @@ export function MarkdownEditorPanel({
 
   return (
     <div className="min-w-0" onKeyDown={gestures.onKeyDown}>
-      {mode === "live" ? (
-        <MarkdownLiveEditor
-          value={value}
-          onChange={onChange}
-          caretRef={caretRef}
-          label={label}
-          placeholder={placeholder}
-          autoFocus={autoFocus}
-          className={`${minHeightClass} ${paddingClass}`}
-        />
-      ) : mode === "source" ? (
+      {mode === "source" ? (
         <MarkdownSourceEditor
           label={label}
           value={value}

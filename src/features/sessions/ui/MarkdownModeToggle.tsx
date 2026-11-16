@@ -8,7 +8,6 @@ import {
   type RefObject,
 } from "react";
 import type { MarkdownCaretTarget } from "./markdownCaret";
-import { preloadMarkdownLiveEditor } from "./MarkdownLiveEditor";
 import {
   MARKDOWN_EDIT_ARIA_SHORTCUT,
   MARKDOWN_EDIT_SHORTCUT_LABEL,
@@ -16,29 +15,21 @@ import {
 } from "./useMarkdownEditGestures";
 
 /**
- * How a Markdown body is shown: `live` edits it formatted (Obsidian-style),
- * `preview` renders it read-only, `source` edits the raw text.
+ * How a Markdown body is shown: `preview` renders it read-only, `source`
+ * edits the raw text. (Fork L-324 removed the formatted Live mode.)
  */
-export type MarkdownViewMode = "live" | "preview" | "source";
+export type MarkdownViewMode = "preview" | "source";
 
 /** Tab order everywhere Markdown can be shown. */
-const MODE_TABS: readonly { mode: MarkdownViewMode; label: string }[] = [
-  { mode: "live", label: "Live" },
+export const MARKDOWN_MODE_TABS: readonly { mode: MarkdownViewMode; label: string }[] = [
   { mode: "preview", label: "Preview" },
   { mode: "source", label: "Source" },
 ];
 
-/** The tabs a view offers: Live only where the Markdown can be edited. */
-export function markdownModeTabs(
-  liveAvailable: boolean,
-): readonly { mode: MarkdownViewMode; label: string }[] {
-  return liveAvailable ? MODE_TABS : MODE_TABS.filter((tab) => tab.mode !== "live");
-}
-
 /** Tooltip for a mode tab, naming the shortcut where it applies. */
-export function markdownModeTabTitle(label: string, liveAvailable: boolean): string {
-  return liveAvailable
-    ? `${label} (${MARKDOWN_EDIT_SHORTCUT_LABEL} switches Live and Preview)`
+export function markdownModeTabTitle(label: string, editable: boolean): string {
+  return editable
+    ? `${label} (${MARKDOWN_EDIT_SHORTCUT_LABEL} switches Preview and Source)`
     : label;
 }
 
@@ -73,15 +64,15 @@ type ToggleProps = {
   markdown?: string;
   mode: MarkdownViewMode;
   onChange: (mode: MarkdownViewMode) => void;
-  /** Offer the Live tab (editable Markdown only). */
-  liveAvailable?: boolean;
+  /** Editable Markdown: tabs name the Preview/Source shortcut. */
+  editable?: boolean;
 };
 
 export function MarkdownModeToggle({
   mode,
   onChange,
   markdown,
-  liveAvailable = false,
+  editable = false,
 }: ToggleProps): ReactElement {
   return (
     <div className="flex items-center gap-1.5">
@@ -90,12 +81,12 @@ export function MarkdownModeToggle({
         aria-label="Markdown view"
         className="flex rounded-md border border-content/10 bg-content/10 p-0.5 backdrop-blur-md"
       >
-        {markdownModeTabs(liveAvailable).map((tab) => (
+        {MARKDOWN_MODE_TABS.map((tab) => (
           <ModeTab
             key={tab.mode}
             label={tab.label}
-            title={markdownModeTabTitle(tab.label, liveAvailable)}
-            shortcut={liveAvailable}
+            title={markdownModeTabTitle(tab.label, editable)}
+            shortcut={editable}
             selected={mode === tab.mode}
             onSelect={() => onChange(tab.mode)}
           />
@@ -144,12 +135,9 @@ type ShellProps = {
   onModeChange: (mode: MarkdownViewMode) => void;
   preview: ReactNode;
   source: ReactNode;
-  /**
-   * Live view. `"source"` means the `source` element turns itself into Live
-   * (the file editor reuses one CodeMirror for both); omit for read-only views.
-   */
-  live?: ReactNode | "source";
-  /** The editor shown in Live, for "edit here" gestures. */
+  /** The Markdown can be edited: Ctrl+E and double-click open Source. */
+  editable?: boolean;
+  /** The editor shown in Source, for "edit here" gestures. */
   caretRef?: RefObject<MarkdownCaretTarget | null>;
   actions?: ReactNode;
 };
@@ -158,38 +146,28 @@ const layerClass = (shown: boolean): string =>
   shown ? "absolute inset-0" : "pointer-events-none invisible absolute inset-0";
 
 /**
- * Overlay Preview/Live/Source switcher used by file tabs and plan panes. All
- * views stay mounted so switching keeps scroll and undo history; with a Live
- * view, double-clicking the preview and Ctrl+E switch into it.
+ * Overlay Preview/Source switcher used by file tabs and plan panes. Both
+ * views stay mounted so switching keeps scroll and undo history; when
+ * `editable`, double-clicking the preview and Ctrl+E switch into Source.
  */
 export function MarkdownViewShell({
   mode,
   onModeChange,
   preview,
   source,
-  live,
+  editable = false,
   caretRef,
   actions,
   markdown,
 }: ShellProps): ReactElement {
-  const liveAvailable = live !== undefined;
-  const liveInSource = live === "source";
   const fallbackCaret = useRef<MarkdownCaretTarget | null>(null);
   const gestures = useMarkdownEditGestures({
     mode,
     onModeChange,
     markdown: markdown ?? "",
     caretRef: caretRef ?? fallbackCaret,
-    liveAvailable,
+    editable,
   });
-  // Warm the lazy Live editor; the file editor's Live is its own CodeMirror.
-  const preloadLive = liveAvailable && !liveInSource;
-  useEffect(() => {
-    if (preloadLive) preloadMarkdownLiveEditor();
-  }, [preloadLive]);
-  // A view without Live (SVG, read-only) shows Preview for a remembered "live".
-  const shown: MarkdownViewMode =
-    mode === "live" && !liveAvailable ? "preview" : mode;
 
   return (
     <div
@@ -200,36 +178,26 @@ export function MarkdownViewShell({
         <div className="pointer-events-auto flex items-center gap-1.5">
           {actions}
           <MarkdownModeToggle
-            mode={shown}
+            mode={mode}
             onChange={onModeChange}
             markdown={markdown}
-            liveAvailable={liveAvailable}
+            editable={editable}
           />
         </div>
       </div>
       <div
         {...gestures.previewProps}
-        data-markdown-view-active={shown === "preview" ? "" : undefined}
-        className={`${layerClass(shown === "preview")} outline-none`}
+        data-markdown-view-active={mode === "preview" ? "" : undefined}
+        className={`${layerClass(mode === "preview")} outline-none`}
       >
         {preview}
       </div>
       <div
-        data-markdown-view-active={
-          shown === "source" || (liveInSource && shown === "live") ? "" : undefined
-        }
-        className={layerClass(shown === "source" || (liveInSource && shown === "live"))}
+        data-markdown-view-active={mode === "source" ? "" : undefined}
+        className={layerClass(mode === "source")}
       >
         {source}
       </div>
-      {liveAvailable && !liveInSource ? (
-        <div
-          data-markdown-view-active={shown === "live" ? "" : undefined}
-          className={layerClass(shown === "live")}
-        >
-          {live}
-        </div>
-      ) : null}
     </div>
   );
 }

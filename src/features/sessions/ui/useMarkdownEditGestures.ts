@@ -19,7 +19,7 @@ export const MARKDOWN_EDIT_SHORTCUT_LABEL = IS_MAC ? "⌘E" : "Ctrl+E";
 /** `aria-keyshortcuts` value for the same shortcut. */
 export const MARKDOWN_EDIT_ARIA_SHORTCUT = IS_MAC ? "Meta+E" : "Control+E";
 
-/** How long a requested caret waits for the lazily loaded Live editor. */
+/** How long a requested caret waits for the Source editor to mount. */
 const CARET_WAIT_MS = 5_000;
 
 /** Blocks a preview double-click maps to a source line. */
@@ -89,17 +89,16 @@ function previewClickTarget(
 }
 
 /**
- * Shortcuts shared by every Markdown view that can be edited in Live mode
- * (used inside `MarkdownViewShell` and `MarkdownEditorPanel`, so every surface
- * gets them):
- * - Ctrl+E (Cmd+E on macOS) toggles Preview and Live; from Source it goes to
- *   Preview too, and back lands in Live;
- * - double-clicking text in Preview opens Live with the caret on the clicked
- *   line and word.
+ * Shortcuts shared by every editable Markdown view (used inside
+ * `MarkdownViewShell` and `MarkdownEditorPanel`, so every surface gets them):
+ * - Ctrl+E (Cmd+E on macOS) toggles Preview and Source, returning to the
+ *   caret Source had;
+ * - double-clicking text in Preview opens Source with the caret on the
+ *   clicked line and word.
  *
  * Spread `onKeyDown` on the element that holds the views and `previewProps`
  * on the element that wraps the preview (it becomes focusable, so the
- * shortcut also works while reading). With `liveAvailable` false (read-only
+ * shortcut also works while reading). With `editable` false (read-only
  * views) both do nothing.
  */
 export function useMarkdownEditGestures({
@@ -107,13 +106,13 @@ export function useMarkdownEditGestures({
   onModeChange,
   markdown,
   caretRef,
-  liveAvailable,
+  editable,
 }: {
   mode: MarkdownViewMode;
   onModeChange: (mode: MarkdownViewMode) => void;
   markdown: string;
   caretRef: RefObject<MarkdownCaretTarget | null>;
-  liveAvailable: boolean;
+  editable: boolean;
 }): {
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   previewProps: {
@@ -123,7 +122,7 @@ export function useMarkdownEditGestures({
   };
 } {
   const previewRef = useRef<HTMLDivElement | null>(null);
-  // Where the caret goes once Live shows; null leaves focus alone.
+  // Where the caret goes once Source shows; null leaves focus alone.
   const pendingCaret = useRef<number | null>(null);
   // Caret the editor had when Ctrl+E left it, so Ctrl+E back returns there.
   const lastCaret = useRef<number | null>(null);
@@ -132,7 +131,7 @@ export function useMarkdownEditGestures({
   markdownRef.current = markdown;
 
   useLayoutEffect(() => {
-    if (mode === "live") {
+    if (mode === "source") {
       const caret = pendingCaret.current;
       pendingCaret.current = null;
       if (caret === null) return;
@@ -140,8 +139,8 @@ export function useMarkdownEditGestures({
         caretRef.current.focusAt(caret);
         return;
       }
-      // The Live editor loads lazily the first time: place the caret once it
-      // registers, giving up after a few seconds (a failed load).
+      // The Source editor may mount after this effect: place the caret once
+      // it registers, giving up after a few seconds.
       const deadline = performance.now() + CARET_WAIT_MS;
       let frame = 0;
       const retry = (): void => {
@@ -160,26 +159,26 @@ export function useMarkdownEditGestures({
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
-      if (!liveAvailable || event.defaultPrevented) return;
+      if (!editable || event.defaultPrevented) return;
       if (!isEditToggleShortcut(event)) return;
       event.preventDefault();
       event.stopPropagation();
       if (mode === "preview") {
         pendingCaret.current = lastCaret.current ?? 0;
-        onModeChange("live");
+        onModeChange("source");
       } else {
         lastCaret.current = caretRef.current?.selection().start ?? null;
         focusPreview.current = true;
         onModeChange("preview");
       }
     },
-    [caretRef, liveAvailable, mode, onModeChange],
+    [caretRef, editable, mode, onModeChange],
   );
 
   const onDoubleClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       const root = previewRef.current;
-      if (!liveAvailable || !root || event.button !== 0) return;
+      if (!editable || !root || event.button !== 0) return;
       const target = previewClickTarget(root, event.target);
       if (!target) return;
       event.preventDefault();
@@ -187,9 +186,9 @@ export function useMarkdownEditGestures({
         sourceOffsetForPreviewClick(markdownRef.current, target) ??
         markdownRef.current.length;
       window.getSelection()?.removeAllRanges();
-      onModeChange("live");
+      onModeChange("source");
     },
-    [liveAvailable, onModeChange],
+    [editable, onModeChange],
   );
 
   return {

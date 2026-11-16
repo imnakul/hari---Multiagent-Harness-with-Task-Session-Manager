@@ -677,8 +677,8 @@ function NoteEditor({
   const lockOverscroll = useLockOverscroll<HTMLDivElement>();
   const marks = useProjectMarks();
   const blank = !note.body.trim() && note.title === "Untitled";
-  // Live is the default view: read and edit in one place.
-  const [mode, setMode] = useMarkdownMode(note.id, "live");
+  // Opens in Preview; a blank one opens in Source, ready to type.
+  const [mode, setMode] = useMarkdownMode(note.id, "preview");
   type Edits = Partial<Pick<Note, "title" | "body" | "tags">>;
   const [edits, setEdits] = useState<Edits>({});
   const title = edits.title ?? note.title;
@@ -708,7 +708,7 @@ function NoteEditor({
   const time = formatRelativeTime(new Date(note.updatedAt).toISOString());
 
   useEffect(() => {
-    if (blank) setMode("live");
+    if (blank) setMode("source");
     // New untitled notes open ready to type, not behind the preview.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

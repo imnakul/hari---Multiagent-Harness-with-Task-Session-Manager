@@ -1,12 +1,14 @@
 import { lazySurface } from "../../../shared/ui/lazySurface";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { memo, useRef, useSyncExternalStore } from "react";
+import { memo, useCallback, useRef, useSyncExternalStore } from "react";
 import {
   MarkdownViewShell,
   useMarkdownMode,
 } from "../../sessions/ui/MarkdownModeToggle";
-import type { MarkdownCaretTarget } from "../../sessions/ui/markdownCaret";
-import { MarkdownLiveEditor } from "../../sessions/ui/MarkdownLiveEditor";
+import {
+  textareaCaretTarget,
+  type MarkdownCaretTarget,
+} from "../../sessions/ui/markdownCaret";
 import { SurfaceTabs } from "../../workspace/ui/SurfaceTabs";
 import {
   isAgentTab,
@@ -316,8 +318,11 @@ function PlanSurface({
   ) => void;
 }) {
   const plan = file.plan;
-  const [mode, setMode] = useMarkdownMode(file.path, "live");
-  const liveCaretRef = useRef<MarkdownCaretTarget | null>(null);
+  const [mode, setMode] = useMarkdownMode(file.path, "preview");
+  const sourceCaretRef = useRef<MarkdownCaretTarget | null>(null);
+  const sourceField = useCallback((field: HTMLTextAreaElement | null) => {
+    sourceCaretRef.current = field ? textareaCaretTarget(field) : null;
+  }, []);
   const session = plan
     ? sessions.find((entry) => entry.id === plan.sessionId)
     : undefined;
@@ -394,21 +399,11 @@ function PlanSurface({
             ) : null}
           </div>
         }
-        live={
-          <div className="h-full overflow-auto px-5 pb-5 pt-14">
-            <MarkdownLiveEditor
-              value={block.text}
-              onChange={(next) => onUpdatePlan(plan.sessionId, block.id, next)}
-              caretRef={liveCaretRef}
-              label="Plan markdown"
-              readOnly={editLocked}
-              className={editLocked ? "opacity-70" : ""}
-            />
-          </div>
-        }
-        caretRef={liveCaretRef}
+        editable={!editLocked}
+        caretRef={sourceCaretRef}
         source={
           <textarea
+            ref={sourceField}
             aria-label="Plan markdown"
             spellCheck={false}
             value={block.text}

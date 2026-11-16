@@ -1,11 +1,19 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-16 23:08 IST — Markdown Live mode removed (L-324)
+- Type: refactor
+- What: Markdown everywhere in the desktop app (Notes, Tasks, Session summaries, .md files, plans) now has two views, Preview and Source. It opens in Preview; Ctrl+E switches between them, and double-clicking text in Preview opens Source at that line. A blank new note or task opens in Source. The Live editor is gone.
+- Why: User decision 2026-11-16 (1A): remove Live mode completely.
+- Files: see L-324 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md); spec [remove-markdown-live.md](../specs/remove-markdown-live.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (21 files, 186 tests; the 70 unhandled `listen` errors from `NotesView.test.ts` were there before). Desktop check manual.
+
 ## 2026-11-16 23:02 IST — Share opens smoothly on both sides (L-323)
 - Type: fix
 - What: Hari no longer asks the computer for the whole Share history on every reconnect, only on the first connect after pairing or when the phone has none. The Share chat no longer jumps to the bottom a second time or overlaps text as link cards and pictures load. On the computer, the Share panel slides in and out more slowly and softly.
 - Why: User report 2026-11-16: phone Share "bottom shows up once in a chat, and then again it shows after a delay, sometimes overlapping text"; "if it's already connected don't do it"; desktop slide "very fast".
 - Files: see L-323 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: uncommitted
+- Commit: 007987af
 - Verified: root typecheck ✅; phone typecheck ✅ lint ✅ `shareModel` tests ✅ (27). Needs a check on the phone and the computer.
 
 ## 2026-11-15 22:31 IST — Hari update check no longer says Up to date when it cannot read a release (L-322)

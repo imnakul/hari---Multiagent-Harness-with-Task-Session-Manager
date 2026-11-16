@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import { EditorView } from "@codemirror/view";
 import { act, createElement, useRef, useState, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -38,14 +37,10 @@ function Harness(): ReactElement {
   });
 }
 
-async function liveView(): Promise<EditorView> {
-  await vi.waitFor(async () => {
-    await act(async () => {
-      await vi.dynamicImportSettled();
-    });
-    expect(container.querySelector(".cm-editor")).not.toBeNull();
-  });
-  return EditorView.findFromDOM(container.querySelector<HTMLElement>(".cm-editor")!)!;
+function sourceField(): HTMLTextAreaElement {
+  const field = container.querySelector("textarea");
+  if (!field) throw new Error("Source editor is not showing");
+  return field;
 }
 
 beforeEach(() => {
@@ -62,17 +57,17 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("opens Live at the double-clicked paragraph", async () => {
+it("opens Source at the double-clicked paragraph", async () => {
   await act(async () => root.render(createElement(Harness)));
   const paragraph = container.querySelector("p")!;
   await act(async () => {
     paragraph.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, button: 0 }));
   });
-  expect(modes.at(-1)).toBe("live");
-  const view = await liveView();
-  expect(view.state.doc.toString()).toBe(BODY);
+  expect(modes.at(-1)).toBe("source");
+  const field = sourceField();
+  expect(field.value).toBe(BODY);
   // "Hello world" starts line 3, at offset 9.
-  await vi.waitFor(() => expect(view.state.selection.main.head).toBe(9));
+  await vi.waitFor(() => expect(field.selectionStart).toBe(9));
 });
 
 it("ignores double-clicks on links in the preview", async () => {
@@ -86,7 +81,7 @@ it("ignores double-clicks on links in the preview", async () => {
   expect(modes.at(-1)).toBe("preview");
 });
 
-it("toggles Live and Preview with Ctrl+E", async () => {
+it("toggles Preview and Source with Ctrl+E", async () => {
   await act(async () => root.render(createElement(Harness)));
   const press = async (target: Element): Promise<void> => {
     await act(async () => {
@@ -101,8 +96,7 @@ it("toggles Live and Preview with Ctrl+E", async () => {
     });
   };
   await press(container.querySelector("p")!);
-  expect(modes.at(-1)).toBe("live");
-  const view = await liveView();
-  await press(view.contentDOM);
+  expect(modes.at(-1)).toBe("source");
+  await press(sourceField());
   expect(modes.at(-1)).toBe("preview");
 });

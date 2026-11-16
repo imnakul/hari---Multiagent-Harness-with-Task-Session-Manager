@@ -373,7 +373,8 @@ function SummaryTab({
   onStatus: (message: string | null) => void;
 }): ReactNode {
   const [draft, setDraft] = useState(notes);
-  const [mode, setMode] = useState<MarkdownViewMode>("live");
+  // Opened to edit, so it starts in Source with the caret in the field.
+  const [mode, setMode] = useState<MarkdownViewMode>("source");
   const [saving, setSaving] = useState(false);
   const caret = useRef<MarkdownCaretTarget | null>(null);
 
