@@ -233,8 +233,9 @@ internal object HariLive {
     main.post {
       val send = emit
       if (send != null) deliver(send, event)
-      // A tick is only worth anything to an app that's listening.
-      else if (event["action"] != "tick") pending.add(event)
+      // A tick is only worth anything to an app that's listening. Fork (L-325):
+      // so is a notification change: the app reads the whole list when it starts.
+      else if (event["action"] != "tick" && event["action"] != "notifications") pending.add(event)
     }
   }
 

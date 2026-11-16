@@ -28,11 +28,13 @@ import {
   openBatterySettings,
   openPromotedSettings,
   phoneFiles,
+  phoneNotices,
   quitHari,
   shareBubble,
   useAllFilesAllowed,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
+import { usePhoneNoticePreferences } from "@/features/phoneNotifications/preferences";
 import { useHaptics } from "@/features/settings/haptics";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
@@ -420,6 +422,7 @@ function ShareBubbleSettings() {
   const colors = useColors();
   const styles = useStyles();
   const [{ enabled, permitted }, turn] = useShareBubble(colors.accent);
+  const [phoneNoticePreferences] = usePhoneNoticePreferences();
   return (
     <>
       <Text style={styles.heading}>Share</Text>
@@ -436,6 +439,18 @@ function ShareBubbleSettings() {
             />
           }
         />
+        {/* Fork (Hari, L-325): this phone's notifications in the computer's Share. */}
+        {phoneNotices ? (
+          <>
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="notifications"
+              label="Notifications on computer"
+              value={phoneNoticePreferences.enabled ? "On" : "Off"}
+              onPress={() => router.push("/settings/phone-notifications")}
+            />
+          </>
+        ) : null}
       </View>
       {enabled && !permitted ? (
         <Text style={styles.note} onPress={() => void shareBubble?.openSettings()}>

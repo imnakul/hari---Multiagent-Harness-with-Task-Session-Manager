@@ -53,6 +53,8 @@ mod mobile_notifications;
 mod mobile_pc;
 mod mobile_pc_extra;
 mod mobile_share;
+// Fork (Hari, L-325): the phone's notifications in Share.
+mod mobile_phone_notifications;
 mod mono;
 // Fork (Hari, L-307): extra dimming of the screens from the phone.
 #[cfg(target_os = "macos")]
@@ -550,6 +552,9 @@ pub fn run() {
             mobile_share::mobile_share_clear,
             mobile_share::mobile_share_storage,
             mobile_share::mobile_phone_files_list,
+            mobile_phone_notifications::mobile_phone_notifications_list,
+            mobile_phone_notifications::mobile_phone_notification_dismiss,
+            mobile_phone_notifications::mobile_phone_notifications_clear,
             mobile_share::mobile_phone_files_send,
             mobile_pc::mobile_pc_phone_stats,
             mobile_pc::mobile_pc_ring,

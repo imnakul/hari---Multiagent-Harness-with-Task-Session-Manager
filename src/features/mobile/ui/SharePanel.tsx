@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } from "react";
-import { CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../shared/ui/icons";
+import { Bell, CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../shared/ui/icons";
 import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
@@ -25,6 +25,7 @@ import {
   type ShareFilter,
 } from "../model/shareView";
 import { PhoneFilesView } from "./PhoneFilesView";
+import { PhoneNotificationsView } from "./PhoneNotificationsView";
 import { PhoneStatus, SHARE_SMALL_BUTTON, shareErrorMessage } from "./PhoneStatus";
 import { ShareBubble } from "./ShareBubble";
 import { ShareComposer } from "./ShareComposer";
@@ -163,7 +164,9 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
   const [dragging, setDragging] = useState(false);
   const [staged, setStaged] = useState<string[]>([]);
   const [storageOpen, setStorageOpen] = useState(false);
-  const [phoneFiles, setPhoneFiles] = useState(false);
+  // Fork (Hari, L-325): Share itself, the phone's files, or its notifications.
+  const [view, setView] = useState<"share" | "files" | "notifications">("share");
+  const awayFromShare = view !== "share";
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -258,7 +261,7 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
   useEffect(() => {
     const scroller = scrollRef.current;
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  }, [newestShown, filter, phoneFiles]);
+  }, [newestShown, filter, awayFromShare]);
 
   const jumpTo = (id: string) => {
     const go = () => {
@@ -281,20 +284,31 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
       <header className="flex h-10 shrink-0 select-none items-center gap-1 border-b border-stroke pl-3 pr-1.5">
         <SmartPhone className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
         <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium text-content">
-          {phoneFiles ? "Phone files" : "Share"}
+          {view === "files" ? "Phone files" : view === "notifications" ? "Phone notifications" : "Share"}
         </h3>
         {paired ? (
-          <button
-            type="button"
-            title={phoneFiles ? "Back to Share" : "Browse the phone's files"}
-            aria-pressed={phoneFiles}
-            onClick={() => setPhoneFiles((value) => !value)}
-            className={`${HEADER_BUTTON} ${phoneFiles ? "bg-content/10 text-content" : ""}`}
-          >
-            <SmartPhone className="size-3.5" strokeWidth={1.75} aria-hidden />
-          </button>
+          <>
+            <button
+              type="button"
+              title={view === "notifications" ? "Back to Share" : "The phone's notifications"}
+              aria-pressed={view === "notifications"}
+              onClick={() => setView((value) => (value === "notifications" ? "share" : "notifications"))}
+              className={`${HEADER_BUTTON} ${view === "notifications" ? "bg-content/10 text-content" : ""}`}
+            >
+              <Bell className="size-3.5" strokeWidth={1.75} aria-hidden />
+            </button>
+            <button
+              type="button"
+              title={view === "files" ? "Back to Share" : "Browse the phone's files"}
+              aria-pressed={view === "files"}
+              onClick={() => setView((value) => (value === "files" ? "share" : "files"))}
+              className={`${HEADER_BUTTON} ${view === "files" ? "bg-content/10 text-content" : ""}`}
+            >
+              <SmartPhone className="size-3.5" strokeWidth={1.75} aria-hidden />
+            </button>
+          </>
         ) : null}
-        {!phoneFiles ? (
+        {!awayFromShare ? (
           <button
             type="button"
             title="Storage and Delete all"
@@ -310,8 +324,10 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
         </button>
       </header>
 
-      {phoneFiles ? (
-        <PhoneFilesView onError={setError} onBack={() => setPhoneFiles(false)} />
+      {view === "files" ? (
+        <PhoneFilesView onError={setError} onBack={() => setView("share")} />
+      ) : view === "notifications" ? (
+        <PhoneNotificationsView onError={setError} />
       ) : (
         <>
           {storageOpen ? <StorageStrip busy={busy} attempt={attempt} onDone={load} /> : null}
@@ -381,7 +397,7 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
         </p>
       ) : null}
 
-      {phoneFiles ? null : list !== null && paired ? (
+      {awayFromShare ? null : list !== null && paired ? (
         <ShareComposer busy={busy} attempt={attempt} staged={staged} onStage={setStaged} />
       ) : list !== null && items.length > 0 ? (
         <p className="shrink-0 border-t border-stroke px-3 py-3 text-[12px] text-content/55">
@@ -389,7 +405,7 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
         </p>
       ) : null}
 
-      {dragging && !phoneFiles ? (
+      {dragging && !awayFromShare ? (
         <div className="pointer-events-none absolute inset-2 grid place-items-center rounded-xl border-2 border-dashed border-accent/60 bg-surface/85">
           <span className="flex items-center gap-2 text-[13px] text-content">
             <CloudUpload className="size-4" strokeWidth={1.75} aria-hidden />

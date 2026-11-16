@@ -44,6 +44,10 @@ export default function SettingsLayout() {
         options={{ title: "Permissions", ...androidBackHeader("Permissions") }}
       />
       <Stack.Screen
+        name="phone-notifications"
+        options={{ title: "Notifications on computer", ...androidBackHeader("Notifications on computer") }}
+      />
+      <Stack.Screen
         name="usage"
         options={{ title: "Usage", ...androidBackHeader("Usage") }}
       />

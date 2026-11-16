@@ -807,6 +807,10 @@ async fn handle(
         if crate::mobile_events::handles(method) {
             break 'locked Err(std::mem::take(&mut params));
         }
+        // Fork (Hari, L-325): the phone's notifications, kept off the lock.
+        if crate::mobile_phone_notifications::handles(method) {
+            break 'locked Err(std::mem::take(&mut params));
+        }
         if ![
             "conversation.read",
             "conversation.older",
@@ -921,6 +925,9 @@ async fn handle(
         }
         Err(params) if crate::mobile_events::handles(method) => {
             return crate::mobile_events::handle(app, peer, method, &params)
+        }
+        Err(params) if crate::mobile_phone_notifications::handles(method) => {
+            return crate::mobile_phone_notifications::handle(app, peer, &params)
         }
         Err(params) => return crate::mobile_tools::handle(app, method, params).await,
     };

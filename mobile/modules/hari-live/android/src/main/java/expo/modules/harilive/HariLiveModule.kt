@@ -72,6 +72,14 @@ class HariLiveModule : Module() {
     /** Fork (L-321): the system page for "Display over other apps". */
     Function("openOverlaySettings") { HariBubble.openOverlaySettings(context) }
 
+    /** Fork (L-325): the phone's notifications for the computer's Share panel. */
+    Function("notificationAccess") { HariNotifications.allowed(context) }
+    Function("openNotificationAccess") { HariNotifications.openSettings(context) }
+    Function("activeNotifications") { HariNotifications.active(context) }
+    Function("dismissNotification") { key: String -> HariNotifications.dismiss(key) }
+    Function("appIcons") { packages: List<String> -> HariNotifications.icons(context, packages) }
+    Function("appLabels") { packages: List<String> -> HariNotifications.labels(context, packages) }
+
     /** Fork (L-279): moves a file from Hari's cache into Download/Hari; its content URI. */
     AsyncFunction("saveToDownloads") { source: String, name: String, mimeType: String ->
       HariShare.saveToDownloads(context, source, name, mimeType)

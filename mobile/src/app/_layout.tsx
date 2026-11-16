@@ -20,6 +20,7 @@ import { LinkStreamSync } from "@/features/link/LinkStreamSync";
 import { NotificationFeedSync } from "@/features/notifications/NotificationFeedSync";
 import { PanelActions } from "@/features/notifications/PanelActions";
 import { ShareSync } from "@/features/share/ShareSync";
+import { PhoneNotificationsSync } from "@/features/phoneNotifications/PhoneNotificationsSync";
 import { PcSync } from "@/features/pc/PcSync";
 import { ToolsSync } from "@/features/tools/ToolsSync";
 import { LiveUpdates } from "@/features/liveUpdates/LiveUpdates";
@@ -193,6 +194,8 @@ function LinkedWorkspace() {
       <LinkStreamSync />
       {/* Fork (Hari, L-279): Share with the computer (after the stream). */}
       <ShareSync />
+      {/* Fork (Hari, L-325): the phone's notifications in the computer's Share. */}
+      <PhoneNotificationsSync />
       {/* Fork (Hari, L-280): Find my phone, phone stats, Wake-on-LAN cards. */}
       <PcSync />
       {/* Fork (Hari, L-281): Tasks and Notes kept on the phone for offline. */}

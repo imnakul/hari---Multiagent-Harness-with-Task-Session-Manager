@@ -10,6 +10,13 @@
   <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
   <!-- Fork (Hari, L-321): the Share bubble over other apps (the user turns on Display over other apps). -->
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- Fork (Hari, L-325): names and icons of the apps whose notifications go to the computer. -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+  </queries>
   <application>
     <service
       android:name="expo.modules.harilive.HariLiveService"
@@ -59,6 +66,17 @@
       android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
       <intent-filter>
         <action android:name="android.service.quicksettings.action.QS_TILE" />
+      </intent-filter>
+    </service>
+    <!-- Fork (Hari, L-325): reads the phone's notifications for the computer
+         (the user turns on Notification access for Hari). -->
+    <service
+      android:name="expo.modules.harilive.HariNotificationListener"
+      android:exported="true"
+      android:label="Hari: notifications on computer"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
       </intent-filter>
     </service>
     <!-- Fork (Hari, L-321): draws the Share bubble. -->

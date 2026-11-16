@@ -15,7 +15,9 @@ export type LiveEvent =
   /** Android or the phone maker rejected a card; none show for this run. */
   | { action: "failed"; message?: string }
   /** Fork (L-279): the share sheet or the tile left something to send. */
-  | { action: "shared" };
+  | { action: "shared" }
+  /** Fork (L-325): the phone's notifications changed. */
+  | { action: "notifications" };
 
 type HariLiveModule = {
   update(cards: string): void;
@@ -39,6 +41,13 @@ type HariLiveModule = {
   bubbleState?(): { enabled: boolean; permitted: boolean };
   setBubble?(on: boolean, color: string | null): boolean;
   openOverlaySettings?(): boolean;
+  /** Fork (L-325); missing in builds before it. */
+  notificationAccess?(): boolean;
+  openNotificationAccess?(): boolean;
+  activeNotifications?(): string;
+  dismissNotification?(key: string): boolean;
+  appIcons?(packages: string[]): Record<string, string>;
+  appLabels?(packages: string[]): Record<string, string>;
   /** Fork (L-280); missing in builds before it. */
   phoneStats?(): Record<string, unknown>;
   wake?(macs: string[], broadcasts: string[]): Promise<number>;
@@ -210,6 +219,54 @@ export const shareBubble = native?.setBubble
         }
       },
       openSettings: (): boolean => native?.openOverlaySettings?.() ?? false,
+    }
+  : null;
+
+/**
+ * Fork (Hari, L-325): the phone's notifications for the computer; null
+ * without the module (or a build from before it). A failed native call reads
+ * as nothing, so a broken listener never stops the app.
+ */
+export const phoneNotices = native?.activeNotifications
+  ? {
+      allowed: (): boolean => {
+        try {
+          return native?.notificationAccess?.() ?? false;
+        } catch {
+          return false;
+        }
+      },
+      openSettings: (): boolean => native?.openNotificationAccess?.() ?? false,
+      /** JSON: `{ listening, items }` (see HariNotifications.active). */
+      active: (): string => {
+        try {
+          return native?.activeNotifications?.() ?? "{}";
+        } catch (error) {
+          console.warn("Notifications: could not read the phone's list", error);
+          return "{}";
+        }
+      },
+      dismiss: (key: string): boolean => {
+        try {
+          return native?.dismissNotification?.(key) ?? false;
+        } catch {
+          return false;
+        }
+      },
+      icons: (packages: string[]): Record<string, string> => {
+        try {
+          return native?.appIcons?.(packages) ?? {};
+        } catch {
+          return {};
+        }
+      },
+      labels: (packages: string[]): Record<string, string> => {
+        try {
+          return native?.appLabels?.(packages) ?? {};
+        } catch {
+          return {};
+        }
+      },
     }
   : null;
 

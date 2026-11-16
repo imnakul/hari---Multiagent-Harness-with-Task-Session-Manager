@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-11-16 23:13 | [Review — Phone notifications in desktop Share (L-325)](phone-notifications-plan.md) | Android notification listener sends the phone's notifications (minus a skip list) to a Notifications view in desktop Share; dismiss clears them on the phone; codes hidden until clicked; memory only, 24 hours. Desktop and phone checks manual. |
 | 2026-11-16 23:08 | [Review — Remove Markdown Live mode (L-324)](remove-markdown-live.md) | Preview and Source only, default Preview, Ctrl+E and double-click open Source; Live editor code deleted. Desktop check manual. |
 | 2026-11-14 21:49 | [Review — Share as a sidebar view, phone Computer hub (L-287, L-288)](share-panel-plan.md) | Share becomes a full app view (chat-style timeline, inline pictures, drop files, Open on phone); the phone merges Share and Computer into one screen with tabs. Built in 0.16.0-local46 with the phone extras (side-menu Computer and Wake, Monitor on, Haptics switch). Desktop and phone checks manual. |
 | 2026-11-11 23:25 | [Review — Improve prompt in the composer (L-252)](improve-prompt-plan.md) | ✨ next to Send rewrites the draft in place (Original toggle, hold to peek, Restore); keeps paths, mentions, IDs and a leading /command; learns a "How I write" profile and a project glossary on this device; offers Add to AGENTS.md for a rule said in 3+ prompts. Desktop check manual. |

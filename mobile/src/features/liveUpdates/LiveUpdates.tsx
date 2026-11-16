@@ -123,7 +123,8 @@ export function LiveUpdates() {
         return;
       }
       // Fork (L-279): Share's, handled by ShareSync.
-      if (event.action === "shared") return;
+      // Fork (L-325): the phone's notifications, handled by PhoneNotificationsSync.
+      if (event.action === "shared" || event.action === "notifications") return;
       const session = catalog.sessions.find((entry) => entry.id === event.sessionId);
       if (!session) return;
       const stop = event.action === "stop";
