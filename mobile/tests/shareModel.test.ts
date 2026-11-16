@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   fillShareHistory,
+  shouldFillShareHistory,
   parseComputerHistory,
   parseShareMeta,
   withExtension,
@@ -269,6 +270,13 @@ describe("filling in from the computer (L-317)", () => {
     expect(filled[0].text).toBe("mine");
     const same = fillShareHistory(filled, computer, new Set(["f2"]));
     expect(same).toBe(filled);
+  });
+
+  it("fills in once per pairing, or when the phone has no history (L-323)", () => {
+    expect(shouldFillShareHistory(false, null, "pc:1")).toBe(true);
+    expect(shouldFillShareHistory(false, "pc:1", "pc:1")).toBe(false);
+    expect(shouldFillShareHistory(true, "pc:1", "pc:1")).toBe(true);
+    expect(shouldFillShareHistory(false, "pc:1", "pc:2")).toBe(true);
   });
 
   it("reads a remove from the other device", () => {

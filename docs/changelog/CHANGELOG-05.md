@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-16 23:02 IST — Share opens smoothly on both sides (L-323)
+- Type: fix
+- What: Hari no longer asks the computer for the whole Share history on every reconnect, only on the first connect after pairing or when the phone has none. The Share chat no longer jumps to the bottom a second time or overlaps text as link cards and pictures load. On the computer, the Share panel slides in and out more slowly and softly.
+- Why: User report 2026-11-16: phone Share "bottom shows up once in a chat, and then again it shows after a delay, sometimes overlapping text"; "if it's already connected don't do it"; desktop slide "very fast".
+- Files: see L-323 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: uncommitted
+- Verified: root typecheck ✅; phone typecheck ✅ lint ✅ `shareModel` tests ✅ (27). Needs a check on the phone and the computer.
+
 ## 2026-11-15 22:31 IST — Hari update check no longer says Up to date when it cannot read a release (L-322)
 - Type: fix
 - What: Check for updates now says Couldn't check (with Open the release page) when the newest release can't be read, instead of Up to date.

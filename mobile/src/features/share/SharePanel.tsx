@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import { File } from "expo-file-system";
 import { Image } from "expo-image";
 import { useHeaderHeight } from "expo-router/react-navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -87,6 +87,9 @@ const isPicture = (entry: PhoneShareEntry) => shareThumbnail(entry) !== null;
 const KEYBOARD_GAP = 8;
 /** Within this of the end, the chat counts as at its end and follows new messages. */
 const AT_END = 80;
+/** Fork (Hari, L-323): how long after opening the list may still fill in. */
+const SETTLE_MS = 1500;
+const REMOVE_GLIDE_MS = 200;
 
 /**
  * Fork (Hari, L-279): text, links, the clipboard and files between this phone
@@ -118,6 +121,18 @@ export function SharePanel() {
   // Opens at its end and follows new messages there; not when scrolled back.
   const atEnd = useRef(true);
   const placed = useRef(false);
+  // Fork (Hari, L-323): for a moment after opening, link cards and pictures
+  // still fill in; the end is held in place without an animated scroll, so
+  // the bottom does not seem to load twice.
+  const openedAt = useRef(0);
+  // Rows glide into place only while one is being removed; at other times a
+  // row growing (a card loading) moved the rest under it, overlapping text.
+  const [removing, setRemoving] = useState(false);
+  const removingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    openedAt.current = Date.now();
+    return () => clearTimeout(removingTimer.current);
+  }, []);
   const composerHeight = useRef(0);
 
   // Oldest first, as a chat reads (the history is newest first).
@@ -181,6 +196,9 @@ export function SharePanel() {
   const remove = (row: ShareRow) => {
     void Haptics.selectionAsync();
     setSelected(null);
+    setRemoving(true);
+    clearTimeout(removingTimer.current);
+    removingTimer.current = setTimeout(() => setRemoving(false), REMOVE_GLIDE_MS + 120);
     // Fork (Hari, L-317): gone from the computer's history too.
     removeSharesEverywhere(row.items.map((item) => item.id));
   };
@@ -232,7 +250,7 @@ export function SharePanel() {
       toEnd(false);
       return;
     }
-    if (atEnd.current) toEnd(true);
+    if (atEnd.current) toEnd(Date.now() - openedAt.current > SETTLE_MS);
   };
   // A composer growing past a line (or a file waiting in it) keeps the end in view.
   const onComposerLayout = ({ nativeEvent }: LayoutChangeEvent) => {
@@ -315,7 +333,7 @@ export function SharePanel() {
             <Animated.View
               key={row.key}
               exiting={FadeOut.duration(160)}
-              layout={LinearTransition.duration(200)}
+              layout={removing ? LinearTransition.duration(REMOVE_GLIDE_MS) : undefined}
               onLayout={({ nativeEvent }) => rowsAt.current.set(row.key, nativeEvent.layout.y)}
             >
               {newDay ? (

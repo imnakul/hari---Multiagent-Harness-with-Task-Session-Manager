@@ -3,6 +3,12 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 export const SLIDE_IN_MS = 220;
 export const SLIDE_OUT_MS = 180;
 const EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
+// Fork (L-323): `motion="slide"` moves the whole panel across the window, so
+// it takes longer and eases in softly (a drawer curve); at 220 ms the long
+// travel read as a jump.
+const GLIDE_IN_MS = 340;
+const GLIDE_OUT_MS = 260;
+const GLIDE_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 /** Just past the right edge, margin included. */
 const OFFSCREEN = "translateX(calc(100% + 0.5rem))";
 
@@ -98,7 +104,7 @@ export function SlidePanel({
         void target.offsetWidth;
       }
       target.style.willChange = "transform, opacity";
-      target.style.transition = `transform ${ms}ms ${EASE}, opacity ${ms}ms ${EASE}`;
+      target.style.transition = `transform ${ms}ms ${GLIDE_EASE}, opacity ${ms}ms ${GLIDE_EASE}`;
       target.style.transform = show ? "translateX(0)" : OFFSCREEN;
       target.style.opacity = show ? "1" : "0";
       timer = window.setTimeout(done, ms);
@@ -115,7 +121,7 @@ export function SlidePanel({
         rest();
         latest.current.onMoving?.(false);
       };
-      if (panel) glide(panel, true, SLIDE_IN_MS, settle);
+      if (panel) glide(panel, true, GLIDE_IN_MS, settle);
       else slide(panelWidth(node), SLIDE_IN_MS, settle);
       return () => {
         cancelled = true;
@@ -130,7 +136,7 @@ export function SlidePanel({
     }
     void (latest.current.beforeLeave?.() ?? Promise.resolve()).then(() => {
       if (cancelled) return;
-      if (panel) glide(panel, false, SLIDE_OUT_MS, () => latest.current.onGone());
+      if (panel) glide(panel, false, GLIDE_OUT_MS, () => latest.current.onGone());
       else slide(0, SLIDE_OUT_MS, () => latest.current.onGone());
     });
     return () => {

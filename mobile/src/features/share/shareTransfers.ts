@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { Directory, File, FileMode, Paths } from "expo-file-system";
 import * as Notifications from "expo-notifications";
+import Storage from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 import { AppState, Linking, Platform } from "react-native";
 
@@ -20,6 +21,7 @@ import {
   autoDownloads,
   bytesToBase64,
   fillShareHistory,
+  shouldFillShareHistory,
   formatShareSize,
   kindForText,
   metaChange,
@@ -534,20 +536,29 @@ export function useShareHistoryFilling(): boolean {
   }, () => filling);
 }
 
+const FILLED_KEY = "hari.share.filledFor";
+let fillRunning = false;
+
 /**
- * Fork (Hari, L-317): on each connect, adds what the computer has and this
- * phone lacks (all of it after a reinstall). Messages removed here stay gone.
+ * Fork (Hari, L-317): adds what the computer has and this phone lacks (all of
+ * it after a reinstall). Messages removed here stay gone. L-323: once per
+ * pairing (`pairingKey`), or when this phone has no history; later connects
+ * skip it, as new messages come over the link.
  */
-export async function fillShareHistoryFromComputer(command: Command): Promise<void> {
+export async function fillShareHistoryFromComputer(command: Command, pairingKey: string): Promise<void> {
   const empty = shareHistory().length === 0;
+  if (fillRunning || !shouldFillShareHistory(empty, Storage.getItemSync(FILLED_KEY), pairingKey)) return;
+  fillRunning = true;
   if (empty) setFilling(true);
   try {
     const computer = parseComputerHistory(await command<unknown>("share.history"));
     replaceShareHistory(fillShareHistory(shareHistory(), computer, removedShareIds()));
+    Storage.setItemSync(FILLED_KEY, pairingKey);
   } catch (reason) {
     // An older computer has no `share.history`; nothing to fill in.
     console.warn("Share: could not fill in the history", reason);
   } finally {
+    fillRunning = false;
     if (empty) setFilling(false);
   }
 }

@@ -280,6 +280,15 @@ export function parseComputerHistory(raw: unknown): PhoneShareEntry[] {
 }
 
 /**
+ * Fork (Hari, L-323): the history is filled in from the computer once per
+ * pairing (and whenever this phone has none, as after a reinstall), not on
+ * every reconnect: while paired, new messages arrive over the link itself.
+ */
+export function shouldFillShareHistory(historyEmpty: boolean, filledFor: string | null, pairingKey: string): boolean {
+  return historyEmpty || filledFor !== pairingKey;
+}
+
+/**
  * Fork (Hari, L-317): adds what the computer has and this phone lacks,
  * except what was removed here; newest first, trimmed as usual. Unchanged
  * (the same array) when there is nothing to add.

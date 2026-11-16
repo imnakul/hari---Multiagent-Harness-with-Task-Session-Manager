@@ -22,6 +22,7 @@ import {
 export function ShareSync(): null {
   const { pairing, connected, command } = useConnection();
   const fingerprint = pairing?.desktop.fingerprint ?? null;
+  const pairingKey = pairing ? `${pairing.desktop.fingerprint}:${pairing.desktop.deviceId}` : null;
   useEffect(() => {
     if (!fingerprint) return;
     const items = onLinkItem("share", (item) => receiveShare(item.payload, command));
@@ -41,10 +42,10 @@ export function ShareSync(): null {
       appState.remove();
     };
   }, [fingerprint, command]);
-  // Fork (Hari, L-317): on each connect, fill in what the computer has and
-  // this phone lacks (everything after a reinstall).
+  // Fork (Hari, L-317, L-323): fill in what the computer has and this phone
+  // lacks, on the first connect after pairing (or with no history here).
   useEffect(() => {
-    if (fingerprint && connected) void fillShareHistoryFromComputer(command);
-  }, [fingerprint, connected, command]);
+    if (pairingKey && connected) void fillShareHistoryFromComputer(command, pairingKey);
+  }, [pairingKey, connected, command]);
   return null;
 }
