@@ -5,7 +5,7 @@
 - What: The phone's notifications can show on the computer. In Hari, Settings → Share → Notifications on computer turns it on (Android asks for Notification access). The desktop Share panel gets a bell button that opens Phone notifications: what's on the phone now and what left it in the last 24 hours. Dismissing one on the computer clears it on the phone. One-time codes are dotted out until clicked. Banking, payment, authenticator and password apps start switched off; any app can be switched off on the phone. Nothing is saved to disk or queued while the computer is away.
 - Why: User request 2026-11-16 (2: A A A).
 - Files: see L-325 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md); spec [phone-notifications-plan.md](../specs/phone-notifications-plan.md)
-- Commit: uncommitted
+- Commit: 2277d68d
 - Verified: typecheck ✅ (root, mobile) lint ✅ (mobile; root has no ESLint config) tests ✅ (root mobile features 20 files, 95 tests; Rust 5; mobile 331, `watchFrames.test.ts` failed before) Kotlin compile ✅. Phone and desktop checks manual.
 
 ## 2026-11-16 23:08 IST — Markdown Live mode removed (L-324)
