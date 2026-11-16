@@ -5,7 +5,7 @@
 - What: Markdown everywhere in the desktop app (Notes, Tasks, Session summaries, .md files, plans) now has two views, Preview and Source. It opens in Preview; Ctrl+E switches between them, and double-clicking text in Preview opens Source at that line. A blank new note or task opens in Source. The Live editor is gone.
 - Why: User decision 2026-11-16 (1A): remove Live mode completely.
 - Files: see L-324 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md); spec [remove-markdown-live.md](../specs/remove-markdown-live.md)
-- Commit: uncommitted
+- Commit: 5dbf9d35
 - Verified: typecheck ✅ tests ✅ (21 files, 186 tests; the 70 unhandled `listen` errors from `NotesView.test.ts` were there before). Desktop check manual.
 
 ## 2026-11-16 23:02 IST — Share opens smoothly on both sides (L-323)
