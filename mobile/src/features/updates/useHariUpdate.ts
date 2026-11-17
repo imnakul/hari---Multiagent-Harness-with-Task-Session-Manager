@@ -25,6 +25,9 @@ export type HariUpdateState =
   | { status: "error"; message: string; release?: HariRelease };
 
 const LAST_CHECK_KEY = "hari.update.lastCheckedAt";
+/** Fork (Hari, L-342): the build the downloaded APK in the cache is for. */
+const APK_FOR_KEY = "hari.update.apkVersionCode";
+const APK_NAME = "hari-update.apk";
 // Android's ACTION_VIEW, and Intent.FLAG_GRANT_READ_URI_PERMISSION so the
 // installer may read the APK from this app's cache.
 const ACTION_VIEW = "android.intent.action.VIEW";
@@ -50,6 +53,25 @@ export function useHariUpdate() {
     },
     () => state,
   );
+}
+
+/**
+ * Fork (Hari, L-342): deletes the downloaded APK once its build is installed.
+ * It stayed in the cache after every in-app update, about 70 MB each time.
+ * One for a build not yet installed stays, for the installer's Update tap.
+ */
+export function clearInstalledUpdate() {
+  if (!updatesSupported || !installed || state.status === "downloading") return;
+  try {
+    const apk = new File(Paths.cache, APK_NAME);
+    if (!apk.exists) return;
+    const forBuild = Number(Storage.getItemSync(APK_FOR_KEY) ?? NaN);
+    if (Number.isFinite(forBuild) && forBuild > installed.versionCode) return;
+    apk.delete();
+    Storage.removeItemSync(APK_FOR_KEY);
+  } catch {
+    // Android clears the cache by itself when space runs low.
+  }
 }
 
 /**
@@ -94,7 +116,7 @@ export async function checkForHariUpdate(quiet = false): Promise<HariRelease | u
 export async function installHariUpdate(release: HariRelease) {
   if (!updatesSupported || state.status === "downloading") return;
   set({ status: "downloading", release, progress: 0 });
-  const target = new File(Paths.cache, "hari-update.apk");
+  const target = new File(Paths.cache, APK_NAME);
   try {
     // Fork (Hari, L-327): Pages first, then the release's own copy, so a
     // Pages hiccup (it once answered 404 for a while) can't block an update.
@@ -117,6 +139,7 @@ export async function installHariUpdate(release: HariRelease) {
       }
     }
     if (!apk) throw lastError ?? new Error("Couldn't download the update");
+    Storage.setItemSync(APK_FOR_KEY, String(release.versionCode));
     set({ status: "available", release });
     // Android asks once to allow installs from Hari, then shows Update.
     await startActivityAsync(ACTION_VIEW, {

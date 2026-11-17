@@ -254,7 +254,7 @@ function MonoScreen({ monoOnly }: { monoOnly: boolean }) {
         </AccentOverride>
       }
     >
-      <ConnectionNotice error={conversation.error} />
+      <ConnectionNotice error={conversation.error} updating={conversation.updating} />
       {monoOnly ? (
         <>
           {/* The stack's native header: back from the stack, the Mono's

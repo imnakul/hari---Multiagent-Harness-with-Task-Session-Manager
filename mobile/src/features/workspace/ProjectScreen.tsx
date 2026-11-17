@@ -519,7 +519,7 @@ export function ProjectScreen({
       </SessionContent>
       {/* After the content: iOS blurs under the header the scroll view it
           finds first, down each view's first child. */}
-      <ConnectionNotice error={conversation.error} />
+      <ConnectionNotice error={conversation.error} updating={conversation.updating} />
     </SessionScreen>
   );
 }

@@ -82,6 +82,7 @@ const NO_TURNS: Turn[] = [];
  *
  * It opens on the latest turns the desktop sends; scrolling up to the top
  * pages in the ones before, holding the reader's place as they land above.
+ * Fork (Hari, L-341): nothing moves the list while the reader scrolls it.
  */
 export function Transcript({
   turns: allTurns,
@@ -188,6 +189,24 @@ export function Transcript({
     transform: [{ translateY: (1 - reveal.get()) * REVEAL_RISE }],
   }));
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // The newest turn, and the one the reader was last at the end of: the list
+  // keeps to its end only while that is still the newest. A reply that comes
+  // in after leaves the reader where they are, with the scroll-to-end button.
+  const newest = turns.at(-1)?.id;
+  const newestRef = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    newestRef.current = newest;
+  });
+  const endTurn = useRef<string | undefined>(undefined);
+  // Fork (Hari, L-341): what the reader's finger is doing. Nothing scrolls
+  // the list by itself while they drag it or it glides on from a flick
+  // (fling): a scroll that comes then is dropped, not saved for after.
+  const dragging = useRef(false);
+  const gliding = useRef(false);
+  // Older turns page in only once the reader has scrolled by hand.
+  const scrolledByHand = useRef(false);
+  const paging = useRef(false);
+  const handsOn = () => dragging.current || gliding.current;
 
   // What is there on open shows as is; replies that arrive after fade in.
   const [opened, setOpened] = useState(false);
@@ -232,7 +251,7 @@ export function Transcript({
   // replaces the one kept from the last visit. The reader was left on empty
   // space past the end and had to scroll a long way up; bring the end back.
   const keepInRange = () => {
-    if (!settled || viewportHeight.current === 0) return;
+    if (!settled || viewportHeight.current === 0 || handsOn()) return;
     const end = Math.max(
       0,
       contentHeight.current + contentInsetBottom.current - viewportHeight.current,
@@ -328,6 +347,8 @@ export function Transcript({
         const mode = pendingScroll.current;
         pendingScroll.current = null;
         if (!mode) return;
+        // Fork (Hari, L-341): the reader has the list in hand; leave it there.
+        if (settled && handsOn()) return;
         const scroll = list.current?.getNativeScrollRef() as
           ScrollView | null | undefined;
         if (firstUserAnchor.current) {
@@ -337,6 +358,7 @@ export function Transcript({
         } else {
           scroll?.scrollToEnd({ animated: mode === "animated" });
         }
+        endTurn.current = newest;
         if (__DEV__ && !settled)
           console.log(
             `[mobile] transcript shown ${Date.now() - mountedAt}ms after mount`,
@@ -357,6 +379,7 @@ export function Transcript({
       const scroll = list.current?.getNativeScrollRef() as
         ScrollView | null | undefined;
       scroll?.scrollToEnd({ animated: false });
+      endTurn.current = newestRef.current;
       setSettled(true);
     }, SHOW_WITHIN);
     return () => clearTimeout(timer);
@@ -385,12 +408,19 @@ export function Transcript({
     update();
   });
 
+  // Fork (Hari, L-341): asked from the reader's own scroll near the top,
+  // not FlatList's onStartReached: with a short list that fired on open and
+  // again after every page, paging in history while the reader scrolled.
   const pageOlder = () => {
-    if (!settled || !hasOlder || !loadOlder || loadingOlder) return;
+    if (!settled || !hasOlder || !loadOlder || paging.current) return;
+    paging.current = true;
     setLoadingOlder(true);
     loadOlder()
       .catch(() => {})
-      .finally(() => setLoadingOlder(false));
+      .finally(() => {
+        paging.current = false;
+        setLoadingOlder(false);
+      });
   };
 
   const onRowLayout = (id: string, event: LayoutChangeEvent) => {
@@ -424,10 +454,21 @@ export function Transcript({
   // A Mono's chat follows its reply down while the reader is at the end.
   const atEnd = useRef(true);
   const follow = () => {
-    if (!agent || !atEnd.current || pendingScroll.current) return;
+    if (!agent || !atEnd.current || pendingScroll.current || handsOn()) return;
     const scroll = list.current?.getNativeScrollRef() as
       ScrollView | null | undefined;
     scroll?.scrollToEnd({ animated: true });
+  };
+  // Fork (Hari, L-341): a chat that isn't holding a message under the header
+  // stays at its newest turn while the reader is there, as the desktop's
+  // fresh copy replaces the one kept on the phone or a turn grows.
+  const stickToEnd = () => {
+    if (agent || !settled || anchoring.current !== false) return;
+    if (!atEnd.current || pendingScroll.current || handsOn() || moving.current) return;
+    if (!newest || newest !== endTurn.current) return;
+    const scroll = list.current?.getNativeScrollRef() as
+      ScrollView | null | undefined;
+    scroll?.scrollToEnd({ animated: false });
   };
 
   return (
@@ -441,7 +482,11 @@ export function Transcript({
           onDismiss={() => setErrorPresented(false)}
         />
       ) : null}
-      <Animated.View style={[styles.fill, revealStyle]}>
+      {/* Hidden until placed, and out of reach until then (L-341). */}
+      <Animated.View
+        style={[styles.fill, revealStyle]}
+        pointerEvents={settled ? "auto" : "none"}
+      >
         <FlatList
           ref={list}
           data={turns}
@@ -468,8 +513,6 @@ export function Transcript({
           windowSize={11}
           maxToRenderPerBatch={5}
           updateCellsBatchingPeriod={30}
-          onStartReached={pageOlder}
-          onStartReachedThreshold={1}
           // Keep the reader's place as earlier turns land above it.
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           ListHeaderComponent={
@@ -485,8 +528,12 @@ export function Transcript({
               layoutMeasurement,
             } = event.nativeEvent;
             offsetY.current = contentOffset.y;
+            // Within a screen of the top, scrolled there by hand: the turns before.
+            if (scrolledByHand.current && contentOffset.y < layoutMeasurement.height)
+              pageOlder();
             const visibleEnd = contentOffset.y + layoutMeasurement.height;
             atEnd.current = visibleEnd >= contentSize.height - 48;
+            if (atEnd.current) endTurn.current = newest;
             // The bottom inset holds the blank space under an anchored message.
             showJump(
               contentSize.height + (contentInset?.bottom ?? 0) - visibleEnd >
@@ -498,10 +545,25 @@ export function Transcript({
           // scrolls left `offsetY` behind and `keepInRange` missed a reader
           // left past the end (L-246). Below 17ms it throttles nothing.
           scrollEventThrottle={16}
+          onScrollBeginDrag={() => {
+            dragging.current = true;
+            gliding.current = false;
+            scrolledByHand.current = true;
+          }}
+          onScrollEndDrag={() => {
+            dragging.current = false;
+          }}
+          onMomentumScrollBegin={() => {
+            gliding.current = true;
+          }}
+          onMomentumScrollEnd={() => {
+            gliding.current = false;
+          }}
           onContentSizeChange={(_, height) => {
             contentHeight.current = height;
             update();
             follow();
+            stickToEnd();
             keepInRange();
           }}
           renderItem={({ item, index }) => (

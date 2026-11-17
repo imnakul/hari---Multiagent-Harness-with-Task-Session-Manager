@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -21,18 +21,46 @@ export function useOffline() {
   return !!connection.pairing && !connection.connected && !!connection.error;
 }
 
+/** Fork (Hari, L-341): an update that lands within this long says nothing. */
+const UPDATING_AFTER = 400;
+
 /**
  * Errors other than losing the desktop, like a conversation that failed to
  * load, as a quiet line under the header. Losing the desktop shows in the
  * composer instead, and under the project's worktree line.
+ *
+ * Fork (Hari, L-341): and "Updating…" while the chat shows turns the desktop
+ * hasn't confirmed yet, the copy kept on the phone or the ones from before
+ * the app was away, if that takes more than a moment.
  */
-export function ConnectionNotice({ error }: { error?: string | null }) {
+export function ConnectionNotice({
+  error,
+  updating = false,
+}: {
+  error?: string | null;
+  updating?: boolean;
+}) {
   const styles = useStyles();
   const offline = useOffline();
   const { top } = useSessionLayout();
-  return !offline && error ? (
-    <Text style={[styles.inline, { top }]} numberOfLines={2}>
-      {error}
+  const waiting = updating && !offline && !error;
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setSlow(true), UPDATING_AFTER);
+    return () => {
+      clearTimeout(timer);
+      setSlow(false);
+    };
+  }, [waiting]);
+  const text = offline ? null : error ? error : waiting && slow ? "Updating…" : null;
+  return text ? (
+    <Text
+      style={[styles.inline, { top }]}
+      numberOfLines={2}
+      accessibilityLiveRegion="polite"
+    >
+      {text}
     </Text>
   ) : null;
 }

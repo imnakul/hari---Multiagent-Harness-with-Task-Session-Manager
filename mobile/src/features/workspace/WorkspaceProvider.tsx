@@ -133,6 +133,9 @@ type Status = {
   questions: Record<string, DisplayedQuestionPrompt>;
   usageLimits: Record<string, UsageLimitState>;
   queues: Record<string, QueueState>;
+  /** Fork (Hari, L-341): showing turns the desktop hasn't confirmed yet, as
+   *  the copy kept on the phone or the ones from before the app was away. */
+  updating: Record<string, boolean>;
 };
 export type SessionPage = { sessions: SessionSummary[]; hasMore: boolean };
 /** Narrows a page to sessions active since a time, and without some providers.
@@ -141,8 +144,15 @@ export type SessionListFilters = { since: number; hiddenHarnesses: string[] };
 export const SESSION_PAGE = 30;
 /** Earlier turns of a conversation, and whether there are earlier still. */
 type History = { turns: Turn[]; older: boolean };
-/** Turns a conversation opens on; older ones page in as the reader scrolls up. */
-const TAIL = 3;
+/**
+ * Turns a conversation opens on; older ones page in as the reader scrolls up.
+ * Fork (Hari, L-341): 20, not upstream's 3. Three rarely filled the screen,
+ * so the list read as scrolled to its top and paged in history at once,
+ * page after page, each landing above the reader as they scrolled.
+ */
+const TAIL = 20;
+/** The turns kept on the phone per conversation, to show while the watch opens. */
+const CACHE_TAIL = 3;
 const OLDER_PAGE = 20;
 /** An accepted new session may precede its desktop routing catalog by one poll. */
 const STARTUP_GRACE_MS = 5_000;
@@ -194,7 +204,7 @@ async function readCachedTurns(desktop: string, id: string): Promise<Turn[] | nu
 /** Keeps a conversation's latest turns, the most recent conversations only. */
 async function writeCachedTurns(desktop: string, id: string, turns: Turn[]) {
   // Its own local echo is not the desktop's.
-  const kept = turns.filter((turn) => !turn.id.startsWith("pending:")).slice(-TAIL);
+  const kept = turns.filter((turn) => !turn.id.startsWith("pending:")).slice(-CACHE_TAIL);
   if (kept.length === 0) return;
   try {
     const saved = await Storage.getItem(cacheIndexKey(desktop));
@@ -292,6 +302,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [windowOlder, setWindowOlder] = useState<Record<string, boolean>>({});
   const [remembered, setRemembered] = useState<Record<string, SessionSummary>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [updating, setUpdating] = useState<Record<string, boolean>>({});
+  const updated = useCallback(
+    (id: string) => setUpdating((previous) => withoutKey(previous, id)),
+    [],
+  );
   // Renames and deletes made here, until the desktop's catalog catches up. A
   // rename holds only while the desktop still has the title it replaced.
   const [renamed, setRenamed] = useState<Record<string, { title: string; from: string }>>({});
@@ -347,14 +362,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       showUsageLimit(id, result.usageLimit);
       showQueue(id, result.queue);
       // A read carries the whole conversation.
-      if (!watched) setWindowOlder((previous) => withValue(previous, id, false));
+      if (!watched) {
+        setWindowOlder((previous) => withValue(previous, id, false));
+        updated(id);
+      }
       setErrors((previous) => withoutKey(previous, id));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       if (current.current.pairing === paired && !startupCatalogError(starting.current, id, message))
         setErrors((previous) => withValue(previous, id, message));
     }
-  }, [showQuestion, showUsageLimit, showQueue]);
+  }, [showQuestion, showUsageLimit, showQueue, updated]);
   // The open conversation streams from the desktop: one watch, whose frames
   // land as the desktop sends them. A desktop that cannot watch, or a dropped
   // link, falls back to reading once a second until a watch opens again.
@@ -386,6 +404,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         from = null;
       }
       cachedOnly.current.delete(id);
+      updated(id);
       if (applied.turns !== known) {
         known = applied.turns;
         setTurns((previous) => ({ ...previous, [id]: applied.turns }));
@@ -414,16 +433,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (disposed) return;
         if (cached && !turnsRef.current[id]) {
           cachedOnly.current.add(id);
+          setUpdating((previous) => withValue(previous, id, true));
           turnsRef.current = { ...turnsRef.current, [id]: cached };
           setTurns((previous) => (previous[id] ? previous : { ...previous, [id]: cached }));
         }
       }
+      // Fork (Hari, L-341): turns from before the app was away show as
+      // updating until the reopened watch's first frame confirms them.
+      let away = false;
       while (!disposed) {
         const pairing = current.current.pairing;
         if (AppState.currentState !== "active" || !pairing) {
+          away = true;
           await pause(500);
           continue;
         }
+        if (away && turnsRef.current[id]?.length)
+          setUpdating((previous) => withValue(previous, id, true));
+        away = false;
         try {
           // Open on the latest turns, or on from the first one already here so
           // the history paged in before still joins up.
@@ -447,6 +474,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             if (disposed || current.current.pairing !== pairing) break;
             if (frames.length && !apply(frames)) break;
           }
+          // Left for the background or a new link: reopens on the turns here.
+          away = true;
         } catch {
           live.delete(id);
           if (disposed) break;
@@ -471,10 +500,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       disposed = true;
       live.delete(id);
       subscription.remove();
+      updated(id);
       save();
       if (watchId !== null) void closeWatch(watchId);
     };
-  }, [watching, desktop, read, showQuestion, showUsageLimit, showQueue]);
+  }, [watching, desktop, read, showQuestion, showUsageLimit, showQueue, updated]);
   const mutationIds = useRef(new Map<string, string>());
   const { command, refresh } = connection;
   const mutate = useCallback(async <T,>(method: string, params: object): Promise<T> => {
@@ -891,8 +921,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [messages, turns, pending, history, windowOlder],
   );
   const status = useMemo<Status>(
-    () => ({ busy, errors, questions, usageLimits, queues }),
-    [busy, errors, questions, usageLimits, queues],
+    () => ({ busy, errors, questions, usageLimits, queues, updating }),
+    [busy, errors, questions, usageLimits, queues, updating],
   );
   return (
     <WorkspaceContext value={workspace}>
@@ -931,6 +961,7 @@ export function useConversation(id: string | null, watching = true) {
   return {
     busy: id ? !!status.busy[id] : false,
     error: id ? (status.errors[id] ?? null) : null,
+    updating: id ? !!status.updating[id] : false,
     question: id ? (status.questions[id] ?? null) : null,
     usageLimit: id ? (status.usageLimits[id] ?? null) : null,
     queue: id ? (status.queues[id] ?? null) : null,

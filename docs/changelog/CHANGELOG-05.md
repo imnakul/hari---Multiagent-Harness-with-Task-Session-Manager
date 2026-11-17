@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-17 23:44 IST — Phone chats open at the newest message and don't jump; update file cleaned up (L-341, L-342)
+- Type: fix
+- What: A phone chat opens on its latest 20 turns instead of 3, so older ones load only when you scroll up yourself. Nothing scrolls the list while you drag it or it glides. At the newest message it stays there as the desktop's fresh copy lands; scrolled up, it keeps your place. "Updating…" shows under the header while a kept copy waits for the desktop. The update installer is deleted from Hari's cache once installed.
+- Why: User report 2026-11-17: opening a chat kept loading and showed older messages, then jumped elsewhere while scrolling. User report 2026-11-17 (screenshot): Hari's cache at 110 MB.
+- Files: see L-341 and L-342 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: (pending)
+- Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone vitest ✅ (347; `tests/mobile/watchFrames.test.ts` fails to load on HEAD too). Needs a check on the phone.
+
 ## 2026-11-17 20:13 IST — Share header in one row and a pin card; phone tables scroll; phone session pins (L-337, L-338, L-339, L-340)
 - Type: feature + fix
 - What: The desktop Share header is one row: Share, Notifications and Files tabs (Storage renamed) in place of the title, then a filter icon, a Settings gear and Close. Pinned items sit in a card at the top that opens in place, with an arrow to go to the message and "2 of 3" arrows for several pins. In Hari, a swipe on a table or code block scrolls it; the side menu opens from the right edge there. Hari's session list drops the swipe actions; a long press opens a menu to pin a session on the phone, and pinned sessions come first.

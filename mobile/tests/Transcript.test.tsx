@@ -26,6 +26,10 @@ type ListProps = {
     layoutMeasurement: { height: number };
   } }) => void;
   scrollEventThrottle: number;
+  onScrollBeginDrag: () => void;
+  onScrollEndDrag: () => void;
+  onMomentumScrollBegin: () => void;
+  onMomentumScrollEnd: () => void;
   contentContainerStyle: { paddingTop?: number; paddingBottom?: number }[];
   renderScrollComponent: (props: ListProps) => ReactElement<{
     blankSpace: { get: () => number };
@@ -140,8 +144,12 @@ describe("transcript anchoring", () => {
   let frames: Map<number, FrameRequestCallback>;
   let frameId: number;
   let mounted = false;
-  const render = (turns: Turn[], busy = false) => {
-    act(() => root.render(<Transcript turns={turns} busy={busy} />));
+  const render = (
+    turns: Turn[],
+    busy = false,
+    older?: { hasOlder: boolean; loadOlder: () => Promise<void> },
+  ) => {
+    act(() => root.render(<Transcript turns={turns} busy={busy} {...older} />));
     if (mounted) return;
     mounted = true;
     // The turns are drawn a frame after the list mounts.
@@ -331,6 +339,74 @@ describe("transcript anchoring", () => {
     render([previous, userTurn("confirmed", "Hello")]);
     flushFrames();
     expect(scrollToEnd).toHaveBeenCalledTimes(1);
+  });
+
+  // Fork (Hari, L-341): the reader's own scrolling wins over the list's.
+  const scrollAt = (y: number, height = 1700) =>
+    act(() => listProps.onScroll({ nativeEvent: {
+      contentOffset: { y }, contentSize: { height }, layoutMeasurement: { height: 800 },
+    } }));
+  const manyTurns = (count: number) =>
+    Array.from({ length: count }, (_, index) => userTurn(`turn-${index}`, `Message ${index}`));
+
+  it("pages in older turns only once the reader scrolls up by hand, one page at a time", () => {
+    let finish = () => {};
+    const loadOlder = vi.fn(() => new Promise<void>((done) => { finish = done; }));
+    const turns = manyTurns(3);
+    render(turns, false, { hasOlder: true, loadOlder });
+    flushFrames();
+    // A short chat sits within a screen of its top as it opens.
+    scrollAt(0, 600);
+    expect(loadOlder).not.toHaveBeenCalled();
+
+    act(() => listProps.onScrollBeginDrag());
+    scrollAt(100, 600);
+    scrollAt(50, 600);
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+    act(() => finish());
+  });
+
+  it("leaves the list where the reader has it while they drag or it glides", () => {
+    const turns = manyTurns(12);
+    render(turns);
+    flushFrames();
+    act(() => listProps.onScrollBeginDrag());
+    scrollAt(900);
+    scrollToEnd.mockClear();
+    // The desktop's fresh copy is shorter, mid-drag: no jump back to the end.
+    render(turns.slice(-3));
+    flushFrames();
+    expect(scrollToEnd).not.toHaveBeenCalled();
+
+    act(() => listProps.onScrollEndDrag());
+    act(() => listProps.onMomentumScrollBegin());
+    render(turns.slice(-2));
+    flushFrames();
+    expect(scrollToEnd).not.toHaveBeenCalled();
+  });
+
+  it("stays at its newest turn as the desktop's copy adds the turns before it", () => {
+    const turns = manyTurns(20);
+    render(turns.slice(-3));
+    flushFrames();
+    scrollAt(900, 1700);
+    scrollToEnd.mockClear();
+
+    render(turns);
+    flushFrames();
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+  });
+
+  it("keeps the reader's place above the end as the desktop's copy lands", () => {
+    const turns = manyTurns(20);
+    render(turns.slice(-3));
+    flushFrames();
+    scrollAt(100, 1700);
+    scrollToEnd.mockClear();
+
+    render(turns);
+    flushFrames();
+    expect(scrollToEnd).not.toHaveBeenCalled();
   });
 
   it("keeps the user anchor when an assistant-only turn arrives", () => {

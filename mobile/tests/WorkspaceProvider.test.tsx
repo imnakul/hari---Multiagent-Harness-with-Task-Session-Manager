@@ -132,7 +132,7 @@ describe("starting mobile sessions", () => {
     expect(conversation.busy).toBe(true);
     // A local pending ID must never be sent as the watch's desktop history cursor.
     expect(link.openWatch).toHaveBeenCalledWith(expect.anything(), "conversation.watch", {
-      conversationId: "session", tail: 3, incremental: true,
+      conversationId: "session", tail: 20, incremental: true,
     });
 
     await frame([{ order: [], turns: [], busy: true }]);
@@ -266,14 +266,17 @@ describe("starting mobile sessions", () => {
     link.storage.set("monocode.mobile.desktop.turns.existing", JSON.stringify([cached]));
     await act(async () => { render("existing"); });
     expect(conversation.turns).toEqual([cached]);
+    // Fork (Hari, L-341): shown as updating until the desktop's copy lands.
+    expect(conversation.updating).toBe(true);
     // Possibly long out of date, so the watch opens on the latest turns.
     expect(link.openWatch).toHaveBeenCalledWith(expect.anything(), "conversation.watch", {
-      conversationId: "existing", tail: 3, incremental: true,
+      conversationId: "existing", tail: 20, incremental: true,
     });
 
     const latest: Turn = { id: "new", items: [{ type: "user", id: "new", text: "After" }] };
     await frame([{ order: [latest.id], turns: [latest], busy: false }]);
     expect(conversation.turns).toEqual([latest]);
+    expect(conversation.updating).toBe(false);
     await act(async () => { render(null); });
     expect(JSON.parse(link.storage.get("monocode.mobile.desktop.turns.existing")!)).toEqual([latest]);
     expect(JSON.parse(link.storage.get("monocode.mobile.desktop.turns")!)).toEqual(["existing"]);

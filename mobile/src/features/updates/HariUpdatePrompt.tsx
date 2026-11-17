@@ -4,6 +4,7 @@ import { Alert } from "react-native";
 
 import {
   checkForHariUpdate,
+  clearInstalledUpdate,
   installHariUpdate,
   updatesSupported,
 } from "./useHariUpdate";
@@ -13,6 +14,7 @@ export function HariUpdatePrompt() {
   useEffect(() => {
     if (!updatesSupported || asked.current) return;
     asked.current = true;
+    clearInstalledUpdate();
     void checkForHariUpdate(true).then((release) => {
       if (!release) return;
       Alert.alert(
