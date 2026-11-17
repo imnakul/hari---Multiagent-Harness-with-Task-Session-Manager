@@ -5,7 +5,7 @@
 - What: The desktop Share panel has the app's gliding tabs under its title: Share, Notifications, Storage (the phone's files) and Settings. The kinds of item (All, Media, Files, Links, Text, Saved) moved to a dropdown beside Close. Settings holds the phone's name, battery, heat, storage, network and last update, Find my phone, and Share's storage on this computer with Delete all. The bell, phone and box buttons in the header are gone.
 - Why: User request 2026-11-17: the header and filter rows were crowded; tabs and a settings view instead.
 - Files: see L-332 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: uncommitted
+- Commit: 6d530c9d (released in 0.16.0-local57)
 - Verified: root typecheck ✅; mobile feature tests ✅ (92). Needs a check in the desktop app.
 
 ## 2026-11-17 16:24 IST — Hari Share hold menu; old Antigravity automations fixed (L-330, L-331)
@@ -13,7 +13,7 @@
 - What: In Hari's Share chat, holding a message now offers Add to notes, Add task, Pin, Save and Delete. The row under a card shows only Copy and Save, with the time right beside them on the card's own side. Image and text cards no longer show a bookmark inside. Separately, automations saved with the removed Antigravity (ACP) agent (L-244) kept failing with "Harness is not connected"; they now move to Antigravity CLI with the same model.
 - Why: User request 2026-11-17: Notes, Tasks and Pin only in the hold menu; time looked disconnected at the far end; bookmark duplicated; "wallpapers" and "freeproductshub" automations failing daily since 2026-11-12.
 - Files: see L-330 and L-331 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: uncommitted
+- Commit: d93879ef (released in 0.16.0-local57)
 - Verified: phone typecheck ✅ lint ✅ phone tests ✅ (337); root typecheck ✅ automations tests ✅ (73). Needs a check on the phone, and the next automation run on the desktop.
 
 ## 2026-11-17 15:25 IST — Interactive Claude: long messages stopped sending (L-329)
