@@ -740,7 +740,9 @@ function ShareBubble({
             mine ? styles.bubbleMine : styles.bubbleTheirs,
             pictures.length > 0 && styles.bubblePicture,
             // Fork (Hari, L-317): a link's card at full width, as on the computer.
-            texts.some((item) => item.kind === "link") && styles.bubbleLink,
+            // L-333: a Markdown list fills its width, so a list takes the full bubble too.
+            texts.some((item) => item.kind === "link" || (item.kind === "text" && MARKDOWN_LIST.test(item.text ?? ""))) &&
+              styles.bubbleLink,
             failed && styles.bubbleFailed,
             selected && styles.bubbleSelected,
           ]}
@@ -1054,6 +1056,9 @@ function Notice({ title, text }: { title: string; text: string }) {
     </View>
   );
 }
+
+/** A Markdown list line ("- item", "1. item"). */
+const MARKDOWN_LIST = /^s*(?:[-*+]|d+[.)])s+S/m;
 
 const useStyles = themedStyles((colors) => ({
   composer: {
