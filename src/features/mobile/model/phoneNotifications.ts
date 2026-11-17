@@ -16,6 +16,8 @@ export type PhoneNotice = {
 export type PhoneNotices = {
   /** The phone has sent its list since it last said it stopped. */
   receiving: boolean;
+  /** L-334: the phone is set to send but its notification reader isn't running. */
+  stalled: boolean;
   paired: boolean;
   onPhone: PhoneNotice[];
   /** Left the phone in the last 24 hours, newest first. */
@@ -54,6 +56,7 @@ export function parsePhoneNotices(raw: unknown): PhoneNotices | null {
     for (const [pkg, icon] of Object.entries(raw.icons)) if (typeof icon === "string") icons[pkg] = icon;
   return {
     receiving: raw.receiving === true,
+    stalled: raw.stalled === true,
     paired: raw.paired === true,
     onPhone: parseNotices(raw.onPhone),
     earlier: parseNotices(raw.earlier),

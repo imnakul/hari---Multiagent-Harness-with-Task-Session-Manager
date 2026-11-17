@@ -12,6 +12,7 @@ describe("phone notifications (L-325)", () => {
     });
     expect(list).toEqual({
       receiving: true,
+      stalled: false,
       paired: true,
       onPhone: [{ key: "a", package: "com.chat", app: "Chat", title: "Ann", text: "Hi", postedAt: 5 }],
       earlier: [{ key: "c", package: "com.mail", app: "com.mail", title: "", text: "", postedAt: 1 }],

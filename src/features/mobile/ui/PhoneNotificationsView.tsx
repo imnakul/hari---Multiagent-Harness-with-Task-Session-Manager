@@ -96,17 +96,24 @@ export function PhoneNotificationsView({ onError }: { onError: (error: string) =
     );
 
   const { list } = load;
-  if (!list.paired || !list.receiving)
+  if (!list.paired || !list.receiving || list.stalled)
     return (
       <div className="mx-auto mt-10 max-w-xs px-3 text-center text-[12.5px] text-content/55">
         <BellOff className="mx-auto mb-3 size-6 text-content/30" strokeWidth={1.5} aria-hidden />
-        {list.paired ? (
+        {!list.paired ? (
+          <p>Pair Hari on your phone (Settings → Mobile) to see its notifications here.</p>
+        ) : list.stalled ? (
+          // L-334: Android left the phone's notification reader stopped (often after an update).
           <p>
-            On your phone, open Hari → Settings → Share → Notifications on computer and turn on Send to computer.
-            They show here while the phone is connected.
+            Your phone's notification reader isn't running. Open Hari on the phone to restart it. If they still
+            don't show, turn Hari's Notification access off and on in the phone's settings.
           </p>
         ) : (
-          <p>Pair Hari on your phone (Settings → Mobile) to see its notifications here.</p>
+          // Nothing since this computer started: the phone may just not have sent yet.
+          <p>
+            No notifications from the phone yet. If they don't appear, open Hari → Settings → Share → Notifications
+            on computer on the phone and turn on Send to computer.
+          </p>
         )}
       </div>
     );

@@ -10,6 +10,9 @@ import { usePhoneNoticePreferences } from "./preferences";
 
 /** Bursts of changes (a chat filling in) go as one send. */
 const SEND_DELAY_MS = 1200;
+/** L-334: a stopped reader is checked again this often (the native side restarts it). */
+const RECHECK_MS = 6000;
+const RECHECKS = 4;
 
 /**
  * Fork (Hari, L-325): sends the phone's notifications to the computer's Share
@@ -54,6 +57,8 @@ export function PhoneNotificationsSync(): null {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let sending = false;
     let again = false;
+    let rechecks = 0;
+    let saidStalled = false;
 
     const send = async () => {
       if (sending) {
@@ -62,10 +67,29 @@ export function PhoneNotificationsSync(): null {
       }
       sending = true;
       try {
-        const { listening, items } = parseActiveNotices(native.active());
-        // Access is off or Android hasn't bound the listener yet: say nothing,
-        // rather than tell the computer the phone has no notifications.
-        if (!listening) return;
+        const { listening, stalled, items } = parseActiveNotices(native.active());
+        // Access is off or Android hasn't bound the listener yet: never tell
+        // the computer the phone has no notifications.
+        if (!listening) {
+          // Fork (L-334): access is on but the reader isn't running (often
+          // after an update). Asking again lets the native side restart it;
+          // the computer says why it's quiet instead of "turn it on".
+          if (stalled && rechecks < RECHECKS && !stopped) {
+            rechecks += 1;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+              timer = null;
+              if (!stopped) void send();
+            }, RECHECK_MS);
+          }
+          if (stalled && !saidStalled) {
+            saidStalled = true;
+            await command("phone.notifications", { enabled: true, listening: false, items: [] });
+          }
+          return;
+        }
+        rechecks = 0;
+        saidStalled = false;
         const shown = noticesToSend(items, skip);
         const need = iconsNeeded(shown, sentIcons.current);
         const icons = need.length > 0 ? native.icons(need) : {};
@@ -95,7 +119,9 @@ export function PhoneNotificationsSync(): null {
       if (event.action === "notifications") schedule();
     });
     const appState = AppState.addEventListener("change", (state) => {
-      if (state === "active") schedule();
+      if (state !== "active") return;
+      rechecks = 0;
+      schedule();
     });
     return () => {
       stopped = true;

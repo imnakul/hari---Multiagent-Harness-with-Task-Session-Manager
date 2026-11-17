@@ -6,6 +6,7 @@ import { CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../share
 import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
+import { useWindowWidth } from "../../../shared/hooks/useWindowWidth";
 import { SlidePanel } from "../../../shared/ui/SlidePanel";
 import { SelectMenu } from "../../sessions/ui/SelectMenu";
 import { formatFileSize } from "../../files/model/filePreview";
@@ -437,6 +438,7 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
   const open = useSharePanelOpen();
   const [mounted, setMounted] = useState(open);
   const [width, setWidth] = useState(readSharePanelWidth);
+  const windowWidth = useWindowWidth();
   // Fork (Hari, L-302): the history and its pictures load once the slide has
   // ended, and give way as it starts to close, so the slide has only the
   // chat beside it to lay out. A skeleton holds the place meanwhile.
@@ -454,12 +456,13 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
   if (!open && !mounted) return null;
-  const max = Math.max(SHARE_PANEL_MIN, Math.round(window.innerWidth * 0.6));
+  // Fork (L-335): redrawn on resize, and held while minimised.
+  const max = Math.max(SHARE_PANEL_MIN, Math.round(windowWidth * 0.6));
   return (
     <SlidePanel
       open={open}
       appear
-      motion="slide"
+      motion="unroll"
       className={overlay ? "fixed bottom-0 right-0 top-10 z-40 justify-end" : ""}
       onMoving={(moving) => setStill(!moving)}
       onGone={() => setMounted(false)}

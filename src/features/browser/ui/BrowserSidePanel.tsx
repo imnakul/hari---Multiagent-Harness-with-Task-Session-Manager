@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useWindowWidth } from "../../../shared/hooks/useWindowWidth";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { SlidePanel } from "../../../shared/ui/SlidePanel";
 import { PANEL_DEFAULT, PANEL_MIN } from "../model/browserTabs";
@@ -26,7 +27,8 @@ export function BrowserSidePanel({
   onGone: () => void;
 }) {
   const frame = useRef<HTMLElement>(null);
-  const max = Math.max(PANEL_MIN, Math.round(window.innerWidth * 0.75));
+  // Fork (L-335): redrawn on resize, and held while minimised.
+  const max = Math.max(PANEL_MIN, Math.round(useWindowWidth() * 0.75));
   const [still, setStill] = useState(true);
   const stillDone = useRef<(() => void) | null>(null);
   return (

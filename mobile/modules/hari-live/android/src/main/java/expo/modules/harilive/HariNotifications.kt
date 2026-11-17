@@ -5,10 +5,12 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
 import android.os.Parcelable
+import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -49,6 +51,8 @@ internal object HariNotifications {
   private const val MAX_TEXT = 2000
   private const val ICON_PX = 64
   private const val MAX_PACKAGES = 80
+  private const val RESTART_AFTER_MS = 4_000L
+  private const val RESTART_EVERY_MS = 60_000L
 
   @Volatile
   var listener: HariNotificationListener? = null
@@ -103,15 +107,17 @@ internal object HariNotifications {
 
   /**
    * What the phone shows now, newest first, as JSON:
-   * `{ listening, items: [{ key, package, app, title, text, postedAt }] }`.
+   * `{ listening, allowed, items: [{ key, package, app, title, text, postedAt }] }`.
    * Not listening (access off, or Android hasn't bound the listener yet): no items.
    */
   fun active(context: Context): String {
     val service = listener
     if (service == null) {
-      if (allowed(context)) rebind(context)
-      return JSONObject().put("listening", false).put("items", JSONArray()).toString()
+      val allowed = allowed(context)
+      if (allowed) rebind(context)
+      return JSONObject().put("listening", false).put("allowed", allowed).put("items", JSONArray()).toString()
     }
+    askedAt = 0L
     val items = JSONArray()
     val labels = HashMap<String, String>()
     val list =
@@ -212,8 +218,37 @@ internal object HariNotifications {
       null
     }
 
+  /** When the app first asked Android to bind the listener, and last restarted it (L-334). */
+  private var askedAt = 0L
+  private var restartedAt = 0L
+
   // After an app update Android may leave the listener unbound until asked.
+  // Fork (L-334): some phones (Xiaomi) ignore the ask; still unbound a few
+  // seconds later, the listener is switched off and on, which makes Android
+  // bind it again (what turning Notification access off and on does). At most
+  // once a minute, so a phone that never binds it isn't churned.
   private fun rebind(context: Context) {
+    val now = SystemClock.elapsedRealtime()
+    if (askedAt == 0L) askedAt = now
+    if (now - askedAt >= RESTART_AFTER_MS && (restartedAt == 0L || now - restartedAt >= RESTART_EVERY_MS)) {
+      restartedAt = now
+      try {
+        val manager = context.packageManager
+        val name = component(context)
+        manager.setComponentEnabledSetting(
+          name,
+          PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+          PackageManager.DONT_KILL_APP,
+        )
+        manager.setComponentEnabledSetting(
+          name,
+          PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+          PackageManager.DONT_KILL_APP,
+        )
+      } catch (error: Exception) {
+        Log.w(TAG, "Could not restart the notification listener", error)
+      }
+    }
     try {
       NotificationListenerService.requestRebind(component(context))
     } catch (error: Exception) {

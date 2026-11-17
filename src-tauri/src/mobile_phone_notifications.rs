@@ -58,6 +58,9 @@ struct State {
     dismissed: HashMap<String, u64>,
     /// Whether the phone has sent a list since it last said it stopped.
     receiving: bool,
+    /// L-334: the phone is set to send but its notification reader isn't
+    /// running (Android left it stopped, often after an app update).
+    stalled: bool,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -135,6 +138,15 @@ impl State {
             .retain(|_, at| now.saturating_sub(*at) <= DISMISSED_MS);
     }
 
+    /// L-334: the phone says its reader stopped; another phone starts afresh.
+    fn stall(&mut self, peer: &str) {
+        if self.peer.as_deref() != Some(peer) {
+            self.reset();
+            self.peer = Some(peer.into());
+        }
+        self.stalled = true;
+    }
+
     /// The phone's new list: what's gone from it moves to earlier.
     fn replace(&mut self, peer: &str, items: Vec<Notice>, now: u64) {
         if self.peer.as_deref() != Some(peer) {
@@ -142,6 +154,7 @@ impl State {
             self.peer = Some(peer.into());
         }
         self.receiving = true;
+        self.stalled = false;
         self.prune(now);
         let items: Vec<Notice> = items
             .into_iter()
@@ -210,6 +223,7 @@ impl State {
             .collect();
         json!({
             "receiving": self.receiving,
+            "stalled": self.stalled,
             "onPhone": self.on_phone,
             "earlier": self.earlier,
             "icons": icons,
@@ -230,6 +244,9 @@ pub(crate) fn handle(app: &AppHandle, peer: &str, params: &Value) -> Result<Valu
                 state.reset();
             }
         })?;
+    } else if params["listening"] == false {
+        // L-334: the reader isn't running; keep what we had, say why it's quiet.
+        with(|state| state.stall(peer))?;
     } else {
         let items = parse_items(&params["items"]);
         with(|state| {
@@ -251,7 +268,7 @@ fn check_window(window: &Window) -> Result<(), String> {
     }
 }
 
-/// What the view shows: `{ receiving, paired, onPhone, earlier, icons }`.
+/// What the view shows: `{ receiving, stalled, paired, onPhone, earlier, icons }`.
 /// An unpaired phone's list is forgotten.
 #[tauri::command]
 pub fn mobile_phone_notifications_list(window: Window, app: AppHandle) -> Result<Value, String> {
@@ -304,6 +321,19 @@ mod tests {
 
     fn notice(key: &str, posted_at: u64) -> Value {
         json!({ "key": key, "package": "com.chat", "app": "Chat", "title": "Ann", "text": "Hi", "postedAt": posted_at })
+    }
+
+    #[test]
+    fn a_stopped_reader_keeps_the_list_until_the_next_one_arrives() {
+        let mut state = State::default();
+        state.replace("phone", parse_items(&json!([notice("a", 1)])), 10);
+        state.stall("phone");
+        assert!(state.stalled);
+        assert_eq!(state.on_phone.len(), 1);
+        state.replace("phone", parse_items(&json!([notice("a", 1)])), 10);
+        assert!(!state.stalled);
+        state.stall("other");
+        assert!(state.stalled && state.on_phone.is_empty());
     }
 
     #[test]

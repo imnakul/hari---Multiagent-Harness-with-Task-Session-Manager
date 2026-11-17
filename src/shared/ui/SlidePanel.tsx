@@ -11,6 +11,11 @@ const GLIDE_OUT_MS = 260;
 const GLIDE_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 /** Just past the right edge, margin included. */
 const OFFSCREEN = "translateX(calc(100% + 0.5rem))";
+// Fork (L-336): `motion="unroll"` uncovers the panel from its top edge down
+// (out of the top bar, where its button is) and rolls it back up to close.
+// Same timing and curve as the slide; the text never moves or squashes.
+const ROLLED_UP = { clip: "inset(0 0 100% 0 round 0.75rem)", transform: "translateY(-0.5rem)" };
+const UNROLLED = { clip: "inset(0 0 0 0 round 0.75rem)", transform: "translateY(0)" };
 
 function reducedMotion(): boolean {
   return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
@@ -35,6 +40,9 @@ function panelWidth(box: HTMLElement): number {
  * Fork (L-306): `motion="slide"` moves only the panel (transform and opacity),
  * so nothing beside it is laid out again while it moves: the chat takes its
  * new width once, as the slide in starts or after the slide out ends.
+ *
+ * Fork (L-336): `motion="unroll"` is the same, but the panel unrolls down from
+ * its top edge (clip, a small drop and a fade) instead of sliding in.
  */
 export function SlidePanel({
   open,
@@ -48,7 +56,7 @@ export function SlidePanel({
 }: {
   open: boolean;
   appear?: boolean;
-  motion?: "width" | "slide";
+  motion?: "width" | "slide" | "unroll";
   className?: string;
   /** Runs before the slide out starts (the Browser freezes its page). */
   beforeLeave?: () => Promise<void>;
@@ -70,7 +78,8 @@ export function SlidePanel({
     const changed = shownOpen.current === null ? appear : shownOpen.current !== open;
     shownOpen.current = open;
     const animate = changed && !reducedMotion();
-    const panel = motion === "slide" ? (node.firstElementChild as HTMLElement | null) : null;
+    const panel = motion !== "width" ? (node.firstElementChild as HTMLElement | null) : null;
+    const unroll = motion === "unroll";
     let timer = 0;
     let cancelled = false;
     const rest = () => {
@@ -81,6 +90,7 @@ export function SlidePanel({
         panel.style.transition = "";
         panel.style.transform = "";
         panel.style.opacity = "";
+        panel.style.clipPath = "";
         panel.style.willChange = "";
       }
     };
@@ -94,19 +104,28 @@ export function SlidePanel({
       node.style.width = `${to}px`;
       timer = window.setTimeout(done, ms);
     };
-    // A fresh slide in starts past the right edge; one already moving turns
-    // around from where it is.
+    // A fresh slide in starts past the right edge (or rolled up); one
+    // already moving turns around from where it is.
+    const hide = (target: HTMLElement) => {
+      target.style.transform = unroll ? ROLLED_UP.transform : OFFSCREEN;
+      if (unroll) target.style.clipPath = ROLLED_UP.clip;
+      target.style.opacity = "0";
+    };
     const glide = (target: HTMLElement, show: boolean, ms: number, done: () => void) => {
       if (show && !target.style.transform) {
         target.style.transition = "none";
-        target.style.transform = OFFSCREEN;
-        target.style.opacity = "0";
+        hide(target);
         void target.offsetWidth;
       }
-      target.style.willChange = "transform, opacity";
-      target.style.transition = `transform ${ms}ms ${GLIDE_EASE}, opacity ${ms}ms ${GLIDE_EASE}`;
-      target.style.transform = show ? "translateX(0)" : OFFSCREEN;
-      target.style.opacity = show ? "1" : "0";
+      const moves = unroll ? ["transform", "opacity", "clip-path"] : ["transform", "opacity"];
+      target.style.willChange = moves.join(", ");
+      target.style.transition = moves.map((name) => `${name} ${ms}ms ${GLIDE_EASE}`).join(", ");
+      if (!show) hide(target);
+      else {
+        target.style.transform = unroll ? UNROLLED.transform : "translateX(0)";
+        if (unroll) target.style.clipPath = UNROLLED.clip;
+        target.style.opacity = "1";
+      }
       timer = window.setTimeout(done, ms);
     };
 

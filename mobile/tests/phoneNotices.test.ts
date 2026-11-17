@@ -31,6 +31,7 @@ describe("phone notifications (L-325)", () => {
     });
     expect(parseActiveNotices(raw)).toEqual({
       listening: true,
+      stalled: false,
       items: [
         { key: "a", package: "com.chat", app: "Chat", title: "Ann", text: "Hi", postedAt: 5 },
         { key: "b", package: "com.mail", app: "com.mail", title: "", text: "", postedAt: 4 },
@@ -38,9 +39,18 @@ describe("phone notifications (L-325)", () => {
     });
   });
 
+  it("reads access on but no reader as stalled (L-334)", () => {
+    expect(parseActiveNotices('{"listening":false,"allowed":true,"items":[]}')).toEqual({
+      listening: false,
+      stalled: true,
+      items: [],
+    });
+    expect(parseActiveNotices('{"listening":false,"allowed":false,"items":[]}').stalled).toBe(false);
+  });
+
   it("reads unreadable JSON as not listening", () => {
-    expect(parseActiveNotices("{")).toEqual({ listening: false, items: [] });
-    expect(parseActiveNotices("{}")).toEqual({ listening: false, items: [] });
+    expect(parseActiveNotices("{")).toEqual({ listening: false, stalled: false, items: [] });
+    expect(parseActiveNotices("{}")).toEqual({ listening: false, stalled: false, items: [] });
   });
 
   it("never sends a skipped app's notifications", () => {

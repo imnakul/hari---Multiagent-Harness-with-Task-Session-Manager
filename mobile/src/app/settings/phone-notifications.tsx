@@ -19,15 +19,15 @@ export default function PhoneNotificationsScreen() {
   const styles = useStyles();
   const [{ enabled, skipped }, setPreferences] = usePhoneNoticePreferences();
   const [allowed, setAllowed] = useState(() => phoneNotices?.allowed() ?? false);
-  const [active, setActive] = useState<PhoneNotice[]>(() =>
-    phoneNotices ? parseActiveNotices(phoneNotices.active()).items : [],
+  const [{ items: active, stalled }, setRead] = useState(() =>
+    phoneNotices ? parseActiveNotices(phoneNotices.active()) : { listening: false, stalled: false, items: [] as PhoneNotice[] },
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active" || !phoneNotices) return;
       setAllowed(phoneNotices.allowed());
-      setActive(parseActiveNotices(phoneNotices.active()).items);
+      setRead(parseActiveNotices(phoneNotices.active()));
     });
     return () => subscription.remove();
   }, []);
@@ -63,6 +63,13 @@ export default function PhoneNotificationsScreen() {
       {enabled && !allowed ? (
         <Text style={styles.note} onPress={() => void phoneNotices?.openSettings()}>
           Turn on Notification access for Hari to read your notifications.{" "}
+          <Text style={{ color: colors.accent }}>Open settings</Text>
+        </Text>
+      ) : enabled && stalled ? (
+        // L-334: access is on but Android hasn't started the reader (often after an update).
+        <Text style={styles.note} onPress={() => void phoneNotices?.openSettings()}>
+          Android hasn&apos;t started Hari&apos;s notification reader. Hari is restarting it; if notifications
+          still don&apos;t reach the computer, turn Notification access off and on.{" "}
           <Text style={{ color: colors.accent }}>Open settings</Text>
         </Text>
       ) : (

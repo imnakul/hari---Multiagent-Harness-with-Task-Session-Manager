@@ -14,7 +14,8 @@ export type PhoneNotice = {
   postedAt: number;
 };
 
-export type ActiveNotices = { listening: boolean; items: PhoneNotice[] };
+/** `stalled` (L-334): access is on but Android hasn't started the reader. */
+export type ActiveNotices = { listening: boolean; stalled: boolean; items: PhoneNotice[] };
 
 /**
  * Pre-filled skip list: banking, UPI, authenticator and password apps, whose
@@ -74,11 +75,13 @@ export function parseActiveNotices(raw: string): ActiveNotices {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { listening: false, items: [] };
+    return { listening: false, stalled: false, items: [] };
   }
   const items = field(parsed, "items");
+  const listening = field(parsed, "listening") === true;
   return {
-    listening: field(parsed, "listening") === true,
+    listening,
+    stalled: !listening && field(parsed, "allowed") === true,
     items: Array.isArray(items)
       ? items.map(parseNotice).filter((notice): notice is PhoneNotice => notice !== null)
       : [],
