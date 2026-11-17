@@ -77,6 +77,17 @@ export function numberWords(blocks: MarkdownBlock[]): {
   return { count, ranges };
 }
 
+/**
+ * Fork (Hari, L-333): whether the text has a block that stretches to its
+ * container's width: a list (its text fills the row), code or a table (side
+ * scrollers), a quote or a rule. A bubble that sizes to its content gives
+ * these no width, so they need a set width. Plain paragraphs and headings
+ * size themselves.
+ */
+export function fillsWidth(source: string): boolean {
+  return parseMarkdown(source).some((block) => block.type !== "paragraph" && block.type !== "heading");
+}
+
 export function parseMarkdown(source: string): MarkdownBlock[] {
   return parseBlocks(source.replace(/\r\n?/g, "\n").split("\n"));
 }

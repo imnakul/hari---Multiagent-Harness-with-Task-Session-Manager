@@ -26,6 +26,7 @@ import { useConnection } from "@/features/connection/ConnectionProvider";
 import { canSaveToDownloads, openNativeFile } from "@/features/liveUpdates/nativeLive";
 import { withLiftHeld } from "@/features/sessions/liftHold";
 import { Markdown } from "@/features/sessions/Markdown";
+import { fillsWidth } from "@/features/sessions/markdownParser";
 import { useKeyboardLift } from "@/features/sessions/SessionScreen";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import {
@@ -740,8 +741,8 @@ function ShareBubble({
             mine ? styles.bubbleMine : styles.bubbleTheirs,
             pictures.length > 0 && styles.bubblePicture,
             // Fork (Hari, L-317): a link's card at full width, as on the computer.
-            // L-333: a Markdown list fills its width, so a list takes the full bubble too.
-            texts.some((item) => item.kind === "link" || (item.kind === "text" && MARKDOWN_LIST.test(item.text ?? ""))) &&
+            // L-333: Markdown lists, code, tables, quotes and rules stretch, so they take the full bubble too.
+            texts.some((item) => item.kind === "link" || (item.kind === "text" && fillsWidth((item.text ?? "").slice(0, 4000)))) &&
               styles.bubbleLink,
             failed && styles.bubbleFailed,
             selected && styles.bubbleSelected,
@@ -1056,9 +1057,6 @@ function Notice({ title, text }: { title: string; text: string }) {
     </View>
   );
 }
-
-/** A Markdown list line ("- item", "1. item"). */
-const MARKDOWN_LIST = /^s*(?:[-*+]|d+[.)])s+S/m;
 
 const useStyles = themedStyles((colors) => ({
   composer: {

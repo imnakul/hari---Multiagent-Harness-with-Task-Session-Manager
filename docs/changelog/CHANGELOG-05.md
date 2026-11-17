@@ -1,12 +1,12 @@
 # Changelog 05 — MonoCode Windows fork
 
-## 2026-11-17 17:54 IST — Hari Share: messages with a list were squeezed (L-333)
+## 2026-11-17 17:54 IST — Hari Share: messages with a list, code or a table were squeezed (L-333)
 - Type: fix
-- What: In Hari's Share chat, a text message with a numbered or bulleted list was only as wide as its first line, so the list broke words over many short lines. It now takes the full bubble width.
-- Why: User report 2026-11-17 (screenshot: "Two issues:" message). Cause: Markdown list text fills its row (`flex: 1`), which gives it no width inside a bubble that sizes to its content.
+- What: In Hari's Share chat, a text message with a numbered or bulleted list was only as wide as its first line, so the list broke words over many short lines. Code blocks, tables, quotes and rules had the same problem. Messages with any of these now take the full bubble width; plain text and headings still size to fit.
+- Why: User report 2026-11-17 (screenshot: "Two issues:" message). Cause: Markdown list text fills its row (`flex: 1`) and code and tables scroll sideways, which gives them no width inside a bubble that sizes to its content.
 - Files: see L-333 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
 - Commit: uncommitted
-- Verified: phone typecheck ✅ lint ✅. Needs a check on the phone.
+- Verified: phone typecheck ✅ lint ✅ `markdown` tests ✅ (8). Needs a check on the phone.
 
 ## 2026-11-17 17:08 IST — Desktop Share: tabs, type dropdown, Settings (L-332)
 - Type: feature

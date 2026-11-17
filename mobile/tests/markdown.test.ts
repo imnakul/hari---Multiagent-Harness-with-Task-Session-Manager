@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseInline, parseMarkdown } from "@/features/sessions/markdownParser";
+import { fillsWidth, parseInline, parseMarkdown } from "@/features/sessions/markdownParser";
 import {
   formatWorkingDuration,
   hasTurnMetrics,
@@ -103,5 +103,21 @@ describe("turn metrics", () => {
       ],
     });
     expect(hasTurnMetrics({ inputTokens: 0 })).toBe(false);
+  });
+});
+
+describe("fillsWidth (L-333)", () => {
+  it("is true for blocks that stretch to their container", () => {
+    expect(fillsWidth("Two issues:\n\n1. Trend line\n2. Counts")).toBe(true);
+    expect(fillsWidth("- one\n- two")).toBe(true);
+    expect(fillsWidth("```\nconst a = 1;\n```")).toBe(true);
+    expect(fillsWidth("| a | b |\n| - | - |\n| 1 | 2 |")).toBe(true);
+    expect(fillsWidth("> quoted")).toBe(true);
+    expect(fillsWidth("above\n\n---\n\nbelow")).toBe(true);
+  });
+
+  it("is false for paragraphs and headings", () => {
+    expect(fillsWidth("Vandana data has issue")).toBe(false);
+    expect(fillsWidth("# Title\n\nSome **bold** text and `code`.")).toBe(false);
   });
 });
