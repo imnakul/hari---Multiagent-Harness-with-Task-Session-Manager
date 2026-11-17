@@ -80,7 +80,7 @@ function FlashIcon({
  * A picture at its own shape (at most 280 wide and 360 tall), or a square
  * tile in a group's grid. Click opens it in the default app.
  */
-function ShareImage({ path, label, tile }: { path: string; label: string; tile: boolean }): JSX.Element {
+export function ShareImage({ path, label, tile }: { path: string; label: string; tile: boolean }): JSX.Element {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -158,7 +158,7 @@ function FileCard({ name, size, onOpen }: { name: string; size?: number; onOpen?
   );
 }
 
-function ShareText({ text }: { text: string }): JSX.Element {
+export function ShareText({ text }: { text: string }): JSX.Element {
   const long = isLongShareText(text);
   const [open, setOpen] = useState(false);
   return (
@@ -179,7 +179,7 @@ function ShareText({ text }: { text: string }): JSX.Element {
   );
 }
 
-const isPicture = (entry: ShareEntry) => entry.kind === "file" && isImagePath(entry.path ?? entry.name ?? "");
+export const isPicture = (entry: ShareEntry) => entry.kind === "file" && isImagePath(entry.path ?? entry.name ?? "");
 
 /**
  * Fork (Hari, L-287, L-290): one Share message as a chat bubble: a single

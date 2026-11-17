@@ -32,6 +32,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useContentWidth } from "./ContentPane";
+import { sideScrollTouchX, sideScrollTouchY } from "./SideScroll";
 
 
 import { useColors, useScheme } from "./theme";
@@ -46,6 +47,8 @@ const SPRING = {
   reduceMotion: ReduceMotion.Never,
 };
 const SWIPE_MIN_OFFSET = 5;
+/** Fork (Hari, L-339): from a table or code block, the menu opens only from this strip at the edge. */
+const EDGE_STRIP = 28;
 const SWIPE_MIN_DISTANCE = 60;
 const SWIPE_MIN_VELOCITY = 500;
 /** How near shut the scene is when a switch from the drawer goes ahead: the
@@ -284,6 +287,8 @@ export function ScenePagerHost({
   /** Where the finger landed, to tell which way it goes. */
   const touchX = useSharedValue(0);
   const touchY = useSharedValue(0);
+  /** Where the finger landed within the pager, for the edge strip. */
+  const touchLocalX = useSharedValue(0);
   /** Where the pages or the scene were when the finger landed, even
    *  mid-animation. */
   const dragStart = useSharedValue(0);
@@ -437,6 +442,7 @@ export function ScenePagerHost({
           const touch = event.allTouches[0];
           touchX.set(touch.absoluteX);
           touchY.set(touch.absoluteY);
+          touchLocalX.set(touch.x);
         })
         .onTouchesMove((event, manager) => {
           // Decided: the moves after are the drag's own, and judging them
@@ -456,6 +462,22 @@ export function ScenePagerHost({
           if (isOpen.get() || translateX.get() < -1) {
             if (hasDrawer && dx > 0) {
               moving.set(DRAWER);
+              manager.activate();
+            } else manager.fail();
+            return;
+          }
+          // Fork (Hari, L-339): a swipe that starts on a table or code block
+          // that scrolls sideways is the block's, unless it starts at the
+          // screen's edge (the menu from the right, Back from the left).
+          const onSideScroll =
+            Math.abs(sideScrollTouchX.get() - touchX.get()) < 1 &&
+            Math.abs(sideScrollTouchY.get() - touchY.get()) < 1;
+          if (onSideScroll) {
+            if (hasDrawer && swipes.get() > 0 && dx < 0 && touchLocalX.get() >= width - EDGE_STRIP) {
+              moving.set(DRAWER);
+              manager.activate();
+            } else if (backs.get() > 0 && dx > 0 && touchLocalX.get() <= EDGE_STRIP) {
+              moving.set(BACK);
               manager.activate();
             } else manager.fail();
             return;
@@ -545,6 +567,7 @@ export function ScenePagerHost({
       pages,
       touchX,
       touchY,
+      touchLocalX,
       isOpen,
       translateX,
       swipes,

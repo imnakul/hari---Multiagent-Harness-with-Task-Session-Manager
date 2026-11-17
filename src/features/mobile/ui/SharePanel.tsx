@@ -2,7 +2,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } from "react";
-import { CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../shared/ui/icons";
+import {
+  ArrowUpRight,
+  Archive,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  CloudUpload,
+  ListFilter,
+  Pin,
+  Settings,
+  SmartPhone,
+  Trash2,
+  X,
+} from "../../../shared/ui/icons";
 import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
@@ -29,7 +42,7 @@ import {
 import { PhoneFilesView } from "./PhoneFilesView";
 import { PhoneNotificationsView } from "./PhoneNotificationsView";
 import { PhoneStatus, SHARE_SMALL_BUTTON, shareErrorMessage } from "./PhoneStatus";
-import { ShareBubble } from "./ShareBubble";
+import { isPicture, ShareBubble, ShareImage, ShareText } from "./ShareBubble";
 import { ShareComposer } from "./ShareComposer";
 
 /** Tauri reports physical pixels on some Windows setups; map back to CSS pixels. */
@@ -41,23 +54,33 @@ function toClientPoint(x: number, y: number): { x: number; y: number } {
 
 type Storage = { historyBytes: number; filesBytes: number; files: number };
 
-type ShareView = "share" | "notifications" | "storage" | "settings";
+type ShareView = "share" | "notifications" | "files" | "settings";
+type ShareTab = Exclude<ShareView, "settings">;
 
-/** Fork (Hari, L-332): Share's tabs. Notifications and Storage need a paired phone. */
-const SHARE_VIEWS: readonly { id: ShareView; label: string }[] = [
+/**
+ * Fork (Hari, L-332, L-337): Share's tabs, in the header. Notifications and
+ * Files need a paired phone; Settings is the gear beside them.
+ */
+const SHARE_TABS: readonly { id: ShareTab; label: string }[] = [
   { id: "share", label: "Share" },
   { id: "notifications", label: "Notifications" },
-  { id: "storage", label: "Storage" },
-  { id: "settings", label: "Settings" },
+  { id: "files", label: "Files" },
 ];
+/** Below this panel width Notifications shows as a bell, so the header fits. */
+const SHARE_TABS_NARROW = 380;
 
 const SHARE_FILTER_OPTIONS = SHARE_FILTERS.map((option) => ({ value: option.id, label: option.label }));
 
 const HEADER_BUTTON =
   "grid size-7 place-items-center rounded-md text-content/55 transition-[background-color,color,transform] duration-100 hover:bg-content/10 hover:text-content active:scale-[0.94] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60";
 
-/** Pinned items in a bar at the top; a click jumps to one and moves to the next. */
-function PinBar({
+/**
+ * Fork (Hari, L-338): the pinned items as one card at the top. Folded it
+ * shows one line; a click opens it in place (the picture, or the whole text
+ * in a box that scrolls). The arrow jumps to it in the chat; with several
+ * pins, the chevrons step through them.
+ */
+function PinCard({
   pins,
   onJump,
 }: {
@@ -65,37 +88,70 @@ function PinBar({
   onJump: (id: string) => void;
 }): JSX.Element | null {
   const [index, setIndex] = useState(0);
+  const [open, setOpen] = useState(false);
   if (!pins.length) return null;
-  const current = pins[Math.min(index, pins.length - 1)];
+  const at = Math.min(index, pins.length - 1);
+  const current = pins[at];
   if (!current) return null;
   const label =
     current.kind === "file" ? (current.name ?? "File") : (current.text ?? "").replace(/\s+/g, " ").slice(0, 140);
+  const step = (delta: number) => setIndex((at + delta + pins.length) % pins.length);
   return (
-    <button
-      type="button"
-      title={pins.length > 1 ? "Jump to this pin; click again for the next" : "Jump to the pinned message"}
-      onClick={() => {
-        onJump(current.id);
-        setIndex((value) => (value + 1) % pins.length);
-      }}
-      className="flex min-w-0 shrink-0 items-center gap-2 border-b border-stroke px-3 py-1.5 text-left text-[12px] hover:bg-content/[0.04]"
-    >
-      <span className="flex shrink-0 flex-col gap-0.5" aria-hidden>
-        {pins.slice(0, 4).map((pin, at) => (
-          <span
-            key={pin.id}
-            className={`h-1.5 w-0.5 rounded-full ${at === index % Math.min(pins.length, 4) ? "bg-accent" : "bg-content/25"}`}
+    <section aria-label="Pinned" className="shrink-0 border-b border-stroke">
+      <div className="flex min-w-0 items-center gap-0.5 py-1 pl-3 pr-1.5">
+        <button
+          type="button"
+          aria-expanded={open}
+          title={open ? "Fold the pin" : "Open the pin here"}
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-left text-[12px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+        >
+          <Pin className="size-3.5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-content/80">{label}</span>
+          <ChevronDown
+            className={`size-3.5 shrink-0 text-content/45 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            strokeWidth={1.75}
+            aria-hidden
           />
-        ))}
-      </span>
-      <Pin className="size-3.5 shrink-0 text-accent" strokeWidth={1.75} aria-hidden />
-      <span className="min-w-0 flex-1 truncate text-content/80">{label}</span>
-      {pins.length > 1 ? (
-        <span className="shrink-0 tabular-nums text-content/40">
-          {(index % pins.length) + 1}/{pins.length}
-        </span>
+        </button>
+        {pins.length > 1 ? (
+          <>
+            <span className="shrink-0 px-1 text-[11px] tabular-nums text-content/40">
+              {at + 1} of {pins.length}
+            </span>
+            <button type="button" title="Previous pin" aria-label="Previous pin" onClick={() => step(-1)} className={HEADER_BUTTON}>
+              <ChevronUp className="size-3.5" strokeWidth={1.75} aria-hidden />
+            </button>
+            <button type="button" title="Next pin" aria-label="Next pin" onClick={() => step(1)} className={HEADER_BUTTON}>
+              <ChevronDown className="size-3.5" strokeWidth={1.75} aria-hidden />
+            </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          title="Go to it in the chat"
+          aria-label="Go to the pinned message in the chat"
+          onClick={() => onJump(current.id)}
+          className={HEADER_BUTTON}
+        >
+          <ArrowUpRight className="size-3.5" strokeWidth={1.75} aria-hidden />
+        </button>
+      </div>
+      {open ? (
+        <div key={current.id} className="max-h-72 overflow-y-auto px-3 pb-2.5 animate-[zen-step-in_220ms_ease-out_both]">
+          {isPicture(current) && current.path ? (
+            <ShareImage path={current.path} label={current.name ?? "Picture"} tile={false} />
+          ) : current.kind === "file" ? (
+            <p className="text-[12px] text-content/60">
+              {current.name ?? "File"}
+              {current.size !== undefined ? ` · ${formatFileSize(current.size)}` : ""}
+            </p>
+          ) : (
+            <ShareText text={current.text ?? ""} />
+          )}
+        </div>
       ) : null}
-    </button>
+    </section>
   );
 }
 
@@ -169,7 +225,7 @@ function StorageStrip({
  * paired phone. The title-bar phone button opens and closes it. Drop, paste
  * or attach files to send them; pins sit in a bar at the top.
  */
-function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
+function ShareContent({ onClose, width }: { onClose: () => void; width: number }): JSX.Element {
   const [list, setList] = useState<ShareList | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShareFilter>("all");
@@ -202,6 +258,14 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
 
   const items = useMemo(() => list?.items ?? [], [list]);
   const paired = (list?.phones ?? 0) > 0;
+  const narrow = width < SHARE_TABS_NARROW;
+  const tabs = useMemo(
+    () =>
+      SHARE_TABS.filter((tab) => paired || tab.id === "share").map((tab) =>
+        tab.id === "notifications" && narrow ? { ...tab, icon: Bell, iconOnly: true } : tab,
+      ),
+    [paired, narrow],
+  );
   const newestIn = items.find((entry) => entry.direction === "in")?.at ?? 0;
 
   useEffect(() => {
@@ -294,35 +358,45 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
 
   return (
     <div ref={rootRef} role="region" aria-label="Share with your phone" className="relative flex min-h-0 flex-1 flex-col">
-      <header className="flex h-10 shrink-0 select-none items-center gap-1 border-b border-stroke pl-3 pr-1.5">
-        <SmartPhone className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
-        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium text-content">Share</h3>
-        {/* Fork (Hari, L-332): the kinds of item in a dropdown, beside Close. */}
+      {/* Fork (Hari, L-337): one row: the tabs stand in for the title, then the
+          filter (Share only), Settings and Close. */}
+      <header className="flex h-11 shrink-0 select-none items-center gap-1 border-b border-stroke pl-2 pr-1.5">
+        <SegmentedSwitch
+          options={tabs}
+          value={view}
+          onChange={setView}
+          ariaLabel="Share views"
+          size="md"
+        />
+        <span className="min-w-0 flex-1" />
         {view === "share" ? (
           <SelectMenu
             label="Show"
             value={filter}
             options={SHARE_FILTER_OPTIONS}
             onChange={(value) => setFilter(value as ShareFilter)}
-            className="w-24"
+            icon={ListFilter}
+            marked={filter !== "all"}
+            className=""
             menuWidth={160}
           />
         ) : null}
+        <button
+          type="button"
+          title="Settings"
+          aria-label="Share settings"
+          aria-pressed={view === "settings"}
+          onClick={() => setView(view === "settings" ? "share" : "settings")}
+          className={`${HEADER_BUTTON} ${view === "settings" ? "bg-content/10 text-content" : ""}`}
+        >
+          <Settings className="size-3.5" strokeWidth={1.75} aria-hidden />
+        </button>
         <button type="button" title="Close Share" aria-label="Close Share" onClick={onClose} className={HEADER_BUTTON}>
           <X className="size-3.5" strokeWidth={1.75} aria-hidden />
         </button>
       </header>
-      <div className="shrink-0 border-b border-stroke px-3 py-2">
-        {/* Fork (Hari, L-332): the app's gliding tabs; the phone's own tabs only once one is paired. */}
-        <SegmentedSwitch
-          options={paired ? SHARE_VIEWS : SHARE_VIEWS.filter((option) => option.id === "share" || option.id === "settings")}
-          value={view}
-          onChange={setView}
-          ariaLabel="Share views"
-        />
-      </div>
 
-      {view === "storage" ? (
+      {view === "files" ? (
         <PhoneFilesView onError={setError} />
       ) : view === "notifications" ? (
         <PhoneNotificationsView onError={setError} />
@@ -345,7 +419,7 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
         </div>
       ) : (
         <>
-          <PinBar pins={pins} onJump={jumpTo} />
+          <PinCard pins={pins} onJump={jumpTo} />
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {list === null ? (
@@ -496,7 +570,7 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
           }}
         />
         <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-          {still ? <ShareContent onClose={() => setSharePanelOpen(false)} /> : <ShareSkeleton />}
+          {still ? <ShareContent onClose={() => setSharePanelOpen(false)} width={Math.min(width, max)} /> : <ShareSkeleton />}
         </div>
       </aside>
     </SlidePanel>

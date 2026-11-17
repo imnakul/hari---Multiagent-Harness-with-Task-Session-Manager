@@ -5,7 +5,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { Check, ChevronDown } from "../../../shared/ui/icons";
+import { Check, ChevronDown, type IconComponent } from "../../../shared/ui/icons";
 import { Popover } from "../../../shared/ui/Popover";
 
 export type SelectMenuOption = {
@@ -27,6 +27,12 @@ type Props = {
   className?: string;
   menuWidth?: number;
   maxHeight?: number;
+  /**
+   * Fork (L-337): a square icon button instead of the field, for a crowded
+   * header; `marked` puts a dot on it (a filter is on).
+   */
+  icon?: IconComponent;
+  marked?: boolean;
 };
 
 export function SelectMenu({
@@ -38,6 +44,8 @@ export function SelectMenu({
   className = "w-44",
   menuWidth = 240,
   maxHeight = 360,
+  icon: Icon,
+  marked = false,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -103,19 +111,37 @@ export function SelectMenu({
           if (!open) onOpen?.();
           setOpen(!open);
         }}
-        className={`flex h-7 w-full items-center gap-2 rounded-md border px-2 text-[12px] outline-none transition-colors ${
-          open
-            ? "border-content/20 bg-content/10 text-content"
-            : "border-content/10 bg-content/5 text-content/85 hover:border-content/20 hover:bg-content/8 hover:text-content"
-        }`}
+        title={Icon ? `${label}: ${current?.label ?? value}` : undefined}
+        className={
+          Icon
+            ? `relative grid size-7 place-items-center rounded-md outline-none transition-[background-color,color,transform] duration-100 active:scale-[0.94] focus-visible:ring-1 focus-visible:ring-accent/60 ${
+                open ? "bg-content/10 text-content" : "text-content/55 hover:bg-content/10 hover:text-content"
+              }`
+            : `flex h-7 w-full items-center gap-2 rounded-md border px-2 text-[12px] outline-none transition-colors ${
+                open
+                  ? "border-content/20 bg-content/10 text-content"
+                  : "border-content/10 bg-content/5 text-content/85 hover:border-content/20 hover:bg-content/8 hover:text-content"
+              }`
+        }
       >
-        <span className="min-w-0 flex-1 truncate text-left">
-          {current?.label ?? value}
-        </span>
-        <ChevronDown
-          className={`size-3.5 shrink-0 text-content/45 transition-transform ${open ? "rotate-180" : ""}`}
-          strokeWidth={1.75}
-        />
+        {Icon ? (
+          <>
+            <Icon className="size-3.5" strokeWidth={1.75} aria-hidden />
+            {marked ? (
+              <span aria-hidden className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" />
+            ) : null}
+          </>
+        ) : (
+          <>
+            <span className="min-w-0 flex-1 truncate text-left">
+              {current?.label ?? value}
+            </span>
+            <ChevronDown
+              className={`size-3.5 shrink-0 text-content/45 transition-transform ${open ? "rotate-180" : ""}`}
+              strokeWidth={1.75}
+            />
+          </>
+        )}
       </button>{" "}
       {open ? (
         <Popover

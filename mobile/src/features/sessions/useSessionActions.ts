@@ -1,7 +1,6 @@
 import * as Haptics from "@/ui/haptics";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActionSheetIOS, Alert } from "react-native";
-import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import type { SessionSummary } from "@/features/workspace/types";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
@@ -15,24 +14,15 @@ const failed = (title: string) => (reason: unknown) =>
 
 /**
  * What the desktop sidebar's menu does for a session, from a swipe or a long
- * press on a row of a session list: rename and delete, each asked first. Also
- * keeps one row's swipe actions out at a time.
+ * press on a row of a session list: rename and delete, each asked first.
+ * Fork (Hari, L-340): the list's rows no longer swipe; the session's
+ * toolbar still renames from here.
  */
 export function useSessionActions(
   onDeleted: (session: SessionSummary) => void,
 ) {
   const scheme = useScheme();
   const { renameSession, deleteSession } = useWorkspace();
-
-  const openRow = useRef<SwipeableMethods | null>(null);
-  const swipeOpened = (row: SwipeableMethods) => {
-    if (openRow.current !== row) openRow.current?.close();
-    openRow.current = row;
-  };
-  const closeOpenRow = () => {
-    openRow.current?.close();
-    openRow.current = null;
-  };
 
   // A deleted row fades out and the rows below slide up into its place. The
   // animations are on only while it goes, so switching projects, searching and
@@ -94,5 +84,5 @@ export function useSessionActions(
     );
   };
 
-  return { removing, rename, remove, showActions, swipeOpened, closeOpenRow };
+  return { removing, rename, remove, showActions };
 }

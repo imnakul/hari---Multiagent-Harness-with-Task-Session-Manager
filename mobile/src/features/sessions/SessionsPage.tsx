@@ -1,20 +1,20 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
-import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
+import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 
 import { FileSearchBar, SEARCH_BAR } from "@/features/files/FileSearchBar";
 import type { Harness, SessionSummary, Worktree } from "@/features/workspace/types";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { AnimationsPaused } from "@/ui/AnimationsPaused";
+import { ChoiceSheet } from "@/ui/ChoiceMenu";
+import * as Haptics from "@/ui/haptics";
 import { GradualBlur } from "@/ui/GradualBlur";
 import { themedStyles, useColors } from "@/ui/theme";
 
@@ -27,12 +27,13 @@ import {
 } from "./SessionFilterMenu";
 import { useSessionLayout } from "./SessionScreen";
 import { ARRIVE_MS, useArrivals } from "./useArrivals";
-import { REMOVE_MS, useSessionActions } from "./useSessionActions";
+import { pinnedFirst, toggleSessionPin, useSessionPins } from "./sessionPins";
 import { useSessionPages, visibleSessions } from "./useSessionPages";
 
 /**
- * A project's sessions, newest first and paged in as the list scrolls. Each
- * swipes left to rename or delete, as on the desktop sidebar. Searched and
+ * A project's sessions, newest first and paged in as the list scrolls.
+ * Fork (Hari, L-340): sessions pinned on the phone come first; a long press
+ * on one opens its menu (Pin or Unpin). Searched and
  * filtered from the bar where the composer rests on the chat page, and
  * narrowed to `worktree` when the header's menu picks one, as the desktop's
  * sidebar is. `active` while the page is in view: it reads the list then, and
@@ -63,7 +64,8 @@ export function SessionsPage({
   const listed = visibleSessions(pages, recent, needle, edited).filter((session) =>
     inWorktree(session, worktree),
   );
-  const visible = filterSessions(listed, filter);
+  const pins = useSessionPins();
+  const visible = pinnedFirst(filterSessions(listed, filter), pins);
   const scope = JSON.stringify([projectId, needle, filter, worktree?.path, !!pages]);
   const arrivals = useArrivals(visible, scope, active);
   // The agents to filter by: those in the list, in the order first seen.
@@ -71,18 +73,14 @@ export function SessionsPage({
   if (filter.harness && !harnesses.includes(filter.harness)) harnesses.push(filter.harness);
   const narrowed = !!needle || filter !== NO_FILTER || !!worktree;
 
-  const actions = useSessionActions(() => {});
-  const { closeOpenRow } = actions;
-  useEffect(() => {
-    if (!active) closeOpenRow();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  // The menu shows only while the page is in view.
+  const [menuFor, setMenuFor] = useState<SessionSummary | null>(null);
 
   // The rows' handlers keep their identity, reaching the latest render's
   // through a ref, so a row only re-renders when its own session changes.
-  const latest = useRef({ onOpen, rememberSession, actions });
+  const latest = useRef({ onOpen, rememberSession });
   useLayoutEffect(() => {
-    latest.current = { onOpen, rememberSession, actions };
+    latest.current = { onOpen, rememberSession };
   });
   const handlers = useMemo<RowHandlers>(
     () => ({
@@ -90,38 +88,33 @@ export function SessionsPage({
         latest.current.rememberSession(session);
         latest.current.onOpen(session);
       },
-      showActions: (session) => latest.current.actions.showActions(session),
-      rename: (session) => latest.current.actions.rename(session),
-      remove: (session) => latest.current.actions.remove(session),
-      swipeOpened: (row) => latest.current.actions.swipeOpened(row),
+      showActions: (session) => {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setMenuFor(session);
+      },
     }),
     [],
   );
-  const removingId = actions.removing?.id;
   const { arriving, moving } = arrivals;
+  const pinnedIds = useMemo(() => new Set(pins), [pins]);
   const renderItem = useCallback(
     ({ item }: { item: SessionSummary }) => (
       <SessionRow
         session={item}
-        removing={removingId === item.id}
+        pinned={pinnedIds.has(item.id)}
         arriving={arriving.has(item.id)}
         handlers={handlers}
       />
     ),
-    [removingId, arriving, handlers],
+    [pinnedIds, arriving, handlers],
   );
+  const menuPinned = !!menuFor && pinnedIds.has(menuFor.id);
 
   return (
     <AnimationsPaused value={!active}>
       <View style={styles.page}>
         <Animated.FlatList
-          itemLayoutAnimation={
-            actions.removing
-              ? LinearTransition.duration(REMOVE_MS)
-              : moving
-                ? LinearTransition.duration(ARRIVE_MS)
-                : undefined
-          }
+          itemLayoutAnimation={moving ? LinearTransition.duration(ARRIVE_MS) : undefined}
           data={arrivals.sessions}
           // Re-renders the rows when they start or stop moving, so each takes up the transition.
           extraData={moving}
@@ -138,7 +131,6 @@ export function SessionsPage({
           ListFooterComponent={
             pages?.loadingMore ? <ActivityIndicator style={styles.more} color={colors.muted} /> : null
           }
-          onScrollBeginDrag={closeOpenRow}
           onEndReached={pages?.loadMore}
           onEndReachedThreshold={0.5}
           initialNumToRender={12}
@@ -157,6 +149,24 @@ export function SessionsPage({
           accessory={
             <SessionFilterMenu value={filter} onChange={setFilter} harnesses={harnesses} />
           }
+        />
+        <ChoiceSheet
+          open={active && menuFor !== null}
+          title={menuFor?.title ?? "Session"}
+          sections={
+            menuFor
+              ? [
+                  [
+                    {
+                      label: menuPinned ? "Unpin" : "Pin",
+                      icon: "pin",
+                      onPress: () => toggleSessionPin(menuFor.id),
+                    },
+                  ],
+                ]
+              : []
+          }
+          onClose={() => setMenuFor(null)}
         />
       </View>
     </AnimationsPaused>
@@ -187,9 +197,6 @@ function Divider() {
 type RowHandlers = {
   open: (session: SessionSummary) => void;
   showActions: (session: SessionSummary) => void;
-  rename: (session: SessionSummary) => void;
-  remove: (session: SessionSummary) => void;
-  swipeOpened: (row: SwipeableMethods) => void;
 };
 
 /** What a row shows of its session: a fresh list read hands over new objects
@@ -211,12 +218,12 @@ function sameRow(a: SessionSummary, b: SessionSummary) {
 /** A session in the list, re-rendered only when what it shows changes. */
 const SessionRow = memo(function SessionRow({
   session,
-  removing,
+  pinned,
   arriving,
   handlers,
 }: {
   session: SessionSummary;
-  removing: boolean;
+  pinned: boolean;
   arriving: boolean;
   handlers: RowHandlers;
 }) {
@@ -226,16 +233,13 @@ const SessionRow = memo(function SessionRow({
       detailed
       onPress={() => handlers.open(session)}
       onLongPress={() => handlers.showActions(session)}
-      onRename={() => handlers.rename(session)}
-      onDelete={() => handlers.remove(session)}
-      onSwipeOpen={handlers.swipeOpened}
+      pinned={pinned}
       entering={arriving ? FadeIn.duration(ARRIVE_MS).delay(ARRIVE_MS * 0.3) : undefined}
-      exiting={removing ? FadeOut.duration(REMOVE_MS * 0.6) : undefined}
     />
   );
 },
 (before, after) =>
-  before.removing === after.removing &&
+  before.pinned === after.pinned &&
   before.arriving === after.arriving &&
   before.handlers === after.handlers &&
   sameRow(before.session, after.session));

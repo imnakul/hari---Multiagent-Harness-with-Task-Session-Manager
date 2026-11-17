@@ -5,6 +5,8 @@ export type SegmentedOption<T extends string> = {
   id: T;
   label: string;
   icon?: IconComponent;
+  /** Fork (L-337): show only the icon (the label becomes its name and hover text). */
+  iconOnly?: boolean;
 };
 
 /**
@@ -20,11 +22,14 @@ export function SegmentedSwitch<T extends string>({
   value,
   onChange,
   ariaLabel,
+  size = "sm",
 }: {
   options: readonly SegmentedOption<T>[];
   value: T;
   onChange: (value: T) => void;
   ariaLabel: string;
+  /** Fork (L-337): `md` matches a 13 px panel title, for tabs that stand in for one. */
+  size?: "sm" | "md";
 }): ReactNode {
   const refs = useRef(new Map<T, HTMLButtonElement>());
   const box = useRef<HTMLDivElement>(null);
@@ -84,7 +89,7 @@ export function SegmentedSwitch<T extends string>({
           }`}
         />
       ) : null}
-      {options.map(({ id, label, icon: Icon }) => {
+      {options.map(({ id, label, icon: Icon, iconOnly }) => {
         const selected = value === id;
         return (
           <button
@@ -98,16 +103,20 @@ export function SegmentedSwitch<T extends string>({
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(id)}
-            className={`relative inline-flex h-6 items-center gap-1 rounded px-2 font-sans text-[11px] transition-colors duration-100 ${
+            aria-label={Icon && iconOnly ? label : undefined}
+            title={Icon && iconOnly ? label : undefined}
+            className={`relative inline-flex items-center gap-1 rounded px-2 font-sans transition-colors duration-100 ${
+              size === "md" ? "h-7 text-[13px]" : "h-6 text-[11px]"
+            } ${
               selected
                 ? `text-content ${mark ? "" : "bg-selection-strong"}`
                 : "text-content/45 hover:text-content/80"
             }`}
           >
             {Icon ? (
-              <Icon aria-hidden className="size-3" strokeWidth={1.75} />
+              <Icon aria-hidden className={size === "md" ? "size-3.5" : "size-3"} strokeWidth={1.75} />
             ) : null}
-            {label}
+            {Icon && iconOnly ? null : label}
           </button>
         );
       })}

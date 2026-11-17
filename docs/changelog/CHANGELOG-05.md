@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-17 20:13 IST — Share header in one row and a pin card; phone tables scroll; phone session pins (L-337, L-338, L-339, L-340)
+- Type: feature + fix
+- What: The desktop Share header is one row: Share, Notifications and Files tabs (Storage renamed) in place of the title, then a filter icon, a Settings gear and Close. Pinned items sit in a card at the top that opens in place, with an arrow to go to the message and "2 of 3" arrows for several pins. In Hari, a swipe on a table or code block scrolls it; the side menu opens from the right edge there. Hari's session list drops the swipe actions; a long press opens a menu to pin a session on the phone, and pinned sessions come first.
+- Why: User request 2026-11-17 (screenshots: Share's second tabs row; pin bar only scrolled to the message). User report 2026-11-17: reading a wide table in a session opened the side menu. User request 2026-11-17: phone-only pinning, a hold menu instead of swipe; Rename and Delete on the phone left as they are.
+- Files: see L-337 to L-340 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: (not released yet)
+- Verified: root typecheck ✅ mobile and shared-ui vitest ✅ (31 files); phone typecheck ✅ lint ✅ (2 old warnings) full phone vitest ✅ (343). Needs a check in the desktop app and on the phone.
+
 ## 2026-11-17 19:31 IST — Phone notifications after updates; Share panel width and unroll (L-334, L-335, L-336)
 - Type: fix + feature
 - What: After a Hari update, phone notifications stopped reaching the computer until Notification access was turned off and on; Hari now restarts its notification reader itself, says in its Notifications settings when the reader isn't running, and the computer says why it's quiet instead of asking to turn Send to computer on. The Share and Browser side panels no longer come back squeezed after Hari is minimised. The desktop Share panel now unrolls down from the top bar and rolls back up to close.

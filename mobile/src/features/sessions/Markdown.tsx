@@ -7,11 +7,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { FileTypeIcon } from "@/features/files/FileTypeIcon";
 import { chooseLinkOpen } from "@/features/share/openLink";
 import { BlockLinkCards } from "@/features/tools/LinkCard";
+import { SideScroll } from "@/ui/SideScroll";
 import { withAlpha, themedStyles, useColors } from "@/ui/theme";
 
 import {
@@ -140,8 +141,7 @@ const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBloc
       );
     case "code":
       return (
-        <ScrollView
-          horizontal
+        <SideScroll
           showsHorizontalScrollIndicator={false}
           style={styles.codeBlock}
           contentContainerStyle={styles.codeContent}
@@ -149,7 +149,7 @@ const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBloc
           <Text style={styles.codeText} selectable>
             {block.text}
           </Text>
-        </ScrollView>
+        </SideScroll>
       );
     case "list":
       return (
@@ -189,8 +189,7 @@ function Table({ rows, fade }: { rows: Inline[][][]; fade?: Fade }) {
   const inner = width - StyleSheet.hairlineWidth * 2;
   const cellWidth = Math.max(MIN_COLUMN_WIDTH, Math.floor(inner / columns));
   return (
-    <ScrollView
-      horizontal
+    <SideScroll
       showsHorizontalScrollIndicator={false}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
     >
@@ -209,7 +208,7 @@ function Table({ rows, fade }: { rows: Inline[][][]; fade?: Fade }) {
           </View>
         ))}
       </View>
-    </ScrollView>
+    </SideScroll>
   );
 }
 
