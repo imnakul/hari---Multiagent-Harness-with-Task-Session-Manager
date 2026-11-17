@@ -254,6 +254,7 @@ vi.mock("@/features/workspace/ProjectPages", () => ({
   useProjectPages: () => ({ progress: { get: () => 0 }, view: desktop.page }),
   ProjectPages: () => null,
   ProjectSwitch: () => null,
+  showProjectSessions: vi.fn(),
 }));
 vi.mock("@/features/workspace/WorkspaceProvider", () => ({
   useWorkspace: () => ({
@@ -302,6 +303,7 @@ vi.mock("@/ui/ScenePager", () => ({
     allowSwipe: () => () => {},
   }),
   useDrawerSwipe: vi.fn(),
+  useBackSwipe: vi.fn(),
   useSceneSwapping: () => false,
   useSceneSwitching: () => false,
 }));
@@ -482,7 +484,8 @@ describe("new session composer workspace", () => {
         </GlassBlurTarget>,
       ),
     );
-    const renderAvatar = desktop.header.headerLeft as () => ReactNode;
+    // L-328: the menu button is on the right, where its drawer opens.
+    const renderAvatar = desktop.header.headerRight as () => ReactNode;
     act(() => root.render(<>{renderAvatar()}</>));
     expect(desktop.headerTarget).toBe(target);
     expect(button("Projects and monos").hasAttribute("data-glass")).toBe(true);

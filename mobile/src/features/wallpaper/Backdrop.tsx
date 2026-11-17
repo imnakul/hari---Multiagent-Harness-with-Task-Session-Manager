@@ -8,7 +8,14 @@ import { useSafeAreaFrame } from "react-native-safe-area-context";
 import { accentColor, hueOf, useColors, useLook, useScheme, withAlpha } from "@/ui/theme";
 
 import { drawPreset, drawnPreset } from "./presets";
-import { photoUri, READING_DIM, useWallpaper, type WallpaperSource } from "./wallpaper";
+import {
+  photoUri,
+  READING_DIM,
+  useShareWallpaper,
+  useWallpaper,
+  type Wallpaper,
+  type WallpaperSource,
+} from "./wallpaper";
 
 /** The accent's hue in dark, as the accent glow is drawn in. */
 function useAccentHue(): number {
@@ -45,8 +52,9 @@ export const BackdropReading = createContext<boolean | undefined>(undefined);
 type BackdropLayer = { uri: string; dim: number; blur: number };
 
 /** The wallpaper as a screen draws it; null without one, or before a preset is drawn. */
-export function useBackdrop(reading: boolean): BackdropLayer | null {
-  const wallpaper = useWallpaper();
+export function useBackdrop(reading: boolean, own?: Wallpaper | null): BackdropLayer | null {
+  const app = useWallpaper();
+  const wallpaper = own ?? app;
   const uri = useWallpaperUri(wallpaper.source);
   const scheme = useScheme();
   if (!uri) return null;
@@ -88,6 +96,22 @@ export function Backdrop({ reading = false }: { reading?: boolean }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <BackdropImage layer={layer} />
+    </View>
+  );
+}
+
+/**
+ * Fork (Hari, L-328): Share's own background over the app's, when it has
+ * one: its picture, or the sheet's plain colour for none.
+ */
+export function ShareBackdrop() {
+  const own = useShareWallpaper();
+  const layer = useBackdrop(false, own);
+  const colors = useColors();
+  if (!own) return null;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.sheet }]}>
+      {layer ? <BackdropImage layer={layer} /> : null}
     </View>
   );
 }

@@ -58,6 +58,7 @@ import {
   type ShareFile,
 } from "@/features/share/shareTransfers";
 import { LinkCard } from "@/features/tools/LinkCard";
+import { ShareBackdrop } from "@/features/wallpaper/Backdrop";
 import { ToolButton } from "@/features/tools/ReplyTools";
 import { createTask, newId, saveNote, titleFrom } from "@/features/tools/tools";
 import type { Command } from "@/features/tools/tools";
@@ -286,6 +287,8 @@ export function SharePanel() {
 
   return (
     <View style={[styles.chat, { paddingTop: headerHeight + 8 }]}>
+      {/* Fork (Hari, L-328): Share's own background, if set in Appearance. */}
+      <ShareBackdrop />
       <View style={styles.top}>
         {history.length ? (
           <View style={styles.toolbar}>

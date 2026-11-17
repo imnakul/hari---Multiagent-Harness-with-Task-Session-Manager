@@ -56,6 +56,7 @@ import { Transcript, TranscriptLoading } from "@/features/sessions/Transcript";
 import {
   ProjectPages,
   ProjectSwitch,
+  showProjectSessions,
   useProjectPages,
 } from "@/features/workspace/ProjectPages";
 import {
@@ -73,7 +74,7 @@ import { UnreadDot, useAnyUnreadMono } from "@/features/workspace/UnreadDot";
 import { Icon } from "@/ui/Icon";
 import { androidBackHeader } from "@/ui/AndroidHeader";
 import { GlassBlurTarget, LiquidView } from "@/ui/LiquidView";
-import { useDrawerActions, useDrawerSwipe } from "@/ui/ScenePager";
+import { useBackSwipe, useDrawerActions, useDrawerSwipe } from "@/ui/ScenePager";
 import { Timed } from "@/ui/Timed";
 import { ReplyToolsProvider } from "@/features/tools/ReplyTools";
 import { useColors } from "@/ui/theme";
@@ -83,8 +84,8 @@ import { usePushedIn, usePushStarted } from "@/ui/usePushedIn";
  * A project's screen: a new session, or with `sessionId` one of its sessions.
  * A new session comes first, then the project's sessions to its right;
  * swiping left slides the sessions in (and the composer out with the new
- * session), the header switch following the finger; a swipe right from the
- * new session opens the drawer. The project's mascot opens it too, and the
+ * session), the header switch following the finger; a swipe left past the
+ * sessions opens the drawer, on the right (L-328). The project's mascot opens it too, and the
  * button on the right settings; a session's
  * right has its changes and a menu of its actions instead. A session, or
  * one just started, is pushed over it as a screen of its own: its chat under
@@ -111,7 +112,16 @@ export function ProjectScreen({
   const unread = useAnyUnreadMono();
   // A session is pushed over its project and swipes back; only the project
   // itself swipes the drawer open.
-  useDrawerSwipe(!sessionId);
+  // Fork (Hari, L-328): on Android, where the stack has no swipe back of its
+  // own, a session too opens the drawer (now on the right) with a swipe left,
+  // and a swipe right goes back to its project's sessions, one-handed.
+  const sessionSwipes = !!sessionId && !sheet && Platform.OS === "android";
+  useDrawerSwipe(!sessionId || sessionSwipes);
+  useBackSwipe(() => {
+    showProjectSessions(project.id);
+    if (router.canGoBack()) router.back();
+    else router.replace({ pathname: "/project/[projectId]", params: { projectId: project.id } });
+  }, sessionSwipes);
   const blurTarget = use(GlassBlurTarget);
   // What it runs with, as the model picker, a route over it, sets it.
   const { session, chosen, startAccess, accounts } = useSessionChoice(project, sessionId);
@@ -437,8 +447,9 @@ export function ProjectScreen({
                 ...(Platform.OS === "android"
                   ? {
                       headerTitleAlign: "center" as const,
-                      headerLeft: () => headerSurface(menuButton),
-                      headerRight: () => headerSurface(settingsButton),
+                      // Fork (Hari, L-328): the menu on the right, where its drawer opens.
+                      headerLeft: () => headerSurface(settingsButton),
+                      headerRight: () => headerSurface(menuButton),
                       headerBackVisible: false,
                     }
                   : {}),
@@ -451,8 +462,8 @@ export function ProjectScreen({
         )
       ) : Platform.OS === "android" ? null : (
         <Stack.Toolbar placement="left">
-          {/* The drawer's menu button in the bar's glass. */}
-          <Stack.Toolbar.View>{menuButton}</Stack.Toolbar.View>
+          {/* The app's own cog in the bar's glass (L-328: the menu is on the right). */}
+          <Stack.Toolbar.View>{settingsButton}</Stack.Toolbar.View>
         </Stack.Toolbar>
       )}
       {sessionId ? (
@@ -461,8 +472,8 @@ export function ProjectScreen({
         )
       ) : Platform.OS === "android" ? null : (
         <Stack.Toolbar placement="right">
-          {/* The app's own cog in the bar's glass, as the mascot on the left. */}
-          <Stack.Toolbar.View>{settingsButton}</Stack.Toolbar.View>
+          {/* The drawer's menu button, on the side its drawer opens from. */}
+          <Stack.Toolbar.View>{menuButton}</Stack.Toolbar.View>
         </Stack.Toolbar>
       )}
       <SessionContent>

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
@@ -14,9 +14,24 @@ import { PROJECT_VIEWS, projectSegments, type ProjectView } from "./projectHeade
  * starts back on the first page. Not `active` on a screen without them.
  */
 export function useProjectPages(key: string, active = true) {
-  const [viewFor, setViewFor] = useState<{ key: string; view: ProjectView } | null>(null);
+  const [viewFor, setViewFor] = useState<{ key: string; view: ProjectView } | null>(() =>
+    takeSessionsRequest(key) ? { key, view: "sessions" } : null,
+  );
   const view: ProjectView = viewFor?.key === key ? viewFor.view : "chat";
   const setView = (next: ProjectView) => setViewFor({ key, view: next });
+  // Fork (Hari, L-328): a session's swipe back lands on its project's sessions.
+  useEffect(() => {
+    if (!active) return;
+    const listener = (projectId: string) => {
+      if (projectId !== key) return false;
+      setViewFor({ key, view: "sessions" });
+      return true;
+    };
+    sessionsListeners.add(listener);
+    return () => {
+      sessionsListeners.delete(listener);
+    };
+  }, [key, active]);
 
   const width = useContentWidth();
   const progress = useScenePager(
@@ -29,6 +44,22 @@ export function useProjectPages(key: string, active = true) {
     transform: [{ translateX: -progress.get() * width }],
   }));
   return { view, setView, progress, slide };
+}
+
+const sessionsListeners = new Set<(projectId: string) => boolean>();
+let sessionsRequest: string | null = null;
+function takeSessionsRequest(key: string) {
+  if (sessionsRequest !== key) return false;
+  sessionsRequest = null;
+  return true;
+}
+
+/** Fork (Hari, L-328): shows the project's sessions page, now if its screen
+ *  is there, or once it opens. */
+export function showProjectSessions(projectId: string) {
+  let shown = false;
+  for (const listener of sessionsListeners) shown = listener(projectId) || shown;
+  sessionsRequest = shown ? null : projectId;
 }
 
 export type ProjectPagesState = ReturnType<typeof useProjectPages>;

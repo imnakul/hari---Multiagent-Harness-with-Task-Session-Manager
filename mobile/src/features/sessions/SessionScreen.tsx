@@ -663,12 +663,20 @@ export function SessionFrame({
                 )}
                 <View style={[styles.header, { top: headerTop }]}>
                   <View>
-                    <CircleButton
-                      icon="sidebar"
-                      label={unread ? "Projects and monos, new replies" : "Projects and monos"}
-                      onPress={drawer.open}
-                    />
-                    {unread ? <UnreadDot /> : null}
+                    {trailingLayers.map((layer) => (
+                      <HeaderPiece
+                        push={push}
+                        key={layer.key}
+                        stage={0}
+                        incoming={layer.incoming}
+                        started={started}
+                        still={layer.still}
+                        glass
+                        style={!layer.incoming && styles.leaving}
+                      >
+                        <HeaderTrailing chrome={layer.chrome} />
+                      </HeaderPiece>
+                    ))}
                   </View>
                   <View style={styles.titleBlock}>
                     {centerLayers.map((layer) => (
@@ -686,21 +694,14 @@ export function SessionFrame({
                       </HeaderPiece>
                     ))}
                   </View>
+                  {/* Fork (Hari, L-328): the menu on the right, where its drawer opens. */}
                   <View>
-                    {trailingLayers.map((layer) => (
-                      <HeaderPiece
-                        push={push}
-                        key={layer.key}
-                        stage={0}
-                        incoming={layer.incoming}
-                        started={started}
-                        still={layer.still}
-                        glass
-                        style={!layer.incoming && styles.leaving}
-                      >
-                        <HeaderTrailing chrome={layer.chrome} />
-                      </HeaderPiece>
-                    ))}
+                    <CircleButton
+                      icon="sidebar"
+                      label={unread ? "Projects and monos, new replies" : "Projects and monos"}
+                      onPress={drawer.open}
+                    />
+                    {unread ? <UnreadDot /> : null}
                   </View>
                 </View>
                 </>

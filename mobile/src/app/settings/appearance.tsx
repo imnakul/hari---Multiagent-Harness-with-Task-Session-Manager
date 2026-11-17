@@ -45,8 +45,11 @@ import {
   BLUR_RANGE,
   DIM_RANGE,
   pickWallpaperPhoto,
+  setShareWallpaper,
   setWallpaper,
+  useShareWallpaper,
   useWallpaper,
+  type Wallpaper,
   type WallpaperSource,
 } from "@/features/wallpaper/wallpaper";
 import { projectForRoute } from "@/features/workspace/routing";
@@ -95,6 +98,7 @@ export default function AppearanceScreen() {
       <AccentSection />
       <TintSection />
       <WallpaperSection />
+      <ShareWallpaperSection />
       <TranscriptSection />
     </SettingsPage>
   );
@@ -419,18 +423,65 @@ const NONE: WallpaperSource = { kind: "none" };
 
 /** The picture behind every screen: none, one of the app's, or a photo. */
 function WallpaperSection() {
+  return (
+    <WallpaperPicker
+      heading="Wallpaper"
+      wallpaper={useWallpaper()}
+      set={setWallpaper}
+      note={(none) =>
+        none
+          ? "A picture behind the side menu, lists, Tasks, Activity and chats."
+          : "Dim is set for light and dark apart, and is a little stronger behind messages. Code and Changes keep a plain background."
+      }
+    />
+  );
+}
+
+// Fork (Hari, L-328): Share's own background, with the same tiles and
+// sliders as the wallpaper's; "Same as app" follows the wallpaper.
+function ShareWallpaperSection() {
+  const own = useShareWallpaper();
+  const app = useWallpaper();
+  return (
+    <WallpaperPicker
+      heading="Share background"
+      wallpaper={own ?? app}
+      set={setShareWallpaper}
+      follow={{ on: !own, onPress: () => setShareWallpaper(null) }}
+      note={() =>
+        own ? "Only behind Share. Card opacity follows the wallpaper." : "Share uses the wallpaper above."
+      }
+    />
+  );
+}
+
+/** A wallpaper's tiles and sliders, for the app's or Share's own. */
+function WallpaperPicker({
+  heading,
+  wallpaper,
+  set,
+  follow,
+  note,
+}: {
+  heading: string;
+  wallpaper: Wallpaper;
+  set: (patch: Partial<Wallpaper>) => void;
+  /** Share's: a first tile that follows the app's wallpaper, and no card opacity. */
+  follow?: { on: boolean; onPress: () => void };
+  note: (none: boolean) => string;
+}) {
   const styles = useStyles();
   const scheme = useScheme();
-  const wallpaper = useWallpaper();
-  const { source } = wallpaper;
+  const following = !!follow?.on;
+  const source: WallpaperSource = following ? NONE : wallpaper.source;
   const [busy, setBusy] = useState(false);
   const choose = (next: WallpaperSource) => {
     void Haptics.selectionAsync();
-    setWallpaper({ source: next });
+    set({ source: next });
   };
   const pickPhoto = () => {
     setBusy(true);
-    pickWallpaperPhoto()
+    pickWallpaperPhoto((next) => set({ source: next }))
       .catch(() => {
         Alert.alert("Couldn't use that photo", "Try another one.");
         return false;
@@ -440,14 +491,29 @@ function WallpaperSection() {
   const dimKey = scheme === "dark" ? "dimDark" : "dimLight";
   return (
     <>
-      <Text style={styles.heading}>Wallpaper</Text>
+      <Text style={styles.heading}>{heading}</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.tiles}
         style={styles.tileStrip}
       >
-        <WallpaperTile label="None" selected={source.kind === "none"} onPress={() => choose(NONE)} />
+        {follow ? (
+          <WallpaperTile
+            label="Same as app"
+            icon="image"
+            selected={following}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              follow.onPress();
+            }}
+          />
+        ) : null}
+        <WallpaperTile
+          label="None"
+          selected={!following && source.kind === "none"}
+          onPress={() => choose(NONE)}
+        />
         {PRESET_IDS.map((id) => (
           <PresetTile
             key={id}
@@ -462,7 +528,7 @@ function WallpaperSection() {
           onPress={pickPhoto}
         />
       </ScrollView>
-      {source.kind !== "none" ? (
+      {!following && source.kind !== "none" ? (
         <View style={[styles.card, styles.sliderCard]}>
           <LookSlider
             label={scheme === "dark" ? "Dim (dark)" : "Dim (light)"}
@@ -470,32 +536,34 @@ function WallpaperSection() {
             min={DIM_RANGE.min}
             max={DIM_RANGE.max}
             format={percent}
-            onCommit={(dim) => setWallpaper({ [dimKey]: dim })}
+            onCommit={(dim) => set({ [dimKey]: dim })}
           />
           <View style={styles.sliderDivider} />
-          <LookSlider
-            label="Card opacity"
-            value={wallpaper.glass}
-            min={GLASS_RANGE.min}
-            max={GLASS_RANGE.max}
-            format={percent}
-            onCommit={(glass) => setWallpaper({ glass })}
-          />
-          <View style={styles.sliderDivider} />
+          {follow ? null : (
+            <>
+              <LookSlider
+                label="Card opacity"
+                value={wallpaper.glass}
+                min={GLASS_RANGE.min}
+                max={GLASS_RANGE.max}
+                format={percent}
+                onCommit={(glass) => set({ glass })}
+              />
+              <View style={styles.sliderDivider} />
+            </>
+          )}
           <LookSlider
             label="Softness"
             value={wallpaper.blur}
             min={BLUR_RANGE.min}
             max={BLUR_RANGE.max}
             format={(blur) => `${Math.round(blur)}`}
-            onCommit={(blur) => setWallpaper({ blur: Math.round(blur) })}
+            onCommit={(blur) => set({ blur: Math.round(blur) })}
           />
         </View>
       ) : null}
       <Text style={styles.note}>
-        {source.kind === "none"
-          ? "A picture behind the side menu, lists, Tasks, Activity and chats."
-          : "Dim is set for light and dark apart, and is a little stronger behind messages. Code and Changes keep a plain background."}
+        {note(source.kind === "none")}
       </Text>
     </>
   );

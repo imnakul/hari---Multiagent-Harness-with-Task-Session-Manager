@@ -173,8 +173,13 @@ async function mainHue(uri: string): Promise<number | null> {
   }
 }
 
-/** Lets the user pick a photo, then uses it as the wallpaper. False if they cancelled. */
-export async function pickWallpaperPhoto(): Promise<boolean> {
+/**
+ * Lets the user pick a photo, then uses it as the wallpaper (or, with
+ * `apply`, Share's own). False if they cancelled.
+ */
+export async function pickWallpaperPhoto(
+  apply: (source: WallpaperSource) => void = (source) => setWallpaper({ source }),
+): Promise<boolean> {
   const result = await launchImageLibraryAsync({ mediaTypes: "images", quality: 1 });
   const picked = result.assets?.[0];
   if (result.canceled || !picked) return false;
@@ -182,6 +187,44 @@ export async function pickWallpaperPhoto(): Promise<boolean> {
   const destination = new File(WALLPAPERS, file);
   await prepareImage(picked.uri, destination);
   const hue = await mainHue(destination.uri).catch(() => null);
-  setWallpaper({ source: { kind: "photo", file, hue } });
+  apply({ kind: "photo", file, hue });
   return true;
+}
+
+// Fork (Hari, L-328): Share's own background, as the app's wallpaper is set
+// (picture, dim and softness; card opacity stays the app's). Null follows
+// the app's wallpaper.
+const SHARE_KEY = "wallpaper.share";
+
+function loadShare(): Wallpaper | null {
+  try {
+    const raw = Storage.getItemSync(SHARE_KEY);
+    return raw ? parseWallpaper(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+let shareWallpaper = loadShare();
+const shareListeners = new Set<() => void>();
+const subscribeShare = (listener: () => void) => {
+  shareListeners.add(listener);
+  return () => {
+    shareListeners.delete(listener);
+  };
+};
+
+/** Changes Share's own background; null goes back to the app's wallpaper. */
+export function setShareWallpaper(patch: Partial<Wallpaper> | null): void {
+  const previous = shareWallpaper?.source;
+  // Starting its own, Share starts from the app's dim and softness.
+  shareWallpaper = patch ? { ...(shareWallpaper ?? wallpaper), ...patch } : null;
+  if (previous?.kind === "photo" && shareWallpaper?.source !== previous) removePhoto(previous.file);
+  if (shareWallpaper) void Storage.setItem(SHARE_KEY, JSON.stringify({ ...shareWallpaper, v: VERSION }));
+  else void Storage.removeItem(SHARE_KEY);
+  shareListeners.forEach((listener) => listener());
+}
+
+export function useShareWallpaper(): Wallpaper | null {
+  return useSyncExternalStore(subscribeShare, () => shareWallpaper);
 }

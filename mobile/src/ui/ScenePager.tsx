@@ -63,6 +63,8 @@ const OVERLAY_OPACITY = { dark: 0.5, light: 0 } as const;
 const NONE = 0;
 const PAGES = 1;
 const DRAWER = 2;
+/** Fork (Hari, L-328): a swipe right that goes back to what is behind. */
+const BACK = 3;
 
 type ScenePager = {
   /** The page index: 0 on the first page, 1 on the second, in between while dragging. */
@@ -104,6 +106,9 @@ type DrawerActions = {
   /** Lets a swipe right open the drawer while a screen that wants it is in
    *  front; returns the undo. */
   allowSwipe: () => () => void;
+  /** Fork (Hari, L-328): lets a swipe right run `back` while a screen that
+   *  wants it is in front; returns the undo. */
+  allowBackSwipe: (back: () => void) => () => void;
 };
 
 /** Never changes, so what only opens or closes the drawer doesn't re-render
@@ -149,6 +154,23 @@ export function useDrawerSwipe(active = true) {
   useEffect(() => {
     if (focused && active) return allowSwipe();
   }, [focused, active, allowSwipe]);
+}
+
+/**
+ * Fork (Hari, L-328): a swipe right runs `back` while this screen is in
+ * front (a session's, to its project's sessions), as the drawer now opens
+ * from the right.
+ */
+export function useBackSwipe(back: () => void, active = true) {
+  const { allowBackSwipe } = useDrawerActions();
+  const focused = useIsFocused();
+  const latest = useRef(back);
+  useEffect(() => {
+    latest.current = back;
+  });
+  useEffect(() => {
+    if (focused && active) return allowBackSwipe(() => latest.current());
+  }, [focused, active, allowBackSwipe]);
 }
 
 /**
@@ -216,8 +238,9 @@ export function useScenePager(
  * also drives, as the Expo Router drawer's "back" type: the scene slides
  * aside, dimming, to uncover `drawer` fixed underneath. Shut, a swipe goes to
  * the pages while there is one that way, and otherwise a deliberate swipe
- * right opens the drawer; open, a swipe left anywhere or a tap on the scene
- * shuts it. One pan for both, so they never
+ * left opens the drawer (Fork, L-328: it is on the right) and a swipe right
+ * goes back where a screen allows it; open, a swipe right anywhere or a tap
+ * on the scene shuts it. One pan for both, so they never
  * fight over a swipe. Nothing but a transform and an opacity moves, so the
  * scene's glass and blur aren't redrawn as it goes.
  */
@@ -253,6 +276,11 @@ export function ScenePagerHost({
    *  but a switch can mount the next before the last lets go. */
   const swipes = useSharedValue(0);
   const [swipeCount, setSwipeCount] = useState(0);
+  // Fork (Hari, L-328): the screen in front's swipe right back, if any.
+  const backs = useSharedValue(0);
+  // The latest to ask; the pan is rebuilt as it changes, as for swipeCount.
+  const [back, setBack] = useState<{ run: () => void } | null>(null);
+  const backCount = back ? 1 : 0;
   /** Where the finger landed, to tell which way it goes. */
   const touchX = useSharedValue(0);
   const touchY = useSharedValue(0);
@@ -268,7 +296,7 @@ export function ScenePagerHost({
     cancelAnimation(progress);
     progress.set(target.get());
     cancelAnimation(translateX);
-    translateX.set(isOpen.get() ? drawerWidth : 0);
+    translateX.set(isOpen.get() ? -drawerWidth : 0);
   }, [width, drawerWidth, moving, progress, target, translateX, isOpen]);
 
   // Side effects of opening or shutting; the motion itself runs on the UI thread.
@@ -282,7 +310,7 @@ export function ScenePagerHost({
     (willOpen: boolean) => {
       if (isOpen.get() !== willOpen) onToggled(willOpen);
       isOpen.set(willOpen);
-      translateX.set(withSpring(willOpen ? drawerWidth : 0, SPRING));
+      translateX.set(withSpring(willOpen ? -drawerWidth : 0, SPRING));
     },
     [isOpen, translateX, drawerWidth, onToggled],
   );
@@ -330,7 +358,7 @@ export function ScenePagerHost({
     }, SWAP_TIMEOUT);
   }, [finishSwitch]);
   useAnimatedReaction(
-    () => switchWaiting.get() && translateX.get() <= SWITCH_AT,
+    () => switchWaiting.get() && -translateX.get() <= SWITCH_AT,
     (shut, wasShut) => {
       if (!shut || wasShut) return;
       switchWaiting.set(false);
@@ -350,7 +378,7 @@ export function ScenePagerHost({
         setSwitching(true);
         animateTo(false);
         // Already shut: the cover still draws before the switch.
-        if (translateX.get() <= SWITCH_AT) afterFrames(1, runSwitch);
+        if (-translateX.get() <= SWITCH_AT) afterFrames(1, runSwitch);
         else switchWaiting.set(true);
       },
       allowSwipe: () => {
@@ -361,8 +389,17 @@ export function ScenePagerHost({
           setSwipeCount((count) => count - 1);
         };
       },
+      allowBackSwipe: (back) => {
+        const entry = { run: back };
+        setBack(entry);
+        backs.set(backs.get() + 1);
+        return () => {
+          setBack((current) => (current === entry ? null : current));
+          backs.set(backs.get() - 1);
+        };
+      },
     }),
-    [animateTo, swipes, translateX, switchWaiting, runSwitch],
+    [animateTo, swipes, backs, translateX, switchWaiting, runSwitch],
   );
 
   // Android's back shuts the drawer before it leaves the screen.
@@ -391,7 +428,7 @@ export function ScenePagerHost({
       Gesture.Pan()
         // Not rebuilt as the drawer opens or shuts: a new gesture would be
         // attached anew mid-animation.
-        .enabled(width > 0 && (on || (hasDrawer && swipeCount > 0)))
+        .enabled(width > 0 && (on || backCount > 0 || (hasDrawer && swipeCount > 0)))
         // Takes only a swipe towards a page there is, or the drawer's way, so
         // one off the edge (left on the last page, say) goes to what is under
         // the finger, such as a row's own swipe actions.
@@ -414,8 +451,10 @@ export function ScenePagerHost({
           }
           if (Math.abs(dx) <= SWIPE_MIN_OFFSET) return;
           // Open, the drawer takes the swipe that shuts it and nothing else.
-          if (isOpen.get() || translateX.get() > 1) {
-            if (hasDrawer && dx < 0) {
+          // Fork (Hari, L-328): the drawer is on the right, so the scene moves
+          // left for it and a swipe right shuts it.
+          if (isOpen.get() || translateX.get() < -1) {
+            if (hasDrawer && dx > 0) {
               moving.set(DRAWER);
               manager.activate();
             } else manager.fail();
@@ -425,8 +464,11 @@ export function ScenePagerHost({
           if (enabled.get() && next >= 0 && next < pages.get()) {
             moving.set(PAGES);
             manager.activate();
-          } else if (hasDrawer && swipes.get() > 0 && dx > 0) {
+          } else if (hasDrawer && swipes.get() > 0 && dx < 0) {
             moving.set(DRAWER);
+            manager.activate();
+          } else if (backs.get() > 0 && dx > 0) {
+            moving.set(BACK);
             manager.activate();
           } else manager.fail();
         })
@@ -436,7 +478,7 @@ export function ScenePagerHost({
         .onUpdate((event) => {
           if (moving.get() === DRAWER) {
             const next = dragStart.get() + event.translationX;
-            translateX.set(Math.min(drawerWidth, Math.max(0, next)));
+            translateX.set(Math.max(-drawerWidth, Math.min(0, next)));
             return;
           }
           if (moving.get() !== PAGES) return;
@@ -460,14 +502,18 @@ export function ScenePagerHost({
           if (moving.get() === DRAWER) {
             // The Expo Router drawer's rule, both ways: a flick or a long
             // enough drag goes its way, a nudge springs back.
-            const willOpen = decisive ? !leftward : isOpen.get();
+            const willOpen = decisive ? leftward : isOpen.get();
             if (isOpen.get() !== willOpen) scheduleOnRN(onToggled, willOpen);
             isOpen.set(willOpen);
             // Springs right here on the UI thread with the finger's velocity,
             // so there is no frame of lag waiting on JS.
             translateX.set(
-              withSpring(willOpen ? drawerWidth : 0, { ...SPRING, velocity: velocityX }),
+              withSpring(willOpen ? -drawerWidth : 0, { ...SPRING, velocity: velocityX }),
             );
+            return;
+          }
+          if (moving.get() === BACK) {
+            if (decisive && !leftward && back) scheduleOnRN(back.run);
             return;
           }
           if (moving.get() !== PAGES) return;
@@ -488,6 +534,9 @@ export function ScenePagerHost({
       on,
       hasDrawer,
       swipeCount,
+      backCount,
+      backs,
+      back,
       moving,
       enabled,
       dragStart,
@@ -510,10 +559,10 @@ export function ScenePagerHost({
   const dim = OVERLAY_OPACITY[scheme];
   // Only there while the scene is aside, so nothing shows at rest.
   const edgeStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.get(), [0, 24], [0, 1], "clamp"),
+    opacity: interpolate(-translateX.get(), [0, 24], [0, 1], "clamp"),
   }));
   const overlayStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.get(), [0, drawerWidth], [0, dim], "clamp"),
+    opacity: interpolate(-translateX.get(), [0, drawerWidth], [0, dim], "clamp"),
   }));
 
   return (
@@ -537,7 +586,7 @@ export function ScenePagerHost({
                 style={[styles.scene, { backgroundColor: colors.background }, sceneStyle]}
               >
                 {drawer ? (
-                  // Fork (Hari, L-235): a thin line along the scene's left edge as it
+                  // Fork (Hari, L-235, L-328): a thin line along the scene's right edge as it
                   // moves aside, in place of a soft shadow that read as a smudge.
                   <Animated.View
                     pointerEvents="none"
@@ -570,10 +619,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
+  // Fork (Hari, L-328): on the right, in reach of the thumb.
   drawer: {
     position: "absolute",
     top: 0,
-    left: 0,
+    right: 0,
     bottom: 0,
   },
   scene: {
@@ -583,7 +633,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     bottom: 0,
-    left: -StyleSheet.hairlineWidth,
+    right: -StyleSheet.hairlineWidth,
     width: StyleSheet.hairlineWidth,
   },
   overlay: {

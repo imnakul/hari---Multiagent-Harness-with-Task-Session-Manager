@@ -249,37 +249,15 @@ export function WorkspaceDrawer() {
           keyboardDismissMode="on-drag"
         >
           {/* Fork (Hari, L-236): the desktop's Tasks and Notes, over the lists. */}
-          {(catalog.phoneTools || feedShown || pairing) && !needle ? (
+          {/* Fork (Hari, L-275, L-328): the desktop bell's history, first. */}
+          {feedShown && !needle ? (
             <View style={[styles.list, styles.toolList]}>
-              {/* Fork (Hari, L-275): the desktop bell's history. */}
-              {feedShown ? (
-                <ToolRow
-                  icon="notifications"
-                  label="Notifications"
-                  badge={feedUnread}
-                  onPress={() => openModal("/notifications")}
-                />
-              ) : null}
-              {/* Fork (Hari, L-288, L-290): the Computer hub (Share | Control).
-                  L-310: always there once paired, as Share keeps an outbox for
-                  an offline computer; Wake-on-LAN joins it once it can't be reached. */}
-              {pairing ? (
-                <ToolRow icon="share" label="Share" onPress={() => openModal("/computer?tab=share")} />
-              ) : null}
-              {offline && canWake ? (
-                <ToolRow
-                  icon="power"
-                  label="Wake computer"
-                  detail={waking === "busy" ? "Sending…" : waking === "sent" ? "Sent" : undefined}
-                  onPress={() => void wake()}
-                />
-              ) : null}
-              {catalog.phoneTools ? (
-                <>
-                  <ToolRow icon="tasks" label="Tasks" onPress={() => openModal("/tasks")} />
-                  <ToolRow icon="note" label="Notes" onPress={() => openModal("/notes")} />
-                </>
-              ) : null}
+              <ToolRow
+                icon="notifications"
+                label="Notifications"
+                badge={feedUnread}
+                onPress={() => openModal("/notifications")}
+              />
             </View>
           ) : null}
           {listedMonos.length ? (
@@ -318,6 +296,33 @@ export function WorkspaceDrawer() {
                 : "No Monos or projects on this phone yet."}
             </Text>
           ) : null}
+          {/* Fork (Hari, L-236, L-328): the computer's tools under the lists,
+              then Settings, nearest the thumb above the search. */}
+          {!needle ? (
+            <View style={[styles.list, styles.section]}>
+              {/* Fork (Hari, L-288, L-290): the Computer hub (Share | Control).
+                  L-310: always there once paired, as Share keeps an outbox for
+                  an offline computer; Wake-on-LAN joins it once it can't be reached. */}
+              {pairing ? (
+                <ToolRow icon="share" label="Share" onPress={() => openModal("/computer?tab=share")} />
+              ) : null}
+              {offline && canWake ? (
+                <ToolRow
+                  icon="power"
+                  label="Wake computer"
+                  detail={waking === "busy" ? "Sending…" : waking === "sent" ? "Sent" : undefined}
+                  onPress={() => void wake()}
+                />
+              ) : null}
+              {catalog.phoneTools ? (
+                <>
+                  <ToolRow icon="tasks" label="Tasks" onPress={() => openModal("/tasks")} />
+                  <ToolRow icon="note" label="Notes" onPress={() => openModal("/notes")} />
+                </>
+              ) : null}
+              <ToolRow icon="settings" label="Settings" onPress={openSettings} />
+            </View>
+          ) : null}
         </ScrollView>
 
         <GradualBlur edge="top" height={headerBottom + FADE} color={colors.drawer} />
@@ -338,7 +343,6 @@ export function WorkspaceDrawer() {
 
         <Animated.View style={[styles.foot, { bottom: footerBottom }, lift]}>
           <View style={styles.footer}>
-          <CircleButton icon="settings" label="Settings" onPress={openSettings} size={FOOTER_HEIGHT} />
           <LiquidView borderRadius={FOOTER_HEIGHT / 2} style={styles.searchFrame} innerStyle={styles.search}>
             <Icon name="search" size={18} color={colors.muted} />
             <TextInput
@@ -732,8 +736,7 @@ const useStyles = themedStyles((colors) => ({
     alignItems: "center",
     gap: ROW_GAP,
     minHeight: 48,
-    paddingLeft: ROW_INSET,
-    paddingRight: ROW_INSET + 12,
+    paddingHorizontal: ROW_INSET,
     paddingVertical: 8,
     borderRadius: radii.card - 6,
     borderCurve: "continuous",
@@ -791,9 +794,7 @@ const useStyles = themedStyles((colors) => ({
     alignItems: "center",
     gap: ROW_GAP,
     minHeight: 64,
-    paddingLeft: ROW_INSET,
-    // Clear of the scene's edge, which the drawer meets on the right.
-    paddingRight: ROW_INSET + 12,
+    paddingHorizontal: ROW_INSET,
     paddingVertical: 10,
     borderRadius: radii.card - 6,
     borderCurve: "continuous",
