@@ -47,7 +47,18 @@ const LOOKS: Record<
   "large-side": { card: { height: 140 }, image: { width: "40%" }, title: 15, titleLines: 2, lines: 4 },
 };
 
-export function LinkCard({ url, style, command }: { url: string; style: LinkCardStyle; command: Command }) {
+export function LinkCard({
+  url,
+  style,
+  command,
+  onLongPress,
+}: {
+  url: string;
+  style: LinkCardStyle;
+  command: Command;
+  /** Fork (Hari, L-326): a hold on the card goes to the message it is in. */
+  onLongPress?: () => void;
+}) {
   const styles = useStyles();
   const colors = useColors();
   const [state, setState] = useState<State>({ status: "loading" });
@@ -84,6 +95,7 @@ export function LinkCard({ url, style, command }: { url: string; style: LinkCard
       accessibilityLabel={`${title}, ${hostOf(url)}`}
       // Fork (Hari, L-286): on the phone or on the computer.
       onPress={() => chooseLinkOpen(url)}
+      onLongPress={onLongPress}
       style={({ pressed }) => [styles.card, look.card, pressed && styles.pressed]}
     >
       {large ? image : null}

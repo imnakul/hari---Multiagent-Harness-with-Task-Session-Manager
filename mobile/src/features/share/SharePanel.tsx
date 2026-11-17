@@ -1,4 +1,5 @@
 import * as Clipboard from "expo-clipboard";
+import Storage from "expo-sqlite/kv-store";
 import { File } from "expo-file-system";
 import { Image } from "expo-image";
 import { useHeaderHeight } from "expo-router/react-navigation";
@@ -33,7 +34,8 @@ import {
   MAX_SHARE_FILES,
   MAX_SHARE_TEXT,
   shareCaption,
-  shareDay,
+  shareStamp,
+  shareState,
   shareRows,
   shareThumbnail,
   type PhoneShareEntry,
@@ -59,6 +61,7 @@ import { LinkCard } from "@/features/tools/LinkCard";
 import { ToolButton } from "@/features/tools/ReplyTools";
 import { createTask, newId, saveNote, titleFrom } from "@/features/tools/tools";
 import type { Command } from "@/features/tools/tools";
+import { ChoiceSheet, type MenuAction } from "@/ui/ChoiceMenu";
 import * as Haptics from "@/ui/haptics";
 import { Icon, type IconName } from "@/ui/Icon";
 import { radii, themedStyles, useColors, useScheme, withAlpha } from "@/ui/theme";
@@ -78,9 +81,6 @@ const KIND_ICON: Record<PhoneShareEntry["kind"], IconName> = {
 
 const why = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
-const timeOf = (at: number) =>
-  new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-
 const isPicture = (entry: PhoneShareEntry) => shareThumbnail(entry) !== null;
 
 /** Fork (Hari, L-316): the composer's gap above the keyboard, as in a session. */
@@ -90,6 +90,27 @@ const AT_END = 80;
 /** Fork (Hari, L-323): how long after opening the list may still fill in. */
 const SETTLE_MS = 1500;
 const REMOVE_GLIDE_MS = 200;
+/** Fork (Hari, L-326): the note saying which side is which, shown until closed once. */
+const DIRECTIONS_SEEN_KEY = "hari.shareDirectionsSeen";
+
+function readDirectionsSeen(): boolean {
+  try {
+    return Storage.getItemSync(DIRECTIONS_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Fork (Hari, L-326): what a hold on a message offers, above Delete. */
+function messageMenu(row: ShareRow): MenuAction[] {
+  const ids = row.items.map((item) => item.id);
+  const pinned = row.items.some((item) => item.pinned);
+  const saved = row.items.some((item) => item.saved);
+  return [
+    { label: pinned ? "Unpin" : "Pin", icon: "pin", onPress: () => pinShares(ids, !pinned) },
+    { label: saved ? "Unsave" : "Save", icon: "bookmark", onPress: () => saveShares(ids, !saved) },
+  ];
+}
 
 /**
  * Fork (Hari, L-279): text, links, the clipboard and files between this phone
@@ -109,6 +130,9 @@ export function SharePanel() {
   const colors = useColors();
   const [savedOnly, setSavedOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  // Fork (Hari, L-326): the message a hold opened the menu for.
+  const [menuRow, setMenuRow] = useState<ShareRow | null>(null);
+  const [directionsSeen, setDirectionsSeen] = useState(readDirectionsSeen);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pinIndex, setPinIndex] = useState(0);
   const scroll = useRef<ScrollView>(null);
@@ -302,6 +326,26 @@ export function SharePanel() {
         onScroll={onScroll}
         onContentSizeChange={onContentSizeChange}
       >
+        {!directionsSeen && history.length ? (
+          <View style={styles.directions}>
+            <Icon name="share" size={16} color={colors.muted} />
+            <Text style={styles.directionsText}>
+              Yours are on the right and go to your computer. Your computer&apos;s are on the left.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Got it, hide this note"
+              hitSlop={8}
+              onPress={() => {
+                setDirectionsSeen(true);
+                void Storage.setItem(DIRECTIONS_SEEN_KEY, "1").catch(() => {});
+              }}
+              style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
+            >
+              <Icon name="close" size={14} color={colors.muted} />
+            </Pressable>
+          </View>
+        ) : null}
         <Text style={styles.hint}>
           {canSaveToDownloads
             ? "Files from your computer save to Download/Hari; big ones wait for Download. Keep Hari open while files move."
@@ -324,11 +368,7 @@ export function SharePanel() {
           <Text style={styles.empty}>Long-press a message and tap Save to keep it here.</Text>
         ) : null}
 
-        {rows.map((row, index) => {
-          const head = row.items[row.items.length - 1];
-          const day = shareDay(head.at);
-          const previous = rows[index - 1];
-          const newDay = !previous || shareDay(previous.items[previous.items.length - 1].at) !== day;
+        {rows.map((row) => {
           return (
             <Animated.View
               key={row.key}
@@ -336,11 +376,6 @@ export function SharePanel() {
               layout={removing ? LinearTransition.duration(REMOVE_GLIDE_MS) : undefined}
               onLayout={({ nativeEvent }) => rowsAt.current.set(row.key, nativeEvent.layout.y)}
             >
-              {newDay ? (
-                <Text style={styles.day} accessibilityRole="header">
-                  {day}
-                </Text>
-              ) : null}
               <ShareBubble
                 row={row}
                 copiedId={copiedId}
@@ -349,16 +384,33 @@ export function SharePanel() {
                 cardStyle={catalog.linkPreviews?.cardStyle ?? "compact"}
                 onOpen={open}
                 onSelect={() => {
-                  void Haptics.selectionAsync();
-                  setSelected((current) => (current === row.key ? null : row.key));
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setSelected(row.key);
+                  setMenuRow(row);
                 }}
-                onRemove={() => remove(row)}
                 onCopy={copy}
               />
             </Animated.View>
           );
         })}
       </KeyboardChatScrollView>
+
+      <ChoiceSheet
+        open={menuRow !== null}
+        title="Message"
+        sections={
+          menuRow
+            ? [
+                messageMenu(menuRow),
+                [{ label: "Delete", icon: "trash", destructive: true, onPress: () => remove(menuRow) }],
+              ]
+            : []
+        }
+        onClose={() => {
+          setMenuRow(null);
+          setSelected(null);
+        }}
+      />
 
       <Animated.View style={[keyboardLift, { paddingBottom: composerBottom }]} onLayout={onComposerLayout}>
         <ShareComposer
@@ -593,7 +645,6 @@ function ShareBubble({
   cardStyle,
   onOpen,
   onSelect,
-  onRemove,
   onCopy,
 }: {
   row: ShareRow;
@@ -603,7 +654,6 @@ function ShareBubble({
   cardStyle: NonNullable<ReturnType<typeof useConnection>["catalog"]["linkPreviews"]>["cardStyle"];
   onOpen: (entry: PhoneShareEntry) => void;
   onSelect: () => void;
-  onRemove: () => void;
   onCopy: (id: string, text: string) => void;
 }) {
   const styles = useStyles();
@@ -618,13 +668,21 @@ function ShareBubble({
   const texts = row.items.filter((item) => item.kind !== "file");
   const ids = row.items.map((item) => item.id);
   const copyText = texts.map((item) => item.text ?? "").join("\n\n");
-  const meta = `${shareCaption(head)} · ${timeOf(head.at)}`;
+  const copied = !!copiedId && ids.includes(copiedId);
+  const state = copied ? "Copied" : shareState(head);
   // Fork (Hari, L-301): no swipe to delete; a swipe here moves between
-  // Computer and Share. Delete is in the long-press row only.
+  // Computer and Share. L-326: a hold anywhere on the bubble opens its menu
+  // (Pin, Save, Delete); before, only a hold on its text did.
   return (
     <View>
       <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
-        <View
+        <Pressable
+          accessibilityLabel={shareCaption(head)}
+          accessibilityActions={[{ name: "longpress", label: "Pin, save or delete" }]}
+          onAccessibilityAction={({ nativeEvent }) => {
+            if (nativeEvent.actionName === "longpress") onSelect();
+          }}
+          onLongPress={onSelect}
           style={[
             styles.bubble,
             mine ? styles.bubbleMine : styles.bubbleTheirs,
@@ -664,7 +722,9 @@ function ShareBubble({
                       {entry.text}
                     </Text>
                   </View>
-                  {cards && entry.text ? <LinkCard url={entry.text} style={cardStyle} command={cards} /> : null}
+                  {cards && entry.text ? (
+                    <LinkCard url={entry.text} style={cardStyle} command={cards} onLongPress={onSelect} />
+                  ) : null}
                 </>
               ) : entry.kind === "clipboard" ? (
                 <View style={styles.bubbleHead}>
@@ -680,13 +740,17 @@ function ShareBubble({
               )}
             </Pressable>
           ))}
-          <View style={[styles.footer, pictures.length > 0 && !texts.length && styles.pictureMeta]}>
-            {pinned ? <Icon name="pin" size={11} color={colors.muted} /> : null}
-            {saved ? <Icon name="bookmark" size={11} color={colors.muted} /> : null}
-            <Text style={[styles.meta, failed && styles.metaFailed]} numberOfLines={1}>
-              {copiedId && ids.includes(copiedId) ? "Copied" : meta}
-            </Text>
-          </View>
+          {pinned || saved || state ? (
+            <View style={[styles.footer, pictures.length > 0 && !texts.length && styles.pictureMeta]}>
+              {pinned ? <Icon name="pin" size={11} color={colors.muted} /> : null}
+              {saved ? <Icon name="bookmark" size={11} color={colors.muted} /> : null}
+              {state ? (
+                <Text style={[styles.meta, failed && styles.metaFailed]} numberOfLines={1}>
+                  {state}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           {row.items.map((entry) =>
             entry.status === "failed" && entry.error ? (
               <Pressable key={entry.id} onPress={() => onOpen(entry)} accessibilityRole="button">
@@ -696,7 +760,7 @@ function ShareBubble({
               </Pressable>
             ) : null,
           )}
-        </View>
+        </Pressable>
       </View>
       <MessageActions
         row={row}
@@ -704,26 +768,19 @@ function ShareBubble({
         pinned={pinned}
         saved={saved}
         copyText={copyText}
-        copied={!!copiedId && ids.includes(copiedId)}
+        copied={copied}
         cards={cards}
+        stamp={shareStamp(head.at)}
         onCopy={() => onCopy(head.id, copyText)}
       />
-      {selected ? (
-        <Animated.View
-          entering={FadeIn.duration(140)}
-          exiting={FadeOut.duration(120)}
-          style={[styles.actions, mine && styles.actionsMine]}
-        >
-          <BubbleAction icon="trash" label="Delete" destructive onPress={onRemove} />
-        </Animated.View>
-      ) : null}
     </View>
   );
 }
 
 /**
  * Fork (Hari, L-301): under every message, as under a chat reply: Copy, Add
- * to notes, Add task (when the computer has them), Pin and Save.
+ * to notes, Add task (when the computer has them), Pin and Save. L-326: with
+ * the message's day and time at the row's far end, away from the buttons.
  */
 function MessageActions({
   row,
@@ -733,6 +790,7 @@ function MessageActions({
   copyText,
   copied,
   cards,
+  stamp,
   onCopy,
 }: {
   row: ShareRow;
@@ -742,6 +800,7 @@ function MessageActions({
   copyText: string;
   copied: boolean;
   cards: Command | null;
+  stamp: string;
   onCopy: () => void;
 }) {
   const styles = useStyles();
@@ -774,7 +833,12 @@ function MessageActions({
     }
   };
   return (
-    <View style={[styles.messageActions, mine && styles.actionsMine]}>
+    <View style={styles.messageActions}>
+      {mine ? (
+        <Text style={[styles.meta, styles.stamp]} numberOfLines={1}>
+          {stamp}
+        </Text>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={copied ? "Copied" : "Copy"}
@@ -830,6 +894,11 @@ function MessageActions({
       >
         <Icon name="bookmark" size={16} color={saved ? colors.accent : tint} />
       </Pressable>
+      {mine ? null : (
+        <Text style={[styles.meta, styles.stamp, styles.stampTheirs]} numberOfLines={1}>
+          {stamp}
+        </Text>
+      )}
     </View>
   );
 }
@@ -927,35 +996,6 @@ function Progress({ value, overlay = false }: { value: number; overlay?: boolean
     <View style={[styles.track, overlay && styles.trackOverlay]}>
       <View style={[styles.bar, { width: `${Math.round(value * 100)}%` }]} />
     </View>
-  );
-}
-
-function BubbleAction({
-  icon,
-  label,
-  destructive = false,
-  onPress,
-}: {
-  icon: IconName;
-  label: string;
-  destructive?: boolean;
-  onPress: () => void;
-}) {
-  const styles = useStyles();
-  const colors = useColors();
-  const tint = destructive ? colors.deletions : colors.content;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={() => {
-        void Haptics.selectionAsync();
-        onPress();
-      }}
-      style={({ pressed }) => [styles.bubbleAction, pressed && styles.pressedScale]}
-    >
-      <Icon name={icon} size={15} color={tint} />
-      <Text style={[styles.bubbleActionLabel, { color: tint }]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -1114,14 +1154,6 @@ const useStyles = themedStyles((colors) => ({
   pinTicks: { gap: 2, justifyContent: "center" },
   pinTick: { width: 3, height: 6, borderRadius: 1.5 },
   pinText: { flex: 1, color: colors.content, fontSize: 14 },
-  day: {
-    alignSelf: "center",
-    marginTop: 16,
-    marginBottom: 8,
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "600",
-  },
   bubbleRow: { flexDirection: "row", justifyContent: "flex-start", paddingVertical: 3 },
   bubbleRowMine: { justifyContent: "flex-end" },
   bubble: {
@@ -1175,20 +1207,24 @@ const useStyles = themedStyles((colors) => ({
   },
   trackOverlay: { position: "absolute", left: 8, right: 8, bottom: 8 },
   bar: { height: 3, backgroundColor: colors.accent },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingVertical: 4 },
-  actionsMine: { justifyContent: "flex-end" },
-  bubbleAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minHeight: 34,
-    paddingHorizontal: 10,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-  },
-  bubbleActionLabel: { fontSize: 13, fontWeight: "600" },
   messageActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, paddingTop: 2, paddingBottom: 6 },
   messageAction: { padding: 4, borderRadius: 6 },
+  // Fork (Hari, L-326): fills the row, so it sits at the far end from the buttons.
+  stamp: { flex: 1, minWidth: 0 },
+  stampTheirs: { textAlign: "right" },
+  directions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingLeft: 12,
+    paddingRight: 6,
+    borderRadius: radii.card,
+    borderCurve: "continuous",
+    backgroundColor: withAlpha(colors.content, 0.06),
+  },
+  directionsText: { flex: 1, color: colors.muted, fontSize: 13, lineHeight: 18 },
   messageActionPressed: { backgroundColor: withAlpha(colors.content, 0.08) },
   notice: { alignItems: "center", gap: 8, marginTop: 48, paddingHorizontal: 24 },
   noticeTitle: { color: colors.content, fontSize: 17, fontWeight: "600", textAlign: "center" },

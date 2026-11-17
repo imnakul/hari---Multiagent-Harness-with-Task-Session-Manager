@@ -531,3 +531,31 @@ export function shareDay(at: number, now = Date.now()): string {
   if (at >= start - 86_400_000) return "Yesterday";
   return new Date(at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
+
+/**
+ * Fork (Hari, L-326): a message's day and time, under it on its action row:
+ * "Today · 6:37 pm", "Yesterday · …", then the date.
+ */
+export function shareStamp(at: number, now = Date.now()): string {
+  const time = new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${shareDay(at, now)} · ${time}`;
+}
+
+/**
+ * Fork (Hari, L-326): where a message is on its way, for inside its bubble;
+ * empty once it has arrived. Which way it went is shown once at the top.
+ */
+export function shareState(entry: PhoneShareEntry): string {
+  switch (entry.status) {
+    case "offered":
+      return "Tap to download";
+    case "queued":
+      return "Waiting";
+    case "moving":
+      return `${Math.round((entry.progress ?? 0) * 100)}%`;
+    case "failed":
+      return "Failed";
+    default:
+      return "";
+  }
+}

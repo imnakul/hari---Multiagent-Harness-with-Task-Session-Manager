@@ -47,6 +47,37 @@ export function ChoiceMenu({
   style?: StyleProp<ViewStyle>;
 }) {
   const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={disabled}
+        style={style}
+        onPress={() => setOpen(true)}
+      >
+        {children}
+      </Pressable>
+      <ChoiceSheet open={open} title={title} sections={sections} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+/**
+ * Fork (Hari, L-326): ChoiceMenu's sheet on its own, opened by its owner (a
+ * long-press, say) rather than by a button of its own.
+ */
+export function ChoiceSheet({
+  open,
+  title,
+  sections,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  sections: MenuAction[][];
+  onClose: () => void;
+}) {
   // Fork (Hari, L-235): a chosen action waits for the menu to finish closing.
   // Started while it closed, a picker took 10–20 s to open on Android.
   const chosen = useRef<(() => void) | null>(null);
@@ -62,68 +93,50 @@ export function ChoiceMenu({
   const insets = useSafeAreaInsets();
   const groups = sections.filter((group) => group.length > 0);
   return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        disabled={disabled}
-        style={style}
-        onPress={() => setOpen(true)}
-      >
-        {children}
-      </Pressable>
-      <Modal
-        visible={open}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setOpen(false)}
-        onDismiss={runChosen}
-      >
-        <View style={styles.overlay}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close menu"
-            onPress={() => setOpen(false)}
-            style={styles.backdrop}
-          />
-          <View accessibilityViewIsModal style={styles.sheet}>
-            <View style={styles.handle} />
-            <View style={styles.header}>
-              <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>
-                {title}
-              </Text>
-            </View>
-            <ScrollView
-              style={styles.scroll}
-              contentContainerStyle={{ ...styles.content, paddingBottom: insets.bottom + 16 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {groups.map((group, index) => (
-                <View key={index} style={styles.card}>
-                  {group.map((action, row) => (
-                    <View key={`${row}:${action.label}`}>
-                      {row > 0 ? (
-                        <View style={[styles.divider, !action.icon && styles.dividerFlush]} />
-                      ) : null}
-                      <MenuRow
-                        action={action}
-                        onPress={() => {
-                          chosen.current = action.onPress;
-                          setOpen(false);
-                          // In case the close is never reported.
-                          timer.current = setTimeout(runChosen, 400);
-                        }}
-                      />
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </ScrollView>
+    <Modal
+      visible={open}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+      onDismiss={runChosen}
+    >
+      <View style={styles.overlay}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={onClose} style={styles.backdrop} />
+        <View accessibilityViewIsModal style={styles.sheet}>
+          <View style={styles.handle} />
+          <View style={styles.header}>
+            <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>
+              {title}
+            </Text>
           </View>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={{ ...styles.content, paddingBottom: insets.bottom + 16 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {groups.map((group, index) => (
+              <View key={index} style={styles.card}>
+                {group.map((action, row) => (
+                  <View key={`${row}:${action.label}`}>
+                    {row > 0 ? <View style={[styles.divider, !action.icon && styles.dividerFlush]} /> : null}
+                    <MenuRow
+                      action={action}
+                      onPress={() => {
+                        chosen.current = action.onPress;
+                        onClose();
+                        // In case the close is never reported.
+                        timer.current = setTimeout(runChosen, 400);
+                      }}
+                    />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
         </View>
-      </Modal>
-    </>
+      </View>
+    </Modal>
   );
 }
 

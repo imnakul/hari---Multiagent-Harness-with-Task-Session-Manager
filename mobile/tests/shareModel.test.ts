@@ -21,6 +21,8 @@ import {
   settleInterrupted,
   shareCaption,
   shareDay,
+  shareStamp,
+  shareState,
   shareThumbnail,
   updateShareEntry,
   type PhoneShareEntry,
@@ -294,5 +296,21 @@ describe("withExtension (L-317)", () => {
     expect(withExtension("clip", "video/mp4; codecs=avc1")).toBe("clip.mp4");
     expect(withExtension("photo.png", "image/jpeg")).toBe("photo.png");
     expect(withExtension("blob", "application/octet-stream")).toBe("blob");
+  });
+});
+
+describe("message stamp and state (L-326)", () => {
+  const now = new Date(2026, 10, 14, 15, 0).getTime();
+  it("puts the day before the time", () => {
+    expect(shareStamp(new Date(2026, 10, 14, 9, 5).getTime(), now)).toMatch(/^Today · .*9.*05/);
+    expect(shareStamp(new Date(2026, 10, 13, 22, 0).getTime(), now)).toMatch(/^Yesterday · /);
+    expect(shareStamp(new Date(2026, 10, 1, 8, 0).getTime(), now)).not.toMatch(/Today|Yesterday/);
+  });
+  it("says only how a message is moving, not which way", () => {
+    expect(shareState(entry("a", { status: "moving", progress: 0.426 }))).toBe("43%");
+    expect(shareState(entry("a", { status: "queued" }))).toBe("Waiting");
+    expect(shareState(entry("a", { status: "failed" }))).toBe("Failed");
+    expect(shareState(entry("a", { status: "offered", direction: "in" }))).toBe("Tap to download");
+    expect(shareState(entry("a", { status: "done" }))).toBe("");
   });
 });

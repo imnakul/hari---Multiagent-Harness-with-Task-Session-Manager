@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-17 08:17 IST — Hari Share chat tidier, hold a message to delete it (L-326)
+- Type: feature
+- What: In Hari's Share chat, messages no longer each say "Link to your computer" or "from your computer"; a note at the top says it once and goes away for good when closed. Each message shows its day and time (Today, Yesterday, then the date) on its button row: at the left end under your messages, at the right end under the computer's. Holding a message now opens a menu with Pin, Save and Delete.
+- Why: User request 2026-11-17: labels repeated on every message; date wanted beside the buttons; "Holding a message is not showing any option". Cause: only a hold on a message's text was caught, and it put a Delete button below the message, often off screen.
+- Files: see L-326 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: uncommitted
+- Verified: phone typecheck ✅ lint ✅ `shareModel` tests ✅ (29). Needs a check on the phone.
+
 ## 2026-11-16 23:26 IST — Phone notifications in desktop Share (L-325)
 - Type: feature
 - What: The phone's notifications can show on the computer. In Hari, Settings → Share → Notifications on computer turns it on (Android asks for Notification access). The desktop Share panel gets a bell button that opens Phone notifications: what's on the phone now and what left it in the last 24 hours. Dismissing one on the computer clears it on the phone. One-time codes are dotted out until clicked. Banking, payment, authenticator and password apps start switched off; any app can be switched off on the phone. Nothing is saved to disk or queued while the computer is away.
