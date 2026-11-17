@@ -5,7 +5,7 @@
 - What: A phone chat opens on its latest 20 turns instead of 3, so older ones load only when you scroll up yourself. Nothing scrolls the list while you drag it or it glides. At the newest message it stays there as the desktop's fresh copy lands; scrolled up, it keeps your place. "Updating…" shows under the header while a kept copy waits for the desktop. The update installer is deleted from Hari's cache once installed.
 - Why: User report 2026-11-17: opening a chat kept loading and showed older messages, then jumped elsewhere while scrolling. User report 2026-11-17 (screenshot): Hari's cache at 110 MB.
 - Files: see L-341 and L-342 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: 037bc3b8 (not released yet)
+- Commit: 037bc3b8 (released in 0.16.0-local59)
 - Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone vitest ✅ (347; `tests/mobile/watchFrames.test.ts` fails to load on HEAD too). Needs a check on the phone.
 
 ## 2026-11-17 20:13 IST — Share header in one row and a pin card; phone tables scroll; phone session pins (L-337, L-338, L-339, L-340)
@@ -13,7 +13,7 @@
 - What: The desktop Share header is one row: Share, Notifications and Files tabs (Storage renamed) in place of the title, then a filter icon, a Settings gear and Close. Pinned items sit in a card at the top that opens in place, with an arrow to go to the message and "2 of 3" arrows for several pins. In Hari, a swipe on a table or code block scrolls it; the side menu opens from the right edge there. Hari's session list drops the swipe actions; a long press opens a menu to pin a session on the phone, and pinned sessions come first.
 - Why: User request 2026-11-17 (screenshots: Share's second tabs row; pin bar only scrolled to the message). User report 2026-11-17: reading a wide table in a session opened the side menu. User request 2026-11-17: phone-only pinning, a hold menu instead of swipe; Rename and Delete on the phone left as they are.
 - Files: see L-337 to L-340 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: 00981dfa (not released yet)
+- Commit: 00981dfa (released in 0.16.0-local59)
 - Verified: root typecheck ✅ mobile and shared-ui vitest ✅ (31 files); phone typecheck ✅ lint ✅ (2 old warnings) full phone vitest ✅ (343). Needs a check in the desktop app and on the phone.
 
 ## 2026-11-17 19:31 IST — Phone notifications after updates; Share panel width and unroll (L-334, L-335, L-336)
@@ -21,7 +21,7 @@
 - What: After a Hari update, phone notifications stopped reaching the computer until Notification access was turned off and on; Hari now restarts its notification reader itself, says in its Notifications settings when the reader isn't running, and the computer says why it's quiet instead of asking to turn Send to computer on. The Share and Browser side panels no longer come back squeezed after Hari is minimised. The desktop Share panel now unrolls down from the top bar and rolls back up to close.
 - Why: User report 2026-11-17 (Xiaomi phone: access on and connected, but the computer said "turn on Send to computer"; toggling access fixed it). User report 2026-11-17 (screenshots: Share panel narrow after restoring from minimised, until a click). User request 2026-11-17: open from the top instead of the right.
 - Files: see L-334, L-335 and L-336 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: 81bbe516 (not released yet)
+- Commit: 81bbe516 (released in 0.16.0-local59)
 - Verified: root typecheck ✅ full vitest ✅ (770 files); Rust `mobile_phone_notifications` tests ✅ (6); phone typecheck ✅ lint ✅ `phoneNotices` tests ✅ (6). Kotlin is compiled by the release build. Needs a check on the phone and in the desktop app.
 
 ## 2026-11-17 17:54 IST — Hari Share: messages with a list, code or a table were squeezed (L-333)
