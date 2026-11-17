@@ -138,6 +138,17 @@ describe("real VT parser input gate", () => {
         await draw(box("❯ R[Pasted text #1 +4 lines]\r\n  and more")),
       ).toBe("R[Pasted text #1 +4 lines]\n  and more");
       expect(await draw(box("❯ नमस्ते 你好"))).toBe("नमस्ते 你好");
+      // Claude 2.1.326 scrolls a tall draft inside a capped box (L-329).
+      const up = "── ↑ 21 more " + "─".repeat(107);
+      const down = "── ↓ 3 more " + "─".repeat(108);
+      expect(
+        await draw(
+          `\x1b[2J\x1b[3;1H${up}\r\nappropriate buttons on tests to Teachers.\r\n${border}`,
+        ),
+      ).toBe("appropriate buttons on tests to Teachers.");
+      expect(
+        await draw(`\x1b[2J\x1b[3;1H${border}\r\n❯ first rows\r\n${down}`),
+      ).toBe("first rows");
       // Two boxes (or none) are ambiguous: delivery must not guess.
       expect(
         await draw(`${box("❯ one")}\x1b[20;1H${border}\r\n❯ two\r\n${border}`),

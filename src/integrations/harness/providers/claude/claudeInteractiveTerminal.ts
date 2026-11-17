@@ -185,6 +185,14 @@ export async function createInteractiveTerminal(
   const isFrame = (line: string): boolean =>
     /^[─━]{8,}(?: [^─━]+ [─━]+)?$/.test(line.trim()) &&
     line.trim().length >= term.cols - 2;
+  // Fork (L-329): Claude 2.1.326 caps the input box's height. A taller draft
+  // scrolls inside it, and the border over or under it counts the hidden rows:
+  // "── ↑ 21 more ───". The `❯` row is then out of sight.
+  const isScrollFrame = (line: string): boolean =>
+    /^[─━]+ [↑↓] \d+ more [─━]+$/.test(line.trim()) &&
+    line.trim().length >= term.cols - 2;
+  const isBorder = (line: string): boolean =>
+    isFrame(line) || isScrollFrame(line);
   const accept =(data: Uint8Array, start: number): void => {
     if (start > offset) return; // Replay fills gaps; never parse a broken VT stream.
     const skip = Math.max(0, offset - start);
@@ -389,9 +397,14 @@ export async function createInteractiveTerminal(
         buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? "";
       const boxes: string[] = [];
       for (let y = 1; y < term.rows - 1; y++) {
-        if (!/^\s*❯/.test(text(y)) || !isFrame(text(y - 1))) continue;
+        // A scrolled draft shows its later rows only; any visible text proves
+        // the paste arrived (composerShowsPaste never needs the whole draft).
+        const scrolled =
+          isScrollFrame(text(y - 1)) && text(y - 1).includes("↑");
+        if (!scrolled && (!/^\s*❯/.test(text(y)) || !isFrame(text(y - 1))))
+          continue;
         const rows: string[] = [];
-        for (let row = y; row < term.rows && !isFrame(text(row)); row++) {
+        for (let row = y; row < term.rows && !isBorder(text(row)); row++) {
           const line = buffer.getLine(buffer.baseY + row);
           let chars = "";
           for (let x = 0; x < term.cols; x++) {
