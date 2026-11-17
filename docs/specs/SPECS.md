@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-11-17 14:05 | [Review — Hari: task editor, side menu on the right, Share background (L-327, L-328)](hari-tasks-drawer-share-background.md) | Tasks status/project pills and edit sheet with Markdown body (`tasks.read`), APK backup link for in-app updates; drawer on the right with in-session swipes, new sidebar order, Share background in Appearance. Phone check manual. |
 | 2026-11-16 23:13 | [Review — Phone notifications in desktop Share (L-325)](phone-notifications-plan.md) | Android notification listener sends the phone's notifications (minus a skip list) to a Notifications view in desktop Share; dismiss clears them on the phone; codes hidden until clicked; memory only, 24 hours. Desktop and phone checks manual. |
 | 2026-11-16 23:08 | [Review — Remove Markdown Live mode (L-324)](remove-markdown-live.md) | Preview and Source only, default Preview, Ctrl+E and double-click open Source; Live editor code deleted. Desktop check manual. |
 | 2026-11-14 21:49 | [Review — Share as a sidebar view, phone Computer hub (L-287, L-288)](share-panel-plan.md) | Share becomes a full app view (chat-style timeline, inline pictures, drop files, Open on phone); the phone merges Share and Computer into one screen with tabs. Built in 0.16.0-local46 with the phone extras (side-menu Computer and Wake, Monitor on, Haptics switch). Desktop and phone checks manual. |

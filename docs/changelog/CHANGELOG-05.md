@@ -1,5 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-17 15:25 IST — Interactive Claude: long messages stopped sending (L-329)
+- Type: fix
+- What: In Interactive CLI mode, every long message (and every message with an attachment) stopped with "Prompt delivery is unconfirmed: Claude's prompt never showed the message". Claude Code 2.1.326 now caps its input box and scrolls a tall draft inside it, and the top border reads "── ↑ 21 more ──" with the `❯` row hidden. MonoCode's draft reader needed that `❯` row under a plain border. It now also reads a scrolled box.
+- Why: User report 2026-11-17: no message could be sent in Interactive mode, in new or resumed chats.
+- Files: `src/integrations/harness/providers/claude/claudeInteractiveTerminal.ts`, `claudeInteractiveTerminal.test.ts`
+- Commit: afb017f0 (released in 0.16.0-local56)
+- Verified: root typecheck ✅; Claude provider and sessions tests ✅ (2390). Needs a check in the desktop app with a long message.
+
+## 2026-11-17 14:05 IST — Hari: task editor, side menu on the right, Share background (L-327, L-328)
+- Type: feature
+- What: In Hari Tasks, status and project are one pill each that opens a short list, and Edit slides up a full editor (title, status, project, tags, Markdown details with Write | Preview). The side menu now opens from the right, and its button is at the top right. In a session on Android, swipe left opens it and swipe right goes back to the project's sessions. The side menu order is Notifications, lists, then Share, Tasks, Notes and Settings, with the search at the bottom. Share can have its own background (Settings → Appearance → Share background). In-app updates fall back to the release's own APK when the Pages link fails.
+- Why: User request 2026-11-17: "Blocked" pill cut off, no way to edit a task's details on the phone, one-handed use, sidebar order, Share background, and the phone's update download failing.
+- Files: see L-327 and L-328 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md); spec [hari-tasks-drawer-share-background.md](../specs/hari-tasks-drawer-share-background.md)
+- Commit: 1d5bd5ee (L-327), 2d339b22 (L-328); released in 0.16.0-local56
+- Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone tests ✅ (337; `tests/mobile/watchFrames.test.ts` fails to load in the phone run, untouched); root typecheck ✅ root tests ✅ (769 files); `cargo check` ✅ `mobile_tools` tests ✅. Needs a check on the phone and a new APK.
+
 ## 2026-11-17 08:17 IST — Hari Share chat tidier, hold a message to delete it (L-326)
 - Type: feature
 - What: In Hari's Share chat, messages no longer each say "Link to your computer" or "from your computer"; a note at the top says it once and goes away for good when closed. Each message shows its day and time (Today, Yesterday, then the date) on its button row: at the left end under your messages, at the right end under the computer's. Holding a message now opens a menu with Pin, Save and Delete.
