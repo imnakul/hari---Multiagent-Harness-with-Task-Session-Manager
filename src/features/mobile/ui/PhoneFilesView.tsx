@@ -14,13 +14,7 @@ import { SHARE_SMALL_BUTTON, shareErrorMessage } from "./PhoneStatus";
  * Refresh always works: it asks again, and an older answer that arrives
  * late is ignored. While the phone is asked, the list says so.
  */
-export function PhoneFilesView({
-  onError,
-  onBack,
-}: {
-  onError: (error: string) => void;
-  onBack: () => void;
-}): JSX.Element {
+export function PhoneFilesView({ onError }: { onError: (error: string) => void }): JSX.Element {
   const [folder, setFolder] = useState<PhoneFolder | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,18 +59,22 @@ export function PhoneFilesView({
     );
   };
 
+  const up = folder?.parent;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-stroke px-2 text-[12px]">
-        <button
-          type="button"
-          aria-label={folder?.parent ? "Up one folder" : "Back to Share"}
-          title={folder?.parent ? "Up one folder" : "Back to Share"}
-          onClick={() => (folder?.parent ? open(folder.parent) : onBack())}
-          className="grid size-6 place-items-center rounded-md text-content/55 hover:bg-content/10 hover:text-content"
-        >
-          <ChevronLeft className="size-3.5" strokeWidth={1.75} aria-hidden />
-        </button>
+        {/* Fork (Hari, L-332): a tab in Share now, so the top folder has no Back. */}
+        {up ? (
+          <button
+            type="button"
+            aria-label="Up one folder"
+            title="Up one folder"
+            onClick={() => open(up)}
+            className="grid size-6 place-items-center rounded-md text-content/55 hover:bg-content/10 hover:text-content"
+          >
+            <ChevronLeft className="size-3.5" strokeWidth={1.75} aria-hidden />
+          </button>
+        ) : null}
         <span className="min-w-0 flex-1 truncate text-content/70" title={folder?.path}>
           {folder ? folder.label : "Phone"}
         </span>

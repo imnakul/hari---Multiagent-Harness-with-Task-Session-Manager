@@ -2,11 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } from "react";
-import { Bell, CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../shared/ui/icons";
+import { CloudUpload, Archive, Pin, SmartPhone, Trash2, X } from "../../../shared/ui/icons";
 import { GlassBackdrop } from "../../../app/shell/GlassBackdrop";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
 import { SlidePanel } from "../../../shared/ui/SlidePanel";
+import { SelectMenu } from "../../sessions/ui/SelectMenu";
 import { formatFileSize } from "../../files/model/filePreview";
 import { parseShareList, SHARE_CHANGE_EVENT, type ShareList } from "../model/mobileShare";
 import {
@@ -38,6 +39,18 @@ function toClientPoint(x: number, y: number): { x: number; y: number } {
 }
 
 type Storage = { historyBytes: number; filesBytes: number; files: number };
+
+type ShareView = "share" | "notifications" | "storage" | "settings";
+
+/** Fork (Hari, L-332): Share's tabs. Notifications and Storage need a paired phone. */
+const SHARE_VIEWS: readonly { id: ShareView; label: string }[] = [
+  { id: "share", label: "Share" },
+  { id: "notifications", label: "Notifications" },
+  { id: "storage", label: "Storage" },
+  { id: "settings", label: "Settings" },
+];
+
+const SHARE_FILTER_OPTIONS = SHARE_FILTERS.map((option) => ({ value: option.id, label: option.label }));
 
 const HEADER_BUTTON =
   "grid size-7 place-items-center rounded-md text-content/55 transition-[background-color,color,transform] duration-100 hover:bg-content/10 hover:text-content active:scale-[0.94] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60";
@@ -103,7 +116,7 @@ function StorageStrip({
   }, []);
   useEffect(load, [load]);
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-stroke bg-content/[0.02] px-3 py-2 text-[12px] text-content/65">
+    <div className="flex flex-wrap items-center gap-2 text-[12px] text-content/65">
       <Archive className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
       <span className="min-w-0 flex-1">
         {storage
@@ -163,9 +176,8 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [staged, setStaged] = useState<string[]>([]);
-  const [storageOpen, setStorageOpen] = useState(false);
-  // Fork (Hari, L-325): Share itself, the phone's files, or its notifications.
-  const [view, setView] = useState<"share" | "files" | "notifications">("share");
+  // Fork (Hari, L-325, L-332): Share itself, the phone's notifications, its files, or settings.
+  const [view, setView] = useState<ShareView>("share");
   const awayFromShare = view !== "share";
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -283,59 +295,55 @@ function ShareContent({ onClose }: { onClose: () => void }): JSX.Element {
     <div ref={rootRef} role="region" aria-label="Share with your phone" className="relative flex min-h-0 flex-1 flex-col">
       <header className="flex h-10 shrink-0 select-none items-center gap-1 border-b border-stroke pl-3 pr-1.5">
         <SmartPhone className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
-        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium text-content">
-          {view === "files" ? "Phone files" : view === "notifications" ? "Phone notifications" : "Share"}
-        </h3>
-        {paired ? (
-          <>
-            <button
-              type="button"
-              title={view === "notifications" ? "Back to Share" : "The phone's notifications"}
-              aria-pressed={view === "notifications"}
-              onClick={() => setView((value) => (value === "notifications" ? "share" : "notifications"))}
-              className={`${HEADER_BUTTON} ${view === "notifications" ? "bg-content/10 text-content" : ""}`}
-            >
-              <Bell className="size-3.5" strokeWidth={1.75} aria-hidden />
-            </button>
-            <button
-              type="button"
-              title={view === "files" ? "Back to Share" : "Browse the phone's files"}
-              aria-pressed={view === "files"}
-              onClick={() => setView((value) => (value === "files" ? "share" : "files"))}
-              className={`${HEADER_BUTTON} ${view === "files" ? "bg-content/10 text-content" : ""}`}
-            >
-              <SmartPhone className="size-3.5" strokeWidth={1.75} aria-hidden />
-            </button>
-          </>
-        ) : null}
-        {!awayFromShare ? (
-          <button
-            type="button"
-            title="Storage and Delete all"
-            aria-pressed={storageOpen}
-            onClick={() => setStorageOpen((value) => !value)}
-            className={`${HEADER_BUTTON} ${storageOpen ? "bg-content/10 text-content" : ""}`}
-          >
-            <Archive className="size-3.5" strokeWidth={1.75} aria-hidden />
-          </button>
+        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium text-content">Share</h3>
+        {/* Fork (Hari, L-332): the kinds of item in a dropdown, beside Close. */}
+        {view === "share" ? (
+          <SelectMenu
+            label="Show"
+            value={filter}
+            options={SHARE_FILTER_OPTIONS}
+            onChange={(value) => setFilter(value as ShareFilter)}
+            className="w-24"
+            menuWidth={160}
+          />
         ) : null}
         <button type="button" title="Close Share" aria-label="Close Share" onClick={onClose} className={HEADER_BUTTON}>
           <X className="size-3.5" strokeWidth={1.75} aria-hidden />
         </button>
       </header>
+      <div className="shrink-0 border-b border-stroke px-3 py-2">
+        {/* Fork (Hari, L-332): the app's gliding tabs; the phone's own tabs only once one is paired. */}
+        <SegmentedSwitch
+          options={paired ? SHARE_VIEWS : SHARE_VIEWS.filter((option) => option.id === "share" || option.id === "settings")}
+          value={view}
+          onChange={setView}
+          ariaLabel="Share views"
+        />
+      </div>
 
-      {view === "files" ? (
-        <PhoneFilesView onError={setError} onBack={() => setView("share")} />
+      {view === "storage" ? (
+        <PhoneFilesView onError={setError} />
       ) : view === "notifications" ? (
         <PhoneNotificationsView onError={setError} />
+      ) : view === "settings" ? (
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-3">
+          <section aria-label="Phone" className="space-y-2">
+            <h4 className="text-[11px] font-medium text-content/40">Phone</h4>
+            {paired ? (
+              <PhoneStatus onError={setError} />
+            ) : (
+              <p className="text-[12px] text-content/55">
+                Pair Hari on your phone (Settings → Mobile) to see its battery, storage and network, and to ring it.
+              </p>
+            )}
+          </section>
+          <section aria-label="Storage on this computer" className="space-y-2">
+            <h4 className="text-[11px] font-medium text-content/40">Storage on this computer</h4>
+            <StorageStrip busy={busy} attempt={attempt} onDone={load} />
+          </section>
+        </div>
       ) : (
         <>
-          {storageOpen ? <StorageStrip busy={busy} attempt={attempt} onDone={load} /> : null}
-          <div className="flex shrink-0 flex-col gap-2 border-b border-stroke px-3 py-2">
-            {paired ? <PhoneStatus onError={setError} /> : null}
-            {/* Fork (Hari, L-302): the app's tab switcher, not one-off pills. */}
-            <SegmentedSwitch options={SHARE_FILTERS} value={filter} onChange={setFilter} ariaLabel="Show" />
-          </div>
           <PinBar pins={pins} onJump={jumpTo} />
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
