@@ -5,7 +5,7 @@
 - What: After a Hari update, phone notifications stopped reaching the computer until Notification access was turned off and on; Hari now restarts its notification reader itself, says in its Notifications settings when the reader isn't running, and the computer says why it's quiet instead of asking to turn Send to computer on. The Share and Browser side panels no longer come back squeezed after Hari is minimised. The desktop Share panel now unrolls down from the top bar and rolls back up to close.
 - Why: User report 2026-11-17 (Xiaomi phone: access on and connected, but the computer said "turn on Send to computer"; toggling access fixed it). User report 2026-11-17 (screenshots: Share panel narrow after restoring from minimised, until a click). User request 2026-11-17: open from the top instead of the right.
 - Files: see L-334, L-335 and L-336 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: (pending)
+- Commit: 81bbe516 (not released yet)
 - Verified: root typecheck ✅ full vitest ✅ (770 files); Rust `mobile_phone_notifications` tests ✅ (6); phone typecheck ✅ lint ✅ `phoneNotices` tests ✅ (6). Kotlin is compiled by the release build. Needs a check on the phone and in the desktop app.
 
 ## 2026-11-17 17:54 IST — Hari Share: messages with a list, code or a table were squeezed (L-333)
