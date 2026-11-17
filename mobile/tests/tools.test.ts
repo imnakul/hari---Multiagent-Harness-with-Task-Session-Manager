@@ -17,6 +17,7 @@ import {
   webLinks,
   type Command,
   type TaskItem,
+  taskChanges,
 } from "@/features/tools/tools";
 import type { Project } from "@/features/workspace/types";
 
@@ -218,5 +219,36 @@ describe("linkPreview", () => {
     await linkPreview(run, "https://a.dev/once", false);
     await linkPreview(run, "https://a.dev/once", false);
     expect(command).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("taskChanges (L-327)", () => {
+  const before = {
+    title: "Fix pills",
+    status: "todo" as const,
+    projectCwd: null,
+    tags: "ui, bug",
+    body: "",
+  };
+
+  it("sends only what changed", () => {
+    expect(taskChanges(before, { ...before })).toEqual({});
+    expect(taskChanges(before, { ...before, body: "- [ ] Step", status: "blocked" })).toEqual({
+      body: "- [ ] Step",
+      status: "blocked",
+    });
+  });
+
+  it("keeps the title when it is emptied, and trims it", () => {
+    expect(taskChanges(before, { ...before, title: "   " })).toEqual({});
+    expect(taskChanges(before, { ...before, title: " New title " })).toEqual({ title: "New title" });
+  });
+
+  it("compares tags as parsed, and moves the project", () => {
+    expect(taskChanges(before, { ...before, tags: "#ui bug" })).toEqual({});
+    expect(taskChanges(before, { ...before, tags: "ui", projectCwd: "E:/repo" })).toEqual({
+      tags: ["ui"],
+      projectCwd: "E:/repo",
+    });
   });
 });

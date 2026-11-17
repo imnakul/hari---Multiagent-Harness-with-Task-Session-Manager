@@ -15,8 +15,9 @@ use crate::tasks::{
     tasks_get_blocking, tasks_list_blocking, tasks_upsert_blocking, Task, TaskStatus, TaskUpsert,
 };
 
-const METHODS: [&str; 7] = [
+const METHODS: [&str; 8] = [
     "tasks.list",
+    "tasks.read",
     "tasks.create",
     "tasks.update",
     "notes.list",
@@ -52,6 +53,14 @@ fn run(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String> {
         "tasks.list" => {
             let tasks = tasks_list_blocking(app.state())?;
             Ok(json!({ "tasks": tasks.iter().map(task_summary).collect::<Vec<_>>() }))
+        }
+        // Fork (Hari, L-327): one task with its whole body, for the phone's editor.
+        "tasks.read" => {
+            let task = tasks_get_blocking(app.state(), text(params, "id"))?
+                .ok_or("This task was deleted on your computer")?;
+            let mut full = task_summary(&task);
+            full["body"] = json!(task.body);
+            Ok(json!({ "task": full }))
         }
         "tasks.create" => {
             let task = create_task(app, uuid::Uuid::new_v4().to_string(), params)?;
@@ -180,6 +189,10 @@ fn update_task(app: &AppHandle, task: Task, params: &Value) -> Result<Task, Stri
     }
     if let Some(tags) = tags(params) {
         next.tags = tags;
+    }
+    // Fork (Hari, L-327): the phone's editor saves the whole body.
+    if let Some(body) = params["body"].as_str() {
+        next.body = body.replace("\r\n", "\n");
     }
     if params.get("projectCwd").is_some() {
         next.project_cwd = optional(params, "projectCwd");

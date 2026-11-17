@@ -247,6 +247,8 @@ function LinkedWorkspace() {
                 {/* Fork (Hari, L-236): the desktop's Tasks and Notes. */}
                 <Stack.Screen name="tasks" options={screens.modal} />
                 <Stack.Screen name="notes" options={screens.modal} />
+                {/* Fork (Hari, L-327): a task's editor, as a sheet over Tasks. */}
+                <Stack.Screen name="task-edit" options={screens.sheet} />
                 {/* Fork (Hari, L-275): the desktop bell's history. */}
                 <Stack.Screen name="notifications" options={screens.modal} />
                 <Stack.Screen name="share" options={screens.modal} />

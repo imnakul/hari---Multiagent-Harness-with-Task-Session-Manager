@@ -203,6 +203,9 @@ export async function updateTask(
     status?: TaskStatus;
     title?: string;
     tags?: string[];
+    /** Fork (Hari, L-327): the whole body, from the edit sheet. */
+    body?: string;
+    projectCwd?: string | null;
     /**
      * Pins the task to Focus on this local day, or unpins it with null. Needs
      * `today` (the phone's local day) so the desktop records the day it leaves.
@@ -230,6 +233,54 @@ export async function updateTask(
   taskLists.forget();
   toolsChanged("tasks");
   return task;
+}
+
+/** A task with its whole body (L-327), which only the computer has. */
+export type TaskDetail = TaskItem & { body: string };
+
+/** Fork (Hari, L-327): a task as its editor holds it, tags as typed. */
+export type TaskFields = {
+  title: string;
+  status: TaskStatus;
+  projectCwd: string | null;
+  tags: string;
+  body: string;
+};
+
+export const taskFields = (task: TaskDetail): TaskFields => ({
+  title: task.title,
+  status: task.status,
+  projectCwd: task.projectCwd ?? null,
+  tags: task.tags.join(", "),
+  body: task.body,
+});
+
+/** What the editor changed, as `tasks.update` takes it; an emptied title is kept. */
+export function taskChanges(before: TaskFields, after: TaskFields) {
+  const title = after.title.trim();
+  const tags = parseTags(after.tags);
+  return {
+    ...(title && title !== before.title ? { title } : {}),
+    ...(after.status !== before.status ? { status: after.status } : {}),
+    ...(after.projectCwd !== before.projectCwd ? { projectCwd: after.projectCwd } : {}),
+    ...(tags.join(",") !== parseTags(before.tags).join(",") ? { tags } : {}),
+    ...(after.body !== before.body ? { body: after.body } : {}),
+  };
+}
+
+/** The task with its body, from the computer; older desktops can't send it. */
+export async function readTask(command: Command, id: string): Promise<TaskDetail> {
+  try {
+    const { task } = await command<{ task: TaskDetail }>("tasks.read", { id });
+    return task;
+  } catch (reason) {
+    const message = errorText(reason);
+    if (!linkStreamLive())
+      throw new Error("Editing a task needs your computer. Open it when your computer is connected.");
+    if (/unknown|unsupported|not allowed/i.test(message))
+      throw new Error("Update MonoCode on your computer to edit tasks from the phone.");
+    throw new Error(message);
+  }
 }
 
 export async function listNotes(command: Command, fresh = false): Promise<Listed<NoteItem>> {

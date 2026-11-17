@@ -9,6 +9,7 @@ import { useSyncExternalStore } from "react";
 import { Linking, Platform } from "react-native";
 
 import {
+  apkSources,
   checkResult,
   installedBuild,
   launchCheckDue,
@@ -95,14 +96,27 @@ export async function installHariUpdate(release: HariRelease) {
   set({ status: "downloading", release, progress: 0 });
   const target = new File(Paths.cache, "hari-update.apk");
   try {
-    if (target.exists) target.delete();
-    const apk = await File.downloadFileAsync(release.apk, target, {
-      idempotent: true,
-      onProgress: ({ bytesWritten, totalBytes }) => {
-        if (totalBytes > 0 && state.status === "downloading")
-          set({ ...state, progress: bytesWritten / totalBytes });
-      },
-    });
+    // Fork (Hari, L-327): Pages first, then the release's own copy, so a
+    // Pages hiccup (it once answered 404 for a while) can't block an update.
+    let apk: File | undefined;
+    let lastError: unknown;
+    for (const source of apkSources(release)) {
+      try {
+        if (target.exists) target.delete();
+        set({ status: "downloading", release, progress: 0 });
+        apk = await File.downloadFileAsync(source, target, {
+          idempotent: true,
+          onProgress: ({ bytesWritten, totalBytes }) => {
+            if (totalBytes > 0 && state.status === "downloading")
+              set({ ...state, progress: bytesWritten / totalBytes });
+          },
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!apk) throw lastError ?? new Error("Couldn't download the update");
     set({ status: "available", release });
     // Android asks once to allow installs from Hari, then shows Update.
     await startActivityAsync(ACTION_VIEW, {

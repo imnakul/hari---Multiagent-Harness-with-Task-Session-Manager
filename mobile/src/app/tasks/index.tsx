@@ -1,10 +1,10 @@
+import { router } from "expo-router";
 import * as Haptics from "@/ui/haptics";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,7 +24,6 @@ import {
   parseTags,
   projectLabel,
   statusLabel,
-  TASK_STATUSES,
   taskProjectKey,
   updateTask,
   type Command,
@@ -33,6 +32,7 @@ import {
   type TaskStatus,
 } from "@/features/tools/tools";
 import { cachedTasks, pendingToolEdits } from "@/features/tools/toolsCache";
+import { ProjectMenu, StatusMenu } from "@/features/tools/TaskMenus";
 import { ToolsOffline } from "@/features/tools/ToolsOffline";
 import { Icon } from "@/ui/Icon";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
@@ -240,21 +240,15 @@ export default function TasksScreen() {
             </View>
           </View>
           {taskProjects.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterChips}
-            >
-              <Chip label="All projects" on={projectFilter === null} onPress={() => setProjectFilter(null)} />
-              {taskProjects.map((each) => (
-                <Chip
-                  key={each.key || "none"}
-                  label={each.label}
-                  on={projectFilter === each.key}
-                  onPress={() => setProjectFilter((current) => (current === each.key ? null : each.key))}
-                />
-              ))}
-            </ScrollView>
+            // Fork (Hari, L-327): one dropdown, not a row of project pills.
+            <ProjectMenu
+              all
+              value={projectFilter}
+              projects={projects}
+              keys={taskProjects}
+              onChange={setProjectFilter}
+              style={styles.filterMenu}
+            />
           ) : null}
         </View>
       ) : null}
@@ -362,7 +356,7 @@ function TaskRow({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityHint="Shows its status and Focus to change"
+          accessibilityHint="Shows its status, Focus and Edit"
           onPress={onToggle}
           style={styles.rowText}
         >
@@ -384,7 +378,9 @@ function TaskRow({
         </Pressable>
       </View>
       {open ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        // Fork (Hari, L-327): Focus, a status dropdown and Edit, wrapping
+        // rather than running off the screen ("Blocked" was cut off).
+        <View style={styles.chips}>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: pinned }}
@@ -402,16 +398,17 @@ function TaskRow({
               {pinned ? "In Focus" : "Focus today"}
             </Text>
           </Pressable>
-          <View style={styles.chipGap} />
-          {TASK_STATUSES.map((status) => (
-            <Chip
-              key={status.value}
-              label={status.label}
-              on={task.status === status.value}
-              onPress={() => onChange(status.value)}
-            />
-          ))}
-        </ScrollView>
+          <StatusMenu status={task.status} onChange={onChange} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit task"
+            onPress={() => router.push({ pathname: "/task-edit/[taskId]", params: { taskId: task.id } })}
+            style={({ pressed }) => [styles.chip, styles.focusChip, pressed && styles.pressed]}
+          >
+            <Icon name="edit" size={14} color={colors.muted} />
+            <Text style={styles.chipText}>Edit</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -480,22 +477,9 @@ function QuickAdd({ command, projects }: { command: Command; projects: { name: s
       </View>
       {title.trim() ? (
         <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.chips}
-          >
-            <Chip label="No project" on={project === null} onPress={() => setProject(null)} />
-            {projects.map((each) => (
-              <Chip
-                key={each.path}
-                label={each.name}
-                on={project === each.path}
-                onPress={() => setProject(each.path)}
-              />
-            ))}
-          </ScrollView>
+          <View style={styles.chips}>
+            <ProjectMenu value={project} projects={projects} onChange={setProject} />
+          </View>
           <TextInput
             value={tags}
             onChangeText={setTags}
@@ -508,22 +492,6 @@ function QuickAdd({ command, projects }: { command: Command; projects: { name: s
         </>
       ) : null}
     </View>
-  );
-}
-
-function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  const styles = useStyles();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: on }}
-      onPress={onPress}
-      style={[styles.chip, on && styles.chipOn]}
-    >
-      <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -548,7 +516,7 @@ const useStyles = themedStyles((colors) => ({
   meta: { flexDirection: "row", alignItems: "center", gap: 8 },
   status: { fontSize: 13, fontWeight: "600" },
   tags: { flexShrink: 1, color: colors.muted, fontSize: 13 },
-  chips: { gap: 6, paddingLeft: 30, paddingBottom: 10, paddingRight: 4 },
+  chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, paddingLeft: 30, paddingBottom: 10, paddingRight: 4 },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -589,8 +557,7 @@ const useStyles = themedStyles((colors) => ({
   segmentItemOn: { backgroundColor: colors.surface },
   segmentText: { color: colors.muted, fontSize: 14 },
   segmentTextOn: { color: colors.content, fontWeight: "600" },
-  filterChips: { gap: 6, paddingRight: 4 },
-  chipGap: { width: StyleSheet.hairlineWidth, marginHorizontal: 2, backgroundColor: colors.stroke },
+  filterMenu: { alignSelf: "flex-start" },
   carry: {
     flexDirection: "row",
     alignItems: "center",

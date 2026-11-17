@@ -8,6 +8,8 @@ export type HariRelease = {
   version: string;
   versionCode: number;
   apk: string;
+  /** Fork (Hari, L-327): the release's own copy, tried when `apk` (Pages) fails. */
+  apkBackup?: string;
   notes?: string;
 };
 
@@ -51,12 +53,19 @@ export function parseHariManifest(value: unknown, repo?: string): HariRelease | 
   if (typeof raw.versionCode !== "number" || !Number.isInteger(raw.versionCode)) return;
   const apk = githubLink(raw.apk, repo ? pagesHost(repo) : undefined);
   if (!apk) return;
+  const backup = githubLink(raw.apkBackup);
   return {
     version: raw.version,
     versionCode: raw.versionCode,
     apk: apk.toString(),
+    ...(backup && backup.toString() !== apk.toString() ? { apkBackup: backup.toString() } : {}),
     ...(typeof raw.notes === "string" && raw.notes ? { notes: raw.notes.slice(0, 2000) } : {}),
   };
+}
+
+/** Where to download the APK from, in order: Pages first, then the release (L-327). */
+export function apkSources(release: HariRelease): string[] {
+  return release.apkBackup ? [release.apk, release.apkBackup] : [release.apk];
 }
 
 /** The build this app was made as, from app.config.js's `extra.hari`. */

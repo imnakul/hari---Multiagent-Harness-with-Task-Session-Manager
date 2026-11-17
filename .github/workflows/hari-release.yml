@@ -280,6 +280,8 @@ jobs:
             version: VERSION,
             versionCode: versionCode(VERSION),
             apk: download(apk),
+            // Fork (L-327): the release's own copy; phones from local56 fall back to it.
+            apkBackup: `${REPO_URL}/releases/download/${TAG}/${encodeURIComponent(apk)}`,
             notes,
           }, null, 2));
           EOF

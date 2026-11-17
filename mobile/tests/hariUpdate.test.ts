@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  apkSources,
   CHECK_INTERVAL_MS,
   checkResult,
   installedBuild,
@@ -41,6 +42,23 @@ describe("Hari updates", () => {
     expect(parseHariManifest({ ...base, apk: "http://imnakul.github.io/Hari.apk" }, repo)).toBeUndefined();
     // Without the repo, only GitHub itself.
     expect(parseHariManifest({ ...base, apk: pages })).toBeUndefined();
+  });
+
+  it("keeps the release's own APK as a backup to Pages (L-327)", () => {
+    const pages = "https://imnakul.github.io/hari/Hari_1_android.apk";
+    const backup = "https://github.com/imnakul/hari/releases/download/hari-v1/Hari_1_android.apk";
+    const release = parseHariManifest(
+      { version: "1", versionCode: 2, apk: pages, apkBackup: backup },
+      "imnakul/hari",
+    );
+    expect(release?.apkBackup).toBe(backup);
+    expect(release && apkSources(release)).toEqual([pages, backup]);
+    const offsite = parseHariManifest(
+      { version: "1", versionCode: 2, apk: pages, apkBackup: "https://example.com/x.apk" },
+      "imnakul/hari",
+    );
+    expect(offsite?.apkBackup).toBeUndefined();
+    expect(offsite && apkSources(offsite)).toEqual([pages]);
   });
 
   it("offers only a higher build number", () => {
