@@ -59,7 +59,6 @@ import {
 } from "@/features/share/shareTransfers";
 import { LinkCard } from "@/features/tools/LinkCard";
 import { ShareBackdrop } from "@/features/wallpaper/Backdrop";
-import { ToolButton } from "@/features/tools/ReplyTools";
 import { createTask, newId, saveNote, titleFrom } from "@/features/tools/tools";
 import type { Command } from "@/features/tools/tools";
 import { ChoiceSheet, type MenuAction } from "@/ui/ChoiceMenu";
@@ -102,12 +101,62 @@ function readDirectionsSeen(): boolean {
   }
 }
 
-/** Fork (Hari, L-326): what a hold on a message offers, above Delete. */
-function messageMenu(row: ShareRow): MenuAction[] {
+/** A message's words: its text, else its files by name. */
+const messageText = (row: ShareRow): string =>
+  row.items
+    .filter((item) => item.kind !== "file")
+    .map((item) => item.text ?? "")
+    .join("\n\n");
+const messageBody = (row: ShareRow): string =>
+  messageText(row) ||
+  row.items
+    .filter((item) => item.kind === "file")
+    .map((item) => item.name ?? "File")
+    .join(", ");
+
+/** Runs a menu action that talks to the computer, as the footer's buttons did. */
+function runTool(label: string, run: () => Promise<unknown>) {
+  run().then(
+    () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+    (reason: unknown) => Alert.alert(`Couldn’t ${label.toLowerCase()}`, why(reason)),
+  );
+}
+
+/**
+ * Fork (Hari, L-326): what a hold on a message offers, above Delete. L-330:
+ * Add to notes, Add task and Pin live here only, so the row under a message
+ * keeps just Copy and Save.
+ */
+function messageMenu(row: ShareRow, cards: Command | null): MenuAction[] {
   const ids = row.items.map((item) => item.id);
   const pinned = row.items.some((item) => item.pinned);
   const saved = row.items.some((item) => item.saved);
+  const body = messageBody(row);
   return [
+    ...(cards && body
+      ? [
+          {
+            label: "Add to notes",
+            icon: "noteAdd" as const,
+            onPress: () =>
+              runTool("Add to notes", async () => {
+                const note = await saveNote(cards, {
+                  id: newId(),
+                  title: titleFrom(body),
+                  body,
+                  baseUpdatedAt: null,
+                  finalize: true,
+                });
+                if (note.conflict) throw new Error("The note couldn’t be saved. Try again.");
+              }),
+          },
+          {
+            label: "Add task",
+            icon: "taskAdd" as const,
+            onPress: () => runTool("Add task", () => createTask(cards, { body })),
+          },
+        ]
+      : []),
     { label: pinned ? "Unpin" : "Pin", icon: "pin", onPress: () => pinShares(ids, !pinned) },
     { label: saved ? "Unsave" : "Save", icon: "bookmark", onPress: () => saveShares(ids, !saved) },
   ];
@@ -404,7 +453,7 @@ export function SharePanel() {
         sections={
           menuRow
             ? [
-                messageMenu(menuRow),
+                messageMenu(menuRow, cards),
                 [{ label: "Delete", icon: "trash", destructive: true, onPress: () => remove(menuRow) }],
               ]
             : []
@@ -743,10 +792,10 @@ function ShareBubble({
               )}
             </Pressable>
           ))}
-          {pinned || saved || state ? (
+          {/* L-330: no bookmark here; Save under the message already shows it. */}
+          {pinned || state ? (
             <View style={[styles.footer, pictures.length > 0 && !texts.length && styles.pictureMeta]}>
               {pinned ? <Icon name="pin" size={11} color={colors.muted} /> : null}
-              {saved ? <Icon name="bookmark" size={11} color={colors.muted} /> : null}
               {state ? (
                 <Text style={[styles.meta, failed && styles.metaFailed]} numberOfLines={1}>
                   {state}
@@ -768,11 +817,9 @@ function ShareBubble({
       <MessageActions
         row={row}
         mine={mine}
-        pinned={pinned}
         saved={saved}
         copyText={copyText}
         copied={copied}
-        cards={cards}
         stamp={shareStamp(head.at)}
         onCopy={() => onCopy(head.id, copyText)}
       />
@@ -781,41 +828,30 @@ function ShareBubble({
 }
 
 /**
- * Fork (Hari, L-301): under every message, as under a chat reply: Copy, Add
- * to notes, Add task (when the computer has them), Pin and Save. L-326: with
- * the message's day and time at the row's far end, away from the buttons.
+ * Fork (Hari, L-301): under every message, as under a chat reply. L-330: Copy
+ * and Save only (Add to notes, Add task and Pin are in the hold menu), with
+ * the day and time beside them, on the message's own side.
  */
 function MessageActions({
   row,
   mine,
-  pinned,
   saved,
   copyText,
   copied,
-  cards,
   stamp,
   onCopy,
 }: {
   row: ShareRow;
   mine: boolean;
-  pinned: boolean;
   saved: boolean;
   copyText: string;
   copied: boolean;
-  cards: Command | null;
   stamp: string;
   onCopy: () => void;
 }) {
   const styles = useStyles();
   const colors = useColors();
   const ids = row.items.map((item) => item.id);
-  // Words for a note or task: the text, else the files by name.
-  const body =
-    copyText ||
-    row.items
-      .filter((item) => item.kind === "file")
-      .map((item) => item.name ?? "File")
-      .join(", ");
   const tint = withAlpha(colors.content, 0.4);
   const copyAll = async () => {
     if (copyText) {
@@ -828,20 +864,21 @@ function MessageActions({
       if (picture?.uri) {
         await Clipboard.setImageAsync(await new File(picture.uri).base64());
       } else {
-        await Clipboard.setStringAsync(body);
+        await Clipboard.setStringAsync(messageBody(row));
       }
       void Haptics.selectionAsync();
     } catch (reason) {
       Alert.alert("Couldn’t copy it", why(reason));
     }
   };
+  const time = (
+    <Text style={styles.meta} numberOfLines={1}>
+      {stamp}
+    </Text>
+  );
   return (
-    <View style={styles.messageActions}>
-      {mine ? (
-        <Text style={[styles.meta, styles.stamp]} numberOfLines={1}>
-          {stamp}
-        </Text>
-      ) : null}
+    <View style={[styles.messageActions, mine && styles.messageActionsMine]}>
+      {mine ? time : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={copied ? "Copied" : "Copy"}
@@ -850,39 +887,6 @@ function MessageActions({
         style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
       >
         <Icon name={copied ? "check" : "copy"} size={16} color={tint} />
-      </Pressable>
-      {cards && body ? (
-        <>
-          <ToolButton
-            icon="noteAdd"
-            label="Add to notes"
-            done="Saved to notes"
-            run={async () => {
-              const saved = await saveNote(cards, {
-                id: newId(),
-                title: titleFrom(body),
-                body,
-                baseUpdatedAt: null,
-                finalize: true,
-              });
-              if (saved.conflict) throw new Error("The note couldn’t be saved. Try again.");
-            }}
-          />
-          <ToolButton icon="taskAdd" label="Add task" done="Task added" run={() => createTask(cards, { body })} />
-        </>
-      ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={pinned ? "Unpin" : "Pin"}
-        accessibilityState={{ selected: pinned }}
-        hitSlop={6}
-        onPress={() => {
-          void Haptics.selectionAsync();
-          pinShares(ids, !pinned);
-        }}
-        style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
-      >
-        <Icon name="pin" size={16} color={pinned ? colors.accent : tint} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -897,11 +901,7 @@ function MessageActions({
       >
         <Icon name="bookmark" size={16} color={saved ? colors.accent : tint} />
       </Pressable>
-      {mine ? null : (
-        <Text style={[styles.meta, styles.stamp, styles.stampTheirs]} numberOfLines={1}>
-          {stamp}
-        </Text>
-      )}
+      {mine ? null : time}
     </View>
   );
 }
@@ -1212,9 +1212,8 @@ const useStyles = themedStyles((colors) => ({
   bar: { height: 3, backgroundColor: colors.accent },
   messageActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, paddingTop: 2, paddingBottom: 6 },
   messageAction: { padding: 4, borderRadius: 6 },
-  // Fork (Hari, L-326): fills the row, so it sits at the far end from the buttons.
-  stamp: { flex: 1, minWidth: 0 },
-  stampTheirs: { textAlign: "right" },
+  // Fork (Hari, L-330): under the message, on its side.
+  messageActionsMine: { justifyContent: "flex-end" },
   directions: {
     flexDirection: "row",
     alignItems: "center",

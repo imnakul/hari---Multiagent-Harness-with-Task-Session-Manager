@@ -483,9 +483,34 @@ export function peekAutomations(): Automation[] | null {
 }
 
 export async function listAutomations(): Promise<Automation[]> {
-  const next = await invoke<Automation[]>("automations_list");
+  const listed = await invoke<Automation[]>("automations_list");
+  const next = listed.map(fromRemovedHarness);
+  // Saved once, so the move sticks and the schedule list shows it.
+  await Promise.all(
+    next
+      .filter((automation, index) => automation !== listed[index])
+      .map((automation) =>
+        invoke("automations_upsert", { automation }).catch(() => undefined),
+      ),
+  );
   cachedAutomations = next;
   return next;
+}
+
+/**
+ * Fork (L-331): Antigravity over ACP (`antigravity`) was removed in L-244, but
+ * automations saved with it kept that id and failed every run with "Harness
+ * is not connected". They move to Antigravity CLI, which takes the same model
+ * slugs (`gemini-3.8-flash-high`).
+ */
+export function fromRemovedHarness(automation: Automation): Automation {
+  if ((automation.harness as string) !== "antigravity") return automation;
+  const slug = automation.model.replace(/^antigravity:/, "");
+  return {
+    ...automation,
+    harness: "antigravity-cli",
+    model: `antigravity-cli:${slug || "default"}`,
+  };
 }
 
 export async function saveAutomation(

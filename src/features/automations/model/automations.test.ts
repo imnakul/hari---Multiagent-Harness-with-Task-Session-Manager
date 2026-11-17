@@ -9,6 +9,7 @@ import {
   draftFromTemplate,
   formatAutomationRunAt,
   formatAutomationRunDuration,
+  fromRemovedHarness,
   gmtOffsetLabel,
   newAutomationDraft,
   nextAutomationRunAt,
@@ -282,5 +283,26 @@ describe("automation run display", () => {
         createdAt + 90_000,
       ),
     ).toBe("1m");
+  });
+});
+
+describe("removed harness (L-331)", () => {
+  it("moves Antigravity ACP automations to Antigravity CLI with the same model", () => {
+    const old = {
+      harness: "antigravity",
+      model: "antigravity:gemini-3.8-flash-high",
+    } as unknown as Automation;
+    expect(fromRemovedHarness(old)).toMatchObject({
+      harness: "antigravity-cli",
+      model: "antigravity-cli:gemini-3.8-flash-high",
+    });
+  });
+
+  it("leaves other automations as they are", () => {
+    const current = {
+      harness: "codex",
+      model: "codex:gpt-5",
+    } as unknown as Automation;
+    expect(fromRemovedHarness(current)).toBe(current);
   });
 });

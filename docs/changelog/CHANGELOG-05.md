@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-17 16:24 IST — Hari Share hold menu; old Antigravity automations fixed (L-330, L-331)
+- Type: fix
+- What: In Hari's Share chat, holding a message now offers Add to notes, Add task, Pin, Save and Delete. The row under a card shows only Copy and Save, with the time right beside them on the card's own side. Image and text cards no longer show a bookmark inside. Separately, automations saved with the removed Antigravity (ACP) agent (L-244) kept failing with "Harness is not connected"; they now move to Antigravity CLI with the same model.
+- Why: User request 2026-11-17: Notes, Tasks and Pin only in the hold menu; time looked disconnected at the far end; bookmark duplicated; "wallpapers" and "freeproductshub" automations failing daily since 2026-11-12.
+- Files: see L-330 and L-331 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: uncommitted
+- Verified: phone typecheck ✅ lint ✅ phone tests ✅ (337); root typecheck ✅ automations tests ✅ (73). Needs a check on the phone, and the next automation run on the desktop.
+
 ## 2026-11-17 15:25 IST — Interactive Claude: long messages stopped sending (L-329)
 - Type: fix
 - What: In Interactive CLI mode, every long message (and every message with an attachment) stopped with "Prompt delivery is unconfirmed: Claude's prompt never showed the message". Claude Code 2.1.326 now caps its input box and scrolls a tall draft inside it, and the top border reads "── ↑ 21 more ──" with the `❯` row hidden. MonoCode's draft reader needed that `❯` row under a plain border. It now also reads a scrolled box.
