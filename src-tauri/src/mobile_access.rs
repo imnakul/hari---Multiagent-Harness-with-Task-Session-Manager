@@ -771,6 +771,8 @@ async fn handle(
             // Fork (Hari, L-236): the phone shows Tasks and Notes, and link
             // cards as the desktop window's settings say.
             catalog["phoneTools"] = json!(true);
+            // Fork (Hari, L-354): the phone bookmarks replies and quotes.
+            catalog["bookmarks"] = json!(true);
             if let Some(links) = inner
                 .catalogs
                 .values()
@@ -794,6 +796,10 @@ async fn handle(
             break 'locked Err(std::mem::take(&mut params));
         }
         if crate::mobile_tools::handles(method) {
+            break 'locked Err(std::mem::take(&mut params));
+        }
+        // Fork (Hari, L-354): bookmarks, in the session panel's store.
+        if crate::mobile_bookmarks::handles(method) {
             break 'locked Err(std::mem::take(&mut params));
         }
         // Fork (Hari, L-275): the bell's history, answered from the copy the
@@ -928,6 +934,9 @@ async fn handle(
         }
         Err(params) if crate::mobile_phone_notifications::handles(method) => {
             return crate::mobile_phone_notifications::handle(app, peer, &params)
+        }
+        Err(params) if crate::mobile_bookmarks::handles(method) => {
+            return crate::mobile_bookmarks::handle(app, method, params).await
         }
         Err(params) => return crate::mobile_tools::handle(app, method, params).await,
     };

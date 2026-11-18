@@ -69,6 +69,7 @@ import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
 import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import TextWrapIcon from "@hugeicons/core-free-icons/TextWrapIcon";
+import TextSelectionIcon from "@hugeicons/core-free-icons/TextSelectionIcon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
 import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
@@ -114,6 +115,7 @@ const icons = {
   source: SourceCodeIcon,
   preview: ViewIcon,
   wrap: TextWrapIcon,
+  selectText: TextSelectionIcon,
   edit: PencilEdit01Icon,
   robot: Robot01Icon,
   wrench: Wrench01Icon,

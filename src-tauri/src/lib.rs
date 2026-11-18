@@ -44,6 +44,7 @@ mod mcp;
 mod menu;
 mod mobile_access;
 mod mobile_router;
+mod mobile_bookmarks;
 mod mobile_tools;
 // Fork (Hari, L-277): the always-open event stream to the phone.
 mod mobile_events;

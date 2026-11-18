@@ -333,10 +333,43 @@ function findClose(text: string, mark: string, from: number): number {
   return -1;
 }
 
+/** Inline words without their markers. */
+export function inlinePlain(parts: Inline[]): string {
+  return parts.map((part) => ("children" in part ? inlinePlain(part.children) : part.text)).join("");
+}
+
+/**
+ * Fork (Hari, L-352): what a block's Copy, Add to notes and Add task take, as
+ * the desktop's: a code block's code, a table as a Markdown table, a quote's
+ * words a paragraph per line.
+ */
+export function blockCopyText(item: MarkdownBlock): string {
+  switch (item.type) {
+    case "code":
+      return item.text.replace(/\n$/, "");
+    case "table": {
+      const cell = (parts: Inline[]) => inlinePlain(parts).replace(/\|/g, "\\|").trim();
+      const [head = [], ...body] = item.rows;
+      const line = (row: Inline[][]) => `| ${row.map(cell).join(" | ")} |`;
+      return [line(head), `|${head.map(() => " --- ").join("|")}|`, ...body.map(line)].join("\n");
+    }
+    case "quote":
+      return item.children.map(blockCopyText).filter(Boolean).join("\n\n");
+    case "paragraph":
+    case "heading":
+      return inlinePlain(item.inline);
+    case "list":
+      return item.items
+        .map((entry, index) => `${item.ordered ? `${item.start + index}.` : "-"} ${entry.map(blockCopyText).join(" ")}`)
+        .join("\n");
+    case "rule":
+      return "";
+  }
+}
+
 /** A message's words without its markdown, for a one-line preview. */
 export function plainText(source: string): string {
-  const inline = (parts: Inline[]): string =>
-    parts.map((part) => ("children" in part ? inline(part.children) : part.text)).join("");
+  const inline = inlinePlain;
   const block = (item: MarkdownBlock): string => {
     switch (item.type) {
       case "paragraph":

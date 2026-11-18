@@ -38,6 +38,7 @@ vi.mock("@/features/sessions/UsageLimitCard", () => ({
 }));
 vi.mock("@/features/mascots/PixelMascot", () => ({ PixelMascot: () => null }));
 vi.mock("expo-haptics", () => ({}));
+vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
 vi.mock("@/ui/useNativeHeaderHeight", () => ({ useNativeHeaderHeight: () => 0 }));
 vi.mock("@/features/settings/monoOnly", () => ({ useMonoOnlyLayout: () => [false] }));
 vi.mock("@/features/connection/ConnectionProvider", () => ({

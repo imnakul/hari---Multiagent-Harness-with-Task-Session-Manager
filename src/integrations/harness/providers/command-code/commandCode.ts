@@ -26,6 +26,7 @@ import {
   commandCodeExitError,
   commandCodePrintArgs,
   commandCodePromptText,
+  commandCodeTurnText,
   commandCodeToolKind,
   commandCodeToolOutput,
   commandCodeToolPreview,
@@ -155,7 +156,7 @@ async function runOnce(
   run: CommandCodeRun,
   startedAt: number,
 ): Promise<void> {
-  const prompt = commandCodePromptText(input.text, input.attachments);
+  const prompt = commandCodeTurnText(commandCodePromptText(input.text, input.attachments), run);
   if (!prompt.trim()) return;
   const { path } = await resolveCommandCodeBinary();
   if (epoch(input.sessionId) !== startedAt) return;

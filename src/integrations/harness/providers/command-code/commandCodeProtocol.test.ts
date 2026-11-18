@@ -4,6 +4,8 @@ import {
   commandCodeExitError,
   commandCodePrintArgs,
   commandCodePromptText,
+  commandCodeTurnText,
+  COMMAND_CODE_KEEP_WORKING,
   commandCodeToolKind,
   commandCodeToolOutput,
   commandCodeToolPreview,
@@ -89,6 +91,17 @@ describe("commandCodePromptText", () => {
     expect(text).toContain("What is this?");
     expect(text).toContain("read_file");
     expect(text).toContain(JSON.stringify("C:\\shots\\shot.png"));
+  });
+});
+
+describe("commandCodeTurnText", () => {
+  it("asks a working turn to keep going, not a plan or a helper (L-353)", () => {
+    expect(commandCodeTurnText("Fix it", {})).toBe(`Fix it
+
+${COMMAND_CODE_KEEP_WORKING}`);
+    expect(commandCodeTurnText("Fix it", { planning: true })).toBe("Fix it");
+    expect(commandCodeTurnText("Title this", { ephemeral: true })).toBe("Title this");
+    expect(commandCodeTurnText("  ", {})).toBe("  ");
   });
 });
 

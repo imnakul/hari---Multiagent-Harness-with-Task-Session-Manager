@@ -49,6 +49,8 @@ export type Catalog = {
   monoFiles?: boolean;
   /** Fork (Hari, L-236): the desktop answers Tasks, Notes and link previews. */
   phoneTools?: boolean;
+  /** Fork (Hari, L-354): the desktop keeps the phone's bookmarks in its list. */
+  bookmarks?: boolean;
   /** Its Link previews setting and card style, which the phone follows. */
   linkPreviews?: LinkPreviewSettings;
 };

@@ -548,7 +548,10 @@ export function updateSessionPanel(
     .catch(() => undefined)
     .then(async () => {
       const entry = entries.get(sessionId);
-      const current = entry?.loaded ? entry.data : await fetchPanel(sessionId);
+      // A copy nobody watches misses saves from elsewhere (the phone's
+      // bookmarks, L-354), so it is read again first.
+      const current =
+        entry?.loaded && listeners.has(sessionId) ? entry.data : await fetchPanel(sessionId);
       const updated = change(current);
       if (updated === current) return current;
       await invoke("session_panel_save", {

@@ -539,3 +539,9 @@ export function hostOf(url: string) {
   const match = /^https?:\/\/([^/?#]+)/i.exec(url);
   return (match?.[1] ?? url).replace(/^www\./i, "");
 }
+
+/** The reply's first non-empty line, as the desktop names a bookmark. */
+export function bookmarkLine(text: string): string {
+  const line = text.split(/\r?\n/).map((part) => part.trim()).find(Boolean) ?? "";
+  return line.length > 90 ? `${line.slice(0, 89)}…` : line;
+}

@@ -7,9 +7,11 @@ import {
   Check,
   CheckCircle,
   Copy,
+  ExternalLink,
   File,
   FilePlusCorner,
   FolderOpen,
+  Globe,
   Pin,
   PinOff,
   Send,
@@ -20,6 +22,8 @@ import { createNote, noteTitle } from "../../notes";
 import { loadNotesEnabled, subscribeNotesEnabled } from "../../settings/model/settings";
 import { createTask } from "../../tasks/tasks";
 import { openWebLink } from "../../browser/model/openWebLink";
+import { openInMonoBrowser } from "../../browser/model/browserRequest";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatFileSize, isImagePath, sniffImageMime } from "../../files/model/filePreview";
 import { AgentMarkdown } from "../../sessions/ui/AgentMarkdown";
 import { WebLinkCardLink } from "../../sessions/ui/ChatHoverPreviews";
@@ -235,15 +239,28 @@ export function ShareBubble({
     const paths = row.items.map((entry) => entry.path).filter(Boolean).join("\n");
     return copyText(paths || body);
   };
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; href?: string } | null>(null);
   const onContextMenu = (event: MouseEvent<HTMLLIElement>) => {
-    // A link keeps its own menu, and selected text the native one.
-    if ((event.target as Element).closest("a[href]")) return;
+    // Selected text keeps the native menu. A web link gets its open and copy
+    // items first (fork, L-355); a left-click still follows Web links.
     if (!(window.getSelection()?.isCollapsed ?? true)) return;
+    const anchor = (event.target as Element).closest("a[href]");
+    const href = anchor?.getAttribute("href")?.trim();
+    const web = href && /^https?:\/\//i.test(href) ? href : undefined;
+    if (anchor && !web) return;
     event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY });
+    setMenu({ x: event.clientX, y: event.clientY, href: web });
   };
+  const linkItems: ExplorerMenuItem[] = menu?.href
+    ? [
+        { kind: "item", id: "link-default", label: "Open in default browser", icon: <ExternalLink className={ICON} aria-hidden /> },
+        { kind: "item", id: "link-mono", label: "Open in MonoCode browser", icon: <Globe className={ICON} aria-hidden /> },
+        { kind: "item", id: "link-copy", label: "Copy link", icon: <Copy className={ICON} aria-hidden /> },
+        { kind: "sep" },
+      ]
+    : [];
   const menuItems: ExplorerMenuItem[] = [
+    ...linkItems,
     { kind: "item", id: "copy", label: pictures.length && !copyable ? "Copy picture" : "Copy", icon: <Copy className={ICON} aria-hidden /> },
     ...(notesEnabled && body
       ? [{ kind: "item", id: "note", label: "Add to notes", icon: <FilePlusCorner className={ICON} aria-hidden /> } as const]
@@ -258,8 +275,12 @@ export function ShareBubble({
     { kind: "item", id: "remove", label: "Remove from history", danger: true, icon: <Trash2 className={ICON} aria-hidden /> },
   ];
   const pick = (id: string) => {
+    const href = menu?.href;
     setMenu(null);
-    if (id === "copy") run(copyAll);
+    if (id === "link-default" && href) run(() => openUrl(href));
+    else if (id === "link-mono" && href) openInMonoBrowser(href);
+    else if (id === "link-copy" && href) run(() => copyText(href));
+    else if (id === "copy") run(copyAll);
     else if (id === "note") run(addNote);
     else if (id === "task") run(addTask);
     else if (id === "phone" && link)

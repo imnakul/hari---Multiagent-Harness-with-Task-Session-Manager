@@ -95,6 +95,23 @@ export function commandCodePromptText(
   return parts.filter((part) => part.trim()).join("\n\n");
 }
 
+/**
+ * Fork (L-353): some Command Code models (Muse Ember) end a turn by saying
+ * what they will do next ("Now creating the commit.") without doing it, and
+ * the chat sits finished until asked again. Print mode has no system prompt
+ * flag, so a working turn's message carries this line.
+ */
+export const COMMAND_CODE_KEEP_WORKING =
+  "(Keep working until the task is done. Don't end your turn by announcing a next step; do the step, and stop only when the task is finished or you need my answer.)";
+
+/** The turn's message, with the keep-working line for a working turn. */
+export function commandCodeTurnText(prompt: string, run: Pick<CommandCodeRun, "planning" | "ephemeral">): string {
+  if (!prompt.trim() || run.planning || run.ephemeral) return prompt;
+  return `${prompt}
+
+${COMMAND_CODE_KEEP_WORKING}`;
+}
+
 export type CommandCodeResult = {
   ok: boolean;
   sessionId?: string;

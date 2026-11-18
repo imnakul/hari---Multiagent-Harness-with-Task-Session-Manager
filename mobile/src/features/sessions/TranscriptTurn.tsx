@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "@/ui/haptics";
 import { createContext, memo, use, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PixelMascot } from "@/features/mascots/PixelMascot";
 import { useCollapsedToolCalls } from "@/features/settings/toolCalls";
@@ -18,7 +18,12 @@ import { withAlpha, themedStyles, useColors } from "@/ui/theme";
 
 import { LaunchedSessions } from "./LaunchedSessionCard";
 import { DocumentCard, MonoChoices } from "./MonoCards";
-import { ReplyLinkCards, ReplyToolButtons } from "@/features/tools/ReplyTools";
+import {
+  bookmarkLine,
+  ReplyLinkCards,
+  ReplyToolButtons,
+  useBookmarks,
+} from "@/features/tools/ReplyTools";
 
 import { Markdown } from "./Markdown";
 import { MessageAttachments } from "./MessageAttachments";
@@ -30,6 +35,7 @@ import {
   formatWorkingDuration,
   hasTurnMetrics,
 } from "./transcriptFormat";
+import { SelectTextSheet } from "./SelectTextSheet";
 import { TurnMetricsSheet } from "./TurnMetricsSheet";
 
 /** Who a Mono's turns are by, in place of the model and provider mark. */
@@ -176,6 +182,9 @@ function TurnFooter({ turn }: { turn: Turn }) {
         {turn.copyText ? <CopyButton text={turn.copyText} /> : null}
         {/* Fork (Hari, L-236): the reply to the desktop's Notes or Tasks. */}
         {turn.copyText ? <ReplyToolButtons text={turn.copyText} /> : null}
+        {/* Fork (Hari, L-351, L-354): the whole reply to select across, and its bookmark. */}
+        {turn.copyText ? <SelectTextButton text={turn.copyText} blockId={turn.id} /> : null}
+        {turn.copyText ? <BookmarkButton text={turn.copyText} blockId={turn.id} /> : null}
         {metrics ? (
           <Pressable
             onPress={() => {
@@ -201,6 +210,66 @@ function TurnFooter({ turn }: { turn: Turn }) {
         </>
       ) : null}
     </View>
+  );
+}
+
+function SelectTextButton({ text, blockId }: { text: string; blockId: string }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const [open, setOpen] = useState(false);
+  // Mounted on first open and kept, so the page can slide closed.
+  const [opened, setOpened] = useState(false);
+  return (
+    <>
+      <Pressable
+        onPress={() => {
+          setOpened(true);
+          setOpen(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Select text"
+        hitSlop={6}
+        style={({ pressed }) => [styles.footerButton, pressed && styles.footerButtonActive]}
+      >
+        <Icon name="selectText" size={16} color={withAlpha(colors.content, 0.4)} />
+      </Pressable>
+      {opened ? (
+        <SelectTextSheet visible={open} onClose={() => setOpen(false)} text={text} blockId={blockId} />
+      ) : null}
+    </>
+  );
+}
+
+/** Set when the desktop's Bookmarks list has this reply; tap again to remove. */
+function BookmarkButton({ text, blockId }: { text: string; blockId: string }) {
+  const colors = useColors();
+  const styles = useStyles();
+  const bookmarks = useBookmarks();
+  const [busy, setBusy] = useState(false);
+  if (!bookmarks) return null;
+  const set = bookmarks.marked.has(blockId);
+  return (
+    <Pressable
+      onPress={async () => {
+        setBusy(true);
+        try {
+          await bookmarks.toggle(blockId, bookmarkLine(text));
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } catch (reason) {
+          Alert.alert("Couldn’t bookmark", reason instanceof Error ? reason.message : String(reason));
+        } finally {
+          setBusy(false);
+        }
+      }}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={set ? "Remove bookmark" : "Bookmark"}
+      accessibilityState={{ selected: set }}
+      hitSlop={6}
+      style={({ pressed }) => [styles.footerButton, pressed && styles.footerButtonActive]}
+    >
+      <Icon name="bookmark" size={16} color={set ? colors.accent : withAlpha(colors.content, 0.4)} />
+    </Pressable>
   );
 }
 

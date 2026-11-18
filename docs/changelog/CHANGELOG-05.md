@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-19 00:42 IST — Hari: block actions, Select text and bookmarks; Command Code keeps working; Share link menu (L-351 to L-355)
+- Type: feature
+- What: On the phone, code blocks wrap (with a wrap button), and code, tables and quotes have Add task, Add to notes and Copy. Select text opens a whole reply to select across, with Hari's own bar (Copy, Bookmark, Add to notes, Add task). A bookmark button under each reply saves to the desktop's session Bookmarks. Command Code turns ask the model to keep working until the task is done. The desktop Share panel's link right-click opens in the default browser, MonoCode's browser, or copies the link.
+- Why: User report 2026-11-18 (two screenshots): code ran off the phone's screen, only one block could be selected at a time, no bookmarks or block actions on the phone, Command Code (Muse Ember) stopped after announcing each next step, and Share links had no "open in default browser".
+- Files: see L-351 to L-355 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md); spec [hari-chat-blocks-select-bookmarks-plan.md](../specs/hari-chat-blocks-select-bookmarks-plan.md)
+- Commit: (this commit)
+- Verified: desktop tsc ✅ vitest (mobile, session panel, Command Code: 1205) ✅ cargo check ✅ cargo test mobile_bookmarks ✅; phone tsc ✅ lint ✅ vitest ✅ (361; old `watchFrames` load failure). Needs a check on the phone and desktop.
+
 ## 2026-11-18 10:19 IST — Hari: chat composer no longer stuck mid-screen after minimising (L-350)
 - Type: fix
 - What: Coming back to Hari, the composer settles where the keyboard really is, instead of staying raised in the middle of the screen.

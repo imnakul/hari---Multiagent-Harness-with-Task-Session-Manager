@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HarnessEvent, SendTurnInput } from "../../core/types";
+import { COMMAND_CODE_KEEP_WORKING } from "./commandCodeProtocol";
 
 type Spawn = { id: string; args: string[]; cwd: string };
 
@@ -97,7 +98,12 @@ describe("Command Code headless turns", () => {
     const { running } = await start(input);
     expect(spawns[0]!.args).toContain("--yolo");
     expect(spawns[0]!.args).not.toContain("--resume");
-    expect(writes[0]).toEqual({ line: "Fix the bug", close: true });
+    expect(writes[0]).toEqual({
+      line: `Fix the bug
+
+${COMMAND_CODE_KEEP_WORKING}`,
+      close: true,
+    });
 
     event({ type: "run_start", sessionId: "cc-1" });
     event({ type: "thinking_delta", delta: "Looking" });

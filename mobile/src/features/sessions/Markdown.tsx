@@ -7,15 +7,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FileTypeIcon } from "@/features/files/FileTypeIcon";
 import { chooseLinkOpen } from "@/features/share/openLink";
 import { BlockLinkCards } from "@/features/tools/LinkCard";
+import { BlockToolButtons } from "@/features/tools/ReplyTools";
+import { Icon } from "@/ui/Icon";
 import { SideScroll } from "@/ui/SideScroll";
 import { withAlpha, themedStyles, useColors } from "@/ui/theme";
 
 import {
+  blockCopyText,
   numberWords,
   parseMarkdown,
   splitWords,
@@ -28,6 +31,9 @@ const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
 
 /** Prose inside a fold: the agent talking while it works, one notch quieter. */
 const Muted = createContext(false);
+
+/** Fork (Hari, L-352): block actions wait for the reply to finish, as on desktop. */
+const Streaming = createContext(false);
 
 /**
  * Opens a file a transcript names, as the desktop's FileOpenContext does.
@@ -68,12 +74,14 @@ export const Markdown = memo(function Markdown({
   const fade: Fade = { clock, now, ms: fadeMs, from };
   return (
     <Muted value={muted}>
-      <View style={styles.blocks}>
-        {blocks.map((block, index) => (
-          // Blocks with nothing fading keep their props, so they skip the frame.
-          <BlockView key={index} block={block} fade={ranges[index][1] > from ? fade : undefined} />
-        ))}
-      </View>
+      <Streaming value={streaming}>
+        <View style={styles.blocks}>
+          {blocks.map((block, index) => (
+            // Blocks with nothing fading keep their props, so they skip the frame.
+            <BlockView key={index} block={block} fade={ranges[index][1] > from ? fade : undefined} />
+          ))}
+        </View>
+      </Streaming>
     </Muted>
   );
 });
@@ -140,17 +148,7 @@ const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBloc
         </Text>
       );
     case "code":
-      return (
-        <SideScroll
-          showsHorizontalScrollIndicator={false}
-          style={styles.codeBlock}
-          contentContainerStyle={styles.codeContent}
-        >
-          <Text style={styles.codeText} selectable>
-            {block.text}
-          </Text>
-        </SideScroll>
-      );
+      return <CodeBlock block={block} />;
     case "list":
       return (
         <View style={styles.list}>
@@ -169,15 +167,76 @@ const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBloc
     case "quote":
       return (
         <View style={styles.quote}>
+          <BlockActions block={block} label="quote" />
           <Blocks blocks={block.children} fade={fade} />
         </View>
       );
     case "table":
-      return <Table rows={block.rows} fade={fade} />;
+      return (
+        <View style={styles.tableBlock}>
+          <BlockActions block={block} label="table" />
+          <Table rows={block.rows} fade={fade} />
+        </View>
+      );
     case "rule":
       return <View style={styles.rule} />;
   }
 }, sameBlock);
+
+/** A finished reply's block actions (L-352); none while it streams or in a fold. */
+function BlockActions({ block, label, before }: { block: MarkdownBlock; label: string; before?: ReactNode }) {
+  const streaming = use(Streaming);
+  const muted = use(Muted);
+  const text = useMemo(() => blockCopyText(block), [block]);
+  if (streaming || muted || !text.trim()) return before ? <View style={actionRow}>{before}</View> : null;
+  return <BlockToolButtons label={label} text={text} before={before} />;
+}
+
+const actionRow = { flexDirection: "row", justifyContent: "flex-end" } as const;
+
+/**
+ * Fork (Hari, L-352): code wraps to the screen by default so nothing runs off
+ * its edge; the wrap button turns that off, and long lines scroll sideways.
+ */
+function CodeBlock({ block }: { block: Extract<MarkdownBlock, { type: "code" }> }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const [wrap, setWrap] = useState(true);
+  const code = (
+    <Text style={styles.codeText} selectable>
+      {block.text}
+    </Text>
+  );
+  return (
+    <View style={styles.codeBlock}>
+      <View style={styles.codeHeader}>
+        <BlockActions
+          block={block}
+          label="code"
+          before={
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: wrap }}
+              accessibilityLabel="Wrap lines"
+              hitSlop={6}
+              onPress={() => setWrap((value) => !value)}
+              style={({ pressed }) => [styles.wrapButton, pressed && styles.wrapPressed]}
+            >
+              <Icon name="wrap" size={16} color={wrap ? colors.accent : withAlpha(colors.content, 0.4)} />
+            </Pressable>
+          }
+        />
+      </View>
+      {wrap ? (
+        <View style={styles.codeContent}>{code}</View>
+      ) : (
+        <SideScroll showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeContent}>
+          {code}
+        </SideScroll>
+      )}
+    </View>
+  );
+}
 
 /** Columns share the screen's width, down to a floor; past it, the table scrolls. */
 const MIN_COLUMN_WIDTH = 140;
@@ -393,8 +452,18 @@ const useStyles = themedStyles((colors) => ({
     borderCurve: "continuous",
     backgroundColor: withAlpha(colors.content, 0.05),
   },
+  codeHeader: {
+    paddingTop: 4,
+    paddingHorizontal: 6,
+  },
   codeContent: {
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  wrapButton: { padding: 4, borderRadius: 6 },
+  wrapPressed: { backgroundColor: withAlpha(colors.content, 0.08) },
+  tableBlock: {
+    gap: 2,
   },
   codeText: {
     color: withAlpha(colors.content, 0.85),
