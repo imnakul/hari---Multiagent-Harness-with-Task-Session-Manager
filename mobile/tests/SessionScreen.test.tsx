@@ -43,6 +43,7 @@ vi.mock("react-native", () => {
   return {
     Platform: { get OS() { return layout.OS; } },
     findNodeHandle: () => 42,
+    AppState: { addEventListener: () => ({ remove: () => {} }) },
     Dimensions: { get: () => ({ height: layout.windowHeight }) },
     Keyboard: { addListener: (_name: string, handler: typeof layout.frameHandler) => {
       layout.frameHandler = handler;
@@ -55,6 +56,7 @@ vi.mock("react-native", () => {
   };
 });
 vi.mock("react-native-keyboard-controller", () => ({
+  KeyboardController: { state: () => ({ height: 0 }), isVisible: () => false },
   KeyboardGestureArea: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   useKeyboardHandler: (handler: typeof layout.keyboardHandler) => { layout.keyboardHandler = handler; },
 }));

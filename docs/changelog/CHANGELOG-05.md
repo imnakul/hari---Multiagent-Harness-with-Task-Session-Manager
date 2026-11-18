@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-18 10:19 IST — Hari: chat composer no longer stuck mid-screen after minimising (L-350)
+- Type: fix
+- What: Coming back to Hari, the composer settles where the keyboard really is, instead of staying raised in the middle of the screen.
+- Why: User report 2026-11-18 (screenshot: composer stuck mid-screen after returning from minimised). Android hides the keyboard while the app is away without the move events the composer follows.
+- Files: see L-350 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: (not committed yet)
+- Verified: phone typecheck ✅ lint ✅ phone vitest ✅ (357; `watchFrames` load failure is old). Needs a check on the phone.
+
 ## 2026-11-18 10:15 IST — Hari: places with the side menu, reopened where you left them, swipes everywhere, files saved straight to the phone (L-346 to L-349)
 - Type: feature
 - What: Tasks, Notes, Computer (Share and Control) and Notifications are main screens switched from the side menu, not pop-up sheets. Each project and place reopens where it was left (session, note, tab, folder). A swipe left opens the side menu and a swipe right goes back a step everywhere; on sliders, wide tables and notification rows only from the edge. A file tapped in the computer's files saves straight to Downloads/Hari with progress on the row, then Open.

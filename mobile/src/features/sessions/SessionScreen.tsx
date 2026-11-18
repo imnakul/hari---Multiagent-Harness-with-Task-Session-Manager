@@ -13,6 +13,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  AppState,
   Dimensions,
   Keyboard,
   findNodeHandle,
@@ -25,6 +26,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import {
+  KeyboardController,
   KeyboardGestureArea,
   useKeyboardHandler,
 } from "react-native-keyboard-controller";
@@ -781,6 +783,8 @@ export function SessionFrame({
  */
 /** A held lift's glide to the keyboard, as the keyboard's own slide. */
 const LIFT_SETTLE = { duration: 250, easing: Easing.out(Easing.cubic) };
+/** After coming back into view, when the keyboard is where it will stay. */
+const RESUME_SETTLE_MS = 400;
 
 export function useKeyboardLift(offset: number, owner?: RefObject<TextInput | null>) {
   const height = useSharedValue(0);
@@ -815,6 +819,31 @@ export function useKeyboardLift(offset: number, owner?: RefObject<TextInput | nu
   // Where the keyboard is, also while a picker holds the lift.
   const keyboardHeight = useSharedValue(0);
   const keyboardProgress = useSharedValue(0);
+  // Fork (Hari, L-350): minimised with the keyboard up, Android drops the
+  // keyboard without its move events, and the composer stayed raised in
+  // the middle of the screen on return. Back in view, it settles where the
+  // keyboard really is, once the system has had a moment to restore it.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => {
+      if (!owned.get()) return;
+      const state = KeyboardController.state();
+      const shown = KeyboardController.isVisible() ? Math.max(0, state.height) : 0;
+      keyboardHeight.set(shown);
+      keyboardProgress.set(shown > 0 ? 1 : 0);
+      if (liftHeld.get()) return;
+      height.set(withTiming(shown, LIFT_SETTLE));
+      progress.set(withTiming(shown > 0 ? 1 : 0, LIFT_SETTLE));
+    };
+    const subscription = AppState.addEventListener("change", (next) => {
+      clearTimeout(timer);
+      if (next === "active") timer = setTimeout(settle, RESUME_SETTLE_MS);
+    });
+    return () => {
+      clearTimeout(timer);
+      subscription.remove();
+    };
+  }, [height, progress, keyboardHeight, keyboardProgress, owned]);
   const follow = (e: { height: number; progress: number }) => {
     "worklet";
     if (!owned.get()) return;
