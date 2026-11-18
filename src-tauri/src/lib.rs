@@ -552,6 +552,7 @@ pub fn run() {
             mobile_share::mobile_share_mark,
             mobile_share::mobile_share_clear,
             mobile_share::mobile_share_storage,
+            mobile_share::mobile_share_set_limit,
             mobile_share::mobile_phone_files_list,
             mobile_phone_notifications::mobile_phone_notifications_list,
             mobile_phone_notifications::mobile_phone_notification_dismiss,

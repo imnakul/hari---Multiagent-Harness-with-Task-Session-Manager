@@ -25,15 +25,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
-const METHODS: [&str; 5] = [
+const METHODS: [&str; 6] = [
     "share.upload",
     "share.download",
     "share.uploadStatus",
     "share.filesResult",
     "share.history",
+    "share.limit",
 ];
 const FILE: &str = "share-history.json";
 const MAX_HISTORY: usize = 100;
+/// Fork (L-356): how many items the history keeps, picked in Settings.
+const HISTORY_LIMITS: [usize; 4] = [100, 250, 500, 1000];
+const SETTINGS_FILE: &str = "share-settings.json";
 const MAX_TEXT_CHARS: usize = 30_000;
 /// Fork (L-290): up to 1 GB, moved in 1 MB pieces and resumable.
 const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
@@ -152,6 +156,14 @@ struct Share {
     /// Newest first.
     entries: Vec<Entry>,
     uploads: HashMap<String, Upload>,
+    /// Fork (L-356): the chosen limit; none means the default 100.
+    limit: Option<usize>,
+}
+
+impl Share {
+    fn limit(&self) -> usize {
+        self.limit.unwrap_or(MAX_HISTORY)
+    }
 }
 
 static SHARE: Mutex<Option<Share>> = Mutex::new(None);
@@ -179,10 +191,17 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
-    trim(&mut entries);
+    let limit = std::fs::read(path.with_file_name(SETTINGS_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .and_then(|value| value["limit"].as_u64())
+        .map(|limit| limit as usize)
+        .filter(|limit| HISTORY_LIMITS.contains(limit));
+    trim(&mut entries, limit.unwrap_or(MAX_HISTORY));
     with(|share| {
         share.path = Some(path);
         share.entries = entries;
+        share.limit = limit;
     })
 }
 
@@ -204,13 +223,14 @@ fn save(share: &Share) {
 fn record(share: &mut Share, entry: Entry) {
     share.entries.retain(|old| old.id != entry.id);
     share.entries.insert(0, entry);
-    trim(&mut share.entries);
+    let limit = share.limit();
+    trim(&mut share.entries, limit);
     save(share);
 }
 
 /// Past the limit the oldest go first, but never a pinned or saved one.
-fn trim(entries: &mut Vec<Entry>) {
-    while entries.len() > MAX_HISTORY {
+fn trim(entries: &mut Vec<Entry>, limit: usize) {
+    while entries.len() > limit {
         match entries
             .iter()
             .rposition(|entry| !entry.pinned && !entry.saved)
@@ -531,7 +551,8 @@ fn mark_local(ids: &[String], pinned: Option<bool>, saved: Option<bool>) -> Resu
                 entry.saved = saved;
             }
         }
-        trim(&mut share.entries);
+        let limit = share.limit();
+        trim(&mut share.entries, limit);
         save(share);
     })
 }
@@ -718,8 +739,37 @@ fn check_window(window: &Window) -> Result<(), String> {
 #[tauri::command]
 pub fn mobile_share_list(app: AppHandle) -> Result<Value, String> {
     let phones = crate::mobile_access::paired_phones(&app).len();
-    let entries = with(|share| share.entries.clone())?;
-    Ok(json!({ "items": entries, "phones": phones }))
+    let (entries, limit) = with(|share| (share.entries.clone(), share.limit()))?;
+    Ok(json!({ "items": entries, "phones": phones, "limit": limit }))
+}
+
+/// Fork (L-356): sets how many items the history keeps (one of
+/// `HISTORY_LIMITS`), from Settings here or on the phone. A lower limit drops
+/// the oldest unpinned, unsaved items now. Without a limit, reads it.
+fn set_limit(app: &AppHandle, limit: Option<u64>) -> Result<Value, String> {
+    let Some(limit) = limit else {
+        return with(|share| json!({ "limit": share.limit(), "limits": HISTORY_LIMITS }));
+    };
+    let limit = limit as usize;
+    if !HISTORY_LIMITS.contains(&limit) {
+        return Err("Pick 100, 250, 500 or 1000".into());
+    }
+    with(|share| {
+        share.limit = Some(limit);
+        if let Some(path) = share.path.as_ref() {
+            let _ = std::fs::write(path.with_file_name(SETTINGS_FILE), json!({ "limit": limit }).to_string());
+        }
+        trim(&mut share.entries, limit);
+        save(share);
+    })?;
+    changed(app);
+    Ok(json!({ "limit": limit, "limits": HISTORY_LIMITS }))
+}
+
+#[tauri::command]
+pub fn mobile_share_set_limit(window: Window, app: AppHandle, limit: u64) -> Result<Value, String> {
+    check_window(&window)?;
+    set_limit(&app, Some(limit))
 }
 
 /// Sends text to every paired phone: as text (a link when it is one address)
@@ -1190,6 +1240,7 @@ pub(crate) async fn handle(
         "share.uploadStatus" => upload_status(&peer, &params),
         "share.filesResult" => files_result(&params),
         "share.history" => history_for_phone(),
+        "share.limit" => set_limit(&app, params["limit"].as_u64()),
         _ => Err("Unsupported mobile operation".into()),
     })
     .await
@@ -1529,6 +1580,20 @@ mod tests {
         assert!(share.entries.iter().any(|entry| entry.id == "0"));
         assert!(share.entries.iter().any(|entry| entry.id == "1"));
         assert!(!share.entries.iter().any(|entry| entry.id == "2"));
+    }
+
+    #[test]
+    fn a_chosen_limit_keeps_more() {
+        let mut share = Share {
+            limit: Some(250),
+            ..Share::default()
+        };
+        for n in 0..300 {
+            let mut item = entry(n.to_string(), Direction::In, Kind::Text, Status::Done);
+            item.text = Some("x".into());
+            record(&mut share, item);
+        }
+        assert_eq!(share.entries.len(), 250);
     }
 
     #[test]

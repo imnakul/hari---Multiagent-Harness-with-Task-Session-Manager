@@ -27,7 +27,11 @@ export type ShareEntry = {
   saved?: boolean;
 };
 
-export type ShareList = { items: ShareEntry[]; phones: number };
+/** Fork (L-356): `limit` is how many items the history keeps (pinned and saved aside). */
+export type ShareList = { items: ShareEntry[]; phones: number; limit: number };
+
+/** Fork (L-356): the history limits Settings offers. */
+export const SHARE_LIMITS = [100, 250, 500, 1000] as const;
 
 export const SHARE_CHANGE_EVENT = "monocode-share-changed";
 /** Sent when an arrival toast is clicked: Share opens. */
@@ -76,11 +80,13 @@ function parseEntry(raw: unknown): ShareEntry | null {
 export function parseShareList(raw: unknown): ShareList {
   const items = field(raw, "items");
   const phones = field(raw, "phones");
+  const limit = field(raw, "limit");
   return {
     items: Array.isArray(items)
       ? items.map(parseEntry).filter((entry): entry is ShareEntry => entry !== null)
       : [],
     phones: typeof phones === "number" && phones > 0 ? Math.floor(phones) : 0,
+    limit: typeof limit === "number" && limit > 0 ? Math.floor(limit) : 100,
   };
 }
 

@@ -12,6 +12,9 @@ import {
   formatShareSize,
   kindForText,
   MAX_SHARE_HISTORY,
+  matchesShareSearch,
+  setShareHistoryLimit,
+  shareCounted,
   parseDownloadPiece,
   parseIncomingShare,
   parsePendingShares,
@@ -317,5 +320,24 @@ describe("message stamp and state (L-326)", () => {
     expect(shareState(entry("a", { status: "failed" }))).toBe("Failed");
     expect(shareState(entry("a", { status: "offered", direction: "in" }))).toBe("Tap to download");
     expect(shareState(entry("a", { status: "done" }))).toBe("");
+  });
+});
+
+describe("Share search and limit (L-356, L-357)", () => {
+  it("matches every word across a message's texts and file names", () => {
+    const items = [entry("a", { kind: "file", name: "Report.pdf", text: undefined }), entry("b", { text: "Q3 numbers" })];
+    expect(matchesShareSearch(items, "report q3")).toBe(true);
+    expect(matchesShareSearch(items, "invoice")).toBe(false);
+    expect(matchesShareSearch(items, " ")).toBe(true);
+  });
+
+  it("keeps the chosen limit and counts only what rolls off", () => {
+    expect(setShareHistoryLimit(42)).toBe(false);
+    expect(setShareHistoryLimit(250)).toBe(true);
+    let history: PhoneShareEntry[] = [];
+    for (let index = 0; index < 260; index += 1) history = addShareEntry(history, entry(`e${index}`));
+    expect(history).toHaveLength(250);
+    expect(shareCounted([...history.slice(0, 2), entry("p", { pinned: true })])).toBe(2);
+    setShareHistoryLimit(MAX_SHARE_HISTORY);
   });
 });

@@ -11,6 +11,7 @@ import {
   CloudUpload,
   ListFilter,
   Pin,
+  Search,
   Settings,
   SmartPhone,
   Trash2,
@@ -23,10 +24,11 @@ import { useWindowWidth } from "../../../shared/hooks/useWindowWidth";
 import { SlidePanel } from "../../../shared/ui/SlidePanel";
 import { SelectMenu } from "../../sessions/ui/SelectMenu";
 import { formatFileSize } from "../../files/model/filePreview";
-import { parseShareList, SHARE_CHANGE_EVENT, type ShareList } from "../model/mobileShare";
+import { parseShareList, SHARE_CHANGE_EVENT, SHARE_LIMITS, type ShareList } from "../model/mobileShare";
 import {
   markShareSeen,
   matchesShareFilter,
+  matchesShareSearch,
   pinnedShares,
   readSharePanelOpen,
   readSharePanelWidth,
@@ -35,6 +37,7 @@ import {
   SHARE_FILTERS,
   SHARE_PANEL_DEFAULT,
   SHARE_PANEL_MIN,
+  shareCounted,
   shareDays,
   subscribeSharePanel,
   type ShareFilter,
@@ -229,6 +232,8 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
   const [list, setList] = useState<ShareList | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShareFilter>("all");
+  // Fork (L-357): search, from the magnifier in the header. Null while closed.
+  const [query, setQuery] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -329,7 +334,12 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
     };
   }, [paired]);
 
-  const visible = useMemo(() => items.filter((entry) => matchesShareFilter(entry, filter)), [items, filter]);
+  const visible = useMemo(
+    () => items.filter((entry) => matchesShareFilter(entry, filter) && matchesShareSearch(entry, query ?? "")),
+    [items, filter, query],
+  );
+  const counted = useMemo(() => shareCounted(items), [items]);
+  const searching = query !== null && query.trim() !== "";
   const days = useMemo(() => shareDays(visible), [visible]);
   const pins = useMemo(() => pinnedShares(items), [items]);
 
@@ -338,7 +348,7 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
   useEffect(() => {
     const scroller = scrollRef.current;
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  }, [newestShown, filter, awayFromShare]);
+  }, [newestShown, filter, query, awayFromShare]);
 
   const jumpTo = (id: string) => {
     const go = () => {
@@ -350,8 +360,9 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
         easing: "ease-out",
       });
     };
-    if (filter !== "all" && !visible.some((entry) => entry.id === id)) {
+    if ((filter !== "all" || searching) && !visible.some((entry) => entry.id === id)) {
       setFilter("all");
+      setQuery(null);
       window.setTimeout(go, 50);
     } else go();
   };
@@ -369,6 +380,26 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
           size="md"
         />
         <span className="min-w-0 flex-1" />
+        {view === "share" && list ? (
+          <span
+            title={`${counted} of ${list.limit} kept. Pinned and saved items don't count and never roll off. Change it in Settings.`}
+            className="shrink-0 px-1 text-[11px] tabular-nums text-content/40"
+          >
+            {counted} / {list.limit}
+          </span>
+        ) : null}
+        {view === "share" ? (
+          <button
+            type="button"
+            title="Search"
+            aria-label="Search Share"
+            aria-pressed={query !== null}
+            onClick={() => setQuery(query === null ? "" : null)}
+            className={`${HEADER_BUTTON} ${query !== null ? "bg-content/10 text-content" : ""}`}
+          >
+            <Search className="size-3.5" strokeWidth={1.75} aria-hidden />
+          </button>
+        ) : null}
         {view === "share" ? (
           <SelectMenu
             label="Show"
@@ -412,6 +443,27 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
               </p>
             )}
           </section>
+          <section aria-label="History" className="space-y-2">
+            <h4 className="text-[11px] font-medium text-content/40">History</h4>
+            <div className="flex items-center gap-2 text-[12px] text-content/65">
+              <span className="min-w-0 flex-1">
+                Keep the last {list?.limit ?? 100} items on both. Pinned and saved items don't count.
+              </span>
+              <SelectMenu
+                label="Keep"
+                value={String(list?.limit ?? 100)}
+                options={SHARE_LIMITS.map((limit) => ({ value: String(limit), label: String(limit) }))}
+                onChange={(value) =>
+                  void attempt(async () => {
+                    await invoke("mobile_share_set_limit", { limit: Number(value) });
+                    load();
+                  })
+                }
+                className=""
+                menuWidth={120}
+              />
+            </div>
+          </section>
           <section aria-label="Storage on this computer" className="space-y-2">
             <h4 className="text-[11px] font-medium text-content/40">Storage on this computer</h4>
             <StorageStrip busy={busy} attempt={attempt} onDone={load} />
@@ -419,6 +471,36 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
         </div>
       ) : (
         <>
+          {query !== null ? (
+            <div className="flex shrink-0 items-center gap-2 border-b border-stroke px-3 py-1.5">
+              <Search className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  event.stopPropagation();
+                  setQuery(null);
+                }}
+                placeholder="Search text, links and file names"
+                aria-label="Search Share"
+                className="min-w-0 flex-1 bg-transparent text-[12.5px] text-content placeholder:text-content/40 focus:outline-none"
+              />
+              {searching ? (
+                <span className="shrink-0 text-[11px] tabular-nums text-content/40">{visible.length}</span>
+              ) : null}
+              <button
+                type="button"
+                title="Clear search"
+                aria-label="Clear search"
+                onClick={() => setQuery(null)}
+                className={HEADER_BUTTON}
+              >
+                <X className="size-3.5" strokeWidth={1.75} aria-hidden />
+              </button>
+            </div>
+          ) : null}
           <PinCard pins={pins} onJump={jumpTo} />
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -452,7 +534,9 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
               </div>
             ) : visible.length === 0 ? (
               <p className="mt-12 text-center text-[12.5px] text-content/45">
-                {filter === "saved"
+                {searching
+                  ? "No matches."
+                  : filter === "saved"
                   ? "Nothing saved yet. Saved items stay when the history fills up or is deleted."
                   : `No ${SHARE_FILTERS.find((option) => option.id === filter)?.label.toLowerCase()} yet.`}
               </p>

@@ -51,6 +51,8 @@ export type Catalog = {
   phoneTools?: boolean;
   /** Fork (Hari, L-354): the desktop keeps the phone's bookmarks in its list. */
   bookmarks?: boolean;
+  /** Fork (Hari, L-356): `share.limit` reads and sets the Share history limit. */
+  shareLimit?: boolean;
   /** Its Link previews setting and card style, which the phone follows. */
   linkPreviews?: LinkPreviewSettings;
 };

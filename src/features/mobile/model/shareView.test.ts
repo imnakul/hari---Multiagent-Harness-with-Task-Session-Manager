@@ -5,10 +5,13 @@ import {
   isShareMedia,
   markShareSeen,
   matchesShareFilter,
+  matchesShareSearch,
   pinnedShares,
   readShareSeen,
+  shareCounted,
   shareDays,
   shareRows,
+  shareStamp,
   subscribeShareSeen,
 } from "./shareView";
 
@@ -110,5 +113,25 @@ describe("Share rows, pins and saves (L-290)", () => {
     expect(isLongShareText("short")).toBe(false);
     expect(isLongShareText("x".repeat(800))).toBe(true);
     expect(isLongShareText(Array(20).fill("line").join("\n"))).toBe(true);
+  });
+});
+
+describe("Share search, count and stamp (L-356 to L-358)", () => {
+  it("matches every word in the text or file name, in any case", () => {
+    expect(matchesShareSearch({ ...base, text: "Deploy the Build" }, "build deploy")).toBe(true);
+    expect(matchesShareSearch({ ...base, text: "Deploy" }, "build")).toBe(false);
+    expect(matchesShareSearch(file("Report.pdf"), "report")).toBe(true);
+    expect(matchesShareSearch(base, "  ")).toBe(true);
+  });
+
+  it("counts only what can roll off", () => {
+    expect(shareCounted([base, { ...base, pinned: true }, { ...base, saved: true }])).toBe(1);
+  });
+
+  it("puts the day before the time", () => {
+    const now = new Date(2026, 10, 19, 12).getTime();
+    expect(shareStamp(new Date(2026, 10, 19, 9).getTime(), now)).toMatch(/^Today · /);
+    expect(shareStamp(new Date(2026, 10, 18, 9).getTime(), now)).toMatch(/^Yesterday · /);
+    expect(shareStamp(new Date(2026, 10, 10, 9).getTime(), now)).not.toMatch(/^(Today|Yesterday)/);
   });
 });

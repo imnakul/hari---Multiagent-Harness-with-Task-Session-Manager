@@ -4,6 +4,20 @@
 // is dropped rather than shown half-broken.
 
 export const MAX_SHARE_HISTORY = 100;
+/** Fork (Hari, L-356): the history limits the computer offers; the chosen one is set from it. */
+export const SHARE_LIMITS = [100, 250, 500, 1000] as const;
+let historyLimit: number = MAX_SHARE_HISTORY;
+
+export function shareHistoryLimit(): number {
+  return historyLimit;
+}
+
+/** Takes one of `SHARE_LIMITS`; anything else is ignored. */
+export function setShareHistoryLimit(limit: unknown): boolean {
+  if (typeof limit !== "number" || !SHARE_LIMITS.some((value) => value === limit)) return false;
+  historyLimit = limit;
+  return true;
+}
 export const MAX_SHARE_TEXT = 30_000;
 /** Fork (L-290): up to 1 GB, resumable. */
 export const MAX_SHARE_FILE_BYTES = 1024 * 1024 * 1024;
@@ -171,7 +185,7 @@ export function markShareEntries(
 /** Past the limit the oldest go first, but never a pinned or saved one. */
 export function trimShareHistory(history: PhoneShareEntry[]): PhoneShareEntry[] {
   const next = [...history];
-  while (next.length > MAX_SHARE_HISTORY) {
+  while (next.length > historyLimit) {
     let index = -1;
     for (let at = next.length - 1; at >= 0; at -= 1) {
       const entry = next[at];
@@ -532,6 +546,23 @@ export function shareThumbnail(entry: PhoneShareEntry): string | null {
   if (entry.kind !== "file" || !entry.uri || !entry.mimeType?.startsWith("image/")) return null;
   if (entry.direction === "in" && entry.status !== "done") return null;
   return entry.uri;
+}
+
+/** Fork (Hari, L-357): a message matches a search when its texts and file names hold every word, in any case. */
+export function matchesShareSearch(items: readonly PhoneShareEntry[], query: string): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = items
+    .flatMap((item) => [item.text, item.name])
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+/** Fork (Hari, L-356): the items the limit counts (pinned and saved never roll off). */
+export function shareCounted(history: readonly PhoneShareEntry[]): number {
+  return history.filter((entry) => !entry.pinned && !entry.saved).length;
 }
 
 /** Fork (L-288): the day a timeline entry falls on, for its separator: Today, Yesterday or the date. */

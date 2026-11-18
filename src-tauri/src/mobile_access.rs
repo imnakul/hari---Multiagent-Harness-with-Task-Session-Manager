@@ -773,6 +773,8 @@ async fn handle(
             catalog["phoneTools"] = json!(true);
             // Fork (Hari, L-354): the phone bookmarks replies and quotes.
             catalog["bookmarks"] = json!(true);
+            // Fork (Hari, L-356): the Share history limit can be set from the phone.
+            catalog["shareLimit"] = json!(true);
             if let Some(links) = inner
                 .catalogs
                 .values()

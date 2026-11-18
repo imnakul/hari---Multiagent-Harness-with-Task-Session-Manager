@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-19 01:23 IST — Share: history limit with a count, search, and the desktop's row under each message (L-356 to L-358)
+- Type: feature
+- What: Share keeps 100, 250, 500 or 1000 messages (Settings on the desktop's Share panel or in Hari), shown as "64 / 250" at the top; pinned and saved don't count. A search button on both sides shows only messages matching every word. On the desktop, Copy and the day and time ("Today · 14:05") sit under each message, outside the card, as on the phone.
+- Why: User request 2026-11-19 (screenshot of the desktop Share panel).
+- Files: see L-356 to L-358 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: (this commit)
+- Verified: desktop tsc ✅ vitest src/features/mobile (95) ✅ cargo check ✅ cargo test mobile_share (12) ✅; phone tsc ✅ lint ✅ vitest ✅ (363; old `watchFrames` load failure). Manual: desktop search, count, limit in Settings, row under messages; phone search, count, Settings → Share → Keep messages.
+
 ## 2026-11-19 00:42 IST — Hari: block actions, Select text and bookmarks; Command Code keeps working; Share link menu (L-351 to L-355)
 - Type: feature
 - What: On the phone, code blocks wrap (with a wrap button), and code, tables and quotes have Add task, Add to notes and Copy. Select text opens a whole reply to select across, with Hari's own bar (Copy, Bookmark, Add to notes, Add task). A bookmark button under each reply saves to the desktop's session Bookmarks. Command Code turns ask the model to keep working until the task is done. The desktop Share panel's link right-click opens in the default browser, MonoCode's browser, or copies the link.

@@ -39,6 +39,10 @@ import { useHaptics } from "@/features/settings/haptics";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
 import { useShareBubble } from "@/features/share/useShareBubble";
+import { SHARE_LIMITS } from "@/features/share/shareModel";
+import { useShareLimit } from "@/features/share/shareStore";
+import { syncShareLimit } from "@/features/share/shareTransfers";
+import { ChoiceSheet } from "@/ui/ChoiceMenu";
 import { HariUpdateRows } from "@/features/updates/HariUpdateCard";
 import { updatesSupported } from "@/features/updates/useHariUpdate";
 import { projectForRoute } from "@/features/workspace/routing";
@@ -165,6 +169,7 @@ export default function SettingsScreen() {
       <ComputerSettings />
 
       {shareBubble ? <ShareBubbleSettings /> : null}
+      {connection.catalog.shareLimit ? <ShareHistorySettings heading={!shareBubble} /> : null}
 
       <Text style={styles.heading}>Preferences</Text>
       <View style={styles.card}>
@@ -410,6 +415,45 @@ function ComputerSettings() {
             : "Turn on All files access for Hari to browse this phone's storage from the computer's Share panel."}
         </Text>
       ) : null}
+    </>
+  );
+}
+
+/**
+ * Fork (Hari, L-356): how many Share messages to keep, on both sides (pinned
+ * and saved aside). Set on the computer, which trims both.
+ */
+function ShareHistorySettings({ heading }: { heading: boolean }) {
+  const styles = useStyles();
+  const { command, connected } = useConnection();
+  const limit = useShareLimit();
+  const [open, setOpen] = useState(false);
+  const pick = (next: number) =>
+    void syncShareLimit(command, next).catch((reason: unknown) =>
+      Alert.alert("Couldn’t change it", reason instanceof Error ? reason.message : String(reason)),
+    );
+  return (
+    <>
+      {heading ? <Text style={styles.heading}>Share</Text> : null}
+      <View style={[styles.card, heading ? null : { marginTop: 8 }]}>
+        <SettingsRow
+          icon="share"
+          label="Keep messages"
+          value={String(limit)}
+          onPress={() =>
+            connected ? setOpen(true) : Alert.alert("Connect first", "The limit is set on your computer.")
+          }
+        />
+      </View>
+      <Text style={styles.note}>
+        The last {limit} messages stay on this phone and your computer. Pinned and saved ones don’t count.
+      </Text>
+      <ChoiceSheet
+        open={open}
+        title="Keep messages"
+        sections={[SHARE_LIMITS.map((value) => ({ label: String(value), selected: value === limit, onPress: () => pick(value) }))]}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }

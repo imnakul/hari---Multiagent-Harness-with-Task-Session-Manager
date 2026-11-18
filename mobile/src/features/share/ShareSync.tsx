@@ -10,6 +10,7 @@ import {
   receiveShare,
   sendPendingShares,
   settleSentShares,
+  syncShareLimit,
 } from "./shareTransfers";
 
 /**
@@ -20,7 +21,8 @@ import {
  * LinkStreamSync, so the stream is set up before it sends.
  */
 export function ShareSync(): null {
-  const { pairing, connected, command } = useConnection();
+  const { pairing, connected, command, catalog } = useConnection();
+  const limits = !!catalog.shareLimit;
   const fingerprint = pairing?.desktop.fingerprint ?? null;
   const pairingKey = pairing ? `${pairing.desktop.fingerprint}:${pairing.desktop.deviceId}` : null;
   useEffect(() => {
@@ -47,5 +49,10 @@ export function ShareSync(): null {
   useEffect(() => {
     if (pairingKey && connected) void fillShareHistoryFromComputer(command, pairingKey);
   }, [pairingKey, connected, command]);
+  // Fork (Hari, L-356): the computer's history limit, on each connect.
+  useEffect(() => {
+    if (connected && limits)
+      syncShareLimit(command).catch((reason: unknown) => console.warn("Share: could not read the limit", reason));
+  }, [connected, limits, command]);
   return null;
 }

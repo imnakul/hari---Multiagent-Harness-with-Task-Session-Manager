@@ -5,7 +5,10 @@ import {
   addShareEntry,
   markShareEntries,
   parseShareHistory,
+  setShareHistoryLimit,
   settleInterrupted,
+  shareHistoryLimit,
+  trimShareHistory,
   updateShareEntry,
   type PhoneShareEntry,
 } from "./shareModel";
@@ -17,8 +20,11 @@ const KEY = "hari.share.history";
 /** Fork (Hari, L-317): ids removed on this phone, newest last. */
 const REMOVED_KEY = "hari.share.removed";
 const MAX_REMOVED = 500;
+/** Fork (Hari, L-356): the history limit, as the computer last said. */
+const LIMIT_KEY = "hari.share.limit";
 
 function load(): PhoneShareEntry[] {
+  setShareHistoryLimit(Number(Storage.getItemSync(LIMIT_KEY)));
   try {
     return settleInterrupted(parseShareHistory(JSON.parse(Storage.getItemSync(KEY) ?? "[]")));
   } catch {
@@ -97,6 +103,24 @@ export function replaceShares(next: PhoneShareEntry[]) {
 /** Fork (L-290): the history as stored, in bytes (for Storage). */
 export function shareHistoryBytes(): number {
   return (Storage.getItemSync(KEY) ?? "").length;
+}
+
+/** Fork (Hari, L-356): sets the history limit the computer reports; a lower one drops the oldest now. */
+export function applyShareLimit(limit: unknown) {
+  current();
+  if (!setShareHistoryLimit(limit) || limit === Number(Storage.getItemSync(LIMIT_KEY))) return;
+  Storage.setItemSync(LIMIT_KEY, String(limit));
+  commit(trimShareHistory(current()));
+}
+
+export function useShareLimit(): number {
+  return useSyncExternalStore((listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, () => {
+    current();
+    return shareHistoryLimit();
+  });
 }
 
 export function useShareHistory(): PhoneShareEntry[] {

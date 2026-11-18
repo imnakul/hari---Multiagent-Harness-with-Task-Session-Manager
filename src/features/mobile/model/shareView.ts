@@ -172,3 +172,33 @@ export function shareDays(items: readonly ShareEntry[], now = Date.now()): Share
 export function shareTime(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
+
+/** Fork (L-358): the day and time under a bubble, as on the phone: "Today · 14:05", "Yesterday · …", then the date. */
+export function shareStamp(at: number, now = Date.now()): string {
+  const key = dayKey(at);
+  const day =
+    key === dayKey(now)
+      ? "Today"
+      : key === dayKey(now - 86_400_000)
+        ? "Yesterday"
+        : new Date(at).toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            year: new Date(at).getFullYear() === new Date(now).getFullYear() ? undefined : "numeric",
+          });
+  return `${day} · ${shareTime(at)}`;
+}
+
+/** Fork (L-357): an item matches a search when its text, file name or link has every word, in any case. */
+export function matchesShareSearch(entry: ShareEntry, query: string): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = [entry.text, entry.name].filter(Boolean).join(" ").toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+/** Fork (L-356): the items the limit counts (pinned and saved never roll off). */
+export function shareCounted(items: readonly ShareEntry[]): number {
+  return items.filter((entry) => !entry.pinned && !entry.saved).length;
+}

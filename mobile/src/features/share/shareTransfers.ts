@@ -47,6 +47,7 @@ import {
   recordShare,
   rememberRemovedShares,
   removedShareIds,
+  applyShareLimit,
   removeShares,
   replaceShareHistory,
   replaceShares,
@@ -568,6 +569,15 @@ export async function fillShareHistoryFromComputer(command: Command, pairingKey:
     fillRunning = false;
     if (empty) setFilling(false);
   }
+}
+
+/**
+ * Fork (Hari, L-356): the history limit, kept in step with the computer's.
+ * With a limit, sets it there (and so here); without, reads it.
+ */
+export async function syncShareLimit(command: Command, limit?: number): Promise<void> {
+  const answer = await command<{ limit?: unknown }>("share.limit", limit === undefined ? {} : { limit });
+  applyShareLimit(answer?.limit);
 }
 
 /** Fork (L-290): saves or unsaves messages here and on the computer. */

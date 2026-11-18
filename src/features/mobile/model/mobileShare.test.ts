@@ -32,8 +32,8 @@ describe("Share history (L-279)", () => {
   });
 
   it("reads nothing from a broken answer", () => {
-    expect(parseShareList(null)).toEqual({ items: [], phones: 0 });
-    expect(parseShareList({ items: "x", phones: "1" })).toEqual({ items: [], phones: 0 });
+    expect(parseShareList(null)).toEqual({ items: [], phones: 0, limit: 100 });
+    expect(parseShareList({ items: "x", phones: "1" })).toEqual({ items: [], phones: 0, limit: 100 });
   });
 
   it("says what each entry is, which way it went and whether it is waiting", () => {

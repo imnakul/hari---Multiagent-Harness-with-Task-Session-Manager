@@ -34,7 +34,9 @@ import {
   kindForText,
   MAX_SHARE_FILES,
   MAX_SHARE_TEXT,
+  matchesShareSearch,
   shareCaption,
+  shareCounted,
   shareStamp,
   shareState,
   shareRows,
@@ -43,7 +45,7 @@ import {
   type ShareRow,
 } from "@/features/share/shareModel";
 import { readShareDraft, writeShareFiles, writeShareText } from "@/features/share/shareDraft";
-import { useShareHistory } from "@/features/share/shareStore";
+import { useShareHistory, useShareLimit } from "@/features/share/shareStore";
 import {
   clearAllShares,
   fetchShareFile,
@@ -180,6 +182,10 @@ export function SharePanel() {
   const filling = useShareHistoryFilling();
   const colors = useColors();
   const [savedOnly, setSavedOnly] = useState(false);
+  // Fork (Hari, L-357): search, from the magnifier in the toolbar. Null while closed.
+  const [query, setQuery] = useState<string | null>(null);
+  const limit = useShareLimit();
+  const scheme = useScheme();
   const [selected, setSelected] = useState<string | null>(null);
   // Fork (Hari, L-326): the message a hold opened the menu for.
   const [menuRow, setMenuRow] = useState<ShareRow | null>(null);
@@ -213,8 +219,11 @@ export function SharePanel() {
   // Oldest first, as a chat reads (the history is newest first).
   const rows = useMemo(() => {
     const all = shareRows(history).reverse();
-    return savedOnly ? all.filter((row) => row.items.some((item) => item.saved)) : all;
-  }, [history, savedOnly]);
+    return all.filter(
+      (row) => (!savedOnly || row.items.some((item) => item.saved)) && matchesShareSearch(row.items, query ?? ""),
+    );
+  }, [history, savedOnly, query]);
+  const counted = useMemo(() => shareCounted(history), [history]);
   const pinned = useMemo(
     () => shareRows(history).filter((row) => row.items.some((item) => item.pinned)),
     [history],
@@ -304,6 +313,7 @@ export function SharePanel() {
     if (!pinned.length) return;
     const row = pinned[pinIndex % pinned.length];
     if (savedOnly) setSavedOnly(false);
+    if (query) setQuery(null);
     const y = rowsAt.current.get(row.key);
     if (y !== undefined) scroll.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
     setSelected(row.key);
@@ -345,9 +355,23 @@ export function SharePanel() {
             <Chip label="All" active={!savedOnly} onPress={() => setSavedOnly(false)} />
             <Chip label="Saved" icon="bookmark" active={savedOnly} onPress={() => setSavedOnly(true)} />
             <View style={styles.spacer} />
-            <Text style={styles.storage} numberOfLines={1}>
-              {formatShareSize(storage.historyBytes + storage.filesBytes)}
+            <Text
+              style={styles.storage}
+              numberOfLines={1}
+              accessibilityLabel={`${counted} of ${limit} kept, ${formatShareSize(storage.historyBytes + storage.filesBytes)}`}
+            >
+              {counted}/{limit} · {formatShareSize(storage.historyBytes + storage.filesBytes)}
             </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+              accessibilityState={{ selected: query !== null }}
+              onPress={() => setQuery(query === null ? "" : null)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
+            >
+              <Icon name="search" size={18} color={query !== null ? colors.accent : colors.muted} />
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Delete all"
@@ -356,6 +380,31 @@ export function SharePanel() {
               style={({ pressed }) => [styles.toolbarButton, pressed && styles.pressed]}
             >
               <Text style={styles.clearLabel}>Delete all</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {query !== null ? (
+          <View style={styles.searchRow}>
+            <Icon name="search" size={16} color={colors.muted} />
+            <TextInput
+              autoFocus
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search text, links and file names"
+              placeholderTextColor={colors.muted}
+              keyboardAppearance={scheme}
+              returnKeyType="search"
+              accessibilityLabel="Search Share"
+              style={styles.searchInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
+              hitSlop={8}
+              onPress={() => setQuery(null)}
+              style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
+            >
+              <Icon name="close" size={16} color={colors.muted} />
             </Pressable>
           </View>
         ) : null}
@@ -417,7 +466,9 @@ export function SharePanel() {
             text="Send something from here, from any app’s share menu, or with the “Send clipboard” Quick Settings tile."
           />
         )}
-        {savedOnly && !rows.length ? (
+        {query?.trim() && history.length && !rows.length ? (
+          <Text style={styles.empty}>No matches.</Text>
+        ) : savedOnly && !rows.length ? (
           <Text style={styles.empty}>Long-press a message and tap Save to keep it here.</Text>
         ) : null}
 
@@ -1143,6 +1194,17 @@ const useStyles = themedStyles((colors) => ({
   storage: { color: colors.muted, fontSize: 12, fontVariant: ["tabular-nums"] },
   toolbarButton: { minHeight: 40, justifyContent: "center", paddingLeft: 4 },
   clearLabel: { color: colors.deletions, fontSize: 14, fontWeight: "600" },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 40,
+    paddingLeft: 12,
+    paddingRight: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+  },
+  searchInput: { flex: 1, color: colors.content, fontSize: 15, paddingVertical: 8 },
   empty: { color: colors.muted, fontSize: 14, textAlign: "center", marginTop: 32 },
   pinBar: {
     flexDirection: "row",
