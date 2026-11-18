@@ -19,15 +19,18 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { HeaderButton } from "@/features/files/codeScreen";
+import { PlaceCloseButton, SidebarButton, usePlaceSwipes } from "@/features/workspace/PlaceHeader";
 import { ComputerControl } from "@/features/pc/ComputerControl";
 import { sliderHeld } from "@/features/pc/ComputerParts";
 import { SharePanel } from "@/features/share/SharePanel";
+import { hubTabSet, setHubTab, subscribeHubTab, type ComputerTab } from "./hubTab";
 import { useContentWidth } from "@/ui/ContentPane";
 import * as Haptics from "@/ui/haptics";
 import { Icon } from "@/ui/Icon";
+import { EDGE_STRIP } from "@/ui/ScenePager";
 import { SegmentedSwitch } from "@/ui/SegmentedSwitch";
 
-export type ComputerTab = "share" | "control";
+export type { ComputerTab } from "./hubTab";
 
 // The pages' motion, as ScenePager has it (the Expo Router drawer's).
 const SPRING = {
@@ -60,26 +63,11 @@ const SEGMENTS = [
   },
 ];
 
-// Fork (Hari, L-290): the open tab lives here, not in the screen, so the
-// header's toggle is set once in the layout and never changed after the
-// screen opens. Changing a transparent Android header after it opened left it
-// blank, with the screen behind's buttons showing through. Unset, the hub
-// shows the tab it was opened on.
-let current: ComputerTab | undefined;
-const listeners = new Set<() => void>();
-const setTab = (tab: ComputerTab | undefined) => {
-  if (tab === current) return;
-  current = tab;
-  for (const listener of listeners) listener();
-};
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
+// The open tab's store (L-290) is in hubTab.ts, where the side menu's
+// memory (L-347) reads it too.
+const setTab = setHubTab;
 const useTab = (initial: ComputerTab) =>
-  useSyncExternalStore(subscribe, () => current ?? initial);
+  useSyncExternalStore(subscribeHubTab, () => hubTabSet() ?? initial);
 
 function ComputerSwitch({ initial }: { initial: ComputerTab }) {
   const tab = useTab(initial);
@@ -106,9 +94,9 @@ export const computerHubOptions = (
   title: "Computer",
   headerTitleAlign: "center",
   headerTitle: () => <ComputerSwitch initial={initial} />,
-  headerLeft: () => (
-    <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
-  ),
+  // Fork (Hari, L-346): a place of its own, opened and left from the side menu.
+  headerLeft: () => <PlaceCloseButton />,
+  headerRight: () => <SidebarButton />,
 });
 
 /**
@@ -122,6 +110,7 @@ export const computerFilesOptions: NativeStackNavigationOptions = {
   headerLeft: () => (
     <HeaderButton icon="arrowLeft" label="Back" onPress={() => router.back()} />
   ),
+  headerRight: () => <SidebarButton />,
 };
 
 const TABS: ComputerTab[] = ["share", "control"];
@@ -144,9 +133,11 @@ export function ComputerHub({ initial }: { initial: ComputerTab }) {
   const target = useSharedValue(index);
   const touchX = useSharedValue(0);
   const touchY = useSharedValue(0);
+  const touchLocalX = useSharedValue(0);
   const dragging = useSharedValue(false);
   const dragStart = useSharedValue(0);
   const [both, setBoth] = useState(false);
+  usePlaceSwipes();
 
   useLayoutEffect(() => {
     hubProgress.set(index);
@@ -182,6 +173,7 @@ export function ComputerHub({ initial }: { initial: ComputerTab }) {
           const touch = event.allTouches[0];
           touchX.set(touch.absoluteX);
           touchY.set(touch.absoluteY);
+          touchLocalX.set(touch.x);
         })
         .onTouchesMove((event, manager) => {
           if (dragging.get()) return;
@@ -197,6 +189,11 @@ export function ComputerHub({ initial }: { initial: ComputerTab }) {
             return;
           }
           if (Math.abs(dx) <= SWIPE_MIN_OFFSET) return;
+          // Fork (Hari, L-348): from the right edge it is the side menu's.
+          if (dx < 0 && touchLocalX.get() >= width - EDGE_STRIP) {
+            manager.fail();
+            return;
+          }
           const next = target.get() + (dx < 0 ? 1 : -1);
           if (next >= 0 && next < TABS.length) {
             dragging.set(true);
@@ -228,7 +225,7 @@ export function ComputerHub({ initial }: { initial: ComputerTab }) {
         .onFinalize(() => {
           dragging.set(false);
         }),
-    [width, target, touchX, touchY, dragging, dragStart],
+    [width, target, touchX, touchY, touchLocalX, dragging, dragStart],
   );
 
   const row = useAnimatedStyle(() => ({ transform: [{ translateX: -hubProgress.get() * width }] }));

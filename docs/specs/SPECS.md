@@ -29,6 +29,7 @@ Small tasks have no spec (see the tier table in `docs/WORKING-AGREEMENT.md`).
 
 | Created (IST) | Spec | Notes |
 |---|---|---|
+| 2026-11-18 10:00 | [Review — Hari: places, remembered state and global swipes (L-346 to L-349)](hari-places-and-swipes-plan.md) | Tasks, Notes, Computer, Notifications become places; each remembers its session, note, tab or folder; right swipe opens the sidebar and left swipe goes back everywhere; Send to phone saves straight to Downloads. Phone check manual. |
 | 2026-11-17 14:05 | [Review — Hari: task editor, side menu on the right, Share background (L-327, L-328)](hari-tasks-drawer-share-background.md) | Tasks status/project pills and edit sheet with Markdown body (`tasks.read`), APK backup link for in-app updates; drawer on the right with in-session swipes, new sidebar order, Share background in Appearance. Phone check manual. |
 | 2026-11-16 23:13 | [Review — Phone notifications in desktop Share (L-325)](phone-notifications-plan.md) | Android notification listener sends the phone's notifications (minus a skip list) to a Notifications view in desktop Share; dismiss clears them on the phone; codes hidden until clicked; memory only, 24 hours. Desktop and phone checks manual. |
 | 2026-11-16 23:08 | [Review — Remove Markdown Live mode (L-324)](remove-markdown-live.md) | Preview and Source only, default Preview, Ctrl+E and double-click open Source; Live editor code deleted. Desktop check manual. |

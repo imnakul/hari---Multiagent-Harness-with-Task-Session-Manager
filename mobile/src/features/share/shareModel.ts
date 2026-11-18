@@ -68,7 +68,16 @@ export type IncomingShare =
       entryId?: string;
       groupId?: string;
     }
-  | { type: "file"; fileId: string; name: string; mimeType: string; size: number; groupId?: string };
+  | {
+      type: "file";
+      fileId: string;
+      name: string;
+      mimeType: string;
+      size: number;
+      groupId?: string;
+      /** Fork (L-349): the phone asked for it (browsing the computer): fetch at once, any size. */
+      auto?: boolean;
+    };
 
 const KINDS: readonly ShareKind[] = ["text", "link", "clipboard", "file"];
 const STATUSES: readonly ShareStatus[] = ["offered", "queued", "moving", "done", "failed"];
@@ -107,6 +116,7 @@ export function parseIncomingShare(payload: unknown): IncomingShare | null {
       mimeType: typeof mimeType === "string" && mimeType.includes("/") ? mimeType : "application/octet-stream",
       size,
       ...(groupId ? { groupId } : {}),
+      ...(field(payload, "auto") === true ? { auto: true } : {}),
     };
   }
   if (type !== "text" && type !== "link" && type !== "clipboard") return null;

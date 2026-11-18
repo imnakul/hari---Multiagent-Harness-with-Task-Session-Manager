@@ -1,13 +1,13 @@
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 
 import {
-  HeaderButton,
   modalStackOptions,
   sheetScreenLayout,
 } from "@/features/files/codeScreen";
+import { PlaceCloseButton, SidebarButton } from "@/features/workspace/PlaceHeader";
 import { useColors } from "@/ui/theme";
 
-// Fork (Hari, L-236): the desktop's Tasks, as a native modal with its own
+// Fork (Hari, L-236): the desktop's Tasks, a place (L-346) with its own
 // stack and header, as settings is.
 export default function TasksLayout() {
   const colors = useColors();
@@ -20,9 +20,9 @@ export default function TasksLayout() {
         name="index"
         options={{
           title: "Tasks",
-          headerLeft: () => (
-            <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
-          ),
+          // Fork (Hari, L-346): a place of its own, opened and left from the side menu.
+          headerLeft: () => <PlaceCloseButton />,
+          headerRight: () => <SidebarButton />,
         }}
       />
     </Stack>

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
-import { HeaderButton } from "@/features/files/codeScreen";
+import { HeaderButton, HeaderButtons } from "@/features/files/codeScreen";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import {
   excerptOf,
@@ -17,12 +17,14 @@ import {
 import { cachedNotes, pendingToolEdits } from "@/features/tools/toolsCache";
 import { ToolsOffline } from "@/features/tools/ToolsOffline";
 import { chatTime } from "@/features/workspace/relativeTime";
+import { SidebarButton, usePlaceSwipes } from "@/features/workspace/PlaceHeader";
 import { radii, themedStyles, useColors } from "@/ui/theme";
 
 // Fork (Hari, L-236): the desktop's Notes on the phone, newest first, narrowed
 // by the search in the header. A note opens to read and edit; + starts one.
 export default function NotesScreen() {
   const styles = useStyles();
+  usePlaceSwipes();
   const colors = useColors();
   const { command, catalog } = useConnection();
   const run = command as Command;
@@ -82,14 +84,18 @@ export default function NotesScreen() {
             hideWhenScrolling: false,
             onChangeText: (event) => setQuery(event.nativeEvent.text),
           },
+          // Fork (Hari, L-346): beside the side menu, as Notes is a place of its own.
           headerRight: () => (
-            <HeaderButton
-              icon="compose"
-              label="New note"
-              onPress={() =>
-                router.push({ pathname: "/notes/[noteId]", params: { noteId: newId(), fresh: "1" } })
-              }
-            />
+            <HeaderButtons>
+              <HeaderButton
+                icon="compose"
+                label="New note"
+                onPress={() =>
+                  router.push({ pathname: "/notes/[noteId]", params: { noteId: newId(), fresh: "1" } })
+                }
+              />
+              <SidebarButton />
+            </HeaderButtons>
           ),
         }}
       />

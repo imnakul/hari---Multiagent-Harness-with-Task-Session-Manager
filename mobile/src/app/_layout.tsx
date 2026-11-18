@@ -244,15 +244,16 @@ function LinkedWorkspace() {
                 <Stack.Screen name="mono-new" options={screens.page} />
                 <Stack.Screen name="mono-profile/[monoId]" options={screens.sheet} />
                 <Stack.Screen name="models" options={screens.modal} />
-                {/* Fork (Hari, L-236): the desktop's Tasks and Notes. */}
-                <Stack.Screen name="tasks" options={screens.modal} />
-                <Stack.Screen name="notes" options={screens.modal} />
+                {/* Fork (Hari, L-236, L-346): the desktop's Tasks and Notes,
+                    places of their own (swapped in, as a project is). */}
+                <Stack.Screen name="tasks" />
+                <Stack.Screen name="notes" />
                 {/* Fork (Hari, L-327): a task's editor, as a sheet over Tasks. */}
                 <Stack.Screen name="task-edit" options={screens.sheet} />
                 {/* Fork (Hari, L-275): the desktop bell's history. */}
-                <Stack.Screen name="notifications" options={screens.modal} />
-                <Stack.Screen name="share" options={screens.modal} />
-                <Stack.Screen name="computer" options={screens.modal} />
+                <Stack.Screen name="notifications" />
+                <Stack.Screen name="share" />
+                <Stack.Screen name="computer" />
                 <Stack.Screen name="changes" options={screens.changes} />
               </Stack>
             </SessionFrame>

@@ -188,7 +188,9 @@ pub(crate) fn files_offer(app: &AppHandle, peer: &str, params: &Value) -> Result
     if !file.is_absolute() || !file.is_file() {
         return Err("That file isn't there any more".into());
     }
-    crate::mobile_share::offer_file(app, peer, file)
+    // Fork (L-349): a phone that asks for an auto download saves it at once.
+    let auto = params["auto"].as_bool() == Some(true);
+    crate::mobile_share::offer_file(app, peer, file, auto)
 }
 
 #[cfg(windows)]

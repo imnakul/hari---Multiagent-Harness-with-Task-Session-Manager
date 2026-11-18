@@ -49,7 +49,7 @@ const SPRING = {
 };
 const SWIPE_MIN_OFFSET = 5;
 /** Fork (Hari, L-339): from a table or code block, the menu opens only from this strip at the edge. */
-const EDGE_STRIP = 28;
+export const EDGE_STRIP = 28;
 const SWIPE_MIN_DISTANCE = 60;
 const SWIPE_MIN_VELOCITY = 500;
 /** How near shut the scene is when a switch from the drawer goes ahead: the
@@ -119,6 +119,12 @@ type DrawerActions = {
  *  as it moves. */
 const DrawerActionsContext = createContext<DrawerActions | null>(null);
 const DrawerOpenContext = createContext(false);
+/** Fork (Hari, L-346): whether there is a side menu at all (not in the Monos-only layout). */
+const HasDrawerContext = createContext(false);
+
+export function useHasDrawer() {
+  return use(HasDrawerContext);
+}
 
 /** The drawer's actions, which never change. */
 export function useDrawerActions() {
@@ -491,14 +497,18 @@ export function ScenePagerHost({
           // Fork (Hari, L-339): a swipe that starts on a table or code block
           // that scrolls sideways is the block's, unless it starts at the
           // screen's edge (the menu from the right, Back from the left).
+          // Fork (Hari, L-348): a swipe left from the right edge is always
+          // the side menu's, over pages, sliders and tables alike.
+          if (hasDrawer && swipes.get() > 0 && dx < 0 && touchLocalX.get() >= width - EDGE_STRIP) {
+            moving.set(DRAWER);
+            manager.activate();
+            return;
+          }
           const onSideScroll =
             Math.abs(sideScrollTouchX.get() - touchX.get()) < 1 &&
             Math.abs(sideScrollTouchY.get() - touchY.get()) < 1;
           if (onSideScroll) {
-            if (hasDrawer && swipes.get() > 0 && dx < 0 && touchLocalX.get() >= width - EDGE_STRIP) {
-              moving.set(DRAWER);
-              manager.activate();
-            } else if (backs.get() > 0 && dx > 0 && touchLocalX.get() <= EDGE_STRIP) {
+            if (backs.get() > 0 && dx > 0 && touchLocalX.get() <= EDGE_STRIP) {
               moving.set(BACK);
               manager.activate();
             } else manager.fail();
@@ -612,6 +622,7 @@ export function ScenePagerHost({
 
   return (
     <DrawerActionsContext value={actions}>
+      <HasDrawerContext value={hasDrawer}>
       <DrawerOpenContext value={open}>
         <SwitchingContext value={switchState}>
         <ScenePagerContext value={pager}>
@@ -656,6 +667,7 @@ export function ScenePagerHost({
         </ScenePagerContext>
         </SwitchingContext>
       </DrawerOpenContext>
+      </HasDrawerContext>
     </DrawerActionsContext>
   );
 }

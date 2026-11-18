@@ -47,7 +47,7 @@ import { radii, themedStyles, useColors, useScheme } from "@/ui/theme";
 
 import { useUnreadMonos } from "./monoSeen";
 import { onMonoCreated } from "./newMono";
-import { clearToPlace, showProject, showSession } from "./placeStack";
+import { clearToPlace, showPlace, showSession } from "./placeStack";
 import { projectForRoute } from "./routing";
 import type { Mono, Project, SessionSummary } from "./types";
 import { useWorkspace } from "./WorkspaceProvider";
@@ -125,6 +125,7 @@ export function WorkspaceDrawer() {
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ projectId?: string; monoId?: string }>();
   const nav = useNavigationContainerRef();
+  const desktop = pairing?.desktop.fingerprint;
   const onMono = pathname.startsWith("/mono/");
   const onProject = pathname.startsWith("/project/");
   const activeMono = onMono ? params.monoId : undefined;
@@ -175,17 +176,17 @@ export function WorkspaceDrawer() {
   // built only once it is shut, so building it can't hitch the motion. Same
   // kind to same kind only swaps the params, so the frame stays mounted.
   const openProject = (id: string) => {
-    // Fork (Hari, L-343): the same project with a session open over it goes
-    // back to its sessions, as any other pick does.
-    if (id === activeProject && !pathname.includes("/session/")) return drawer.close();
-    drawer.closeThen(() => showProject(nav, id));
+    // Fork (Hari, L-347): the open project stays as it is; another opens
+    // where it was left (its session, if one was open).
+    if (id === activeProject) return drawer.close();
+    drawer.closeThen(() => showPlace(nav, { kind: "project", id }, desktop));
   };
   // A running session opens over its project, as the project's own list
   // pushes it, once the drawer is shut.
   const openSession = (session: SessionSummary) => {
     // Fork (Hari, L-343): in place of whatever was open, not over it.
     if (pathname.endsWith(`/session/${session.id}`)) return drawer.close();
-    drawer.closeThen(() => showSession(nav, session.projectId, session.id));
+    drawer.closeThen(() => showSession(nav, session.projectId, session.id, desktop));
   };
   const openMono = (id: string) => {
     if (id === activeMono) return drawer.close();
@@ -196,21 +197,28 @@ export function WorkspaceDrawer() {
       return router.setParams({ monoId: id });
     }
     drawer.closeThen(() => {
-      clearToPlace(nav);
+      clearToPlace(nav, desktop);
       router.replace({ pathname: "/mono/[monoId]", params: { monoId: id } });
     });
   };
   // Settings rises over the open drawer, which is still there once it's shut.
   // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,
   // squeezed beside the drawer, so the drawer shuts first.
-  const openModal = (
-    path: "/settings" | "/mono-new" | "/tasks" | "/notes" | "/notifications" | "/computer" | "/computer?tab=share",
-  ) => {
+  const openModal = (path: "/settings" | "/mono-new") => {
     if (isModalRoute(pathname)) return;
     if (Platform.OS === "android") drawer.closeThen(() => router.push(path));
     else router.push(path);
   };
   const openSettings = () => openModal("/settings");
+  // Fork (Hari, L-346, L-347): Tasks, Notes, Notifications and the Computer
+  // hub are places, as a project is: one in place of another, each rebuilt
+  // where it was left. The open one stays as it is.
+  const onPlace = (kind: "tasks" | "notes" | "notifications" | "computer") =>
+    kind === "computer" ? pathname.startsWith("/computer") || pathname.startsWith("/share") : pathname.startsWith(`/${kind}`);
+  const openPlace = (kind: "tasks" | "notes" | "notifications" | "computer") => {
+    if (onPlace(kind)) return drawer.close();
+    drawer.closeThen(() => showPlace(nav, { kind }, desktop));
+  };
   // A new Mono from its own sheet, which rises over the open drawer as
   // settings does; once made, the drawer shuts onto its chat.
   const createMono = () => openModal("/mono-new");
@@ -251,7 +259,7 @@ export function WorkspaceDrawer() {
                 icon="notifications"
                 label="Notifications"
                 badge={feedUnread}
-                onPress={() => openModal("/notifications")}
+                onPress={() => openPlace("notifications")}
               />
             </View>
           ) : null}
@@ -299,7 +307,7 @@ export function WorkspaceDrawer() {
                   L-310: always there once paired, as Share keeps an outbox for
                   an offline computer; Wake-on-LAN joins it once it can't be reached. */}
               {pairing ? (
-                <ToolRow icon="share" label="Share" onPress={() => openModal("/computer?tab=share")} />
+                <ToolRow icon="share" label="Share" onPress={() => openPlace("computer")} />
               ) : null}
               {offline && canWake ? (
                 <ToolRow
@@ -311,8 +319,8 @@ export function WorkspaceDrawer() {
               ) : null}
               {catalog.phoneTools ? (
                 <>
-                  <ToolRow icon="tasks" label="Tasks" onPress={() => openModal("/tasks")} />
-                  <ToolRow icon="note" label="Notes" onPress={() => openModal("/notes")} />
+                  <ToolRow icon="tasks" label="Tasks" onPress={() => openPlace("tasks")} />
+                  <ToolRow icon="note" label="Notes" onPress={() => openPlace("notes")} />
                 </>
               ) : null}
               <ToolRow icon="settings" label="Settings" onPress={openSettings} />

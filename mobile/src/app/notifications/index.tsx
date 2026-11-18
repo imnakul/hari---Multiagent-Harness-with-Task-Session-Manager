@@ -18,9 +18,11 @@ import {
 } from "@/features/notifications/notificationFeed";
 import { useFeedPreferences } from "@/features/settings/notificationFeed";
 import { SettingsPage } from "@/features/settings/SettingsUI";
+import { usePlaceSwipes } from "@/features/workspace/PlaceHeader";
 import { showSession } from "@/features/workspace/placeStack";
 import { chatTime } from "@/features/workspace/relativeTime";
 import { Icon, type IconName } from "@/ui/Icon";
+import { SideSwipeArea } from "@/ui/SideScroll";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
 const KIND: Record<FeedKind, { label: string; icon: IconName }> = {
@@ -45,10 +47,11 @@ export default function NotificationsScreen() {
   const styles = useStyles();
   const colors = useColors();
   const feed = useFeed();
-  const { catalog } = useConnection();
+  const { catalog, pairing } = useConnection();
   const [{ seenOnDesktop }] = useFeedPreferences();
   const [refreshing, setRefreshing] = useState(false);
   const [working, setWorking] = useState(false);
+  usePlaceSwipes();
 
   const items = feed.phase === "ready" ? shownFeedItems(feed.items, seenOnDesktop) : [];
   const unread = items.filter((item) => !item.read).length;
@@ -78,7 +81,7 @@ export default function NotificationsScreen() {
       return;
     }
     // Fork (Hari, L-343): in place of what was open, not over it.
-    showSession(nav, item.projectId, item.sessionId);
+    showSession(nav, item.projectId, item.sessionId, pairing?.desktop.fingerprint);
   };
 
   const remove = (item: FeedItem) => {
@@ -197,7 +200,10 @@ function NotificationRow({
     </View>
   );
   const meta = [kind.label, item.projectName, chatTime(item.at)].filter(Boolean).join(" · ");
+  // Fork (Hari, L-348): a row's swipe removes it; the side menu and Back
+  // take a swipe here only from the screen's edge.
   return (
+    <SideSwipeArea>
     <ReanimatedSwipeable
       friction={1.5}
       leftThreshold={SWIPE_DISTANCE}
@@ -236,6 +242,7 @@ function NotificationRow({
         {item.read ? null : <View style={styles.dot} />}
       </Pressable>
     </ReanimatedSwipeable>
+    </SideSwipeArea>
   );
 }
 

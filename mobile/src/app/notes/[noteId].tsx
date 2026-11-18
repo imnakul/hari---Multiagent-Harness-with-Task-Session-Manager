@@ -7,6 +7,7 @@ import { linkStreamLive, onLinkOutboxSettled } from "@/features/link/linkStream"
 import { HeaderButton } from "@/features/files/codeScreen";
 import { Markdown } from "@/features/sessions/Markdown";
 import { SettingsPage } from "@/features/settings/SettingsUI";
+import { usePlaceSwipes } from "@/features/workspace/PlaceHeader";
 import { parseTags, readNote, saveNote, type Command, type Note } from "@/features/tools/tools";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
@@ -36,6 +37,8 @@ const fieldsOf = (note: Note): Fields => ({
 // user picks Reload (the computer's copy) or Keep mine (save over it).
 export default function NoteScreen() {
   const styles = useStyles();
+  // Fork (Hari, L-348): a swipe right goes back to the list.
+  usePlaceSwipes(() => router.back());
   const colors = useColors();
   const { noteId, fresh } = useLocalSearchParams<{ noteId: string; fresh?: string }>();
   const run = useConnection().command as Command;

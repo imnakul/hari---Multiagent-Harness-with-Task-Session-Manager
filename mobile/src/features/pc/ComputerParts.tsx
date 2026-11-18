@@ -15,6 +15,7 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import * as Haptics from "@/ui/haptics";
 import { Icon, type IconName } from "@/ui/Icon";
+import { sideScrollTouchX, sideScrollTouchY } from "@/ui/SideScroll";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
 // Fork (Hari, L-280): the Computer screen's small building blocks.
@@ -288,8 +289,14 @@ export function TileSlider({
         .enabled(!disabled && !unknown && width > 0)
         .activeOffsetX([-6, 6])
         .failOffsetY([-12, 12])
-        .onTouchesDown(() => {
+        .onTouchesDown((event) => {
           sliderHeld.set(true);
+          // Fork (Hari, L-348): marked as a table that scrolls sideways is,
+          // so the side menu and Back take a swipe here only from the edge.
+          const touch = event.allTouches[0];
+          if (!touch) return;
+          sideScrollTouchX.set(touch.absoluteX);
+          sideScrollTouchY.set(touch.absoluteY);
         })
         .onStart(() => {
           from.set(fill.get());

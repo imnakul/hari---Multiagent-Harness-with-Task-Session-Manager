@@ -34,9 +34,15 @@ export function useSceneKey() {
   return sessionId ? `${pathname}?session=${sessionId}` : pathname;
 }
 
+/** Fork (Hari, L-346): Tasks, Notes, Notifications and the Computer hub are
+ *  places of their own, each with its own stack and header. */
+const PLACE_ROUTES = ["/tasks", "/notes", "/notifications", "/computer", "/share"];
+export const isPlaceRoute = (pathname: string) =>
+  PLACE_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 /** Screens drawn under the stack's own native header, rather than the
- *  frame's: a project and its sessions. */
-export const hasNativeHeader = (pathname: string) => pathname.startsWith("/project/");
+ *  frame's: a project and its sessions, and the places above. */
+export const hasNativeHeader = (pathname: string) =>
+  pathname.startsWith("/project/") || isPlaceRoute(pathname);
 
 /** Routes the stack presents over the screen as native modals, which leave
  *  the screen under them as it was. */
@@ -49,14 +55,6 @@ const MODAL_ROUTES = [
   "/file",
   "/diff",
   "/mono-new",
-  // Fork (Hari, L-236).
-  "/tasks",
-  "/notes",
-  // Fork (Hari, L-275).
-  "/notifications",
-  // Fork (Hari, L-298): the Computer hub (Share | Control) and its Files.
-  "/computer",
-  "/share",
 ];
 export const isModalRoute = (pathname: string) =>
   MODAL_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));

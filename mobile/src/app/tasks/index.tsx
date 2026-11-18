@@ -13,6 +13,7 @@ import {
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { SettingsPage } from "@/features/settings/SettingsUI";
+import { usePlaceSwipes } from "@/features/workspace/PlaceHeader";
 import {
   carryOverTasks,
   createTask,
@@ -44,6 +45,7 @@ import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 // once, and its Tasks screen follows.
 export default function TasksScreen() {
   const styles = useStyles();
+  usePlaceSwipes();
   const colors = useColors();
   const { command, catalog } = useConnection();
   const run = command as Command;

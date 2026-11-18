@@ -193,7 +193,9 @@ export async function receiveShare(payload: unknown, command: Command): Promise<
   if (!share) return;
   if (share.type === "file") {
     if (shareHistory().some((entry) => entry.id === share.fileId)) return;
-    const auto = autoDownloads(share.size);
+    // Fork (Hari, L-349): one this phone asked for comes at once, whatever its size.
+    const auto = share.auto === true || autoDownloads(share.size);
+    if (share.auto) askedHere.add(share.fileId);
     recordShare({
       id: share.fileId,
       direction: "in",
@@ -252,6 +254,9 @@ export function fetchShareFile(id: string, command: Command) {
   enqueue(() => download(id, command));
 }
 
+/** Files the phone asked for while browsing the computer: their row shows them arrive. */
+const askedHere = new Set<string>();
+
 const partFile = (id: string, name: string) => new File(INCOMING, `${id}-${name}`);
 
 async function download(id: string, command: Command) {
@@ -299,7 +304,9 @@ async function download(id: string, command: Command) {
         ? await saveToDownloads(target.uri, name, mimeType)
         : target.uri;
     patchShare(id, { status: "done", uri, name });
-    if ((entry.size ?? 0) > AUTO_DOWNLOAD_BYTES || !entry.groupId)
+    // One asked for in the app shows its own Open; out of the app, it still says so.
+    const shownHere = askedHere.delete(id) && AppState.currentState === "active";
+    if (!shownHere && ((entry.size ?? 0) > AUTO_DOWNLOAD_BYTES || !entry.groupId))
       await notify("File from your computer", `${name} · in Downloads/Hari`);
   } catch (reason) {
     const message = why(reason);

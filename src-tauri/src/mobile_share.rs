@@ -939,7 +939,14 @@ fn send_from_explorer(app: &AppHandle, paths: Vec<String>) {
 /// Fork (Hari, L-280): offers a file the computer made (a screenshot) to the
 /// one phone that asked for it; it lands in that phone's Share like any file.
 /// Fork (L-296): also a file the phone picked while browsing the drives.
-pub(crate) fn offer_file(app: &AppHandle, peer: &str, path: &Path) -> Result<Value, String> {
+/// Fork (L-349): `auto` asks the phone to fetch it at once, whatever its size
+/// (it asked for this file); otherwise a big one waits for Download.
+pub(crate) fn offer_file(
+    app: &AppHandle,
+    peer: &str,
+    path: &Path,
+    auto: bool,
+) -> Result<Value, String> {
     let size = std::fs::metadata(path)
         .map_err(|_| "Couldn't read the file")?
         .len();
@@ -956,7 +963,7 @@ pub(crate) fn offer_file(app: &AppHandle, peer: &str, path: &Path) -> Result<Val
     crate::mobile_events::push(
         peer,
         "share",
-        json!({ "type": "file", "fileId": id, "name": name, "mimeType": mime_type, "size": size }),
+        json!({ "type": "file", "fileId": id, "name": name, "mimeType": mime_type, "size": size, "auto": auto }),
     )?;
     with(|share| {
         record(

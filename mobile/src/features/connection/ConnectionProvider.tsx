@@ -32,6 +32,7 @@ import {
 } from "./nativeLink";
 import { normalizeSelection, type MobileSelection } from "./selection";
 import type { LinkPreviewSettings } from "@/features/tools/tools";
+import { forgetPlaceMemory } from "@/features/workspace/placeMemory";
 
 export type Catalog = {
   projects: Project[];
@@ -252,6 +253,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setSelection(null);
     setError(null);
     await Storage.removeItem(PAIRING);
+    // Fork (Hari, L-347): where the user was in each place goes with the pairing.
+    if (value) forgetPlaceMemory(value.desktop.fingerprint);
     if (value) {
       void request(value, "device.leave").catch(() => {});
       await Storage.removeItem(key(value.desktop.fingerprint, "catalog"));

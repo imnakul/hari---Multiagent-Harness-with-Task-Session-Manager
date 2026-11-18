@@ -1,15 +1,15 @@
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 
 import {
-  HeaderButton,
   modalStackOptions,
   sheetScreenLayout,
 } from "@/features/files/codeScreen";
+import { PlaceCloseButton } from "@/features/workspace/PlaceHeader";
 import { androidBackHeader } from "@/ui/AndroidHeader";
 import { useColors } from "@/ui/theme";
 
-// Fork (Hari, L-236): the desktop's Notes, as a native modal with its own
-// stack: the list, and a note pushed inside the sheet.
+// Fork (Hari, L-236, L-346): the desktop's Notes, a place with its own
+// stack: the list, and a note pushed inside it.
 export default function NotesLayout() {
   const colors = useColors();
   return (
@@ -21,9 +21,8 @@ export default function NotesLayout() {
         name="index"
         options={{
           title: "Notes",
-          headerLeft: () => (
-            <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
-          ),
+          // Fork (Hari, L-346): a place of its own; Close only when opened over another screen.
+          headerLeft: () => <PlaceCloseButton />,
         }}
       />
       <Stack.Screen name="[noteId]" options={{ title: "", ...androidBackHeader("Notes") }} />

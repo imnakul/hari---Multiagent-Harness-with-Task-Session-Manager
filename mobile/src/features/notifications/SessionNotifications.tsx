@@ -11,7 +11,7 @@ import {
   type NotificationCategory,
 } from "@/features/settings/notifications";
 import type { SessionSummary } from "@/features/workspace/types";
-import { showSession } from "@/features/workspace/placeStack";
+import { showPlace, showSession } from "@/features/workspace/placeStack";
 import { kindForText } from "@/features/share/shareModel";
 import { feedServed, refreshFeed } from "./notificationFeed";
 
@@ -82,8 +82,10 @@ export function SessionNotifications() {
   // system settings, where notifications may have been turned on or off.
   const [permissionCheck, setPermissionCheck] = useState(0);
   const command = useRef(connection.command);
+  const desktop = useRef(connection.pairing?.desktop?.fingerprint);
   useEffect(() => {
     command.current = connection.command;
+    desktop.current = connection.pairing?.desktop?.fingerprint;
   });
   // Whether the desktop holds this phone's token; until it does, the phone
   // goes on posting its own alerts.
@@ -229,11 +231,12 @@ export function SessionNotifications() {
       if (kindForText(url) === "link") {
         void Linking.openURL(url).catch((reason: unknown) => {
           console.warn("Share: could not open the link", reason);
-          router.push("/share");
+          showPlace(nav, { kind: "share" }, desktop.current);
         });
         return;
       }
-      router.push("/share");
+      // Fork (Hari, L-346): Share is a place; it opens in place of what was open.
+      showPlace(nav, { kind: "share" }, desktop.current);
       return;
     }
     // Fork (Hari, L-275): read on the desktop too; an automation's opens
@@ -244,7 +247,7 @@ export function SessionNotifications() {
         .then(() => refreshFeed())
         .catch((reason: unknown) => console.warn("Could not mark the notification read", reason));
       if (!data.projectId || !data.sessionId) {
-        router.push("/notifications");
+        showPlace(nav, { kind: "notifications" }, desktop.current);
         return;
       }
     }
@@ -263,7 +266,7 @@ export function SessionNotifications() {
     }
     if (!data?.projectId || !data.sessionId) return;
     // Fork (Hari, L-343): in place of what was open, not over it.
-    showSession(nav, data.projectId, data.sessionId);
+    showSession(nav, data.projectId, data.sessionId, desktop.current);
   }, [response, nav]);
 
   return null;

@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { ScrollView, type ScrollViewProps } from "react-native";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { ScrollView, View, type ScrollViewProps } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { makeMutable } from "react-native-reanimated";
 
@@ -49,6 +49,27 @@ export function SideScroll({ children, onLayout, onContentSizeChange, ...props }
       >
         {children}
       </ScrollView>
+    </GestureDetector>
+  );
+}
+
+/** Marks where a touch on a sideways-swiping child landed, as SideScroll does. */
+const sideMark = Gesture.Manual().onTouchesDown((event) => {
+  const touch = event.allTouches[0];
+  if (!touch) return;
+  sideScrollTouchX.set(touch.absoluteX);
+  sideScrollTouchY.set(touch.absoluteY);
+});
+
+/**
+ * Fork (Hari, L-348): around something with a sideways swipe of its own (a
+ * row's swipe to remove), so the side menu and Back take a swipe on it only
+ * from the screen's edge.
+ */
+export function SideSwipeArea({ children }: { children: ReactNode }) {
+  return (
+    <GestureDetector gesture={sideMark}>
+      <View collapsable={false}>{children}</View>
     </GestureDetector>
   );
 }

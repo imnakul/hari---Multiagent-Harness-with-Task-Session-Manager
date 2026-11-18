@@ -625,7 +625,7 @@ fn screenshot(app: &AppHandle, peer: &str) -> Result<Value, String> {
     remove_old_screenshots(&dir);
     let path = dir.join(format!("Screenshot {}.png", native::local_stamp()));
     native::screenshot_png(&path)?;
-    crate::mobile_share::offer_file(app, peer, &path)
+    crate::mobile_share::offer_file(app, peer, &path, false)
 }
 
 fn remove_old_screenshots(dir: &Path) {

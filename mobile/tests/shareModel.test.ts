@@ -75,6 +75,11 @@ describe("parseIncomingShare", () => {
     ).toEqual({ type: "file", fileId: "f1", name: "a_b.txt", mimeType: "text/plain", size: 3 });
   });
 
+  it("keeps a file the phone asked for as auto (L-349), and nothing else as auto", () => {
+    expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: 3, auto: true })).toMatchObject({ auto: true });
+    expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: 3, auto: "yes" })).not.toHaveProperty("auto");
+  });
+
   it("drops the wrong shapes", () => {
     expect(parseIncomingShare({ type: "text", text: "  " })).toBeNull();
     expect(parseIncomingShare({ type: "file", fileId: "f1", name: "a", size: -1 })).toBeNull();
