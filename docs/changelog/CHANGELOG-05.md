@@ -5,7 +5,7 @@
 - What: Tasks, Notes, Computer (Share and Control) and Notifications are main screens switched from the side menu, not pop-up sheets. Each project and place reopens where it was left (session, note, tab, folder). A swipe left opens the side menu and a swipe right goes back a step everywhere; on sliders, wide tables and notification rows only from the edge. A file tapped in the computer's files saves straight to Downloads/Hari with progress on the row, then Open.
 - Why: User report 2026-11-18 (sidebar missing on these screens, state lost on switching, swipes inconsistent, files going through Share); decisions 1A, 2A, 3A, 4A in [hari-places-and-swipes-plan.md](../specs/hari-places-and-swipes-plan.md).
 - Files: see L-346 to L-349 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: (not committed yet)
+- Commit: a4e0415c (not released yet)
 - Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone vitest ✅ (357; `tests/mobile/watchFrames.test.ts` fails to load on HEAD too) cargo check ✅. Needs a check on the phone.
 
 ## 2026-11-18 09:59 IST — Hari: switches clear old session layers, side menu shuts on minimise, back goes up a folder (L-343, L-344, L-345)
