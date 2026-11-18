@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AppState,
   BackHandler,
   Keyboard,
   Pressable,
@@ -406,6 +407,27 @@ export function ScenePagerHost({
     }),
     [animateTo, swipes, backs, translateX, switchWaiting, runSwitch],
   );
+
+  // Fork (Hari, L-344): leaving the app shuts the drawer at once, with no
+  // motion, and coming back puts the scene where the drawer's state says. A
+  // slide left running as Android paused the app could stay stuck part way,
+  // the scene aside and every switch then drawn inside it.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      cancelAnimation(translateX);
+      moving.set(NONE);
+      if (state === "active") {
+        translateX.set(isOpen.get() ? -drawerWidth : 0);
+        return;
+      }
+      if (isOpen.get()) {
+        isOpen.set(false);
+        setOpen(false);
+      }
+      translateX.set(0);
+    });
+    return () => subscription.remove();
+  }, [translateX, isOpen, moving, drawerWidth]);
 
   // Android's back shuts the drawer before it leaves the screen.
   useEffect(() => {

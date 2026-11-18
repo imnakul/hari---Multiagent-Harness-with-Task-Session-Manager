@@ -51,7 +51,10 @@ vi.mock("expo-notifications", () => ({
   AndroidImportance: { DEFAULT: 3 },
   IosAuthorizationStatus: { NOT_DETERMINED: 0 },
 }));
-vi.mock("expo-router", () => ({ router: { push: vi.fn() } }));
+vi.mock("expo-router", () => ({
+  router: { push: vi.fn(), replace: vi.fn() },
+  useNavigationContainerRef: () => ({ getRootState: () => undefined, dispatch: vi.fn() }),
+}));
 vi.mock("expo-sqlite/kv-store", () => ({
   default: {
     getItemSync: () => null,

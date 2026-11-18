@@ -8,7 +8,7 @@ import {
   tag,
 } from "@expo/ui/swift-ui/modifiers";
 import * as Haptics from "@/ui/haptics";
-import { router, useGlobalSearchParams, usePathname } from "expo-router";
+import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname } from "expo-router";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, {
@@ -47,7 +47,7 @@ import { radii, themedStyles, useColors, useScheme } from "@/ui/theme";
 
 import { useUnreadMonos } from "./monoSeen";
 import { onMonoCreated } from "./newMono";
-import { pickProject } from "./projectPick";
+import { clearToPlace, showProject, showSession } from "./placeStack";
 import { projectForRoute } from "./routing";
 import type { Mono, Project, SessionSummary } from "./types";
 import { useWorkspace } from "./WorkspaceProvider";
@@ -124,6 +124,7 @@ export function WorkspaceDrawer() {
   const unread = useUnreadMonos(pairing?.desktop.fingerprint, roster);
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ projectId?: string; monoId?: string }>();
+  const nav = useNavigationContainerRef();
   const onMono = pathname.startsWith("/mono/");
   const onProject = pathname.startsWith("/project/");
   const activeMono = onMono ? params.monoId : undefined;
@@ -174,24 +175,17 @@ export function WorkspaceDrawer() {
   // built only once it is shut, so building it can't hitch the motion. Same
   // kind to same kind only swaps the params, so the frame stays mounted.
   const openProject = (id: string) => {
-    if (id === activeProject) return drawer.close();
-    drawer.closeThen(() => {
-      // The project route takes a pick in place; any other screen is replaced.
-      if (!pickProject(id))
-        router.replace({ pathname: "/project/[projectId]", params: { projectId: id } });
-    });
+    // Fork (Hari, L-343): the same project with a session open over it goes
+    // back to its sessions, as any other pick does.
+    if (id === activeProject && !pathname.includes("/session/")) return drawer.close();
+    drawer.closeThen(() => showProject(nav, id));
   };
   // A running session opens over its project, as the project's own list
   // pushes it, once the drawer is shut.
   const openSession = (session: SessionSummary) => {
-    drawer.closeThen(() => {
-      if (session.projectId !== activeProject && !pickProject(session.projectId))
-        router.replace({ pathname: "/project/[projectId]", params: { projectId: session.projectId } });
-      router.push({
-        pathname: "/project/[projectId]/session/[sessionId]",
-        params: { projectId: session.projectId, sessionId: session.id },
-      });
-    });
+    // Fork (Hari, L-343): in place of whatever was open, not over it.
+    if (pathname.endsWith(`/session/${session.id}`)) return drawer.close();
+    drawer.closeThen(() => showSession(nav, session.projectId, session.id));
   };
   const openMono = (id: string) => {
     if (id === activeMono) return drawer.close();
@@ -201,9 +195,10 @@ export function WorkspaceDrawer() {
       drawer.close();
       return router.setParams({ monoId: id });
     }
-    drawer.closeThen(() =>
-      router.replace({ pathname: "/mono/[monoId]", params: { monoId: id } }),
-    );
+    drawer.closeThen(() => {
+      clearToPlace(nav);
+      router.replace({ pathname: "/mono/[monoId]", params: { monoId: id } });
+    });
   };
   // Settings rises over the open drawer, which is still there once it's shut.
   // Fork (Hari, L-235): on Android a modal opens inside the slid-aside scene,

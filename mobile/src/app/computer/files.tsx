@@ -1,6 +1,6 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
 import { parseFolder, type PcFileEntry, type PcFolder } from "@/features/pc/deviceModel";
@@ -83,6 +83,19 @@ export default function ComputerFilesScreen() {
   };
 
   const parent = folder?.path ? (folder.parent && folder.parent !== folder.path ? folder.parent : "") : null;
+
+  // Fork (Hari, L-345): the phone's back goes up a folder, as the arrow does,
+  // and leaves the browser only from the top.
+  useFocusEffect(
+    useCallback(() => {
+      if (parent === null) return;
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        void open(parent);
+        return true;
+      });
+      return () => subscription.remove();
+    }, [parent, open]),
+  );
 
   return (
     <SettingsPage onRefresh={() => void open(path)} refreshing={loading && folder !== null}>

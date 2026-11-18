@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
-import { router } from "expo-router";
+import { router, useNavigationContainerRef } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform } from "react-native";
 
@@ -11,6 +11,7 @@ import {
   type NotificationCategory,
 } from "@/features/settings/notifications";
 import type { SessionSummary } from "@/features/workspace/types";
+import { showSession } from "@/features/workspace/placeStack";
 import { kindForText } from "@/features/share/shareModel";
 import { feedServed, refreshFeed } from "./notificationFeed";
 
@@ -56,6 +57,7 @@ const SESSION_CHANNEL = "sessions";
  * Tapping one opens its session or Mono.
  */
 export function SessionNotifications() {
+  const nav = useNavigationContainerRef();
   const connection = useConnection();
   const preferences = useNotificationPreferences();
   const current = useRef(preferences);
@@ -260,11 +262,9 @@ export function SessionNotifications() {
       return;
     }
     if (!data?.projectId || !data.sessionId) return;
-    router.push({
-      pathname: "/project/[projectId]/session/[sessionId]",
-      params: { projectId: data.projectId, sessionId: data.sessionId },
-    });
-  }, [response]);
+    // Fork (Hari, L-343): in place of what was open, not over it.
+    showSession(nav, data.projectId, data.sessionId);
+  }, [response, nav]);
 
   return null;
 }

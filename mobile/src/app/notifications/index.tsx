@@ -1,5 +1,5 @@
 import * as Haptics from "@/ui/haptics";
-import { router } from "expo-router";
+import { useNavigationContainerRef } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -18,6 +18,7 @@ import {
 } from "@/features/notifications/notificationFeed";
 import { useFeedPreferences } from "@/features/settings/notificationFeed";
 import { SettingsPage } from "@/features/settings/SettingsUI";
+import { showSession } from "@/features/workspace/placeStack";
 import { chatTime } from "@/features/workspace/relativeTime";
 import { Icon, type IconName } from "@/ui/Icon";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
@@ -40,6 +41,7 @@ const why = (reason: unknown) => (reason instanceof Error ? reason.message : Str
  * read and Clear change the bell on the computer too.
  */
 export default function NotificationsScreen() {
+  const nav = useNavigationContainerRef();
   const styles = useStyles();
   const colors = useColors();
   const feed = useFeed();
@@ -75,12 +77,8 @@ export default function NotificationsScreen() {
       );
       return;
     }
-    const { projectId, sessionId } = item;
-    router.back();
-    router.push({
-      pathname: "/project/[projectId]/session/[sessionId]",
-      params: { projectId, sessionId },
-    });
+    // Fork (Hari, L-343): in place of what was open, not over it.
+    showSession(nav, item.projectId, item.sessionId);
   };
 
   const remove = (item: FeedItem) => {
