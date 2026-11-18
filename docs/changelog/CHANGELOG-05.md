@@ -5,7 +5,7 @@
 - What: Coming back to Hari, the composer settles where the keyboard really is, instead of staying raised in the middle of the screen.
 - Why: User report 2026-11-18 (screenshot: composer stuck mid-screen after returning from minimised). Android hides the keyboard while the app is away without the move events the composer follows.
 - Files: see L-350 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: ba1e8503 (not released yet)
+- Commit: ba1e8503 (released in 0.16.0-local60)
 - Verified: phone typecheck ✅ lint ✅ phone vitest ✅ (357; `watchFrames` load failure is old). Needs a check on the phone.
 
 ## 2026-11-18 10:15 IST — Hari: places with the side menu, reopened where you left them, swipes everywhere, files saved straight to the phone (L-346 to L-349)
@@ -13,7 +13,7 @@
 - What: Tasks, Notes, Computer (Share and Control) and Notifications are main screens switched from the side menu, not pop-up sheets. Each project and place reopens where it was left (session, note, tab, folder). A swipe left opens the side menu and a swipe right goes back a step everywhere; on sliders, wide tables and notification rows only from the edge. A file tapped in the computer's files saves straight to Downloads/Hari with progress on the row, then Open.
 - Why: User report 2026-11-18 (sidebar missing on these screens, state lost on switching, swipes inconsistent, files going through Share); decisions 1A, 2A, 3A, 4A in [hari-places-and-swipes-plan.md](../specs/hari-places-and-swipes-plan.md).
 - Files: see L-346 to L-349 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: a4e0415c (not released yet)
+- Commit: a4e0415c (released in 0.16.0-local60)
 - Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone vitest ✅ (357; `tests/mobile/watchFrames.test.ts` fails to load on HEAD too) cargo check ✅. Needs a check on the phone.
 
 ## 2026-11-18 09:59 IST — Hari: switches clear old session layers, side menu shuts on minimise, back goes up a folder (L-343, L-344, L-345)
@@ -21,7 +21,7 @@
 - What: Picking a project, session or Mono from the side menu, or a session from a notification, shows only that place; sessions open before no longer stay in front. The side menu shuts when Hari is minimised, so it can't stay stuck half open. In the computer's files, the phone's back goes up one folder.
 - Why: User report 2026-11-18: switching projects kept showing the other project's session (two layers with three sessions); the menu stuck after minimising; back left the file browser.
 - Files: see L-343, L-344 and L-345 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: 8679c348 (not released yet)
+- Commit: 8679c348 (released in 0.16.0-local60)
 - Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone vitest ✅ (351; `tests/mobile/watchFrames.test.ts` fails to load on HEAD too). Needs a check on the phone.
 
 ## 2026-11-17 23:44 IST — Phone chats open at the newest message and don't jump; update file cleaned up (L-341, L-342)

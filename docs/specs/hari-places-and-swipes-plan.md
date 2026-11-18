@@ -59,7 +59,7 @@ Done before this spec (same report): L-343 switches clear old layers (`placeStac
 
 ## Done
 
-2026-11-18 10:15 IST, commit a4e0415c (not released yet). Phone check (checklist above) still to do.
+2026-11-18 10:15 IST, commit a4e0415c (released in 0.16.0-local60). Phone check (checklist above) still to do.
 
 Differences from the plan:
 
