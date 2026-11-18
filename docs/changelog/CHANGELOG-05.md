@@ -5,7 +5,7 @@
 - What: Coming back to Hari, the composer settles where the keyboard really is, instead of staying raised in the middle of the screen.
 - Why: User report 2026-11-18 (screenshot: composer stuck mid-screen after returning from minimised). Android hides the keyboard while the app is away without the move events the composer follows.
 - Files: see L-350 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: (not committed yet)
+- Commit: ba1e8503 (not released yet)
 - Verified: phone typecheck ✅ lint ✅ phone vitest ✅ (357; `watchFrames` load failure is old). Needs a check on the phone.
 
 ## 2026-11-18 10:15 IST — Hari: places with the side menu, reopened where you left them, swipes everywhere, files saved straight to the phone (L-346 to L-349)
