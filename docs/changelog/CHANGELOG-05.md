@@ -5,7 +5,7 @@
 - What: Picking a project, session or Mono from the side menu, or a session from a notification, shows only that place; sessions open before no longer stay in front. The side menu shuts when Hari is minimised, so it can't stay stuck half open. In the computer's files, the phone's back goes up one folder.
 - Why: User report 2026-11-18: switching projects kept showing the other project's session (two layers with three sessions); the menu stuck after minimising; back left the file browser.
 - Files: see L-343, L-344 and L-345 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: uncommitted
+- Commit: 8679c348 (not released yet)
 - Verified: phone typecheck ✅ lint ✅ (2 old warnings) phone vitest ✅ (351; `tests/mobile/watchFrames.test.ts` fails to load on HEAD too). Needs a check on the phone.
 
 ## 2026-11-17 23:44 IST — Phone chats open at the newest message and don't jump; update file cleaned up (L-341, L-342)
