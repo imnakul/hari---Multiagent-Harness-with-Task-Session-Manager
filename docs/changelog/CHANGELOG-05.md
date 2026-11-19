@@ -6,7 +6,7 @@
 - What (L-365): the reply ending no longer clears interactive Claude's background list (root cause). The line shimmers, has an × per task (sends one short "stop it" message), and keeps the chat working for cards, idle hibernate and idle close. A send during background work goes on the running settings with a note; new settings apply after it ends (`/model` and `/effort` were not used: they overwrite Claude's global defaults). No extra turns or tokens. Desktop Share footer: Copy left, time right.
 - What (L-366): Android dropped the selection because the hidden system menu refuses to open on lift; Android now keeps its menu. Tables size columns to their text (64–320 px) and scroll; Share text is touchable (not selectable) and folds past 700 characters or 12 lines.
 - Verified: desktop vitest ✅ (8243; one flaky failure on a loaded first run, passes on rerun), tsc ✅; claude interactive + apply tests ✅; phone tsc ✅, lint ✅, vitest ✅ (367).
-- Commit: (pending)
+- Commit: 442e8894 (in 0.16.0-local64)
 
 ## 2026-11-19 05:57 IST — Hari: side menu closes from the strip while a chat loads (L-364)
 
