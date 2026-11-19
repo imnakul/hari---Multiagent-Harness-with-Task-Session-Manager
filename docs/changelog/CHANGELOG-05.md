@@ -1,5 +1,19 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-19 05:50 IST — Claude tools off until switched on per project; Hari shows Windows' own memory (L-362, L-363)
+
+- L-362: Claude Code's user-scope MCP servers no longer start in every new project. MonoCode keeps a per-project on list (`~/.monocode/mcp-on-demand.json`) and passes the rest as `deniedMcpServers`; a switch in an open chat restarts it on the same conversation (`--resume`) at the next message. Local configs set to match (backups beside each): Codex tabularis off, OpenCode and Antigravity aside off.
+- L-363: `pc.stats` sends kernel paged/non-paged memory and the handle count; Hari's Stats shows them under Memory, amber over 4 GB.
+- Verified: desktop tsc ✅, vitest claude + MCP settings ✅ (370), cargo test mcp ✅ (40), mobile_pc ✅ (14); phone tsc ✅, vitest ✅ (365), lint: no new problems.
+
+## 2026-11-19 05:11 IST — Hari: composer keeps its draft open, side menu always closes, swipe back follows the thumb (L-359 to L-361)
+- Type: fix
+- What: A chat's composer comes back open with its whole draft and pictures (it showed one line after Share). The dimmed strip, a swipe right and Back always close the side menu. A swipe back from the left edge moves the screen with the thumb, then slides it off as the previous screen fades in, or springs back.
+- Why: User report 2026-11-19 (two screenshots): the menu stayed open after switching projects and a tap on the strip did nothing; the left-edge back jumped with no motion; the composer showed one line after Share.
+- Files: see L-359 to L-361 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
+- Commit: (this commit)
+- Verified: phone tsc ✅ lint ✅ vitest ✅ (363; old `watchFrames` load failure). Needs a check on the phone.
+
 ## 2026-11-19 01:23 IST — Share: history limit with a count, search, and the desktop's row under each message (L-356 to L-358)
 - Type: feature
 - What: Share keeps 100, 250, 500 or 1000 messages (Settings on the desktop's Share panel or in Hari), shown as "64 / 250" at the top; pinned and saved don't count. A search button on both sides shows only messages matching every word. On the desktop, Copy and the day and time ("Today · 14:05") sit under each message, outside the card, as on the phone.

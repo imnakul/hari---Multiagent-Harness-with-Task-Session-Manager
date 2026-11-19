@@ -42,6 +42,7 @@ const {
   respondClaudeApproval,
   respondClaudeQuestion,
   setClaudeMcpServerResolver,
+  forgetClaudeOffServers,
   restoreClaudeTaskLists,
   sendClaudeTurn,
   forgetClaudeSession,
@@ -123,6 +124,9 @@ async function startTurn(
 ) {
   const events: HarnessEvent[] = [];
   const userCount = parse().filter((message) => message.type === "user").length;
+  const isInitialize = (m: Record<string, unknown>) =>
+    (m.request as Record<string, unknown> | undefined)?.subtype === "initialize";
+  const initializeCount = parse().filter(isInitialize).length;
   const turn = sendClaudeTurn({
     sessionId,
     fork: options.fork,
@@ -137,15 +141,12 @@ async function startTurn(
     onEvent: (event) => events.push(event),
   });
 
+  // A restart sends a second initialize; answer the new one.
   await waitFor(
-    () =>
-      parse().some((m) => {
-        const request = m.request as Record<string, unknown> | undefined;
-        return request?.subtype === "initialize";
-      }),
+    () => parse().filter(isInitialize).length > initializeCount,
     "initialize",
   );
-  const initialize = outgoingControlRequest("initialize");
+  const initialize = parse().filter(isInitialize).at(-1);
   emit({
     type: "system",
     subtype: "init",
@@ -1380,6 +1381,47 @@ describe("claude model switching", () => {
     );
     emit({ type: "result", subtype: "success", session_id: "sess_1" });
     await second;
+  });
+
+  it("leaves Claude's own servers off and restarts on the same conversation when one switches on", async () => {
+    forgetClaudeOffServers();
+    let off = ["aside", "tabularis"];
+    setClaudeMcpServerResolver(async () => ({
+      configured: ["aside", "tabularis"],
+      enabled: [],
+      off,
+    }));
+    const first = await startTurn("s1");
+    const settingsOf = (args: string[]) =>
+      JSON.parse(args[args.indexOf("--settings") + 1] ?? "{}") as Record<
+        string,
+        unknown
+      >;
+    expect(settingsOf(spawned[0]!).deniedMcpServers).toEqual([
+      { serverName: "aside" },
+      { serverName: "tabularis" },
+    ]);
+    emit({ type: "result", subtype: "success", session_id: "sess_1" });
+    await first.turn;
+
+    off = ["aside"];
+    forgetClaudeOffServers();
+    const userCount = parse().filter((message) => message.type === "user").length;
+    const second = sendFollowup("s1");
+    await waitFor(() => spawned.length === 2, "replacement Claude process");
+    expect(spawned[1]).toEqual(expect.arrayContaining(["--resume", "sess_1"]));
+    expect(settingsOf(spawned[1]!).deniedMcpServers).toEqual([
+      { serverName: "aside" },
+    ]);
+    emit({ type: "system", subtype: "init", session_id: "sess_1" });
+    await waitFor(
+      () =>
+        parse().filter((message) => message.type === "user").length > userCount,
+      "follow-up prompt",
+    );
+    emit({ type: "result", subtype: "success", session_id: "sess_1" });
+    await second.turn;
+    forgetClaudeOffServers();
   });
 
   it("waits for the matching model response before sending the next user message", async () => {

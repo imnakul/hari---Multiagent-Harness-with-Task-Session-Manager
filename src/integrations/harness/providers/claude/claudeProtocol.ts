@@ -66,6 +66,8 @@ export type ClaudeLiveKey = {
   runtimeMode: RuntimeMode;
   planning: boolean;
   hooks: boolean;
+  /** Fork (L-362): servers left off; a change restarts on the same conversation. */
+  offServers?: string;
 };
 
 export type ClaudeSwitchStep =
@@ -178,6 +180,8 @@ export type ClaudeCliSettings = {
   fastMode?: boolean;
   ultracode?: boolean;
   disableAllHooks?: boolean;
+  /** Fork (L-362): Claude's own servers left off in this folder. */
+  deniedMcpServers?: { serverName: string }[];
 };
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
@@ -308,9 +312,13 @@ export function planClaudeLiveSwitch(
     previous.context === next.context &&
     previous.runtimeMode === next.runtimeMode &&
     previous.planning === next.planning &&
-    previous.hooks === next.hooks
+    previous.hooks === next.hooks &&
+    (previous.offServers ?? "") === (next.offServers ?? "")
   ) {
     return { kind: "reuse" };
+  }
+  if ((previous.offServers ?? "") !== (next.offServers ?? "")) {
+    return { kind: "restart", reason: "Claude tools switched on or off" };
   }
   if (previous.account !== next.account) {
     return { kind: "restart", reason: "provider account changed" };

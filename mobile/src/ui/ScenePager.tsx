@@ -29,6 +29,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -60,6 +61,12 @@ const SWITCH_AT = 8;
 const SWAP_TIMEOUT = 1500;
 /** Frames the next screen is given to draw under the loading cover. */
 const SWITCH_FRAMES = 2;
+/** Fork (Hari, L-361): how far a back swipe must go to go back, as a share of the width. */
+const BACK_AT = 0.4;
+const BACK_OUT = { duration: 160 };
+const BACK_IN = { duration: 200 };
+/** A back that changes only the screen's params never changes the route: reveal anyway. */
+const BACK_REVEAL_TIMEOUT = 350;
 /** The scene's dimming with the drawer fully open, as that drawer's overlay:
  *  in dark mode only, as a light scene dimmed with black reads as going dark. */
 const OVERLAY_OPACITY = { dark: 0.5, light: 0 } as const;
@@ -299,6 +306,10 @@ export function ScenePagerHost({
   /** Where the pages or the scene were when the finger landed, even
    *  mid-animation. */
   const dragStart = useSharedValue(0);
+  /** Fork (Hari, L-361): how far a swipe back has carried the scene right, and
+   *  its fade as the previous screen comes in. */
+  const backX = useSharedValue(0);
+  const sceneFade = useSharedValue(1);
   /** What the current drag moves: NONE, PAGES or DRAWER. */
   const moving = useSharedValue(NONE);
 
@@ -422,6 +433,11 @@ export function ScenePagerHost({
     const subscription = AppState.addEventListener("change", (state) => {
       cancelAnimation(translateX);
       moving.set(NONE);
+      // Fork (Hari, L-361): nor is a swipe back left part way.
+      cancelAnimation(backX);
+      backX.set(0);
+      cancelAnimation(sceneFade);
+      sceneFade.set(1);
       if (state === "active") {
         translateX.set(isOpen.get() ? -drawerWidth : 0);
         return;
@@ -433,17 +449,57 @@ export function ScenePagerHost({
       translateX.set(0);
     });
     return () => subscription.remove();
-  }, [translateX, isOpen, moving, drawerWidth]);
+  }, [translateX, isOpen, moving, drawerWidth, backX, sceneFade]);
+
+  // Fork (Hari, L-360): whether the scene sits aside, read from where it is
+  // rather than from the drawer's state. They could disagree (the scene left
+  // open with the state shut), and then nothing on the dimmed strip closed it.
+  const [aside, setAside] = useState(false);
+  useAnimatedReaction(
+    () => translateX.get() < -1,
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setAside, now);
+    },
+  );
 
   // Android's back shuts the drawer before it leaves the screen.
   useEffect(() => {
-    if (!open) return;
+    if (!open && !aside) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       animateTo(false);
       return true;
     });
     return () => subscription.remove();
-  }, [open, animateTo]);
+  }, [open, aside, animateTo]);
+
+  // Fork (Hari, L-361): the swipe back has slid the scene off; go back, and
+  // once the previous screen has arrived, bring the scene in place, fading in.
+  // Shared values, not refs: the pan, built during render, calls runBack.
+  const backFrom = useSharedValue<string | null>(null);
+  const backPath = useSharedValue(pathname);
+  const reveal = useCallback(() => {
+    if (backFrom.get() === null) return;
+    backFrom.set(null);
+    afterFrames(SWITCH_FRAMES, () => {
+      cancelAnimation(backX);
+      backX.set(0);
+      sceneFade.set(0);
+      sceneFade.set(withTiming(1, BACK_IN));
+    });
+  }, [backFrom, backX, sceneFade]);
+  useEffect(() => {
+    backPath.set(pathname);
+    const from = backFrom.get();
+    if (from !== null && pathname !== from) reveal();
+  }, [backFrom, backPath, pathname, reveal]);
+  const runBack = useCallback(
+    (run: () => void) => {
+      backFrom.set(backPath.get());
+      run();
+      setTimeout(reveal, BACK_REVEAL_TIMEOUT);
+    },
+    [backFrom, backPath, reveal],
+  );
 
   const hasDrawer = !!drawer;
   // The drawer going away (the Monos-only layout) takes its state with it:
@@ -461,7 +517,7 @@ export function ScenePagerHost({
       Gesture.Pan()
         // Not rebuilt as the drawer opens or shuts: a new gesture would be
         // attached anew mid-animation.
-        .enabled(width > 0 && (on || backCount > 0 || (hasDrawer && swipeCount > 0)))
+        .enabled(width > 0 && (on || aside || backCount > 0 || (hasDrawer && swipeCount > 0)))
         // Takes only a swipe towards a page there is, or the drawer's way, so
         // one off the edge (left on the last page, say) goes to what is under
         // the finger, such as a row's own swipe actions.
@@ -528,11 +584,17 @@ export function ScenePagerHost({
         })
         .onStart(() => {
           dragStart.set(moving.get() === DRAWER ? translateX.get() : progress.get());
+          if (moving.get() === BACK) cancelAnimation(backX);
         })
         .onUpdate((event) => {
           if (moving.get() === DRAWER) {
             const next = dragStart.get() + event.translationX;
             translateX.set(Math.max(-drawerWidth, Math.min(0, next)));
+            return;
+          }
+          if (moving.get() === BACK) {
+            // Fork (Hari, L-361): the scene follows the thumb.
+            backX.set(Math.max(0, event.translationX));
             return;
           }
           if (moving.get() !== PAGES) return;
@@ -567,7 +629,22 @@ export function ScenePagerHost({
             return;
           }
           if (moving.get() === BACK) {
-            if (decisive && !leftward && back) scheduleOnRN(back.run);
+            // Past the mark, or a flick right: slides off and goes back.
+            // Anything else springs back in place.
+            const goes =
+              !!back &&
+              (translationX > width * BACK_AT ||
+                (decisive && !leftward && velocityX > SWIPE_MIN_VELOCITY));
+            if (!goes) {
+              backX.set(withSpring(0, { ...SPRING, velocity: velocityX }));
+              return;
+            }
+            const run = back.run;
+            backX.set(
+              withTiming(width, BACK_OUT, (finished) => {
+                if (finished) scheduleOnRN(runBack, run);
+              }),
+            );
             return;
           }
           if (moving.get() !== PAGES) return;
@@ -587,6 +664,7 @@ export function ScenePagerHost({
       drawerWidth,
       on,
       hasDrawer,
+      aside,
       swipeCount,
       backCount,
       backs,
@@ -601,6 +679,8 @@ export function ScenePagerHost({
       touchY,
       touchLocalX,
       isOpen,
+      backX,
+      runBack,
       translateX,
       swipes,
       onToggled,
@@ -608,7 +688,13 @@ export function ScenePagerHost({
   );
 
   const sceneStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.get() }],
+    transform: [{ translateX: translateX.get() + backX.get() }],
+    opacity: sceneFade.get(),
+  }));
+  // The drawer sits under the scene's right; a swipe back uncovers the left,
+  // where it would show past a short drag.
+  const drawerStyle = useAnimatedStyle(() => ({
+    opacity: backX.get() > 0 ? 0 : 1,
   }));
   const scheme = useScheme();
   const dim = OVERLAY_OPACITY[scheme];
@@ -634,9 +720,12 @@ export function ScenePagerHost({
               {drawer ? (
                 // Kept as a view of its own: flattened away, the drawer's
                 // header and footer would stack over the scene.
-                <View collapsable={false} style={[styles.drawer, { width: drawerWidth }]}>
+                <Animated.View
+                  collapsable={false}
+                  style={[styles.drawer, { width: drawerWidth }, drawerStyle]}
+                >
                   {drawer}
-                </View>
+                </Animated.View>
               ) : null}
               <Animated.View
                 style={[styles.scene, { backgroundColor: colors.background }, sceneStyle]}
@@ -654,7 +743,7 @@ export function ScenePagerHost({
                   pointerEvents="none"
                   style={[styles.overlay, overlayStyle]}
                 />
-                {open ? (
+                {open || aside ? (
                   <Pressable
                     accessibilityLabel="Close sidebar"
                     style={StyleSheet.absoluteFill}

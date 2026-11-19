@@ -13,6 +13,7 @@ import {
   parseMinimalApps,
   parsePcApps,
   parsePcShortcuts,
+  memoryBreakdown,
   parsePcStats,
   pcError,
   sortPcApps,
@@ -300,6 +301,7 @@ export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => vo
   };
 
   const memory = stats?.memory;
+  const breakdown = stats ? memoryBreakdown(stats) : null;
   const sortedApps = apps ? sortPcApps(apps, sort) : null;
 
   return (
@@ -402,6 +404,15 @@ export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => vo
                   </Text>
                 </View>
               </View>
+              {breakdown ? (
+                <Text
+                  style={[styles.memoryLine, breakdown.high && styles.memoryHigh]}
+                  accessibilityLabel={`Windows itself holds ${formatBytes(breakdown.windows)}, ${breakdown.handles} open handles${breakdown.high ? ", higher than normal, a driver may be leaking" : ""}`}
+                >
+                  Windows itself {formatBytes(breakdown.windows)} · {breakdown.handles.toLocaleString()} handles
+                  {breakdown.high ? " · high: a driver may be leaking, restart clears it" : ""}
+                </Text>
+              ) : null}
               {stats.disks.length ? (
                 <View style={styles.disks}>
                   {stats.disks.map((disk) => (
@@ -576,6 +587,8 @@ const useStyles = themedStyles((colors) => ({
   networkLabel: { color: colors.muted, fontSize: 13, marginBottom: 2 },
   networkValue: { color: colors.content, fontSize: 14, fontVariant: ["tabular-nums"] },
   disks: { gap: 14 },
+  memoryLine: { color: colors.muted, fontSize: 13, fontVariant: ["tabular-nums"], marginTop: -8 },
+  memoryHigh: { color: colors.caution },
   skeleton: { height: 120, backgroundColor: colors.surface, opacity: 0.6 },
   shareLink: { alignSelf: "flex-start", minHeight: 40, justifyContent: "center", paddingHorizontal: 4 },
   link: { color: colors.accent, fontSize: 15, fontWeight: "600" },

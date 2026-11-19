@@ -141,6 +141,7 @@ type PendingApproval = {
 type ClaudeMcpDiscoveryRow = {
   provider?: unknown;
   name?: unknown;
+  scope?: unknown;
   enabled?: unknown;
 };
 
@@ -326,23 +327,59 @@ let resolveClaudeBinaryImpl: () => Promise<{ path: string }> =
   resolveClaudeBinary;
 async function discoverClaudeMcpServers(
   cwd: string,
-): Promise<{ configured: string[]; enabled: string[] }> {
+): Promise<ClaudeMcpServers> {
   const rows = await invoke<ClaudeMcpDiscoveryRow[]>("mcp_discover", { cwd });
   if (!Array.isArray(rows)) return { configured: [], enabled: [] };
   const enabled = new Map<string, boolean>();
+  const userOff = new Set<string>();
+  const otherOn = new Set<string>();
   for (const row of rows) {
     if (row.provider !== "claude" || typeof row.name !== "string") continue;
     enabled.set(
       row.name,
       (enabled.get(row.name) ?? true) && row.enabled !== false,
     );
+    if (row.scope === "user" && row.enabled === false) userOff.add(row.name);
+    else if (row.enabled !== false) otherOn.add(row.name);
   }
   return {
     configured: [...enabled.keys()],
     enabled: [...enabled]
       .filter(([, isEnabled]) => isEnabled)
       .map(([name]) => name),
+    // Fork (L-362): Claude's own servers not switched on for this project.
+    // A project or local server of the same name keeps running.
+    off: [...userOff].filter((name) => !otherOn.has(name)).sort(),
   };
+}
+
+type ClaudeMcpServers = {
+  configured: string[];
+  enabled: string[];
+  off?: string[];
+};
+
+/**
+ * Fork (L-362): the servers Claude is told not to start in this folder. Read
+ * once per folder; Settings → MCP forgets the answer when a switch changes.
+ */
+const offServersByCwd = new Map<string, string[]>();
+async function claudeOffServers(cwd: string): Promise<string[]> {
+  const known = offServersByCwd.get(cwd);
+  if (known) return known;
+  let off: string[] = [];
+  try {
+    off = (await resolveClaudeMcpServersImpl(cwd)).off ?? [];
+  } catch {
+    // Unreadable settings leave every server on, as Claude would.
+  }
+  offServersByCwd.set(cwd, off);
+  return off;
+}
+
+/** Fork (L-362): a tool was switched on or off; the next message reads again. */
+export function forgetClaudeOffServers(): void {
+  offServersByCwd.clear();
 }
 let resolveClaudeMcpServersImpl = discoverClaudeMcpServers;
 
@@ -355,9 +392,7 @@ export function setClaudeBinaryResolver(
 
 /** Test seam for the native MCP configuration discovery used to qualify grants. */
 export function setClaudeMcpServerResolver(
-  fn: (
-    cwd: string,
-  ) => Promise<{ configured: string[]; enabled: string[] }>,
+  fn: (cwd: string) => Promise<ClaudeMcpServers>,
 ): void {
   resolveClaudeMcpServersImpl = fn;
 }
@@ -803,7 +838,13 @@ async function ensureLiveUncoalesced(
     });
   }
   const settingsKey = settingsKeyFor(input);
-  const liveKey = claudeLiveKey(input, loadClaudeHooks());
+  // Awaited only on a folder's first message, or after a switch changed.
+  const offServers =
+    offServersByCwd.get(input.cwd) ?? (await claudeOffServers(input.cwd));
+  const liveKey = {
+    ...claudeLiveKey(input, loadClaudeHooks()),
+    offServers: offServers.join(","),
+  };
   const planning = input.intent === "plan";
   const existing = liveByThread.get(input.sessionId);
   const switchPlan = existing
@@ -904,6 +945,7 @@ async function ensureLiveUncoalesced(
     input,
     canResume ? resume?.sessionId : undefined,
     claudeSessionId,
+    offServers,
   );
   const fork = !canResume && input.fork ? input.fork : undefined;
   const spawnArgs = buildClaudeSpawnArgs(
@@ -3002,6 +3044,7 @@ function launchOptions(
   input: HarnessSessionInput,
   resume: string | undefined,
   sessionId: string,
+  offServers: string[] = [],
 ): {
   model?: string;
   effort?: string;
@@ -3026,6 +3069,11 @@ function launchOptions(
   }
   if (!loadClaudeHooks()) {
     settings.disableAllHooks = true;
+  }
+  if (offServers.length > 0) {
+    settings.deniedMcpServers = offServers.map((serverName) => ({
+      serverName,
+    }));
   }
   return {
     model: resolveClaudeApiModelId(native, context),

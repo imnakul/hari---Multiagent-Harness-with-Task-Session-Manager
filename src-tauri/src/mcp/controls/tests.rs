@@ -299,6 +299,10 @@ fn claude_discovery_reflects_native_project_choice_across_scopes() {
     fixture
         .toggle("claude", "local", &user, "docs", true)
         .unwrap();
+    // Fork (L-362): the user-scope row stays off until switched on.
+    fixture
+        .toggle("claude", "user", &user, "docs", true)
+        .unwrap();
     assert!(fixture
         .rows()
         .iter()
@@ -496,24 +500,27 @@ fn claude_account_configs_are_listed_and_toggled_in_their_own_file() {
     assert!(account_rows
         .iter()
         .all(|row| row.provider == "claude" && row.scope == "user"));
-    set_enabled(
-        &fixture.home(),
-        &fixture.project(),
-        None,
-        None,
-        &configs,
-        "claude",
-        "user",
-        &configs[0].to_string_lossy(),
-        "aside-cu",
-        false,
-    )
-    .unwrap();
-    let key = fixture.project().to_string_lossy().replace('\\', "/");
+    // Fork (L-362): user-scope servers switch on and off in MonoCode's list.
+    for (name, on) in [("aside", true), ("aside-cu", true), ("aside-cu", false)] {
+        set_enabled(
+            &fixture.home(),
+            &fixture.project(),
+            None,
+            None,
+            &configs,
+            "claude",
+            "user",
+            &configs[0].to_string_lossy(),
+            name,
+            on,
+        )
+        .unwrap();
+    }
     assert_eq!(
-        read_json(&account).unwrap()["projects"][key.as_str()]["disabledMcpServers"],
-        serde_json::json!(["aside-cu"])
+        crate::mcp::on_demand::on_list(&fixture.home(), &fixture.project()),
+        ["aside"]
     );
+    assert!(read_json(&account).unwrap().get("projects").is_none());
     assert!(read_json(&fixture.home().join(".claude.json"))
         .unwrap()
         .get("projects")

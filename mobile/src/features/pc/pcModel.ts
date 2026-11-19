@@ -7,6 +7,8 @@ export type PcStats = {
   cpu?: number;
   gpu?: number;
   memory?: { used: number; total: number };
+  /** Fork (L-363): Windows' own memory (kernel pools, in bytes) and open handles. */
+  memoryDetail?: { kernelPaged: number; kernelNonPaged: number; handles: number };
   disks: { name: string; free: number; total: number }[];
   /** Bytes per second. */
   network?: { down?: number; up?: number };
@@ -72,6 +74,12 @@ export function parsePcStats(raw: unknown): PcStats {
   if (used !== undefined && total !== undefined && total > 0 && used <= total) stats.memory = { used, total };
   if (down !== undefined || up !== undefined) stats.network = { down, up };
   if (uptime !== undefined) stats.uptime = uptime;
+  const detail = field(raw, "memoryDetail");
+  const kernelPaged = number(field(detail, "kernelPaged"));
+  const kernelNonPaged = number(field(detail, "kernelNonPaged"));
+  const handles = number(field(detail, "handles"));
+  if (kernelPaged !== undefined && kernelNonPaged !== undefined && handles !== undefined)
+    stats.memoryDetail = { kernelPaged, kernelNonPaged, handles };
   if (field(raw, "monitorOff") === true) stats.monitorOff = true;
   if (field(raw, "minimal") === true) stats.minimal = true;
   for (const disk of list(field(raw, "disks"))) {
@@ -82,6 +90,21 @@ export function parsePcStats(raw: unknown): PcStats {
       stats.disks.push({ name, free, total: size });
   }
   return stats;
+}
+
+/** Fork (L-363): above this, Windows' own memory points to a leaking driver (normal is under 1–2 GB). */
+export const KERNEL_HIGH_BYTES = 4 * 1024 ** 3;
+
+/** Fork (L-363): what Windows itself holds, split from apps, for the Stats line. */
+export function memoryBreakdown(stats: PcStats): { apps: number; windows: number; handles: number; high: boolean } | null {
+  if (!stats.memory || !stats.memoryDetail) return null;
+  const windows = stats.memoryDetail.kernelPaged + stats.memoryDetail.kernelNonPaged;
+  return {
+    apps: Math.max(0, stats.memory.used - stats.memoryDetail.kernelNonPaged),
+    windows,
+    handles: stats.memoryDetail.handles,
+    high: windows > KERNEL_HIGH_BYTES,
+  };
 }
 
 export function parsePcApps(raw: unknown): PcApp[] {

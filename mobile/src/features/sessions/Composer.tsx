@@ -207,7 +207,11 @@ export function Composer({
   // by then the keyboard is up. See "Missing animations on iOS" in the
   // keyboard-controller KeyboardStickyView docs.
   const focused = useSharedValue(false);
-  const progress = useSharedValue(0);
+  // Fork (Hari, L-359): a composer rebuilt with a draft (back from Share, say)
+  // starts open. Its opening animation could run while the dock was still
+  // hidden behind the switch cover, and Android dropped it: one line showed,
+  // with no pictures.
+  const progress = useSharedValue(opens ? 1 : 0);
   const morph = (expand: boolean) => progress.set(withTiming(expand ? 1 : 0, MORPH));
   useEffect(() => {
     if (opens) progress.set(withTiming(1, MORPH));

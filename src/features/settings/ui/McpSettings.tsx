@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { forgetClaudeOffServers } from "../../../integrations/harness/providers/claude/claude";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   useCallback,
@@ -510,6 +511,7 @@ function McpConnections({
       [identity]: { enabled, pending: false },
     }));
     clearMcpSettingsCache();
+    forgetClaudeOffServers();
     // Keep showing the requested state until the discovered one arrives.
     await refresh(true, true).finally(settle);
   }
@@ -528,7 +530,9 @@ function McpConnections({
           </div>
           <p className="mt-1 text-xs text-content/55">
             Configured servers for the selected project and your provider
-            accounts.
+            accounts. Claude Code's own servers stay off until you switch them
+            on for a project; an open chat picks the change up on its next
+            message.
           </p>
         </div>
         <div className="flex items-center gap-2">

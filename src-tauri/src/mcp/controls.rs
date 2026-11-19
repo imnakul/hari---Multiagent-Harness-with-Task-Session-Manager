@@ -83,6 +83,14 @@ fn set_enabled(
         .ok_or("This MCP entry has changed or disappeared; refresh and try again")?;
     // Resolve links before replacing a file, so a config symlink remains intact.
     let selected = std::fs::canonicalize(&row.config_path).map_err(|error| error.to_string())?;
+    if provider == "claude" && scope == "user" {
+        // Fork (L-362): Claude's own servers switch on per project in
+        // MonoCode's list; switching on also clears Claude's own off choice.
+        super::on_demand::set_on(home, project, name, enabled)?;
+        if !enabled {
+            return Ok(());
+        }
+    }
     if provider == "claude" {
         // Fork (L-272): a MonoCode account's row toggles in that account's file.
         let home_config = home.join(".claude.json");

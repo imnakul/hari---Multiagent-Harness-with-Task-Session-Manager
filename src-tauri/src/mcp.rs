@@ -8,6 +8,7 @@ use crate::dirs_home;
 use crate::fs::expand_home;
 
 pub(crate) mod controls;
+pub(crate) mod on_demand;
 
 /// Fork (L-272): the `.claude.json` of every MonoCode Claude account
 /// (`<app data>/provider-accounts/claude/<id>/`). Chats on those accounts run
@@ -655,6 +656,13 @@ fn discover(
                     .iter()
                     .any(|name| name.as_str() == Some(&connection.name));
             }
+        }
+    }
+    // Fork (L-362): Claude's own servers stay off until switched on here.
+    let on = on_demand::on_list(home, project);
+    for connection in &mut connections {
+        if connection.provider == "claude" && connection.scope == "user" {
+            connection.enabled = connection.enabled && on.contains(&connection.name);
         }
     }
     connections

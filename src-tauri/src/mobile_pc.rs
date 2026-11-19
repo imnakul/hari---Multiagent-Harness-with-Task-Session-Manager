@@ -398,6 +398,13 @@ fn stats() -> Result<Value, String> {
         "cpu": cpu,
         "gpu": gpu,
         "memory": native::memory().map(|(used, total)| json!({ "used": used, "total": total })),
+        // Fork (L-363): where memory goes beyond apps: Windows' own share
+        // (kernel pools, which a leaking driver grows) and open handles.
+        "memoryDetail": native::memory_detail().map(|(paged, nonpaged, handles)| json!({
+            "kernelPaged": paged,
+            "kernelNonPaged": nonpaged,
+            "handles": handles,
+        })),
         "disks": native::disks()
             .into_iter()
             .map(|(name, free, total)| json!({ "name": name, "free": free, "total": total }))
@@ -1079,6 +1086,27 @@ mod native {
         }
     }
 
+    /// (kernel paged, kernel non-paged) bytes and open handles, system-wide.
+    pub fn memory_detail() -> Option<(u64, u64, u64)> {
+        use windows_sys::Win32::System::ProcessStatus::{
+            GetPerformanceInfo, PERFORMANCE_INFORMATION,
+        };
+        // SAFETY: the struct is plain data; its size is passed as the API needs.
+        unsafe {
+            let mut info: PERFORMANCE_INFORMATION = std::mem::zeroed();
+            let size = std::mem::size_of::<PERFORMANCE_INFORMATION>() as u32;
+            info.cb = size;
+            (GetPerformanceInfo(&mut info, size) != 0).then(|| {
+                let page = info.PageSize as u64;
+                (
+                    info.KernelPaged as u64 * page,
+                    info.KernelNonpaged as u64 * page,
+                    u64::from(info.HandleCount),
+                )
+            })
+        }
+    }
+
     pub fn uptime_seconds() -> u64 {
         // SAFETY: no arguments.
         unsafe { GetTickCount64() / 1000 }
@@ -1553,6 +1581,9 @@ mod native {
         None
     }
     pub fn memory() -> Option<(u64, u64)> {
+        None
+    }
+    pub fn memory_detail() -> Option<(u64, u64, u64)> {
         None
     }
     pub fn uptime_seconds() -> u64 {

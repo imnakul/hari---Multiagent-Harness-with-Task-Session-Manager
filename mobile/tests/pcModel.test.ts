@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatBytes,
   formatUptime,
+  memoryBreakdown,
   parsePcApps,
   parsePcShortcuts,
   parseMinimalApps,
@@ -148,5 +149,20 @@ describe("formatting", () => {
   it("explains an older MonoCode", () => {
     expect(pcError(new Error("Unsupported mobile operation: pc.stats"))).toBe("Update MonoCode on your computer to use this.");
     expect(pcError("Timed out")).toBe("Timed out");
+  });
+});
+
+describe("memoryBreakdown (L-363)", () => {
+  const GB = 1024 ** 3;
+  it("splits Windows' own memory from apps and flags a leak", () => {
+    const stats = parsePcStats({
+      memory: { used: 16 * GB, total: 32 * GB },
+      memoryDetail: { kernelPaged: 7 * GB, kernelNonPaged: 4 * GB, handles: 251_895 },
+      disks: [],
+    });
+    expect(memoryBreakdown(stats)).toEqual({ apps: 12 * GB, windows: 11 * GB, handles: 251_895, high: true });
+  });
+  it("is empty when the computer doesn't send the detail", () => {
+    expect(memoryBreakdown(parsePcStats({ memory: { used: 1, total: 2 }, memoryDetail: { handles: "x" } }))).toBeNull();
   });
 });
