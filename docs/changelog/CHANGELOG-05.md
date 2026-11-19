@@ -5,7 +5,7 @@
 - Why: user report: the side menu stuck while a chat took a while to load. A slow chat keeps JS busy, and the strip's tap waited for it.
 - What: the tap now shuts the drawer on the UI thread (RNGH Tap beside the pan).
 - Verified: phone tsc ✅, lint ✅, vitest ✅ (365; tests/mobile/watchFrames.test.ts fails to load before and after, unrelated).
-- Commit: (this commit)
+- Commit: 8f2ba01b (in 0.16.0-local63)
 
 ## 2026-11-19 05:50 IST — Claude tools off until switched on per project; Hari shows Windows' own memory (L-362, L-363)
 
