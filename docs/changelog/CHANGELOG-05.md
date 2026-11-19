@@ -1,5 +1,12 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-19 05:57 IST — Hari: side menu closes from the strip while a chat loads (L-364)
+
+- Why: user report: the side menu stuck while a chat took a while to load. A slow chat keeps JS busy, and the strip's tap waited for it.
+- What: the tap now shuts the drawer on the UI thread (RNGH Tap beside the pan).
+- Verified: phone tsc ✅, lint ✅, vitest ✅ (365; tests/mobile/watchFrames.test.ts fails to load before and after, unrelated).
+- Commit: (this commit)
+
 ## 2026-11-19 05:50 IST — Claude tools off until switched on per project; Hari shows Windows' own memory (L-362, L-363)
 
 - L-362: Claude Code's user-scope MCP servers no longer start in every new project. MonoCode keeps a per-project on list (`~/.monocode/mcp-on-demand.json`) and passes the rest as `deniedMcpServers`; a switch in an open chat restarts it on the same conversation (`--resume`) at the next message. Local configs set to match (backups beside each): Codex tabularis off, OpenCode and Antigravity aside off.

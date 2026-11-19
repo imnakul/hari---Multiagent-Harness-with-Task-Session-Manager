@@ -687,6 +687,29 @@ export function ScenePagerHost({
     ],
   );
 
+  // Fork (Hari, L-364): a tap on the dimmed strip shuts the drawer right here
+  // on the UI thread, so it works while a slow chat keeps JS busy (the
+  // Pressable below waits for JS). Fails at once anywhere but the strip, so
+  // the drawer's own rows and the scene keep their taps.
+  const stripTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .enabled(hasDrawer)
+        .onTouchesDown((event, manager) => {
+          const x = event.allTouches[0]?.x ?? width;
+          if (translateX.get() >= -1 || x > width + translateX.get()) manager.fail();
+        })
+        .onEnd((_event, success) => {
+          if (!success) return;
+          const wasOpen = isOpen.get();
+          isOpen.set(false);
+          translateX.set(withSpring(0, SPRING));
+          if (wasOpen) scheduleOnRN(onToggled, false);
+        }),
+    [hasDrawer, width, translateX, isOpen, onToggled],
+  );
+  const gesture = useMemo(() => Gesture.Simultaneous(pan, stripTap), [pan, stripTap]);
+
   const sceneStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.get() + backX.get() }],
     opacity: sceneFade.get(),
@@ -712,7 +735,7 @@ export function ScenePagerHost({
       <DrawerOpenContext value={open}>
         <SwitchingContext value={switchState}>
         <ScenePagerContext value={pager}>
-          <GestureDetector gesture={pan}>
+          <GestureDetector gesture={gesture}>
             <View style={[styles.root, { backgroundColor: colors.page }]}>
               {/* Fork (Hari, L-245): the wallpaper behind the drawer; the
                   scene stays solid, each screen in it drawing its own. */}
