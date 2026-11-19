@@ -365,6 +365,11 @@ export function settleInterrupted(history: PhoneShareEntry[]): PhoneShareEntry[]
   );
 }
 
+/** Fork (Hari, L-366): a text long enough to fold behind Show more, by the computer's rule. */
+export function isLongShareText(text: string): boolean {
+  return text.length > 700 || text.split("\n").length > 12;
+}
+
 /** "Clipboard from your computer", "File to your computer · waiting". */
 export function shareCaption(entry: PhoneShareEntry): string {
   const what =

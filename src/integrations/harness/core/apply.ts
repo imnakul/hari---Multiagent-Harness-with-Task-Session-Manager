@@ -27,6 +27,7 @@ import { taskListText } from "../../../features/sessions/model/taskList";
 import { isReviewablePlan } from "../../../features/sessions/model/plan";
 import { resolveModel } from "../../../features/sessions/model/models";
 import type { HarnessEvent } from "./types";
+import { isClaudeInteractive } from "../providers/claude/claudeInteractiveProtocol";
 import { type ProcessedUsage } from "../../../features/sessions/model/tokenAccounting";
 import { usageLimitFromError } from "../../../features/sessions/model/usageLimit";
 
@@ -707,7 +708,13 @@ export function appendSteerUser(
 }
 
 export function stopStreaming(session: Session, endedAt = Date.now()): Session {
-  const { backgroundTasks: _cleared, ...settled } = settlePendingApprovals(session);
+  const { backgroundTasks, ...rest } = settlePendingApprovals(session);
+  // Fork (L-365): Interactive Claude keeps its own list of background tasks
+  // and clears it when they end or Claude stops; the reply ending is not that.
+  const settled: Session =
+    session.harness === "claude" && isClaudeInteractive(session.modelSettings) && backgroundTasks?.length
+      ? { ...rest, backgroundTasks }
+      : rest;
   let blocks = settled.blocks.filter((block) => !isBareProseStream(block)).map(stopBlockProgress);
   if (session.liveTurnUsage) {
     blocks = stampTurnUsage(blocks, session.liveTurnUsage);

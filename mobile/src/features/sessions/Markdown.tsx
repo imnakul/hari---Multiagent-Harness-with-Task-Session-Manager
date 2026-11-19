@@ -22,6 +22,7 @@ import {
   numberWords,
   parseMarkdown,
   splitWords,
+  tableColumnWidths,
   type Inline,
   type MarkdownBlock,
 } from "./markdownParser";
@@ -34,6 +35,12 @@ const Muted = createContext(false);
 
 /** Fork (Hari, L-352): block actions wait for the reply to finish, as on desktop. */
 const Streaming = createContext(false);
+
+/**
+ * Fork (Hari, L-366): whether the words select on a long press. Off where the
+ * whole message is one button (Share: tap to copy, hold for its menu).
+ */
+const Selectable = createContext(true);
 
 /**
  * Opens a file a transcript names, as the desktop's FileOpenContext does.
@@ -55,6 +62,7 @@ export const Markdown = memo(function Markdown({
   muted = false,
   streaming = false,
   animate = false,
+  selectable = true,
 }: {
   text: string;
   /** As the desktop's `zen-fold-prose`: muted ink, headings as bold lines. */
@@ -62,6 +70,8 @@ export const Markdown = memo(function Markdown({
   streaming?: boolean;
   /** Fade in the words there on mount too: a reply that arrives whole. */
   animate?: boolean;
+  /** Off where a tap or hold on the message does something else (Share). */
+  selectable?: boolean;
 }) {
   const styles = useStyles();
   const shown = useStreamedText(text, streaming);
@@ -75,12 +85,14 @@ export const Markdown = memo(function Markdown({
   return (
     <Muted value={muted}>
       <Streaming value={streaming}>
-        <View style={styles.blocks}>
-          {blocks.map((block, index) => (
-            // Blocks with nothing fading keep their props, so they skip the frame.
-            <BlockView key={index} block={block} fade={ranges[index][1] > from ? fade : undefined} />
-          ))}
-        </View>
+        <Selectable value={selectable}>
+          <View style={styles.blocks}>
+            {blocks.map((block, index) => (
+              // Blocks with nothing fading keep their props, so they skip the frame.
+              <BlockView key={index} block={block} fade={ranges[index][1] > from ? fade : undefined} />
+            ))}
+          </View>
+        </Selectable>
       </Streaming>
     </Muted>
   );
@@ -123,11 +135,12 @@ function sameBlock(
 const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBlock; fade?: Fade }) {
   const styles = useStyles();
   const muted = use(Muted);
+  const selectable = use(Selectable);
   switch (block.type) {
     case "paragraph":
       return (
         <>
-          <Text style={[styles.text, muted && styles.mutedText]} selectable>
+          <Text style={[styles.text, muted && styles.mutedText]} selectable={selectable}>
             <Inlines nodes={block.inline} fade={fade} />
           </Text>
           {/* Fork (Hari, L-236): its web links as page cards, in a finished reply. */}
@@ -142,7 +155,7 @@ const BlockView = memo(function BlockView({ block, fade }: { block: MarkdownBloc
             styles.heading,
             muted ? styles.mutedHeading : block.level <= 2 && styles.headingLarge,
           ]}
-          selectable
+          selectable={selectable}
         >
           <Inlines nodes={block.inline} fade={fade} />
         </Text>
@@ -202,8 +215,9 @@ function CodeBlock({ block }: { block: Extract<MarkdownBlock, { type: "code" }> 
   const styles = useStyles();
   const colors = useColors();
   const [wrap, setWrap] = useState(true);
+  const selectable = use(Selectable);
   const code = (
-    <Text style={styles.codeText} selectable>
+    <Text style={styles.codeText} selectable={selectable}>
       {block.text}
     </Text>
   );
@@ -238,15 +252,11 @@ function CodeBlock({ block }: { block: Extract<MarkdownBlock, { type: "code" }> 
   );
 }
 
-/** Columns share the screen's width, down to a floor; past it, the table scrolls. */
-const MIN_COLUMN_WIDTH = 140;
-
 function Table({ rows, fade }: { rows: Inline[][][]; fade?: Fade }) {
   const styles = useStyles();
+  const selectable = use(Selectable);
   const [width, setWidth] = useState(0);
-  const columns = Math.max(1, ...rows.map((row) => row.length));
-  const inner = width - StyleSheet.hairlineWidth * 2;
-  const cellWidth = Math.max(MIN_COLUMN_WIDTH, Math.floor(inner / columns));
+  const widths = useMemo(() => tableColumnWidths(rows, width - StyleSheet.hairlineWidth * 2), [rows, width]);
   return (
     <SideScroll
       showsHorizontalScrollIndicator={false}
@@ -258,8 +268,8 @@ function Table({ rows, fade }: { rows: Inline[][][]; fade?: Fade }) {
             {row.map((cell, cellIndex) => (
               <Text
                 key={cellIndex}
-                style={[styles.cell, { width: cellWidth }, rowIndex === 0 && styles.headerCell]}
-                selectable
+                style={[styles.cell, { width: widths[cellIndex] }, rowIndex === 0 && styles.headerCell]}
+                selectable={selectable}
               >
                 <Inlines nodes={cell} fade={fade} />
               </Text>

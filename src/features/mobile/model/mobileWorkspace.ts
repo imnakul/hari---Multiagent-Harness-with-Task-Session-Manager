@@ -204,7 +204,8 @@ export async function mobileCatalog(
         updatedAt:
           [...session.blocks].reverse().find((block) => block.startedAt)
             ?.startedAt ?? 0,
-        busy: !!session.busy,
+        // A task Claude left running counts as working on the card (L-365).
+        busy: !!session.busy || !!session.backgroundTasks?.length,
         // What it waits on the user for, so the phone can notify of it; an
         // approval also names what it asks, for the Live Update (L-239).
         ...mobileWaiting(session),

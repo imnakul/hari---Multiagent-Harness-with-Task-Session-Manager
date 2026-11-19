@@ -17,5 +17,7 @@ describe("workingProjectPaths", () => {
     expect(isSessionWorking({})).toBe(false);
     expect(isSessionWorking({ busy: true })).toBe(true);
     expect(isSessionWorking({ externalTurnId: "phone:1" })).toBe(true);
+    expect(isSessionWorking({ backgroundTasks: ["dev server"] })).toBe(true);
+    expect(isSessionWorking({ backgroundTasks: [] })).toBe(false);
   });
 });

@@ -32,6 +32,7 @@ import {
   type ReactNode,
 } from "react";
 import { Composer } from "./Composer";
+import { isInteractiveClaudeSession } from "../model/steerSupport";
 import type { Worktree } from "../../source-control/model/worktrees";
 import {
   orchestrationCheckoutCwd,
@@ -1439,6 +1440,16 @@ const LocalSessionPane = memo(function LocalSessionPane({
                     modelSettings={session.modelSettings}
                     pendingQuestion={!!session.pendingQuestion}
                     backgroundTasks={session.backgroundTasks}
+                    onStopBackgroundTask={
+                      isInteractiveClaudeSession(session) && !session.worktreeRemoved
+                        ? (task) =>
+                            onSubmit(
+                              session.id,
+                              `Stop the background task "${task}" now. Don't start anything else.`,
+                              [],
+                            )
+                        : undefined
+                    }
                     onApproval={session.worktreeRemoved ? undefined : approve}
                     onReviewFix={onReviewFix ? fixReviewIssue : undefined}
                     onAddToSessionManager={

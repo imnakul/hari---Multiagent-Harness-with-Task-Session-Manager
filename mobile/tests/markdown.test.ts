@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fillsWidth, parseInline, parseMarkdown } from "@/features/sessions/markdownParser";
+import { fillsWidth, parseInline, parseMarkdown, tableColumnWidths } from "@/features/sessions/markdownParser";
 import {
   formatWorkingDuration,
   hasTurnMetrics,
@@ -119,5 +119,23 @@ describe("fillsWidth (L-333)", () => {
   it("is false for paragraphs and headings", () => {
     expect(fillsWidth("Vandana data has issue")).toBe(false);
     expect(fillsWidth("# Title\n\nSome **bold** text and `code`.")).toBe(false);
+  });
+});
+
+describe("tableColumnWidths (L-366)", () => {
+  const rows = (parseMarkdown("| Kind | Description |\n| --- | --- |\n| a | " + "long words ".repeat(60) + "|")[0] as {
+    rows: ReturnType<typeof parseInline>[][];
+  }).rows;
+
+  it("sizes columns to their text and caps long ones, so the table scrolls", () => {
+    const [short, long] = tableColumnWidths(rows, 300);
+    expect(short).toBeGreaterThanOrEqual(64);
+    expect(short).toBeLessThan(100);
+    expect(long).toBe(320);
+  });
+
+  it("shares spare room out when the table is narrower than the screen", () => {
+    const small = (parseMarkdown("| a | b |\n| --- | --- |\n| c | d |")[0] as { rows: ReturnType<typeof parseInline>[][] }).rows;
+    expect(tableColumnWidths(small, 400)).toEqual([200, 200]);
   });
 });

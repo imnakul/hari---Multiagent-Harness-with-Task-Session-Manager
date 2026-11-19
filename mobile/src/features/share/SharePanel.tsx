@@ -43,6 +43,7 @@ import {
   shareThumbnail,
   type PhoneShareEntry,
   type ShareRow,
+  isLongShareText,
 } from "@/features/share/shareModel";
 import { readShareDraft, writeShareFiles, writeShareText } from "@/features/share/shareDraft";
 import { useShareHistory, useShareLimit } from "@/features/share/shareStore";
@@ -741,6 +742,29 @@ function PinBar({
   );
 }
 
+/**
+ * Fork (Hari, L-366): a text message in Share. Its tables and code scroll
+ * sideways (a tap still copies, a hold still opens the menu: the words don't
+ * select here), and a long one folds behind Show more, as on the computer.
+ */
+function ShareText({ text }: { text: string }) {
+  const styles = useStyles();
+  const long = isLongShareText(text);
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <View style={long && !open ? styles.textFolded : null}>
+        <Markdown text={text} selectable={false} />
+      </View>
+      {long ? (
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setOpen((value) => !value)}>
+          <Text style={styles.showMore}>{open ? "Show less" : "Show more"}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function ShareBubble({
   row,
   copiedId,
@@ -840,9 +864,7 @@ function ShareBubble({
                   </Text>
                 </View>
               ) : (
-                <View pointerEvents="none">
-                  <Markdown text={(entry.text ?? "").slice(0, 4000)} />
-                </View>
+                <ShareText text={(entry.text ?? "").slice(0, 4000)} />
               )}
             </Pressable>
           ))}
@@ -1262,6 +1284,8 @@ const useStyles = themedStyles((colors) => ({
   pictureMeta: { paddingHorizontal: 8, paddingBottom: 2 },
   pressed: { opacity: 0.6 },
   title: { flexShrink: 1, color: colors.content, fontSize: 15, lineHeight: 20 },
+  textFolded: { maxHeight: 224, overflow: "hidden" },
+  showMore: { marginTop: 4, color: withAlpha(colors.content, 0.6), fontSize: 13 },
   link: { color: colors.accent },
   meta: { color: colors.muted, fontSize: 11, fontVariant: ["tabular-nums"] },
   metaFailed: { color: colors.deletions },

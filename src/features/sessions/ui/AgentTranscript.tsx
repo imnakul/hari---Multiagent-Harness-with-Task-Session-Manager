@@ -283,6 +283,8 @@ type Props = {
   ) => void;
   /** Work the agent left running when it yielded; the turn waits on it. */
   backgroundTasks?: string[];
+  /** Fork (L-365): the × beside a background task. */
+  onStopBackgroundTask?: (task: string) => void;
   onAddToChat?: (text: string) => void;
   onSaveNote?: (text: string) => void | Promise<void>;
   onSendDraft?: (block: Block) => boolean | void;
@@ -372,6 +374,7 @@ function AgentTranscriptComponent({
   modelSettings,
   pendingQuestion = false,
   backgroundTasks,
+  onStopBackgroundTask,
   onApproval,
   onAddToChat,
   onSaveNote,
@@ -1935,7 +1938,7 @@ function AgentTranscriptComponent({
           );
         })}
         {!busy && !externalTurnId && backgroundTasks?.length ? (
-          <IdleBackgroundTasks tasks={backgroundTasks} />
+          <IdleBackgroundTasks tasks={backgroundTasks} onStop={onStopBackgroundTask} />
         ) : null}
       </TranscriptContent>
       {onAddToChat || onSaveSelectionNote || onSaveSelectionTask || onBookmarkQuote ? (
@@ -2116,7 +2119,14 @@ function LiveFoldTitle({
  * monitor, a dev server). Without this the chat looks idle until the agent
  * wakes up on its own.
  */
-function IdleBackgroundTasks({ tasks }: { tasks: string[] }) {
+function IdleBackgroundTasks({
+  tasks,
+  onStop,
+}: {
+  tasks: string[];
+  /** Fork (L-365): asks Claude to stop the task, as its own task list does. */
+  onStop?: (task: string) => void;
+}) {
   return (
     <div
       role="status"
@@ -2124,17 +2134,29 @@ function IdleBackgroundTasks({ tasks }: { tasks: string[] }) {
       className="flex min-w-0 items-center gap-2 px-4 py-1 font-sans text-[12px] text-content/55"
       title={tasks.join("\n")}
     >
-      <span
-        aria-hidden
-        className="size-1.5 shrink-0 rounded-full bg-content/40 motion-safe:animate-pulse"
-      />
-      <span className="shrink-0">
-        {tasks.length === 1 ? "1 task" : `${tasks.length} tasks`} running in
-        background
-      </span>
-      <span className="min-w-0 truncate text-content/40">
-        · {tasks.join(" · ")}
-      </span>
+      {/* Fork (L-365): shimmers like a running chat; the chat is still working. */}
+      <Shimmer className="shrink-0 font-sans text-[12px]" duration={1}>
+        {`${tasks.length === 1 ? "1 task" : `${tasks.length} tasks`} running in background`}
+      </Shimmer>
+      {tasks.map((task, index) => (
+        <span
+          key={`${index}:${task}`}
+          className="flex min-w-0 items-center gap-0.5 text-content/40"
+        >
+          <span className="min-w-0 truncate">· {task}</span>
+          {onStop ? (
+            <button
+              type="button"
+              title={`Ask Claude to stop "${task}"`}
+              aria-label={`Stop background task ${task}`}
+              onClick={() => onStop(task)}
+              className="grid size-4 shrink-0 place-items-center rounded text-content/40 transition-colors hover:bg-content/10 hover:text-content/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+            >
+              <X className="size-3" aria-hidden />
+            </button>
+          ) : null}
+        </span>
+      ))}
     </div>
   );
 }

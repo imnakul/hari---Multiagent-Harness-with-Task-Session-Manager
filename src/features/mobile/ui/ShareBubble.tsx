@@ -296,127 +296,133 @@ export function ShareBubble({
       onContextMenu={onContextMenu}
       className={`group/bubble flex flex-col ${outgoing ? "items-end" : "items-start"}`}
     >
+      {/* Fork (L-365): the card and the row under it share one width, so Copy
+          and the time sit at its two ends. */}
       <div
-        className={`relative ${link ? "w-[min(30rem,88%)]" : "max-w-[min(30rem,88%)]"} overflow-hidden rounded-2xl border-[0.5px] ${
-          outgoing
-            ? "share-bubble-out rounded-br-md"
-            : "rounded-bl-md border-content/10 bg-content/[0.05]"
-        } ${pictures.length || videos.length ? "p-1" : "px-3 py-2"}`}
+        className={`flex ${link ? "w-[min(30rem,88%)]" : "max-w-[min(30rem,88%)]"} flex-col ${outgoing ? "items-end" : "items-start"}`}
       >
-        {pictures.length === 1 && pictures[0]?.path ? (
-          <ShareImage path={pictures[0].path} label={pictures[0].name ?? "picture"} tile={false} />
-        ) : pictures.length > 1 ? (
-          <div className="grid w-[280px] max-w-full grid-cols-2 gap-1">
-            {pictures.map((entry) =>
-              entry.path ? <ShareImage key={entry.id} path={entry.path} label={entry.name ?? "picture"} tile /> : null,
-            )}
-          </div>
-        ) : null}
-        {videos.map((entry) =>
-          entry.path ? (
-            <LocalMedia
-              key={entry.id}
-              path={entry.path}
-              label={entry.name ?? "video"}
-              onOpen={() => {
+        <div
+          className={`relative ${link ? "w-full" : "max-w-full"} overflow-hidden rounded-2xl border-[0.5px] ${
+            outgoing
+              ? "share-bubble-out rounded-br-md"
+              : "rounded-bl-md border-content/10 bg-content/[0.05]"
+          } ${pictures.length || videos.length ? "p-1" : "px-3 py-2"}`}
+        >
+          {pictures.length === 1 && pictures[0]?.path ? (
+            <ShareImage path={pictures[0].path} label={pictures[0].name ?? "picture"} tile={false} />
+          ) : pictures.length > 1 ? (
+            <div className="grid w-[280px] max-w-full grid-cols-2 gap-1">
+              {pictures.map((entry) =>
+                entry.path ? <ShareImage key={entry.id} path={entry.path} label={entry.name ?? "picture"} tile /> : null,
+              )}
+            </div>
+          ) : null}
+          {videos.map((entry) =>
+            entry.path ? (
+              <LocalMedia
+                key={entry.id}
+                path={entry.path}
+                label={entry.name ?? "video"}
+                onOpen={() => {
+                  const path = entry.path;
+                  if (path) run(() => openPathWithDefaultApp(path));
+                }}
+                fallback={<FileCard name={entry.name ?? "video"} size={entry.size} />}
+              />
+            ) : null,
+          )}
+          {files.length ? (
+            <ul className={`space-y-1.5 ${pictures.length || videos.length ? "px-2 pb-1 pt-1.5" : ""}`}>
+              {files.map((entry) => {
                 const path = entry.path;
-                if (path) run(() => openPathWithDefaultApp(path));
-              }}
-              fallback={<FileCard name={entry.name ?? "video"} size={entry.size} />}
+                return (
+                  <li key={entry.id} className="flex items-center gap-1.5">
+                    <FileCard
+                      name={entry.name ?? "file"}
+                      size={entry.size}
+                      onOpen={path ? () => run(() => openPathWithDefaultApp(path)) : undefined}
+                    />
+                    {path ? (
+                      <button
+                        type="button"
+                        title="Show in folder"
+                        aria-label={`Show ${entry.name ?? "file"} in folder`}
+                        onClick={() => run(() => revealPath(path))}
+                        className={ICON_BUTTON}
+                      >
+                        <FolderOpen className="size-3.5" strokeWidth={1.75} aria-hidden />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+          {texts.map((entry) =>
+            entry.kind === "link" && entry.text ? (
+              <div key={entry.id} className={pictures.length || videos.length ? "px-2 pt-1" : ""}>
+                {/* Fork (Hari, L-317): the card opens its page; no separate Open button. */}
+                <button
+                  type="button"
+                  title={entry.text.trim()}
+                  onClick={() => openWebLink(entry.text?.trim() ?? "")}
+                  className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+                >
+                  <WebLinkCardLink url={entry.text.trim()} label={null} bare />
+                </button>
+              </div>
+            ) : (
+              <div key={entry.id} className={pictures.length || videos.length || files.length ? "px-2 pt-1" : ""}>
+                <ShareText text={entry.text ?? ""} />
+              </div>
+            ),
+          )}
+        </div>
+        {/* Fork (Hari, L-317, L-358): under the card, on its side, as on the phone:
+            Copy, with Save and Pin sliding in on hover (transform and opacity
+            only), and the day and time. Everything else is in the right-click
+            menu; clicking the picture, file or link opens it. */}
+        <div className={`mt-0.5 flex items-center justify-between gap-2 self-stretch px-1 ${outgoing ? "flex-row-reverse" : ""}`}>
+          <span className="flex items-center gap-0.5">
+            <FlashIcon
+              icon={<Copy className={ICON} strokeWidth={1.75} aria-hidden />}
+              label={copyable ? "Copy" : pictures.length ? "Copy picture" : "Copy paths"}
+              onRun={copyAll}
+              onError={onError}
             />
-          ) : null,
-        )}
-        {files.length ? (
-          <ul className={`space-y-1.5 ${pictures.length || videos.length ? "px-2 pb-1 pt-1.5" : ""}`}>
-            {files.map((entry) => {
-              const path = entry.path;
-              return (
-                <li key={entry.id} className="flex items-center gap-1.5">
-                  <FileCard
-                    name={entry.name ?? "file"}
-                    size={entry.size}
-                    onOpen={path ? () => run(() => openPathWithDefaultApp(path)) : undefined}
-                  />
-                  {path ? (
-                    <button
-                      type="button"
-                      title="Show in folder"
-                      aria-label={`Show ${entry.name ?? "file"} in folder`}
-                      onClick={() => run(() => revealPath(path))}
-                      className={ICON_BUTTON}
-                    >
-                      <FolderOpen className="size-3.5" strokeWidth={1.75} aria-hidden />
-                    </button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-        {texts.map((entry) =>
-          entry.kind === "link" && entry.text ? (
-            <div key={entry.id} className={pictures.length || videos.length ? "px-2 pt-1" : ""}>
-              {/* Fork (Hari, L-317): the card opens its page; no separate Open button. */}
+            <span className="pointer-events-none flex -translate-x-1 items-center gap-0.5 opacity-0 transition-[transform,opacity] duration-150 ease-out group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:translate-x-0 group-focus-within/bubble:opacity-100 group-hover/bubble:pointer-events-auto group-hover/bubble:translate-x-0 group-hover/bubble:opacity-100 motion-reduce:transition-none">
               <button
                 type="button"
-                title={entry.text.trim()}
-                onClick={() => openWebLink(entry.text?.trim() ?? "")}
-                className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+                title={saved ? "Unsave" : "Save (kept when the history is full or deleted)"}
+                aria-label={saved ? "Unsave" : "Save"}
+                aria-pressed={saved}
+                onClick={() => mark({ saved: !saved })}
+                className={ICON_BUTTON}
               >
-                <WebLinkCardLink url={entry.text.trim()} label={null} bare />
+                <Bookmark className={ICON} strokeWidth={1.75} aria-hidden />
               </button>
-            </div>
-          ) : (
-            <div key={entry.id} className={pictures.length || videos.length || files.length ? "px-2 pt-1" : ""}>
-              <ShareText text={entry.text ?? ""} />
-            </div>
-          ),
-        )}
-      </div>
-      {/* Fork (Hari, L-317, L-358): under the card, on its side, as on the phone:
-          Copy, with Save and Pin sliding in on hover (transform and opacity
-          only), and the day and time. Everything else is in the right-click
-          menu; clicking the picture, file or link opens it. */}
-      <div className={`mt-0.5 flex items-center gap-2 px-1 ${outgoing ? "flex-row-reverse" : ""}`}>
-        <span className="flex items-center gap-0.5">
-          <FlashIcon
-            icon={<Copy className={ICON} strokeWidth={1.75} aria-hidden />}
-            label={copyable ? "Copy" : pictures.length ? "Copy picture" : "Copy paths"}
-            onRun={copyAll}
-            onError={onError}
-          />
-          <span className="pointer-events-none flex -translate-x-1 items-center gap-0.5 opacity-0 transition-[transform,opacity] duration-150 ease-out group-focus-within/bubble:pointer-events-auto group-focus-within/bubble:translate-x-0 group-focus-within/bubble:opacity-100 group-hover/bubble:pointer-events-auto group-hover/bubble:translate-x-0 group-hover/bubble:opacity-100 motion-reduce:transition-none">
-            <button
-              type="button"
-              title={saved ? "Unsave" : "Save (kept when the history is full or deleted)"}
-              aria-label={saved ? "Unsave" : "Save"}
-              aria-pressed={saved}
-              onClick={() => mark({ saved: !saved })}
-              className={ICON_BUTTON}
-            >
-              <Bookmark className={ICON} strokeWidth={1.75} aria-hidden />
-            </button>
-            <button
-              type="button"
-              title={pinned ? "Unpin" : "Pin"}
-              aria-label={pinned ? "Unpin" : "Pin"}
-              onClick={() => mark({ pinned: !pinned })}
-              className={ICON_BUTTON}
-            >
-              {pinned ? (
-                <PinOff className={ICON} strokeWidth={1.75} aria-hidden />
-              ) : (
-                <Pin className={ICON} strokeWidth={1.75} aria-hidden />
-              )}
-            </button>
+              <button
+                type="button"
+                title={pinned ? "Unpin" : "Pin"}
+                aria-label={pinned ? "Unpin" : "Pin"}
+                onClick={() => mark({ pinned: !pinned })}
+                className={ICON_BUTTON}
+              >
+                {pinned ? (
+                  <PinOff className={ICON} strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <Pin className={ICON} strokeWidth={1.75} aria-hidden />
+                )}
+              </button>
+            </span>
           </span>
-        </span>
-        <span className="flex items-center gap-1 text-[10.5px] tabular-nums text-content/40">
-          {pinned ? <Pin className="size-3" strokeWidth={1.75} aria-label="Pinned" /> : null}
-          {saved ? <Bookmark className="size-3" strokeWidth={1.75} aria-label="Saved" /> : null}
-          {last ? shareStamp(last.at) : null}
-          {waiting ? " · waiting" : null}
-        </span>
+          <span className="flex items-center gap-1 text-[10.5px] tabular-nums text-content/40">
+            {pinned ? <Pin className="size-3" strokeWidth={1.75} aria-label="Pinned" /> : null}
+            {saved ? <Bookmark className="size-3" strokeWidth={1.75} aria-label="Saved" /> : null}
+            {last ? shareStamp(last.at) : null}
+            {waiting ? " · waiting" : null}
+          </span>
+        </div>
       </div>
       {menu ? (
         <ExplorerMenu

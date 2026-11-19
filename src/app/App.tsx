@@ -18132,7 +18132,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         >
           {titleBarSpansWindow && !focusMode ? workspaceTitleBar : null}
           <SavePromptDialogHost />
-          <IdleHibernateWatcher busy={sessions.some((session) => session.busy)} />
+          <IdleHibernateWatcher busy={sessions.some(isSessionWorking)} />
           <LinkContextMenu />
           <SessionMetadataAutoWriter />
           {continueOffer

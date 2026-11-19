@@ -1,15 +1,20 @@
 import type { Session } from "./session";
 
-type WorkingTarget = Pick<Session, "busy" | "externalTurnId">;
+type WorkingTarget = Pick<Session, "busy" | "externalTurnId" | "backgroundTasks">;
 
 /**
  * True while a session shows as working in the sidebar: a local turn, or a
- * turn the app did not send (phone, Interactive Claude background work).
+ * turn the app did not send (phone, Interactive Claude background work), or
+ * a task Claude left running in the background (L-365).
  * Presentation only; submission, stop and auto-resume use `busy` alone
  * (fork, L-122).
  */
 export function isSessionWorking(session: WorkingTarget): boolean {
-  return !!session.busy || !!session.externalTurnId;
+  return (
+    !!session.busy ||
+    !!session.externalTurnId ||
+    !!session.backgroundTasks?.length
+  );
 }
 
 /** Project folders with a working session, for the project shimmer. */

@@ -1449,8 +1449,8 @@ describe("interactive observation and parking", () => {
       ([cmd]) => cmd === "claude_interactive_stop",
     ).length;
     await expect(
-      sendInteractiveClaude(input({ model: "claude:opus-5-5" })),
-    ).rejects.toThrow("idle native prompt");
+      sendInteractiveClaude(input({ cwd: "/other" })),
+    ).rejects.toThrow("background");
     await expect(
       sendInteractiveClaude(input({ text: "/compact" })),
     ).rejects.toThrow("background work");
@@ -1460,6 +1460,47 @@ describe("interactive observation and parking", () => {
       ),
     ).toHaveLength(stops);
     expect(mocks.sends).toHaveLength(sent);
+  });
+  it("sends on the running settings while a background task runs, then switches once it ends (L-365)", async () => {
+    await idle();
+    hook("PostToolUse", {
+      tool_name: "Bash",
+      tool_input: { command: "coderabbit review", description: "coderabbit review", run_in_background: true },
+      tool_response: { backgroundTaskId: "bg1" },
+    });
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(events).toContainEqual({ type: "background.updated", tasks: ["coderabbit review"] });
+    const stops = () =>
+      mocks.invoke.mock.calls.filter(([cmd]) => cmd === "claude_interactive_stop").length;
+    const before = stops();
+    const turn = sendInteractiveClaude(input({ model: "claude:opus-5-5", text: "while it runs" }));
+    await waitFor(() => onAccepted.mock.calls.length === 2);
+    hook("Stop", {
+      background_tasks: [{ id: "bg1", type: "shell", status: "running", description: "coderabbit review" }],
+      session_crons: [],
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(stops()).toBe(before);
+    expect(mocks.starts).toHaveLength(1);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "status" &&
+          event.text.includes("coderabbit review") &&
+          event.text.includes("(sonnet-5 · medium)"),
+      ),
+    ).toBe(true);
+    finish();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(events.at(-1)).toEqual({ type: "background.updated", tasks: [] });
+    const next = sendInteractiveClaude(input({ model: "claude:opus-5-5", text: "after it ends" }));
+    await waitFor(() => mocks.starts.length === 2);
+    expect(stops()).toBe(before + 1);
+    expect(mocks.starts[1].model).toContain("opus");
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await next.catch(() => undefined);
   });
   it("rejects a historical fork before launch so the existing copied-context fallback can run", async () => {
     await expect(

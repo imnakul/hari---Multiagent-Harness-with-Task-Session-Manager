@@ -30,6 +30,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("background tasks when a reply ends (L-365)", () => {
+  it("keeps Interactive Claude's list and clears others", () => {
+    const running = (modelSettings?: Record<string, string>) =>
+      applyHarnessEvent(
+        { ...appendUser(newSession("claude", "/tmp"), "Run it"), modelSettings },
+        { type: "background.updated", tasks: ["coderabbit review"] },
+      );
+    expect(
+      stopStreaming(running({ claudeExecution: "interactive" })).backgroundTasks,
+    ).toEqual(["coderabbit review"]);
+    expect(stopStreaming(running()).backgroundTasks).toBeUndefined();
+  });
+});
+
 describe("follow-up readiness", () => {
   it("preserves and pauses the backlog when the original turn fails to connect", () => {
     const queuedMessages = [

@@ -389,3 +389,27 @@ export function plainText(source: string): string {
   };
   return parseMarkdown(source).map(block).join(" ").replace(/\s+/g, " ").trim();
 }
+
+/** About how wide one character of table text draws (14px type), and a cell's side padding. */
+const TABLE_CHAR_WIDTH = 7.8;
+const TABLE_CELL_PADDING = 20;
+const MIN_TABLE_COLUMN = 64;
+const MAX_TABLE_COLUMN = 320;
+
+/**
+ * Fork (Hari, L-366): each table column as wide as its longest cell, so short
+ * words never break, up to a cap where long text wraps. Columns that leave
+ * room on screen share it out; wider tables scroll sideways.
+ */
+export function tableColumnWidths(rows: Inline[][][], available: number): number[] {
+  const columns = Math.max(1, ...rows.map((row) => row.length));
+  const widths = Array.from({ length: columns }, (_, column) => {
+    const longest = Math.max(0, ...rows.map((row) => (row[column] ? inlinePlain(row[column]).trim().length : 0)));
+    const wanted = Math.ceil(longest * TABLE_CHAR_WIDTH) + TABLE_CELL_PADDING;
+    return Math.min(MAX_TABLE_COLUMN, Math.max(MIN_TABLE_COLUMN, wanted));
+  });
+  const total = widths.reduce((sum, width) => sum + width, 0);
+  if (available <= total) return widths;
+  const extra = Math.floor((available - total) / columns);
+  return widths.map((width) => width + extra);
+}

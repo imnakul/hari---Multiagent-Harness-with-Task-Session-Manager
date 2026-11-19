@@ -1,5 +1,13 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-19 12:55 IST — Claude background tasks stay visible and don't block messages; Hari Select text, Share tables and Show more (L-365, L-366)
+
+- Why: user report: a CodeRabbit review Claude ran in the background never showed, and the next message failed with "Return to an empty, idle native prompt…". Phone: the Select text bar vanished on lifting the finger; Share tables were squeezed and couldn't scroll; long Share texts didn't fold.
+- What (L-365): the reply ending no longer clears interactive Claude's background list (root cause). The line shimmers, has an × per task (sends one short "stop it" message), and keeps the chat working for cards, idle hibernate and idle close. A send during background work goes on the running settings with a note; new settings apply after it ends (`/model` and `/effort` were not used: they overwrite Claude's global defaults). No extra turns or tokens. Desktop Share footer: Copy left, time right.
+- What (L-366): Android dropped the selection because the hidden system menu refuses to open on lift; Android now keeps its menu. Tables size columns to their text (64–320 px) and scroll; Share text is touchable (not selectable) and folds past 700 characters or 12 lines.
+- Verified: desktop vitest ✅ (8243; one flaky failure on a loaded first run, passes on rerun), tsc ✅; claude interactive + apply tests ✅; phone tsc ✅, lint ✅, vitest ✅ (367).
+- Commit: (pending)
+
 ## 2026-11-19 05:57 IST — Hari: side menu closes from the strip while a chat loads (L-364)
 
 - Why: user report: the side menu stuck while a chat took a while to load. A slow chat keeps JS busy, and the strip's tap waited for it.

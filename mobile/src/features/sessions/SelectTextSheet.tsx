@@ -17,8 +17,13 @@ const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
  * can't. Plain text, code in monospace. A selection shows Hari's own bar:
  * Copy, Bookmark, Add to notes, Add task, as the desktop's selection menu.
  *
- * The page is a text field that never takes typing (no keyboard, the system's
- * edit menu hidden): React Native's Text gives no selection range to act on.
+ * The page is a text field that never takes typing (no keyboard): React
+ * Native's Text gives no selection range to act on.
+ *
+ * L-366: Android keeps its own selection menu. Hiding it makes Android drop
+ * the selection the moment the finger lifts (a menu that refuses to open
+ * clears the selection), which took Hari's bar with it. Its Cut or Paste
+ * can't change the reply: the page is put back as it was.
  */
 export function SelectTextSheet({
   visible,
@@ -39,6 +44,7 @@ export function SelectTextSheet({
   const runs = useMemo(() => selectableRuns(text), [text]);
   const whole = useMemo(() => runs.map((run) => run.text).join(""), [runs]);
   const [range, setRange] = useState({ start: 0, end: 0 });
+  const [restored, setRestored] = useState(0);
   const selected = whole.slice(range.start, range.end).trim();
   const bookmarks = useBookmarks();
   const tools = useSelectionTools();
@@ -71,10 +77,15 @@ export function SelectTextSheet({
         </View>
         <Text style={styles.hint}>Press and hold, then drag the handles.</Text>
         <TextInput
+          key={restored}
           multiline
           editable
           showSoftInputOnFocus={false}
-          contextMenuHidden
+          contextMenuHidden={Platform.OS === "ios"}
+          onChangeText={() => {
+            setRange({ start: 0, end: 0 });
+            setRestored((value) => value + 1);
+          }}
           caretHidden
           scrollEnabled
           textAlignVertical="top"

@@ -755,6 +755,37 @@ async function poll(live: Live): Promise<void> {
   }
 }
 
+/** "Claude is still running a background task (coderabbit review…)." */
+function backgroundBlocker(live: Live): string {
+  const names = [...live.shownBackground.values()];
+  if (!names.length) return "Claude still has work running in the background,";
+  const list = names.map((name) => (name.length > 60 ? `${name.slice(0, 59)}…` : name)).join(", ");
+  return names.length === 1
+    ? `Claude is still running a background task (${list}),`
+    : `Claude is still running ${names.length} background tasks (${list}),`;
+}
+
+/** The model and effort a running Claude was started with, e.g. "claude-opus-5-5 · high". */
+function launchSummary(key: string): string {
+  try {
+    const [, , model, effort] = JSON.parse(key) as unknown[];
+    const name = typeof model === "string" ? model.replace(/^[a-z]+:/, "") : model;
+    return [name, effort].filter((part) => typeof part === "string" && part).join(" · ") || "its current settings";
+  } catch {
+    return "its current settings";
+  }
+}
+
+function sameProjectAndAccount(a: string, b: string): boolean {
+  try {
+    const [cwdA, accountA] = JSON.parse(a) as unknown[];
+    const [cwdB, accountB] = JSON.parse(b) as unknown[];
+    return cwdA === cwdB && accountA === accountB;
+  } catch {
+    return false;
+  }
+}
+
 function launchKey(input: SendTurnInput): string {
   return JSON.stringify([
     input.cwd,
@@ -788,18 +819,35 @@ async function ensureLive(
   let live = lives.get(input.sessionId);
   const key = launchKey(input);
   if (live && live.key !== key) {
+    const otherwiseIdle =
+      !live.pending &&
+      !live.external &&
+      !live.approvals.size &&
+      live.phase === "ready" &&
+      !live.terminal.owner &&
+      live.terminal.ready();
+    const waitingOnBackground =
+      live.background.size > 0 || live.uncertainBackground;
+    // Fork (L-365): new settings mean restarting Claude, which would end the
+    // tasks it left running. Send on the settings it already has; the next
+    // send after the tasks end restarts with the new ones.
     if (
-      live.pending ||
-      live.external ||
-      live.approvals.size ||
-      live.background.size ||
-      live.uncertainBackground ||
-      live.phase !== "ready" ||
-      live.terminal.owner ||
-      !live.terminal.ready()
+      otherwiseIdle &&
+      waitingOnBackground &&
+      sameProjectAndAccount(live.key, key)
     ) {
-      throw new Error(
-        "Return to an empty, idle native prompt before changing interactive model or permissions.",
+      live.onEvent = input.onEvent;
+      emit(live, {
+        type: "status",
+        text: `${backgroundBlocker(live)} so this message was sent with the settings it is running on (${launchSummary(live.key)}). Your new model, effort or permission settings apply to the first message after it finishes.`,
+      });
+      return { live, launched: false };
+    }
+    if (!otherwiseIdle || waitingOnBackground) {
+      throw new HarnessNeedsAttentionError(
+        waitingOnBackground
+          ? `${backgroundBlocker(live)} and changing the project or account restarts Claude, which would end it. Wait for it to finish, or stop it first. No prompt was sent.`
+          : "Claude is still busy (a reply, a question or the native terminal), and changing the model, effort or permissions restarts it. Wait until it is idle, or send without changing them. No prompt was sent.",
       );
     }
     await stopInteractiveClaude(input.sessionId, true);

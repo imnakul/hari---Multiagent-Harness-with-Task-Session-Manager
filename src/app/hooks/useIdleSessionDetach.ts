@@ -120,8 +120,10 @@ export function useIdleSessionDetach({
     // An enabled RC chat owns a live provider connection even without a tab.
     // Phone activity is independent of the local busy flag. Forgetting either
     // would kill its process and disconnect the other device.
+    // A background task Claude left running ends with its process (L-365).
     const keepRemote = (session: Session): boolean =>
       !!session.externalTurnId ||
+      !!session.backgroundTasks?.length ||
       (session.harness === "claude" &&
         (remoteControlDesired.has(session.id) ||
           session.remoteControlStatus === "on" ||
