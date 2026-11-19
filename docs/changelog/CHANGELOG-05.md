@@ -5,13 +5,14 @@
 - L-362: Claude Code's user-scope MCP servers no longer start in every new project. MonoCode keeps a per-project on list (`~/.monocode/mcp-on-demand.json`) and passes the rest as `deniedMcpServers`; a switch in an open chat restarts it on the same conversation (`--resume`) at the next message. Local configs set to match (backups beside each): Codex tabularis off, OpenCode and Antigravity aside off.
 - L-363: `pc.stats` sends kernel paged/non-paged memory and the handle count; Hari's Stats shows them under Memory, amber over 4 GB.
 - Verified: desktop tsc ✅, vitest claude + MCP settings ✅ (370), cargo test mcp ✅ (40), mobile_pc ✅ (14); phone tsc ✅, vitest ✅ (365), lint: no new problems.
+- Commit: 769e81f5 (in 0.16.0-local62)
 
 ## 2026-11-19 05:11 IST — Hari: composer keeps its draft open, side menu always closes, swipe back follows the thumb (L-359 to L-361)
 - Type: fix
 - What: A chat's composer comes back open with its whole draft and pictures (it showed one line after Share). The dimmed strip, a swipe right and Back always close the side menu. A swipe back from the left edge moves the screen with the thumb, then slides it off as the previous screen fades in, or springs back.
 - Why: User report 2026-11-19 (two screenshots): the menu stayed open after switching projects and a tap on the strip did nothing; the left-edge back jumped with no motion; the composer showed one line after Share.
 - Files: see L-359 to L-361 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: (this commit)
+- Commit: 769e81f5 (in 0.16.0-local62)
 - Verified: phone tsc ✅ lint ✅ vitest ✅ (363; old `watchFrames` load failure). Needs a check on the phone.
 
 ## 2026-11-19 01:23 IST — Share: history limit with a count, search, and the desktop's row under each message (L-356 to L-358)
@@ -19,7 +20,7 @@
 - What: Share keeps 100, 250, 500 or 1000 messages (Settings on the desktop's Share panel or in Hari), shown as "64 / 250" at the top; pinned and saved don't count. A search button on both sides shows only messages matching every word. On the desktop, Copy and the day and time ("Today · 14:05") sit under each message, outside the card, as on the phone.
 - Why: User request 2026-11-19 (screenshot of the desktop Share panel).
 - Files: see L-356 to L-358 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md)
-- Commit: 4ab7616e (in 0.16.0-local61, not released yet)
+- Commit: 4ab7616e (in 0.16.0-local61)
 - Verified: desktop tsc ✅ vitest src/features/mobile (95) ✅ cargo check ✅ cargo test mobile_share (12) ✅; phone tsc ✅ lint ✅ vitest ✅ (363; old `watchFrames` load failure). Manual: desktop search, count, limit in Settings, row under messages; phone search, count, Settings → Share → Keep messages.
 
 ## 2026-11-19 00:42 IST — Hari: block actions, Select text and bookmarks; Command Code keeps working; Share link menu (L-351 to L-355)
@@ -27,7 +28,7 @@
 - What: On the phone, code blocks wrap (with a wrap button), and code, tables and quotes have Add task, Add to notes and Copy. Select text opens a whole reply to select across, with Hari's own bar (Copy, Bookmark, Add to notes, Add task). A bookmark button under each reply saves to the desktop's session Bookmarks. Command Code turns ask the model to keep working until the task is done. The desktop Share panel's link right-click opens in the default browser, MonoCode's browser, or copies the link.
 - Why: User report 2026-11-18 (two screenshots): code ran off the phone's screen, only one block could be selected at a time, no bookmarks or block actions on the phone, Command Code (Muse Ember) stopped after announcing each next step, and Share links had no "open in default browser".
 - Files: see L-351 to L-355 in [LOCAL-FEATURES.md](../LOCAL-FEATURES.md); spec [hari-chat-blocks-select-bookmarks-plan.md](../specs/hari-chat-blocks-select-bookmarks-plan.md)
-- Commit: 8ada324f (in 0.16.0-local61, not released yet)
+- Commit: 8ada324f (in 0.16.0-local61)
 - Verified: desktop tsc ✅ vitest (mobile, session panel, Command Code: 1205) ✅ cargo check ✅ cargo test mobile_bookmarks ✅; phone tsc ✅ lint ✅ vitest ✅ (361; old `watchFrames` load failure). Needs a check on the phone and desktop.
 
 ## 2026-11-18 10:19 IST — Hari: chat composer no longer stuck mid-screen after minimising (L-350)
