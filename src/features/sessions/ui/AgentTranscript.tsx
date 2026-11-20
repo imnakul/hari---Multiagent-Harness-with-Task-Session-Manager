@@ -1934,12 +1934,15 @@ function AgentTranscriptComponent({
                   }
                 />
               ) : null}
+              {/* Fork (L-365): right under the reply that started the work. The
+                  live turn stretches to fill the view, so after it the line
+                  would sit at the bottom, far from that reply. */}
+              {isLastTurn && !busy && !externalTurnId && backgroundTasks?.length ? (
+                <IdleBackgroundTasks tasks={backgroundTasks} onStop={onStopBackgroundTask} />
+              ) : null}
             </HistoryTurn>
           );
         })}
-        {!busy && !externalTurnId && backgroundTasks?.length ? (
-          <IdleBackgroundTasks tasks={backgroundTasks} onStop={onStopBackgroundTask} />
-        ) : null}
       </TranscriptContent>
       {onAddToChat || onSaveSelectionNote || onSaveSelectionTask || onBookmarkQuote ? (
         <TranscriptSelectionMenu

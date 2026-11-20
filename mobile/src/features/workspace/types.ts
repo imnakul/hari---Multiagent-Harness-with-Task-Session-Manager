@@ -126,6 +126,8 @@ export type SessionSummary = {
   model: string;
   /** The model as the desktop names it, e.g. "Opus 4.1" for "claude:opus". */
   modelName?: string;
+  /** Fork (L-368): the account it runs on, when the provider has 2+; absent from an older desktop. */
+  accountName?: string;
   branch: string;
   /** The worktree it works in, when not the project's checkout; absent from an older desktop. */
   worktreePath?: string;

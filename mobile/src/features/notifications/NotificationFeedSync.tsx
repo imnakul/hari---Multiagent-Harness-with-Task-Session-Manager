@@ -1,5 +1,5 @@
 import * as Notifications from "expo-notifications";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
@@ -26,6 +26,7 @@ import {
 } from "./notificationFeed";
 import { categoryFor, panelData } from "./notificationActions";
 import { ensurePanelCategories } from "./PanelActions";
+import { nextWatchLink, shouldWatch, type WatchLink } from "./watchRule";
 
 /** How often the list is asked for while Hari is on screen. */
 const POLL_MS = 5_000;
@@ -63,18 +64,44 @@ export function NotificationFeedSync() {
   const busy = useRef(false);
   const lastFetch = useRef(0);
 
+  // Fork (L-367): watching runs only while the computer answers (see
+  // shouldWatch). The service's tick moves `now` on while the link is lost,
+  // since timers don't run with Hari out of view.
+  const [link, setLink] = useState<WatchLink>({ phase: "never" });
+  const [now, setNow] = useState(() => Date.now());
+  const linkFor = useRef(fingerprint);
+  useEffect(() => {
+    // A new pairing starts over: wait for that computer to answer.
+    const fresh = linkFor.current !== fingerprint;
+    linkFor.current = fingerprint;
+    setLink((current) =>
+      nextWatchLink(fresh ? { phase: "never" } : current, connected, Date.now()),
+    );
+  }, [connected, fingerprint]);
+  useEffect(() => {
+    if (link.phase !== "lost") return;
+    const subscription = onLiveEvent((event) => {
+      if (event.action === "tick") setNow(Date.now());
+    });
+    return () => subscription?.remove();
+  }, [link.phase]);
+  const watching = shouldWatch({
+    wanted: watch && fingerprint !== null,
+    link,
+    now,
+  });
+
   // Android stops the service with the app swiped away only if the user lets it.
   useEffect(() => {
     if (Platform.OS !== "android") return;
-    const on = watch && fingerprint !== null;
-    setLiveWatching(on);
-    if (!on) return;
+    setLiveWatching(watching);
+    if (!watching) return;
     // Opening Hari starts it again if Android stopped it meanwhile.
     const subscription = AppState.addEventListener("change", (next) => {
       if (next === "active") setLiveWatching(true);
     });
     return () => subscription.remove();
-  }, [watch, fingerprint]);
+  }, [watching]);
 
   const post = useCallback(async (desktop: string, items: FeedItem[]) => {
     if (Platform.OS !== "android") return;

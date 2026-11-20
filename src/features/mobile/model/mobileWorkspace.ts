@@ -90,6 +90,7 @@ import {
   mobileAccountChoice,
   mobileProviderAccounts,
   mobileSessionAccountId,
+  mobileSessionAccountName,
 } from "./mobileProviderAccounts";
 import {
   resolveTabGroupColor,
@@ -198,6 +199,7 @@ export async function mobileCatalog(
         harness: session.harness,
         model: session.model,
         modelName: resolveModel(session.harness, session.model).name,
+        ...mobileSessionAccountName(session.harness, mobileSessionAccountId(session)),
         branch: session.worktreeRemoved ? "" : (session.branch ?? ""),
         ...mobileSessionWorktree(session),
         runtimeMode: session.runtimeMode,
@@ -269,6 +271,7 @@ function mobileSummary(session: SessionSummary) {
     harness: session.harness,
     model: session.model,
     modelName: resolveModel(session.harness, session.model).name,
+    ...mobileSessionAccountName(session.harness, session.providerAccountId),
     branch: session.branch ?? "",
     ...mobileSessionWorktree(session),
     runtimeMode: session.runtimeMode,

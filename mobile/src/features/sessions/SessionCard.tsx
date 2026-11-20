@@ -7,6 +7,7 @@ import { Icon } from "@/ui/Icon";
 import { radii, withAlpha, themedStyles, useColors } from "@/ui/theme";
 
 import { ProviderLogo } from "./ProviderLogo";
+import { sessionModelLabel } from "./sessionModelLabel";
 import { TerminalSpinner } from "./TerminalSpinner";
 
 /**
@@ -97,7 +98,7 @@ export function SessionCard({
 function SessionDetails({ session, pinned }: { session: SessionSummary; pinned: boolean }) {
   const colors = useColors();
   const styles = useStyles();
-  const model = session.modelName || session.model;
+  const model = sessionModelLabel(session);
   return (
     <>
       <View style={styles.line}>
@@ -206,7 +207,8 @@ const useStyles = themedStyles((colors) => ({
   },
   model: {
     flexShrink: 1,
-    maxWidth: "50%",
+    // Fork (L-368): room for the account after the model.
+    maxWidth: "60%",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,

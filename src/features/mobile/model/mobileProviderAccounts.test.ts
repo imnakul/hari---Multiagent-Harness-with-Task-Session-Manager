@@ -10,6 +10,7 @@ import {
   mobileAccountChoice,
   mobileProviderAccounts,
   mobileSessionAccountId,
+  mobileSessionAccountName,
 } from "./mobileProviderAccounts";
 
 beforeEach(() => {
@@ -112,5 +113,21 @@ describe("mobile provider accounts", () => {
     expect(
       mobileSessionAccountId({ ...session, harness: "pi" }),
     ).toBeUndefined();
+  });
+
+  it("names a session's account for the phone's list only with 2+ accounts", () => {
+    expect(mobileSessionAccountName("claude", "account-work")).toEqual({
+      accountName: "Work",
+    });
+    // A removed account reads as the default one, as on the desktop card.
+    expect(mobileSessionAccountName("claude", "removed")).toEqual({
+      accountName: "Default account",
+    });
+    expect(mobileSessionAccountName("claude", undefined)).toEqual({
+      accountName: "Default account",
+    });
+    expect(mobileSessionAccountName("pi", "default")).toEqual({});
+    removeProviderAccount("claude", "account-work");
+    expect(mobileSessionAccountName("claude", "default")).toEqual({});
   });
 });

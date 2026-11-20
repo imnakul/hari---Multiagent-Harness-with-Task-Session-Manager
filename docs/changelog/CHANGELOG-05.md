@@ -1,5 +1,15 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-20 11:22 IST — Hari: watching notification closes without the computer; session list shows the account (L-367, L-368)
+
+- Why: user request. The "Watching your computer" notification stayed on (and kept the phone checking) with MonoCode closed, though nothing could arrive; the phone's session list showed the model but not which account a chat runs on.
+- What (L-367): background watching now runs only while the computer answers. After 2 minutes without an answer (the same wait as the session cards), the service and its notification stop. Android won't restart it from the background, so opening Hari with the computer reachable turns it back on. Settings' note says so.
+- Also (L-365): the idle "background tasks" line now sits right under the reply that started the work, not at the bottom of the chat (`AgentTranscript.tsx`).
+- What (L-368): the desktop sends `accountName` with each phone session (only when that provider has 2+ accounts, as on the desktop card); the phone shows "Opus 5.5 · Work". An older desktop sends none and the row looks as before.
+- Files: `mobile/src/features/notifications/watchRule.ts` (new), `NotificationFeedSync.tsx` (watching effect), `mobile/src/app/settings/index.tsx` (note); `src/features/mobile/model/mobileProviderAccounts.ts` (`mobileSessionAccountName`), `mobileWorkspace.ts` (two summaries); phone `workspace/types.ts`, `sessions/sessionModelLabel.ts` (new), `SessionCard.tsx`, `SessionsPage.tsx`.
+- Verified: desktop tsc ✅, vitest ✅ (8243; iconCatalog timed out once under load, passes alone); phone tsc ✅, lint ✅ (changed files), vitest ✅ (375; tests/mobile/watchFrames.test.ts fails to load before and after, unrelated) | manual: phone checks pending
+- Commit: uncommitted
+
 ## 2026-11-19 12:55 IST — Claude background tasks stay visible and don't block messages; Hari Select text, Share tables and Show more (L-365, L-366)
 
 - Why: user report: a CodeRabbit review Claude ran in the background never showed, and the next message failed with "Return to an empty, idle native prompt…". Phone: the Select text bar vanished on lifting the finger; Share tables were squeezed and couldn't scroll; long Share texts didn't fold.

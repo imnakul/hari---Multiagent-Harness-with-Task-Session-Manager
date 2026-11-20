@@ -375,7 +375,7 @@ function FeedSettings() {
       {liveAvailable ? (
         <Text style={styles.note} onPress={() => void openBatterySettings()}>
           {feed.watch
-            ? "Hari checks your computer every 15 seconds while it’s closed, with a quiet notification at the bottom of the panel. For this to last, set Battery to No restrictions and turn on Autostart. "
+            ? "Hari checks your computer every 15 seconds while it’s closed, with a quiet notification at the bottom of the panel. It stops when your computer can’t be reached for 2 minutes, and starts again when you open Hari. For this to last, set Battery to No restrictions and turn on Autostart. "
             : "Notifications from your computer arrive only while Hari is open. "}
           <Text style={{ color: colors.accent }}>Open app settings</Text>
         </Text>

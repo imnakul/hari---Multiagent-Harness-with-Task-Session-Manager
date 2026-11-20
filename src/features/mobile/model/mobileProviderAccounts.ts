@@ -6,6 +6,7 @@ import {
   supportsAccountProfiles,
 } from "../../providers/model/providerAccounts";
 import type { HarnessId, Session } from "../../sessions/model/session";
+import { sessionAccountLabel } from "../../sessions/ui/useCompactModelLabels";
 
 const PROVIDERS = ["claude", "codex"] as const;
 
@@ -30,6 +31,19 @@ export function mobileSessionAccountId(session: Session): string | undefined {
       ? DEFAULT_PROVIDER_ACCOUNT_ID
       : selectedProviderAccountId(session.harness, session.cwd))
   );
+}
+
+/**
+ * Fork (L-368): the account name the phone's session list shows beside the
+ * model, as the desktop's card does: only when the provider has two or more
+ * accounts, so a single-account setup looks as before.
+ */
+export function mobileSessionAccountName(
+  harness: HarnessId,
+  accountId: string | undefined,
+): { accountName?: string } {
+  const label = sessionAccountLabel({ harness, providerAccountId: accountId });
+  return label ? { accountName: label } : {};
 }
 
 /** Validate against the final provider, including when the phone changes models. */

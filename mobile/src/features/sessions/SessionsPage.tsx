@@ -211,6 +211,7 @@ function sameRow(a: SessionSummary, b: SessionSummary) {
       a.branch === b.branch &&
       a.model === b.model &&
       a.modelName === b.modelName &&
+      a.accountName === b.accountName &&
       a.harness === b.harness)
   );
 }
