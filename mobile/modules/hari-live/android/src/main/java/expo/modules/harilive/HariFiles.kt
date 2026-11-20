@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
@@ -110,6 +111,28 @@ internal object HariFiles {
       .put("total", all.size)
       .put("items", items)
       .toString()
+  }
+
+  /**
+   * Fork (Hari, L-375): a picked file's real name. A picker hands back a
+   * content:// address that often ends in a number (".../document/1565"), not
+   * the name; the provider knows the name. Null when it can't say.
+   */
+  fun displayName(context: Context, address: String): String? {
+    val uri = Uri.parse(address)
+    if (uri.scheme == "file") return uri.lastPathSegment
+    return try {
+      context.contentResolver
+        .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor ->
+          val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+          if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+        }
+        ?.takeIf { it.isNotBlank() }
+    } catch (error: Exception) {
+      Log.w(TAG, "Could not read a picked file's name", error)
+      null
+    }
   }
 
   /** A file in shared storage to send, as JSON `{ uri, name, size }`. */

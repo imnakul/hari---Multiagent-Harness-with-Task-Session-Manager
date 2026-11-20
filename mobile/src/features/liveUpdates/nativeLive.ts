@@ -37,6 +37,8 @@ type HariLiveModule = {
   openAllFilesSettings?(): boolean;
   listFiles?(path: string, offset: number): string;
   describeFile?(path: string): string;
+  /** Fork (L-375); missing in builds before it. */
+  displayName?(uri: string): string | null;
   /** Fork (L-321); missing in builds before it. */
   bubbleState?(): { enabled: boolean; permitted: boolean };
   setBubble?(on: boolean, color: string | null): boolean;
@@ -197,6 +199,19 @@ export const phoneFiles = native?.listFiles
   : null;
 
 export const openBatterySettings = () => native?.openBatterySettings();
+
+/**
+ * Fork (Hari, L-375): a picked file's name as the phone shows it. Expo's
+ * `File.name` is the last part of the address, which for a picked file is
+ * often a number ("1565"); `fallback` is used on builds without the module.
+ */
+export function pickedFileName(uri: string, fallback: string): string {
+  try {
+    return native?.displayName?.(uri)?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /** Fork (Hari, L-321): the Share bubble over other apps; null without the module. */
 export type ShareBubbleState = { enabled: boolean; permitted: boolean };

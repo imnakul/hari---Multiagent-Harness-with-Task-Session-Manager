@@ -97,6 +97,9 @@ class HariLiveModule : Module() {
     Function("listFiles") { path: String, offset: Int -> HariFiles.list(path, offset) }
     Function("describeFile") { path: String -> HariFiles.describe(path) }
 
+    /** Fork (L-375): a picked file's real name, not the number its address ends in. */
+    Function("displayName") { uri: String -> HariFiles.displayName(context, uri) }
+
     /** Fork (L-279): opens a saved file in the app the user picks. */
     Function("openFile") { uri: String, mimeType: String -> HariShare.open(context, uri, mimeType) }
 

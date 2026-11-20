@@ -23,7 +23,7 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
-import { canSaveToDownloads, openNativeFile } from "@/features/liveUpdates/nativeLive";
+import { canSaveToDownloads, openNativeFile, pickedFileName } from "@/features/liveUpdates/nativeLive";
 import { withLiftHeld } from "@/features/sessions/liftHold";
 import { Markdown } from "@/features/sessions/Markdown";
 import { fillsWidth } from "@/features/sessions/markdownParser";
@@ -617,7 +617,7 @@ function ShareComposer({
       if (picked.canceled) return;
       const chosen = picked.result.map((file) => ({
         uri: file.uri,
-        name: file.name,
+        name: pickedFileName(file.uri, file.name),
         mimeType: file.type || "application/octet-stream",
         size: file.size,
       }));
