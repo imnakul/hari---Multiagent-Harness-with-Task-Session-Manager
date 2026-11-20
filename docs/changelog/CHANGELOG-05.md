@@ -6,7 +6,7 @@
 - What: right-click anywhere on a link card now offers Open in default browser, Open in MonoCode browser and Copy link, using the card's link.
 - Files: `src/features/mobile/ui/ShareBubble.tsx` (`onContextMenu`).
 - Verified: tsc ✅, vitest ✅ (mobile feature 96) | manual: desktop check pending
-- Commit: uncommitted
+- Commit: 408015a6 (in 0.16.0-local66)
 
 ## 2026-11-20 13:20 IST — Files outside the project open; Changes works on folders holding several repos (L-369, L-370)
 
@@ -15,7 +15,7 @@
 - What (L-370): new desktop command lists repos one level inside a folder that isn't a repo. Changes and History show a repository switcher; diffs, "all changes" and commits open from the picked repo. The pick is remembered per folder. Explorer, search and file badges are unchanged. Remote projects and Hari are not covered.
 - Files: `relatedProjectRoots.ts` (new), `fileIndex.ts`, `AgentMarkdown.tsx`; `src-tauri/src/nested_repos.rs` (new), `lib.rs`, `platform/tauri/fs.ts`, `source-control/model/nestedRepos.ts` (new), `Sidebar.tsx`, `App.tsx`.
 - Verified: tsc ✅, vitest ✅ (full run 8250+; iconCatalog timed out under load, passes alone; switcher's store needed a server snapshot, fixed), windowArgs ✅, cargo clippy ✅ (new file), cargo fmt ✅ (new file), Rust tests ✅ (2) | manual: desktop checks pending
-- Commit: uncommitted
+- Commit: 408015a6 (in 0.16.0-local66)
 
 ## 2026-11-20 11:22 IST — Hari: watching notification closes without the computer; session list shows the account (L-367, L-368)
 
