@@ -8,7 +8,7 @@
 - What (L-368): the desktop sends `accountName` with each phone session (only when that provider has 2+ accounts, as on the desktop card); the phone shows "Opus 5.5 · Work". An older desktop sends none and the row looks as before.
 - Files: `mobile/src/features/notifications/watchRule.ts` (new), `NotificationFeedSync.tsx` (watching effect), `mobile/src/app/settings/index.tsx` (note); `src/features/mobile/model/mobileProviderAccounts.ts` (`mobileSessionAccountName`), `mobileWorkspace.ts` (two summaries); phone `workspace/types.ts`, `sessions/sessionModelLabel.ts` (new), `SessionCard.tsx`, `SessionsPage.tsx`.
 - Verified: desktop tsc ✅, vitest ✅ (8243; iconCatalog timed out once under load, passes alone); phone tsc ✅, lint ✅ (changed files), vitest ✅ (375; tests/mobile/watchFrames.test.ts fails to load before and after, unrelated) | manual: phone checks pending
-- Commit: uncommitted
+- Commit: 22a9528d (in 0.16.0-local65)
 
 ## 2026-11-19 12:55 IST — Claude background tasks stay visible and don't block messages; Hari Select text, Share tables and Show more (L-365, L-366)
 
