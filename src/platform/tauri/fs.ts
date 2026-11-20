@@ -791,3 +791,14 @@ export function basename(path: string): string {
   const parts = trimmed.split("/").filter(Boolean);
   return parts[parts.length - 1] ?? trimmed;
 }
+
+export type NestedRepo = { path: string; name: string };
+
+/**
+ * Fork (L-370): git repositories directly inside `cwd`, when `cwd` isn't in
+ * one itself. Empty otherwise. Local folders only.
+ */
+export function gitNestedRepos(cwd: string): Promise<NestedRepo[]> {
+  if (cwd.startsWith(REMOTE_PATH_PREFIX)) return Promise.resolve([]);
+  return invokeLocal<NestedRepo[]>("git_nested_repos", { cwd });
+}

@@ -5492,13 +5492,14 @@ function Workspace({
 
   /** Stack one section's working-tree changes in one review, whatever the diff-view setting. */
   const onOpenAllChanges = useCallback(
-    (kind: GitFileDiffKind) => {
+    // Fork (L-370): `cwd` is the repository picked inside a multi-repo folder.
+    (kind: GitFileDiffKind, cwd?: string) => {
       setTabs((prev) =>
         prev.map((tab) =>
           tab.id === activeTabId
             ? openChangesTab(
                 tab,
-                gitCwdRef.current,
+                cwd ?? gitCwdRef.current,
                 undefined,
                 kind,
                 sidebarCwdRef.current,
@@ -5512,13 +5513,13 @@ function Workspace({
   );
 
   const onOpenCommit = useCallback(
-    (commit: GitHistoryCommit, pin?: boolean) => {
+    (commit: GitHistoryCommit, pin?: boolean, cwd?: string) => {
       setTabs((prev) =>
         prev.map((tab) =>
           tab.id === activeTabId
             ? openCommitTab(
                 tab,
-                gitCwdRef.current,
+                cwd ?? gitCwdRef.current,
                 {
                   sha: commit.sha,
                   shortSha: commit.shortSha,

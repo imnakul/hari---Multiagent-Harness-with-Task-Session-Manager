@@ -1,8 +1,10 @@
-import { listProjectFiles, type ProjectFile } from "../../../platform/tauri/fs";
+import { listProjectFiles, statFiles, type ProjectFile } from "../../../platform/tauri/fs";
 import { subscribeDirsChanged } from "./fileTree";
 import { scorePath, type FuzzyHit } from "../../../shared/lib/fuzzy";
 import { resolveWorkspacePath, slash } from "../../../shared/lib/paths";
-import { looksLikeProject } from "../../projects/model/recents";
+import { loadProjectGroupAssignments } from "../../projects/model/projectGroups";
+import { knownProjectPaths, looksLikeProject } from "../../projects/model/recents";
+import { relatedProjectRoots } from "./relatedProjectRoots";
 import {
   normalizeEditorPath,
   type FileOpenOptions,
@@ -226,7 +228,8 @@ export async function resolveOpenablePath(
     // direct path and show its own error if that file is unavailable too.
     return direct;
   }
-  if (files.length === 0) return direct;
+  if (files.length === 0)
+    return (await findInRelatedProjects(cwd, direct, href)) ?? direct;
 
   const byPath = new Map(
     files.map((file) => [normalizeEditorPath(file.path), file]),
@@ -253,10 +256,49 @@ export async function resolveOpenablePath(
 
   const baseName = relHint.split("/").filter(Boolean).pop() ?? relHint;
   const byName = files.filter((file) => file.name === baseName);
-  if (byName.length === 0) return direct;
+  if (byName.length === 0)
+    return (await findInRelatedProjects(cwd, direct, href)) ?? direct;
   if (byName.length === 1) return byName[0].path;
 
   return pickOpenableFile(byName, cwd, relHint).path;
+}
+
+/**
+ * Fork (L-369): a name the agent wrote relative to its folder that isn't in
+ * that project, looked for in the projects around it (relatedProjectRoots).
+ * Only for a path that doesn't exist where it points, and only for one inside
+ * `cwd`: an absolute path elsewhere is never swapped for another file.
+ * Listings are read fresh, not through the cache, so a look-up doesn't evict
+ * the open project's index.
+ */
+async function findInRelatedProjects(
+  cwd: string,
+  direct: string,
+  href: string,
+): Promise<string | undefined> {
+  const base = normalizeEditorPath(cwd).replace(/\/+$/, "");
+  if (!base || base === "~" || !normalizeEditorPath(direct).startsWith(`${base}/`))
+    return undefined;
+  const [stat] = await statFiles([direct]).catch(() => []);
+  if (!stat || stat.mtimeMs !== null) return undefined;
+  const relHint = relativePathHint(href, cwd, direct);
+  const baseName = relHint.split("/").filter(Boolean).pop();
+  if (!baseName) return undefined;
+  const roots = relatedProjectRoots(
+    cwd,
+    knownProjectPaths(),
+    loadProjectGroupAssignments(),
+  );
+  for (const root of roots) {
+    const files = await listProjectFiles(root).catch((): ProjectFile[] => []);
+    const named = files.filter((file) => file.name === baseName);
+    if (named.length === 0) continue;
+    const exact = named.filter(
+      (file) => file.relative === relHint || file.relative.endsWith(`/${relHint}`),
+    );
+    return pickOpenableFile(exact.length > 0 ? exact : named, root, relHint).path;
+  }
+  return undefined;
 }
 
 /** Resolve shortened references while preserving paths selected from file UI. */

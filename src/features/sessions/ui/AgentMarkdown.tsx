@@ -32,6 +32,7 @@ import {
   type ExplorerMenuItem,
 } from "../../files/ui/ExplorerMenu";
 import { openWebLink } from "../../browser/model/openWebLink";
+import { resolveOpenablePath } from "../../files/model/fileIndex";
 import { FileActionError } from "../../files/ui/FileActionError";
 import { FileTypeIcon } from "../../files/ui/FileTypeIcon";
 import { boundedCode } from "../../files/editor/codeHighlightPlugin";
@@ -1045,23 +1046,28 @@ export const AgentMarkdown = memo(function AgentMarkdown({
       return;
     }
 
-    let action: Promise<void>;
+    let run: (target: string) => Promise<void>;
     switch (id) {
       case "open-default":
-        action = openPathWithDefaultApp(path);
+        run = openPathWithDefaultApp;
         break;
       case "reveal":
-        action = revealPath(path);
+        run = revealPath;
         break;
       case "copy-path":
-        action = copyText(path);
+        run = copyText;
         break;
       case "copy-relative-path":
-        action = copyText(displayPath(path, cwd));
+        run = (target) => copyText(displayPath(target, cwd));
         break;
       default:
         return;
     }
+    // Fork (L-369): the same file Open finds, when the name the agent wrote
+    // isn't in this project.
+    const action = (cwd ? resolveOpenablePath(cwd, path) : Promise.resolve(undefined))
+      .catch(() => undefined)
+      .then((found) => run(found ?? path));
     void action.catch((error) => {
       console.error(`Failed to run file-link action ${id}:`, error);
       setFileActionError(

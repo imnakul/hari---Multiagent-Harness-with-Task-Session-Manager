@@ -1,5 +1,22 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-20 14:08 IST — Share panel: open a link card in the default browser from anywhere on it (L-371)
+
+- Why: user report: right-clicking a link card in Share showed no "Open in default browser". The link items (L-355) only appeared when the click landed exactly on the link text; most of a card (picture, description) isn't that.
+- What: right-click anywhere on a link card now offers Open in default browser, Open in MonoCode browser and Copy link, using the card's link.
+- Files: `src/features/mobile/ui/ShareBubble.tsx` (`onContextMenu`).
+- Verified: tsc ✅, vitest ✅ (mobile feature 96) | manual: desktop check pending
+- Commit: uncommitted
+
+## 2026-11-20 13:20 IST — Files outside the project open; Changes works on folders holding several repos (L-369, L-370)
+
+- Why: user report. A chat in `Teacher` named `MANUAL_CHECKS.md`, which is in the parent `rigorup-active`; opening it failed ("cannot find the file") and Explorer/default app did nothing. And `rigorup-active` holds three repos but isn't one, so Changes always said "No uncommitted changes".
+- What (L-369): when a named file isn't in the chat's project, MonoCode looks in projects around it (ones containing it, closest first, then others in its sidebar group) and opens the match there. The chat's file menu (Explorer, default app, copy path) uses the same path.
+- What (L-370): new desktop command lists repos one level inside a folder that isn't a repo. Changes and History show a repository switcher; diffs, "all changes" and commits open from the picked repo. The pick is remembered per folder. Explorer, search and file badges are unchanged. Remote projects and Hari are not covered.
+- Files: `relatedProjectRoots.ts` (new), `fileIndex.ts`, `AgentMarkdown.tsx`; `src-tauri/src/nested_repos.rs` (new), `lib.rs`, `platform/tauri/fs.ts`, `source-control/model/nestedRepos.ts` (new), `Sidebar.tsx`, `App.tsx`.
+- Verified: tsc ✅, vitest ✅ (full run 8250+; iconCatalog timed out under load, passes alone; switcher's store needed a server snapshot, fixed), windowArgs ✅, cargo clippy ✅ (new file), cargo fmt ✅ (new file), Rust tests ✅ (2) | manual: desktop checks pending
+- Commit: uncommitted
+
 ## 2026-11-20 11:22 IST — Hari: watching notification closes without the computer; session list shows the account (L-367, L-368)
 
 - Why: user request. The "Watching your computer" notification stayed on (and kept the phone checking) with MonoCode closed, though nothing could arrive; the phone's session list showed the model but not which account a chat runs on.

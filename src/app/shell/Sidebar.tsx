@@ -267,6 +267,8 @@ import { SessionsEmpty } from "../../features/sessions/ui/SessionsEmpty";
 import { SidebarUpdateFooter } from "./SidebarUpdate";
 import { SourceControl } from "../../features/source-control/ui/SourceControl";
 import { GitHistoryGraph } from "../../features/source-control/ui/GitHistoryGraph";
+import { chooseNestedRepo, useNestedRepos } from "../../features/source-control/model/nestedRepos";
+import { SegmentedSwitch } from "../../shared/ui/SegmentedSwitch";
 import { GithubStarPrompt } from "./GithubStarPrompt";
 import { ChatPanel } from "../../features/sessions/ui/ChatPanel";
 import { SharedHoverHighlight } from "../../features/sessions/ui/SharedHoverHighlight";
@@ -420,11 +422,14 @@ type Props = {
   onGoForward?: () => void;
   onOpenDiff?: (
     path: string,
-    options?: GitFileDiffKind | { kind?: GitFileDiffKind; status?: string },
+    options?:
+      | GitFileDiffKind
+      | { kind?: GitFileDiffKind; status?: string; cwd?: string },
     pin?: boolean,
   ) => void;
-  onOpenAllChanges?: (kind: GitFileDiffKind) => void;
-  onOpenCommit?: (commit: GitHistoryCommit, pin?: boolean) => void;
+  /** `cwd`: the repository, when Changes works on one inside the project (L-370). */
+  onOpenAllChanges?: (kind: GitFileDiffKind, cwd?: string) => void;
+  onOpenCommit?: (commit: GitHistoryCommit, pin?: boolean, cwd?: string) => void;
   selectedDiffPath?: string;
   selectedDiffKind?: GitFileDiffKind;
   selectedCommitSha?: string;
@@ -1268,7 +1273,23 @@ function SidebarComponent({
     gitRoot,
     panesOpen && paneTab === "files",
   );
-  const changeStats = useProjectDiffStats(gitRoot, panesOpen);
+  // Fork (L-370): a project folder holding several repositories works on the
+  // one picked in Changes; Explorer and search stay on the whole folder.
+  const nestedRepos = useNestedRepos(gitRoot, panesOpen && !remoteProject);
+  const repoRoot = nestedRepos.repoCwd;
+  const inNestedRepo = repoRoot !== gitRoot;
+  const changeStats = useProjectDiffStats(repoRoot, panesOpen);
+  const repoSwitch =
+    nestedRepos.repos.length > 0 ? (
+      <div className="flex shrink-0 overflow-x-auto px-2 pt-2 [scrollbar-width:none]">
+        <SegmentedSwitch
+          ariaLabel="Repository"
+          options={nestedRepos.repos.map((repo) => ({ id: repo.path, label: repo.name }))}
+          value={repoRoot}
+          onChange={(path) => chooseNestedRepo(gitRoot, path)}
+        />
+      </div>
+    ) : null;
 
   useEffect(() => {
     if (!drawerMode || !sidebarAvailable) setDrawerOpen(false);
@@ -2976,8 +2997,9 @@ function SidebarComponent({
     <>
       {paneTab === "changes" ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {repoSwitch}
           <SourceControl
-            cwd={gitRoot}
+            cwd={repoRoot}
             enabled={panesOpen}
             showGraph={!inset}
             compactHeader={inset}
@@ -2986,11 +3008,26 @@ function SidebarComponent({
             selectedKind={selectedDiffKind}
             selectedSha={selectedCommitSha}
             onOpenFile={
-              onOpenDiff ??
-              ((path) => onOpenFile(path, undefined, { exact: true }))
+              onOpenDiff
+                ? inNestedRepo
+                  ? (path, options, pin) =>
+                      onOpenDiff(
+                        path,
+                        {
+                          ...(typeof options === "string" ? { kind: options } : options),
+                          cwd: repoRoot,
+                        },
+                        pin,
+                      )
+                  : onOpenDiff
+                : (path) => onOpenFile(path, undefined, { exact: true })
             }
-            onOpenAllChanges={onOpenAllChanges ?? (() => {})}
-            onOpenCommit={onOpenCommit ?? (() => {})}
+            onOpenAllChanges={(kind) =>
+              onOpenAllChanges?.(kind, inNestedRepo ? repoRoot : undefined)
+            }
+            onOpenCommit={(commit, pin) =>
+              onOpenCommit?.(commit, pin, inNestedRepo ? repoRoot : undefined)
+            }
           />
         </div>
       ) : null}
@@ -3003,11 +3040,14 @@ function SidebarComponent({
       aria-label="History"
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
+      {repoSwitch}
       <GitHistoryGraph
-        cwd={gitRoot}
+        cwd={repoRoot}
         enabled={panesOpen}
         selectedSha={selectedCommitSha}
-        onOpenCommit={onOpenCommit ?? (() => {})}
+        onOpenCommit={(commit, pin) =>
+          onOpenCommit?.(commit, pin, inNestedRepo ? repoRoot : undefined)
+        }
       />
     </div>
   ) : null;

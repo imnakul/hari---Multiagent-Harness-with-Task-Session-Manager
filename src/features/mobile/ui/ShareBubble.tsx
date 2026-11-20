@@ -249,7 +249,10 @@ export function ShareBubble({
     const web = href && /^https?:\/\//i.test(href) ? href : undefined;
     if (anchor && !web) return;
     event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY, href: web });
+    // Fork (L-371): anywhere on a link card (title, picture, padding) offers
+    // the card's own link, not only a click right on the anchor.
+    const cardLink = link && /^https?:\/\//i.test(link) ? link : undefined;
+    setMenu({ x: event.clientX, y: event.clientY, href: web ?? cardLink });
   };
   const linkItems: ExplorerMenuItem[] = menu?.href
     ? [

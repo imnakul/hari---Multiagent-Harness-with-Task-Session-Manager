@@ -57,6 +57,8 @@ mod mobile_share;
 // Fork (Hari, L-325): the phone's notifications in Share.
 mod mobile_phone_notifications;
 mod mono;
+// Fork (L-370): repositories inside a project folder that isn't one.
+mod nested_repos;
 // Fork (Hari, L-307): extra dimming of the screens from the phone.
 #[cfg(target_os = "macos")]
 mod mono_chat;
@@ -634,6 +636,7 @@ pub fn run() {
             fs::git_diff_stats,
             fs::git_diff_index,
             fs::git_diff_files,
+            nested_repos::git_nested_repos,
             fs::git_file_diff,
             fs::git_history,
             fs::git_commit_files,
