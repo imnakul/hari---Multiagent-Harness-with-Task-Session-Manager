@@ -26,8 +26,15 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type MouseEvent,
 } from "react";
+import {
+  colorSurfaceStyle,
+  loadGroupColorStyle,
+  subscribeGroupColorStyle,
+} from "../../shared/ui/colorSurface";
+import { RevealHeight } from "../../shared/ui/RevealHeight";
 import { useDragResize } from "../../shared/hooks/useDragResize";
 import { useLockOverscroll } from "../../shared/hooks/useLockOverscroll";
 import { useProjectDiffStats } from "../../features/source-control/hooks/useProjectDiffStats";
@@ -887,6 +894,15 @@ function ProjectGroupSection({
   );
   const countLabel = `${items.length} ${items.length === 1 ? "project" : "projects"}`;
   const expanded = !group.collapsed;
+  // Fork (L-374): the group's colour (the one its mascot wears) on its whole
+  // card, in the style picked in Settings. Before this the colour only showed
+  // on the mascot, which is hidden while the group is open.
+  const groupColorStyle = useSyncExternalStore(
+    subscribeGroupColorStyle,
+    loadGroupColorStyle,
+    loadGroupColorStyle,
+  );
+  const surface = colorSurfaceStyle(projectGroupColor(group), groupColorStyle);
   const openMenu = (target: HTMLElement, x?: number, y?: number) => {
     const rect = target.getBoundingClientRect();
     onOpenGroupMenu(x ?? rect.left, y ?? rect.bottom);
@@ -895,9 +911,10 @@ function ProjectGroupSection({
   return (
     <div
       ref={(el) => groupSortable.setItemRef(group.id, el)}
-      className={`reorder-item relative shrink-0 overflow-hidden rounded-md ${
-        expanded ? "mb-1.5 bg-content/5" : ""
-      }`}
+      className={`reorder-item relative shrink-0 overflow-hidden rounded-md transition-[background-color,box-shadow] duration-200 motion-reduce:transition-none ${
+        expanded ? "mb-1.5" : surface ? "mb-0.5" : ""
+      } ${expanded && !surface?.backgroundColor ? "bg-content/5" : ""}`}
+      style={surface}
       data-project-group={group.id}
       role="group"
       aria-label={group.name}
@@ -972,7 +989,7 @@ function ProjectGroupSection({
           <MoreHorizontal className="size-4" strokeWidth={1.75} />
         </button>
       </div>
-      {expanded ? (
+      <RevealHeight open={expanded}>
         <div data-project-group-items data-shared-hover-continuity className="flex flex-col gap-px p-1">
           {items.map((item) => (
             <ProjectCard
@@ -996,7 +1013,7 @@ function ProjectGroupSection({
             />
           ))}
         </div>
-      ) : null}
+      </RevealHeight>
     </div>
   );
 }

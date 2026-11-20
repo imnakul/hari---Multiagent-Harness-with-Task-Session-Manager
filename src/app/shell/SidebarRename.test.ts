@@ -1298,6 +1298,14 @@ describe("sidebar pinned sessions", () => {
 
     act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // The sessions fold away (L-374), then leave once the animation ends.
+    const folding = group.querySelector<HTMLElement>(".reveal-height-out");
+    expect(
+      folding?.querySelector('[data-session-card="session-1"]'),
+    ).not.toBeNull();
+    act(() => {
+      folding?.dispatchEvent(new Event("animationend", { bubbles: true }));
+    });
     expect(group.querySelector('[data-session-card="session-1"]')).toBeNull();
     expect(
       JSON.parse(

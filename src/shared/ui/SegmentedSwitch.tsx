@@ -7,6 +7,8 @@ export type SegmentedOption<T extends string> = {
   icon?: IconComponent;
   /** Fork (L-337): show only the icon (the label becomes its name and hover text). */
   iconOnly?: boolean;
+  /** Fork (L-372): a small colour dot before the label (a repository's colour). */
+  dot?: string;
 };
 
 /**
@@ -89,7 +91,7 @@ export function SegmentedSwitch<T extends string>({
           }`}
         />
       ) : null}
-      {options.map(({ id, label, icon: Icon, iconOnly }) => {
+      {options.map(({ id, label, icon: Icon, iconOnly, dot }) => {
         const selected = value === id;
         return (
           <button
@@ -115,6 +117,9 @@ export function SegmentedSwitch<T extends string>({
           >
             {Icon ? (
               <Icon aria-hidden className={size === "md" ? "size-3.5" : "size-3"} strokeWidth={1.75} />
+            ) : null}
+            {dot ? (
+              <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: dot }} />
             ) : null}
             {Icon && iconOnly ? null : label}
           </button>

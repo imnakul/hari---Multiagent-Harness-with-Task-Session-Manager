@@ -169,6 +169,7 @@ fn create_task(app: &AppHandle, id: String, params: &Value) -> Result<Task, Stri
             today: None,
             archived: false,
             sort_order: None,
+            subtasks: subtasks(params)?,
         },
     )
 }
@@ -196,6 +197,10 @@ fn update_task(app: &AppHandle, task: Task, params: &Value) -> Result<Task, Stri
     }
     if params.get("projectCwd").is_some() {
         next.project_cwd = optional(params, "projectCwd");
+    }
+    // Fork (L-373): the phone sends the whole list when it ticks or edits a step.
+    if let Some(list) = subtasks(params)? {
+        next.subtasks = Some(list);
     }
     // Fork (L-243): the phone pins a task to a day, or unpins it, with
     // its own local day so the desktop records Focus history.
@@ -317,7 +322,18 @@ fn task_summary(task: &Task) -> Value {
         "archived": deferred || task.archived_at.is_some(),
         "focusDate": task.focus_date,
         "focusDays": task.focus_days,
+        "subtasks": task.subtasks,
     })
+}
+
+/// Fork (L-373): `subtasks` from a phone write, when it carries them.
+fn subtasks(params: &Value) -> Result<Option<Vec<crate::tasks::Subtask>>, String> {
+    match params.get("subtasks") {
+        None | Some(Value::Null) => Ok(None),
+        Some(list) => serde_json::from_value(list.clone())
+            .map(Some)
+            .map_err(|_| "Invalid subtasks".to_string()),
+    }
 }
 
 fn note_summary(note: &Note) -> Value {
@@ -351,6 +367,7 @@ fn upsert_of(task: Task) -> TaskUpsert {
         focus_days: task.focus_days,
         today: None,
         sort_order: task.sort_order,
+        subtasks: None,
     }
 }
 

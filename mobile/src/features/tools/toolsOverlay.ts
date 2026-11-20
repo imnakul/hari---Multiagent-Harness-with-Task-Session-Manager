@@ -1,4 +1,4 @@
-import type { Note, NoteItem, TaskItem, TaskStatus } from "./tools";
+import type { Note, NoteItem, Subtask, TaskItem, TaskStatus } from "./tools";
 
 // Fork (Hari, L-281): the pure half of Tasks and Notes offline. Reads what the
 // phone saved (storage is untrusted, so each entry is checked), and lays the
@@ -67,6 +67,7 @@ export function parseTaskItem(value: unknown): TaskItem | null {
     archived: value.archived === true,
     focusDate: text(value.focusDate) ?? null,
     focusDays: texts(value.focusDays),
+    ...(Array.isArray(value.subtasks) ? { subtasks: subtasksOf(value.subtasks) } : {}),
   };
 }
 
@@ -155,6 +156,16 @@ function createdTask({ id, editedAt, fields }: Edit): TaskItem {
   };
 }
 
+/** Fork (L-373): the steps a waiting edit carries; malformed ones are left out. */
+function subtasksOf(list: unknown[]): Subtask[] {
+  return list.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const id = text(entry.id);
+    const title = text(entry.title)?.trim();
+    return id && title ? [{ id, title, status: statusOf(entry.status) ?? "todo" }] : [];
+  });
+}
+
 /** `task` with the fields an offline `tasks.update` changes. */
 function updatedTask(task: TaskItem, { editedAt, fields }: Edit): TaskItem {
   const status = statusOf(fields.status);
@@ -168,6 +179,7 @@ function updatedTask(task: TaskItem, { editedAt, fields }: Edit): TaskItem {
     ...(Array.isArray(fields.tags) ? { tags: texts(fields.tags) } : {}),
     ...("projectCwd" in fields ? { projectCwd: text(fields.projectCwd) ?? null } : {}),
     ...("focusDate" in fields ? { focusDate: text(fields.focusDate) ?? null } : {}),
+    ...(Array.isArray(fields.subtasks) ? { subtasks: subtasksOf(fields.subtasks) } : {}),
     updatedAt: editedAt,
   };
 }

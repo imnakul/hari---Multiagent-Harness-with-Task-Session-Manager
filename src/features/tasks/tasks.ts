@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { normalizeNoteTags, noteTitle } from "../notes/notes";
 import { pathKey } from "../../shared/lib/paths";
+import { normalizeSubtasks, type Subtask } from "./subtasks";
 
 export const TASK_STATUS_LABELS = {
   todo: "Todo",
@@ -45,6 +46,11 @@ export type Task = {
   archivedAt?: number;
   /** Manual position in a board column; lower comes first. */
   sortOrder?: number;
+  /**
+   * Fork (L-373): the task's steps, in order. On a write, omitted keeps the
+   * stored steps; an empty list clears them.
+   */
+  subtasks?: Subtask[];
 };
 export type TaskUpsert = Omit<
   Task,
@@ -168,9 +174,10 @@ export function parseTaskStatus(value: unknown): {
   return { status, archive: false };
 }
 
-type StoredTask = Omit<Task, "status" | "focusDays"> & {
+type StoredTask = Omit<Task, "status" | "focusDays" | "subtasks"> & {
   status: TaskStatus | LegacyStatus;
   focusDays?: unknown;
+  subtasks?: unknown;
 };
 
 /** A row as the UI should see it: retired statuses mapped, plus whether to rewrite it. */
@@ -179,13 +186,15 @@ export function normalizeStoredTask(raw: StoredTask): {
   legacy: boolean;
 } {
   const focusDays = normalizeFocusDays(raw.focusDays);
+  const subtasks = normalizeSubtasks(raw.subtasks);
   if (!isLegacyStatus(raw.status))
-    return { task: { ...raw, focusDays, status: raw.status }, legacy: false };
+    return { task: { ...raw, focusDays, subtasks, status: raw.status }, legacy: false };
   const deferred = raw.status === "deferred";
   return {
     task: {
       ...raw,
       focusDays,
+      subtasks,
       status: LEGACY_STATUSES[raw.status],
       archivedAt: deferred ? (raw.archivedAt ?? raw.updatedAt) : raw.archivedAt,
     },

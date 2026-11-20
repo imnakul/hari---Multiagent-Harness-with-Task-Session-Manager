@@ -104,8 +104,9 @@ describe("Sidebar session list shared-hover continuity", () => {
 
     // Verify the pinned group container is placed outside the unpinned continuity list
     expect(markup).toContain('data-pinned-sessions=""');
+    // (the extra </div> is the slide wrapper round the pinned list, L-374)
     expect(markup).toContain(
-      '</ul></div></li><li class="list-none"><ul data-shared-hover-continuity="true"',
+      '</ul></div></div></li><li class="list-none"><ul data-shared-hover-continuity="true"',
     );
   });
 

@@ -1248,6 +1248,11 @@ describe("grouping", () => {
       '[data-task-group="project:personal"]',
     )!;
     await click(personal);
+    // The group folds away (L-374), then leaves once the animation ends.
+    await act(async () => {
+      for (const element of container.querySelectorAll(".reveal-height-out"))
+        element.dispatchEvent(new Event("animationend", { bubbles: true }));
+    });
     expect(personal.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).not.toContain("Personal reminder");
     expect(JSON.parse(localStorage.getItem(GROUPING_KEY)!).list).toBe(

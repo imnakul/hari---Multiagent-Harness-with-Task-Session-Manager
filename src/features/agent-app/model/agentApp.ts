@@ -4,6 +4,7 @@ import { parseQuickAttachments } from "../../quick-composer/model/quickAttachmen
 import {
   filterTasks,
   localDay,
+  parseSubtasksInput,
   parseTaskStatus,
   taskStatus,
   type Task,
@@ -284,6 +285,7 @@ const FIELDS = new Map<string, readonly string[]>([
       "sourceBlockId",
       "focusDate",
       "archived",
+      "subtasks",
     ],
   ],
   ["tasks.delete", ["id"]],
@@ -1690,6 +1692,9 @@ export async function handleAgentApp(
         changes.today = localDay();
       }
       if (input.tags !== undefined) changes.tags = noteTags(input.tags);
+      // Fork (L-373): steps as titles or { id, title, status }; known ids keep theirs.
+      if (input.subtasks !== undefined)
+        changes.subtasks = parseSubtasksInput(input.subtasks, existing?.subtasks);
       const aliasedProject = taskProjectAlias(source, input, host);
       if (aliasedProject) changes.projectCwd = aliasedProject;
       if (input.projectCwd !== undefined) {
@@ -1725,6 +1730,7 @@ export async function handleAgentApp(
         status: changes.status ?? "todo",
         tags: changes.tags ?? [],
         focusDays: [],
+        ...(changes.subtasks?.length ? { subtasks: changes.subtasks } : {}),
         projectCwd:
           changes.projectCwd === null
             ? undefined

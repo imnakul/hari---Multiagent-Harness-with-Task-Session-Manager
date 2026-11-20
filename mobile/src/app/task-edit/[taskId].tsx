@@ -7,6 +7,7 @@ import { HeaderButton } from "@/features/files/codeScreen";
 import { Markdown } from "@/features/sessions/Markdown";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import { ProjectMenu, StatusMenu } from "@/features/tools/TaskMenus";
+import { SubtaskTree, subtaskProgress } from "@/features/tools/SubtaskTree";
 import {
   readTask,
   taskChanges,
@@ -111,6 +112,13 @@ export default function TaskEditScreen() {
               autoCorrect={false}
               style={styles.tagsInput}
             />
+            <Text style={styles.stepsHeading}>
+              Subtasks
+              {fields.subtasks.length
+                ? `  ${subtaskProgress(fields.subtasks).done}/${fields.subtasks.length}`
+                : ""}
+            </Text>
+            <SubtaskTree subtasks={fields.subtasks} onChange={(subtasks) => edit({ subtasks })} editable />
             <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel="Body">
               {([false, true] as const).map((value) => (
                 <Pressable
@@ -160,6 +168,7 @@ const useStyles = themedStyles((colors) => ({
   titleInput: { color: colors.content, fontSize: 24, fontWeight: "700", paddingVertical: 6 },
   pickers: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagsInput: { color: colors.muted, fontSize: 15, paddingVertical: 6 },
+  stepsHeading: { color: colors.muted, fontSize: 13, fontWeight: "600", marginTop: 6 },
   segment: {
     alignSelf: "flex-start",
     flexDirection: "row",

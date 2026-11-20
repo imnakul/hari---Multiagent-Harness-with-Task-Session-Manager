@@ -272,13 +272,16 @@ Actions:
   tasks.write    {"id":"...","title":"Plan","body":"Markdown",
                   "status":"todo","tags":["work"],"projectCwd":null,
                   "focusDate":"2026-10-03","archived":false,
-                  "sourceSessionId":"...","sourceBlockId":"..."}
+                  "sourceSessionId":"...","sourceBlockId":"...",
+                  "subtasks":["Header",{"title":"Footer","status":"todo"}]}
                   Create or edit a task. Status values: todo, in_progress
                   (Progress), blocked, review (shown as "Verify"), completed.
                   Old names draft and deferred are accepted and saved as todo
                   (deferred also archives). focusDate (YYYY-MM-DD, local day) pins a task to
                   that day's Focus; null clears it. archived hides a task
-                  without changing its status.
+                  without changing its status. subtasks replaces the task's
+                  checklist: titles or {"id","title","status"}; send an
+                  existing step's id (from tasks.read) to keep or tick it.
                   Completing records a completion time; reopening clears it.
                   New tasks default to Todo and this
                   project when omitted; sourceSessionId defaults to this

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   Copy,
@@ -34,6 +34,8 @@ import {
 } from "../tasks";
 import { useLocalDay } from "../../../shared/hooks/useLocalDay";
 import { TaskStatusMenu } from "./TaskStatusIcon";
+import { SubtaskTree } from "./SubtaskTree";
+import { subtaskProgress, type Subtask } from "../subtasks";
 import { relativeTime, TaskFocusChip, TaskProjectMark } from "./TaskTags";
 import { TaskTimeline } from "./TaskTimeline";
 
@@ -200,6 +202,7 @@ export function TaskEditor({
       "tags",
       "projectCwd",
       "focusDate",
+      "subtasks",
     ] as const;
     for (const key of trackedKeys) {
       const shown = shownValue(task, key);
@@ -601,9 +604,39 @@ export function TaskEditor({
             }
           />
         </div>
+        <TaskSubtasksSection
+          subtasks={edits.subtasks ?? task.subtasks ?? []}
+          onChange={(next) => edit({ subtasks: next }, true)}
+        />
         <TaskTimeline task={task} today={today} />
       </div>
     </div>
+  );
+}
+
+/** Fork (L-373): the task's steps, editable, with a done count. */
+function TaskSubtasksSection({
+  subtasks,
+  onChange,
+}: {
+  subtasks: readonly Subtask[];
+  onChange: (next: Subtask[]) => void;
+}): ReactNode {
+  const { done, total } = subtaskProgress(subtasks);
+  return (
+    <section aria-label="Subtasks" className="flex flex-col gap-1">
+      <h3 className="flex items-center gap-2 text-[12px] font-medium text-content/60">
+        Subtasks
+        {total ? (
+          <span className="tabular-nums text-content/45">
+            {done}/{total}
+          </span>
+        ) : null}
+      </h3>
+      <div className="pl-2">
+        <SubtaskTree subtasks={subtasks} onChange={onChange} editable />
+      </div>
+    </section>
   );
 }
 
@@ -628,6 +661,8 @@ function shownValue(
       return { value: task.projectCwd ?? null };
     case "focusDate":
       return { value: task.focusDate ?? null };
+    case "subtasks":
+      return { value: task.subtasks ?? [] };
     default:
       return null;
   }

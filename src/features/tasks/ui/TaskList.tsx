@@ -1,3 +1,4 @@
+import { RevealHeight } from "../../../shared/ui/RevealHeight";
 import { useMemo, type ReactNode } from "react";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import type { ProjectMarks } from "../../projects/ui/ProjectMark";
@@ -6,6 +7,7 @@ import { groupTasks, type TaskGroup, type TaskGroupBy } from "../taskViewState";
 import type { Task } from "../tasks";
 import { TaskGroupHeader } from "./TaskGroupHeader";
 import { TaskRow } from "./TaskRow";
+import { SubtaskReveal, SubtaskToggle, useSubtasksExpanded } from "./SubtaskTree";
 
 export function TaskList({
   tasks,
@@ -69,7 +71,8 @@ export function TaskList({
                 />
               </div>
             ) : null}
-            {isCollapsed ? null : (
+            {/* Fork (L-374): groups slide open and shut. */}
+            <RevealHeight open={!isCollapsed}>
               <ul
                 aria-label={grouped ? `${group.label} tasks` : "Tasks"}
                 role="list"
@@ -78,24 +81,44 @@ export function TaskList({
               >
                 {group.tasks.map((task) => (
                   <li key={task.id}>
-                    <TaskRow
-                      task={task}
-                      active={selectedId === task.id}
-                      marks={marks}
-                      groupBy={groupBy}
-                      today={today}
-                      selectedDay={selectedDay}
-                      onSelect={() => onSelect(task.id)}
-                      onTagClick={onTagClick}
-                      onContextMenu={(x, y) => onContextMenu(task, x, y)}
-                    />
+                    <TaskListItem task={task}>
+                      <TaskRow
+                        task={task}
+                        active={selectedId === task.id}
+                        marks={marks}
+                        groupBy={groupBy}
+                        today={today}
+                        selectedDay={selectedDay}
+                        onSelect={() => onSelect(task.id)}
+                        onTagClick={onTagClick}
+                        onContextMenu={(x, y) => onContextMenu(task, x, y)}
+                      />
+                    </TaskListItem>
                   </li>
                 ))}
               </ul>
-            )}
+            </RevealHeight>
           </section>
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Fork (L-373): a row with subtasks gets a "2/5" toggle beside it and its
+ * steps as a tree that slides open underneath, the rail under the status icon.
+ */
+function TaskListItem({ task, children }: { task: Task; children: ReactNode }): ReactNode {
+  const [open, toggle] = useSubtasksExpanded(task.id);
+  if (!task.subtasks?.length) return children;
+  return (
+    <>
+      <div className="flex items-center gap-1">
+        <div className="min-w-0 flex-1">{children}</div>
+        <SubtaskToggle subtasks={task.subtasks} open={open} onToggle={toggle} className="mr-1" />
+      </div>
+      <SubtaskReveal task={task} open={open} className="mr-3 mb-1 ml-5" />
+    </>
   );
 }

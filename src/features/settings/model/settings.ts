@@ -507,6 +507,18 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "explorer gitignore ignored hidden files tree",
   },
   {
+    id: "group-colors",
+    section: "appearance",
+    label: "Group colours",
+    keywords: "session project group folder colour color tint background border bar fade style",
+  },
+  {
+    id: "repo-colors",
+    section: "appearance",
+    label: "Repository colours",
+    keywords: "git repo repositories colour color tint bar explorer multi nested",
+  },
+  {
     id: "chat-background",
     section: "appearance",
     label: "Chat background",

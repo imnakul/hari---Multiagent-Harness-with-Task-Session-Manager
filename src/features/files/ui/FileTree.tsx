@@ -1,5 +1,4 @@
 import {
-  ChevronDown,
   ChevronRight,
   FilePlus,
   FolderPlus,
@@ -11,9 +10,11 @@ import {
   memo,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -59,8 +60,15 @@ import {
   renamePath,
   revealPath,
   type FsEntry,
+  type NestedRepo,
 } from "../../../platform/tauri/fs";
-import { displayPath, parentPath, rebasePath } from "../../../shared/lib/paths";
+import {
+  loadRepoColorMode,
+  repoColors,
+  repoColorStyle,
+  subscribeRepoColorMode,
+} from "../../source-control/model/repoColors";
+import { displayPath, parentPath, pathKey, rebasePath } from "../../../shared/lib/paths";
 import { IS_MAC, IS_WIN, MOD, SHIFT } from "../../../platform/tauri/platform";
 import type { OpenFileFn } from "../../search/model/search";
 import type { GitStatusMap } from "../../source-control/hooks/useGitFileStatuses";
@@ -73,6 +81,7 @@ import { ExplorerMenu, type ExplorerMenuItem } from "./ExplorerMenu";
 import { FileTypeIcon } from "./FileTypeIcon";
 import { sendFilesToShare } from "../../mobile/model/sendToShare";
 import { PaneHeader } from "../../../shared/ui/PaneHeader";
+import { RevealHeight } from "../../../shared/ui/RevealHeight";
 
 const GIT_STATUS_COLOR: Record<string, string> = {
   modified: "text-amber-400",
@@ -92,6 +101,8 @@ type Props = {
   onFileDeleted?: (path: string) => void;
   onSearch?: () => void;
   gitStatuses?: GitStatusMap;
+  /** Fork (L-372): repositories inside a folder that holds several, coloured per Settings. */
+  nestedRepos?: readonly NestedRepo[];
 };
 
 type Creating = { id: number; parent: string; isDir: boolean };
@@ -115,6 +126,8 @@ type TreeCtxValue = {
   epoch: number;
   showExcludedFiles: boolean;
   gitStatuses?: GitStatusMap;
+  /** Fork (L-372): Explorer style of each top-level repo folder, by path key. */
+  repoStyles: Map<string, CSSProperties>;
   onToggle: (path: string) => void;
   onSelect: (path: string) => void;
   onFilePointerDown: (
@@ -265,6 +278,7 @@ export const FileTree = memo(function FileTree({
   onFileDeleted,
   onSearch,
   gitStatuses,
+  nestedRepos,
 }: Props) {
   const [expanded, setExpanded] = useState(() => loadExpanded(cwd));
   const [selectedPath, setSelectedPath] = useState(() => loadSelected(cwd));
@@ -284,6 +298,20 @@ export const FileTree = memo(function FileTree({
     loadShowExcludedFiles,
     loadShowExcludedFiles,
   );
+  const repoColorMode = useSyncExternalStore(
+    subscribeRepoColorMode,
+    loadRepoColorMode,
+    loadRepoColorMode,
+  );
+  const repoStyles = useMemo(() => {
+    const styles = new Map<string, CSSProperties>();
+    if (!nestedRepos?.length) return styles;
+    for (const [key, color] of repoColors(nestedRepos)) {
+      const style = repoColorStyle(color, repoColorMode);
+      if (style) styles.set(key, style);
+    }
+    return styles;
+  }, [nestedRepos, repoColorMode]);
   const creatingRef = useRef(creating);
   creatingRef.current = creating;
   const fileDragCleanup = useRef<(() => void) | null>(null);
@@ -1003,6 +1031,7 @@ export const FileTree = memo(function FileTree({
         epoch,
         showExcludedFiles,
         gitStatuses,
+        repoStyles,
         onToggle: toggle,
         onSelect,
         onFilePointerDown,
@@ -1082,11 +1111,10 @@ export const FileTree = memo(function FileTree({
             }`}
           >
             <span className="grid size-4 shrink-0 place-items-center text-content/50">
-              {rootOpen ? (
-                <ChevronDown className="size-3.5" strokeWidth={1.75} />
-              ) : (
-                <ChevronRight className="size-3.5" strokeWidth={1.75} />
-              )}
+              <ChevronRight
+                className={`size-3.5 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${rootOpen ? "rotate-90" : ""}`}
+                strokeWidth={1.75}
+              />
             </span>
             <span className="min-w-0 truncate text-[11px] font-semibold tracking-[0.08em] text-content/50 uppercase">
               {name}
@@ -1102,7 +1130,8 @@ export const FileTree = memo(function FileTree({
               {opError}
             </p>
           ) : null}
-          {rootOpen ? (
+          {/* Fork (L-374): folders slide open and shut. */}
+          <RevealHeight open={rootOpen}>
             <div role="tree" aria-label={`${name} files`}>
               <TreeChildren
                 parent={cwd}
@@ -1112,7 +1141,7 @@ export const FileTree = memo(function FileTree({
                 error={error}
               />
             </div>
-          ) : null}
+          </RevealHeight>
         </div>
       </div>
       {menu ? (
@@ -1229,6 +1258,7 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
     dragOverPath,
     epoch,
     gitStatuses,
+    repoStyles,
     onToggle,
     onSelect,
     onFilePointerDown,
@@ -1287,9 +1317,11 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
   const siblings = (peekDir(parentPath(entry.path)) ?? [])
     .map((child) => child.name)
     .filter((name) => name !== entry.name);
+  // Fork (L-372): the whole repo subtree (folder row and children) carries its colour.
+  const repoStyle = depth === 0 && entry.isDir ? repoStyles.get(pathKey(entry.path)) : undefined;
 
   return (
-    <div>
+    <div style={repoStyle}>
       {editing ? (
         <NameRow
           depth={depth}
@@ -1329,11 +1361,10 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
         >
           <span className="grid size-4 shrink-0 place-items-center text-content/50">
             {entry.isDir ? (
-              open ? (
-                <ChevronDown className="size-3.5" strokeWidth={1.75} />
-              ) : (
-                <ChevronRight className="size-3.5" strokeWidth={1.75} />
-              )
+              <ChevronRight
+                className={`size-3.5 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${open ? "rotate-90" : ""}`}
+                strokeWidth={1.75}
+              />
             ) : null}
           </span>
           <span className="shrink-0">
@@ -1348,14 +1379,16 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
           </span>
         </button>
       )}
-      {entry.isDir && open ? (
-        <TreeChildren
-          parent={entry.path}
-          depth={depth + 1}
-          entries={children}
-          loading={children === null && !error}
-          error={error}
-        />
+      {entry.isDir ? (
+        <RevealHeight open={open}>
+          <TreeChildren
+            parent={entry.path}
+            depth={depth + 1}
+            entries={children}
+            loading={children === null && !error}
+            error={error}
+          />
+        </RevealHeight>
       ) : null}
     </div>
   );

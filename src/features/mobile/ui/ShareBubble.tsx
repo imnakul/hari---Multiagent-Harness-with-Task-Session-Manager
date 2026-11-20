@@ -264,7 +264,10 @@ export function ShareBubble({
     : [];
   const menuItems: ExplorerMenuItem[] = [
     ...linkItems,
-    { kind: "item", id: "copy", label: pictures.length && !copyable ? "Copy picture" : "Copy", icon: <Copy className={ICON} aria-hidden /> },
+    // A share that is only the link: Copy would copy the same text as Copy link.
+    ...(menu?.href && !pictures.length && copyable.trim() === menu.href
+      ? []
+      : [{ kind: "item", id: "copy", label: pictures.length && !copyable ? "Copy picture" : "Copy", icon: <Copy className={ICON} aria-hidden /> } as const]),
     ...(notesEnabled && body
       ? [{ kind: "item", id: "note", label: "Add to notes", icon: <FilePlusCorner className={ICON} aria-hidden /> } as const]
       : []),

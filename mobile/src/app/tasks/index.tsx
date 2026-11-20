@@ -30,11 +30,14 @@ import {
   type Command,
   type TaskGrouping,
   type TaskItem,
+  type Subtask,
   type TaskStatus,
 } from "@/features/tools/tools";
 import { cachedTasks, pendingToolEdits } from "@/features/tools/toolsCache";
 import { ProjectMenu, StatusMenu } from "@/features/tools/TaskMenus";
 import { ToolsOffline } from "@/features/tools/ToolsOffline";
+import { SubtaskToggle, SubtaskTree } from "@/features/tools/SubtaskTree";
+import Animated, { FadeInUp, FadeOutUp, LinearTransition } from "react-native-reanimated";
 import { Icon } from "@/ui/Icon";
 import { radii, themedStyles, useColors, withAlpha } from "@/ui/theme";
 
@@ -57,6 +60,14 @@ export default function TasksScreen() {
   const [offline, setOffline] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  // Fork (L-373): tasks whose steps are showing.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggleSteps = (id: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   const [showDone, setShowDone] = useState(false);
 
   const load = useCallback(async () => {
@@ -99,6 +110,17 @@ export default function TasksScreen() {
     } catch (reason) {
       setTasks((all) => all?.map((each) => (each.id === task.id ? task : each)) ?? all);
       Alert.alert("Couldn’t change the task", reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  // Fork (L-373): a ticked step shows at once; put back if the desktop refuses it.
+  const changeSteps = async (task: TaskItem, subtasks: Subtask[]) => {
+    setTasks((all) => all?.map((each) => (each.id === task.id ? { ...each, subtasks } : each)) ?? all);
+    try {
+      await updateTask(run, task.id, { subtasks });
+    } catch (reason) {
+      setTasks((all) => all?.map((each) => (each.id === task.id ? task : each)) ?? all);
+      Alert.alert("Couldn’t change the subtask", reason instanceof Error ? reason.message : String(reason));
     }
   };
 
@@ -290,7 +312,7 @@ export default function TasksScreen() {
           <Text style={styles.heading}>{group.label}</Text>
           <View style={styles.card}>
             {group.tasks.map((task, index) => (
-              <View key={task.id}>
+              <Animated.View key={task.id} layout={LinearTransition.duration(200)}>
                 {index > 0 ? <View style={styles.divider} /> : null}
                 <TaskRow
                   task={task}
@@ -299,8 +321,11 @@ export default function TasksScreen() {
                   onChange={(status) => void change(task, status)}
                   pinned={task.focusDate === today}
                   onFocus={() => void focusTasks([task], task.focusDate === today ? null : today)}
+                  stepsOpen={expanded.has(task.id)}
+                  onToggleSteps={() => toggleSteps(task.id)}
+                  onChangeSteps={(next) => void changeSteps(task, next)}
                 />
-              </View>
+              </Animated.View>
             ))}
           </View>
         </View>
@@ -327,6 +352,9 @@ function TaskRow({
   onChange,
   pinned,
   onFocus,
+  stepsOpen,
+  onToggleSteps,
+  onChangeSteps,
 }: {
   task: TaskItem;
   open: boolean;
@@ -335,6 +363,9 @@ function TaskRow({
   /** Pinned to today's Focus. */
   pinned: boolean;
   onFocus: () => void;
+  stepsOpen: boolean;
+  onToggleSteps: () => void;
+  onChangeSteps: (next: Subtask[]) => void;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -378,7 +409,13 @@ function TaskRow({
             ) : null}
           </View>
         </Pressable>
+        <SubtaskToggle subtasks={task.subtasks} open={stepsOpen} onToggle={onToggleSteps} />
       </View>
+      {stepsOpen && task.subtasks?.length ? (
+        <Animated.View entering={FadeInUp.duration(220)} exiting={FadeOutUp.duration(160)} style={styles.steps}>
+          <SubtaskTree subtasks={task.subtasks} onChange={onChangeSteps} />
+        </Animated.View>
+      ) : null}
       {open ? (
         // Fork (Hari, L-327): Focus, a status dropdown and Edit, wrapping
         // rather than running off the screen ("Blocked" was cut off).
@@ -584,5 +621,6 @@ const useStyles = themedStyles((colors) => ({
   },
   carryButtonText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   showDone: { alignSelf: "center", marginTop: 20, padding: 8 },
+  steps: { marginLeft: 11, paddingBottom: 6, paddingRight: 4 },
   showDoneText: { color: colors.accent, fontSize: 15 },
 }));

@@ -150,6 +150,21 @@ describe("waiting edits laid over", () => {
     expect(shown[1]).toMatchObject({ status: "completed", completedAt: 6, title: "Renamed", updatedAt: 7 });
   });
 
+  it("shows ticked subtasks while they wait, and keeps them in the cache (L-373)", () => {
+    const steps = [
+      { id: "s1", title: "Header", status: "completed" },
+      { id: "s2", title: "  ", status: "todo" },
+      { title: "no id" },
+    ];
+    const shown = overlayTasks([task("a")], [
+      { id: "1", kind: "tasks.update", payload: { id: "a", subtasks: steps, editedAt: 6 } },
+    ]);
+    expect(shown[0].subtasks).toEqual([{ id: "s1", title: "Header", status: "completed" }]);
+    expect(parseTaskItem({ ...task("b"), subtasks: [{ id: "x", title: "Y", status: "odd" }] })?.subtasks).toEqual([
+      { id: "x", title: "Y", status: "todo" },
+    ]);
+  });
+
   it("doesn't show a created task twice once the computer has it", () => {
     const shown = overlayTasks([task("new")], [
       { id: "1", kind: "tasks.create", payload: { id: "new", title: "x", editedAt: 5 } },

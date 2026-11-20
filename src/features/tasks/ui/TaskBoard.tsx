@@ -43,6 +43,7 @@ import {
   TaskStatusLabel,
   TaskTagChips,
 } from "./TaskTags";
+import { SubtaskReveal, SubtaskToggle, useSubtasksExpanded } from "./SubtaskTree";
 import { useOptimisticTask, type TaskMovePatch } from "./useOptimisticTask";
 
 const DRAG_THRESHOLD = 4;
@@ -534,6 +535,18 @@ function DropLine(): ReactNode {
   );
 }
 
+/** Fork (L-373): a card's subtask count, and its steps sliding open as a tree. */
+function TaskCardSubtasks({ task }: { task: Task }): ReactNode {
+  const [open, toggle] = useSubtasksExpanded(task.id);
+  if (!task.subtasks?.length) return null;
+  return (
+    <div data-no-drag className="cursor-default px-2.5 pb-1.5">
+      <SubtaskToggle subtasks={task.subtasks} open={open} onToggle={toggle} className="-ml-1.5" />
+      <SubtaskReveal task={task} open={open} className="ml-1.5 pb-0.5" />
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   status,
@@ -620,6 +633,7 @@ function TaskCard({
           ) : null}
         </span>
       </button>
+      {ghost ? null : <TaskCardSubtasks task={task} />}
       {ghost ? null : (
         <div className="absolute top-1 right-1 opacity-0 transition-opacity duration-100 group-focus-within:opacity-100 group-hover:opacity-100">
           <TaskStatusMenu

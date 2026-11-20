@@ -11,6 +11,8 @@ import {
   saveProjectGroups,
 } from "../model/projectGroups";
 import { savePinnedProjects } from "../model/recents";
+import { saveGroupColorStyle } from "../../../shared/ui/colorSurface";
+import { TAB_GROUP_COLORS } from "../../workspace/model/tabGroups";
 import { ProjectRail } from "../../../app/shell/ProjectRail";
 import { useProjectDiffStats } from "../../source-control/hooks/useProjectDiffStats";
 
@@ -96,11 +98,43 @@ function button(label: string): HTMLButtonElement {
   return found!;
 }
 
+/** Ends every fold-away animation, as the browser would (L-374). */
+function finishReveals(): void {
+  act(() => {
+    for (const element of document.querySelectorAll(".reveal-height-out"))
+      element.dispatchEvent(new Event("animationend", { bubbles: true }));
+  });
+}
+
 function sectionLabels(): string[] {
   return [...container.querySelectorAll("span")]
     .map((element) => element.textContent ?? "")
     .filter((text) => ["Pinned", "Groups", "Projects"].includes(text));
 }
+
+it("colours a project group's card in the chosen style (L-374)", async () => {
+  saveProjectGroups([
+    { id: "clients", name: "Client work", collapsed: false, colorIndex: 4 },
+  ]);
+  saveProjectGroupAssignments({ [pathKey("/work/client")]: "clients" });
+  await renderRail();
+  const group = () =>
+    container.querySelector<HTMLElement>('[data-project-group="clients"]')!;
+  // Tint by default: the group's own fill replaces the neutral one. (The
+  // test DOM drops color-mix() values, so the fill itself isn't readable.)
+  expect(group().classList).not.toContain("bg-content/5");
+
+  // A side bar in the group's colour, open or folded.
+  act(() => saveGroupColorStyle("bar"));
+  expect(group().style.boxShadow).toBe(`inset 2px 0 0 ${TAB_GROUP_COLORS[4]}`);
+  expect(group().classList).toContain("bg-content/5");
+  act(() => button("Client work, 1 project").click());
+  finishReveals();
+  expect(group().style.boxShadow).toBe(`inset 2px 0 0 ${TAB_GROUP_COLORS[4]}`);
+
+  act(() => saveGroupColorStyle("off"));
+  expect(group().getAttribute("style")).toBeNull();
+});
 
 it("renders assigned projects in persistent collapsible groups", async () => {
   savePinnedProjects(["/work/personal"]);
@@ -108,6 +142,8 @@ it("renders assigned projects in persistent collapsible groups", async () => {
     { id: "clients", name: "Client work", collapsed: false, colorIndex: 4 },
   ]);
   saveProjectGroupAssignments({ [pathKey("/work/client")]: "clients" });
+  // The uncoloured card; the coloured styles are covered below (L-374).
+  saveGroupColorStyle("off");
   await renderRail();
 
   expect(button("personal")).toBeDefined();
@@ -140,6 +176,11 @@ it("renders assigned projects in persistent collapsible groups", async () => {
   expect(group.querySelector("[data-group-mascot]")).toBeNull();
 
   act(() => header.click());
+  // The projects fold away (L-374), then leave.
+  expect(
+    group.querySelector("[data-project-group-items]")?.parentElement?.classList,
+  ).toContain("reveal-height-out");
+  finishReveals();
   expect(document.querySelector('button[aria-label="client"]')).toBeNull();
   expect(loadProjectGroups()[0].collapsed).toBe(true);
   const collapsedGroup = container.querySelector<HTMLElement>(

@@ -229,6 +229,7 @@ describe("taskChanges (L-327)", () => {
     projectCwd: null,
     tags: "ui, bug",
     body: "",
+    subtasks: [{ id: "s1", title: "Header", status: "todo" as const }],
   };
 
   it("sends only what changed", () => {
@@ -242,6 +243,12 @@ describe("taskChanges (L-327)", () => {
   it("keeps the title when it is emptied, and trims it", () => {
     expect(taskChanges(before, { ...before, title: "   " })).toEqual({});
     expect(taskChanges(before, { ...before, title: " New title " })).toEqual({ title: "New title" });
+  });
+
+  it("sends the whole subtask list when a step changes (L-373)", () => {
+    const ticked = [{ id: "s1", title: "Header", status: "completed" as const }];
+    expect(taskChanges(before, { ...before, subtasks: [...before.subtasks] })).toEqual({});
+    expect(taskChanges(before, { ...before, subtasks: ticked })).toEqual({ subtasks: ticked });
   });
 
   it("compares tags as parsed, and moves the project", () => {

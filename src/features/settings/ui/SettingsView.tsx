@@ -65,6 +65,18 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import {
+  COLOR_SURFACE_STYLES,
+  isColorSurfaceStyle,
+  loadGroupColorStyle,
+  saveGroupColorStyle,
+  subscribeGroupColorStyle,
+} from "../../../shared/ui/colorSurface";
+import {
+  loadRepoColorMode,
+  saveRepoColorMode,
+  subscribeRepoColorMode,
+} from "../../source-control/model/repoColors";
 import { HarnessIcon } from "../../sessions/ui/HarnessIcon";
 import {
   ColorPickerPopover,
@@ -4385,8 +4397,56 @@ function AppearancePage({ appearance }: { appearance: AppearanceSettings }) {
             onChange={appearance.onShowExcludedFiles}
           />
         </Row>
+        <GroupColorsRow />
+        <RepoColorsRow />
       </Group>
     </>
+  );
+}
+
+/** Fork (L-372): colours for the repositories in a folder that holds several. */
+function RepoColorsRow(): ReactNode {
+  const mode = useSyncExternalStore(subscribeRepoColorMode, loadRepoColorMode, loadRepoColorMode);
+  return (
+    <Row
+      id="repo-colors"
+      label="Repository colours"
+      description="When a project folder holds several git repositories, give each one its own colour in the explorer and the Changes switcher."
+    >
+      <Select
+        label="Repository colours"
+        value={mode}
+        options={[...COLOR_SURFACE_STYLES]}
+        onChange={(value) => {
+          if (isColorSurfaceStyle(value)) saveRepoColorMode(value);
+        }}
+      />
+    </Row>
+  );
+}
+
+/** Fork (L-374): how session groups and project groups show their colour. */
+function GroupColorsRow(): ReactNode {
+  const style = useSyncExternalStore(
+    subscribeGroupColorStyle,
+    loadGroupColorStyle,
+    loadGroupColorStyle,
+  );
+  return (
+    <Row
+      id="group-colors"
+      label="Group colours"
+      description="How a coloured session group or project group shows its colour in the sidebars."
+    >
+      <Select
+        label="Group colours"
+        value={style}
+        options={[...COLOR_SURFACE_STYLES]}
+        onChange={(value) => {
+          if (isColorSurfaceStyle(value)) saveGroupColorStyle(value);
+        }}
+      />
+    </Row>
   );
 }
 

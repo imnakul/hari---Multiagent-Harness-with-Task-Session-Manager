@@ -10,6 +10,8 @@ const TAG_MAX: usize = 48;
 const TAGS_MAX: usize = 20;
 const PROJECT_CWD_MAX: usize = 4096;
 const SOURCE_BLOCK_ID_MAX: usize = 512;
+/// Fork (L-373): a checklist, not a project plan.
+const SUBTASKS_MAX: usize = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -58,6 +60,16 @@ impl TaskStatus {
     }
 }
 
+/// Fork (L-373): one step of a task, with its own status. Ticking it sets
+/// `completed`. Stored as JSON on the task row; one level only.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Subtask {
+    pub id: String,
+    pub title: String,
+    pub status: TaskStatus,
+}
+
 // No `Eq`: `sort_order` is a float.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +101,9 @@ pub struct Task {
     /// Manual position inside a board column (lower first).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_order: Option<f64>,
+    /// Fork (L-373): the task's steps, in order.
+    #[serde(default)]
+    pub subtasks: Vec<Subtask>,
 }
 
 /// A full task replacement. Callers merge partial edits before invoking this.
@@ -121,6 +136,10 @@ pub struct TaskUpsert {
     pub archived: bool,
     #[serde(default)]
     pub sort_order: Option<f64>,
+    /// Fork (L-373): the full list of steps. `None` keeps the stored ones, so
+    /// writers that don't know about subtasks (an older phone) never drop them.
+    #[serde(default)]
+    pub subtasks: Option<Vec<Subtask>>,
 }
 
 /// Initialize or upgrade the independent task table before creating its indexes.
@@ -146,7 +165,8 @@ pub fn ensure_tasks_table(conn: &Connection) -> rusqlite::Result<()> {
             focus_date TEXT,
             focus_days_json TEXT NOT NULL DEFAULT '[]',
             archived_at INTEGER,
-            sort_order REAL
+            sort_order REAL,
+            subtasks_json TEXT NOT NULL DEFAULT '[]'
           );",
     )?;
     let columns = {
@@ -183,6 +203,7 @@ pub fn ensure_tasks_table(conn: &Connection) -> rusqlite::Result<()> {
         ("focus_days_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("archived_at", "INTEGER"),
         ("sort_order", "REAL"),
+        ("subtasks_json", "TEXT NOT NULL DEFAULT '[]'"),
     ] {
         if !columns.iter().any(|column| column.eq_ignore_ascii_case(name)) {
             tx.execute_batch(&format!("ALTER TABLE tasks ADD COLUMN {name} {declaration};"))?;
@@ -306,6 +327,14 @@ fn validate_task_upsert(task: &TaskUpsert) -> Result<(), String> {
         return Err("Invalid task order".into());
     }
     validate_optional_block_id(task.source_block_id.as_deref())?;
+    if let Some(subtasks) = &task.subtasks {
+        if subtasks.len() > SUBTASKS_MAX {
+            return Err("A task can have at most 100 subtasks".into());
+        }
+        for subtask in subtasks {
+            validate_id(&subtask.id, "subtask")?;
+        }
+    }
     if let Some(project_cwd) = task.project_cwd.as_deref() {
         let project_cwd = project_cwd.trim();
         if project_cwd.is_empty()
@@ -360,7 +389,7 @@ fn list_tasks(conn: &Connection) -> rusqlite::Result<Vec<Task>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, body, status, tags_json, project_cwd,
                 source_session_id, source_block_id, created_at, updated_at, completed_at,
-                focus_date, focus_days_json, archived_at, sort_order
+                focus_date, focus_days_json, archived_at, sort_order, subtasks_json
          FROM tasks
          ORDER BY updated_at DESC, id ASC",
     )?;
@@ -372,7 +401,7 @@ fn get_task(conn: &Connection, id: &str) -> rusqlite::Result<Option<Task>> {
     conn.query_row(
         "SELECT id, title, body, status, tags_json, project_cwd,
                 source_session_id, source_block_id, created_at, updated_at, completed_at,
-                focus_date, focus_days_json, archived_at, sort_order
+                focus_date, focus_days_json, archived_at, sort_order, subtasks_json
          FROM tasks
          WHERE id = ?1",
         params![id],
@@ -458,6 +487,7 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
     let today = clean_optional(input.today.as_deref());
     let sort_order = input.sort_order.filter(|order| order.is_finite());
     let now = now_millis();
+    let explicit_subtasks = input.subtasks.as_deref().map(normalize_subtasks);
 
     // R2/R3 history is computed in the same transaction as the focus_date
     // write, so a concurrent edit cannot drop the recorded day.
@@ -466,7 +496,7 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
         .query_row(
             "SELECT id, title, body, status, tags_json, project_cwd,
                     source_session_id, source_block_id, created_at, updated_at, completed_at,
-                    focus_date, focus_days_json, archived_at, sort_order
+                    focus_date, focus_days_json, archived_at, sort_order, subtasks_json
              FROM tasks
              WHERE id = ?1",
             params![input.id],
@@ -503,6 +533,11 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
     }
     let focus_days_json = serde_json::to_string(&focus_days)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    let subtasks = explicit_subtasks
+        .or_else(|| previous.as_ref().map(|stored| stored.subtasks.clone()))
+        .unwrap_or_default();
+    let subtasks_json = serde_json::to_string(&subtasks)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
 
     // Completion time and created time transitions are evaluated by one
     // SQLite statement, so an edit racing a completion cannot reset the time.
@@ -510,10 +545,10 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
         "INSERT INTO tasks (
            id, title, body, status, tags_json, project_cwd,
            source_session_id, source_block_id, created_at, updated_at, completed_at,
-           focus_date, focus_days_json, archived_at, sort_order
+           focus_date, focus_days_json, archived_at, sort_order, subtasks_json
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9,
                    CASE WHEN ?4 = 'completed' THEN ?9 ELSE NULL END,
-                   ?10, ?11, CASE WHEN ?12 THEN ?9 ELSE NULL END, ?13)
+                   ?10, ?11, CASE WHEN ?12 THEN ?9 ELSE NULL END, ?13, ?14)
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title,
            body = excluded.body,
@@ -525,6 +560,7 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
            focus_date = excluded.focus_date,
            focus_days_json = excluded.focus_days_json,
            sort_order = excluded.sort_order,
+           subtasks_json = excluded.subtasks_json,
            archived_at = CASE
              WHEN ?12 AND tasks.archived_at IS NULL THEN excluded.updated_at
              WHEN ?12 THEN tasks.archived_at
@@ -539,6 +575,7 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
                OR tasks.source_block_id IS NOT excluded.source_block_id
                OR tasks.focus_date IS NOT excluded.focus_date
                OR tasks.focus_days_json IS NOT excluded.focus_days_json
+               OR tasks.subtasks_json IS NOT excluded.subtasks_json
                OR (tasks.archived_at IS NULL) = ?12
              THEN excluded.updated_at ELSE tasks.updated_at END,
            completed_at = CASE
@@ -560,13 +597,14 @@ fn upsert_task(conn: &Connection, input: &TaskUpsert) -> rusqlite::Result<Task> 
             focus_days_json,
             input.archived,
             sort_order,
+            subtasks_json,
         ],
     )?;
     let saved: Task = tx
         .query_row(
             "SELECT id, title, body, status, tags_json, project_cwd,
                     source_session_id, source_block_id, created_at, updated_at, completed_at,
-                    focus_date, focus_days_json, archived_at, sort_order
+                    focus_date, focus_days_json, archived_at, sort_order, subtasks_json
              FROM tasks
              WHERE id = ?1",
             params![input.id],
@@ -595,6 +633,8 @@ fn read_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
     let tags = serde_json::from_str::<Vec<String>>(&tags_json).unwrap_or_default();
     let focus_days_json: String = row.get(12).unwrap_or_else(|_| "[]".to_string());
     let focus_days = serde_json::from_str::<Vec<String>>(&focus_days_json).unwrap_or_default();
+    let subtasks_json: String = row.get(15).unwrap_or_else(|_| "[]".to_string());
+    let subtasks = serde_json::from_str::<Vec<Subtask>>(&subtasks_json).unwrap_or_default();
     Ok(Task {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -611,7 +651,31 @@ fn read_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         focus_days: normalize_focus_days(&focus_days),
         archived_at: row.get(13)?,
         sort_order: row.get(14)?,
+        subtasks,
     })
+}
+
+/// Trimmed, clipped titles; empty steps and repeated ids dropped; retired
+/// statuses mapped to Todo, as for tasks.
+fn normalize_subtasks(subtasks: &[Subtask]) -> Vec<Subtask> {
+    let mut kept: Vec<Subtask> = Vec::new();
+    for subtask in subtasks.iter().take(SUBTASKS_MAX) {
+        let title: String = subtask.title.trim().chars().take(TITLE_MAX).collect();
+        let title = title.trim().to_string();
+        if title.is_empty() || kept.iter().any(|seen| seen.id == subtask.id) {
+            continue;
+        }
+        let status = match subtask.status {
+            TaskStatus::Draft | TaskStatus::Deferred => TaskStatus::Todo,
+            other => other,
+        };
+        kept.push(Subtask {
+            id: subtask.id.clone(),
+            title,
+            status,
+        });
+    }
+    kept
 }
 
 fn clean_optional(value: Option<&str>) -> Option<String> {
@@ -675,6 +739,7 @@ mod tests {
             today: None,
             archived: false,
             sort_order: None,
+            subtasks: None,
         }
     }
 
@@ -1277,6 +1342,54 @@ mod tests {
         assert!(validate_task_upsert(&task).is_err());
         task.today = Some("2026-10-07".into());
         task.focus_days = vec!["2026-13-01".into()];
+        assert!(validate_task_upsert(&task).is_err());
+    }
+    fn step(id: &str, title: &str, status: TaskStatus) -> Subtask {
+        Subtask {
+            id: id.into(),
+            title: title.into(),
+            status,
+        }
+    }
+
+    #[test]
+    fn subtasks_are_saved_cleaned_and_kept_by_writers_that_omit_them() {
+        let store = SessionStore::open_in_memory().unwrap();
+        let conn = store.lock_conn().unwrap();
+        let mut task = input("with-steps", TaskStatus::Todo);
+        task.subtasks = Some(vec![
+            step("a", "  Header  ", TaskStatus::Completed),
+            step("b", "   ", TaskStatus::Todo),
+            step("a", "Duplicate", TaskStatus::Todo),
+            step("c", "Footer", TaskStatus::Deferred),
+        ]);
+        let saved = upsert_task(&conn, &task).unwrap();
+        assert_eq!(
+            saved.subtasks,
+            vec![
+                step("a", "Header", TaskStatus::Completed),
+                step("c", "Footer", TaskStatus::Todo),
+            ]
+        );
+        // An older writer (no subtasks field) keeps them.
+        let kept = upsert_task(&conn, &input("with-steps", TaskStatus::Review)).unwrap();
+        assert_eq!(kept.subtasks.len(), 2);
+        // An empty list clears them.
+        let mut cleared = input("with-steps", TaskStatus::Review);
+        cleared.subtasks = Some(Vec::new());
+        assert!(upsert_task(&conn, &cleared).unwrap().subtasks.is_empty());
+    }
+
+    #[test]
+    fn subtasks_reject_bad_ids_and_too_many() {
+        let mut task = input("bad-steps", TaskStatus::Todo);
+        task.subtasks = Some(vec![step("no spaces", "x", TaskStatus::Todo)]);
+        assert!(validate_task_upsert(&task).is_err());
+        task.subtasks = Some(
+            (0..=SUBTASKS_MAX)
+                .map(|i| step(&format!("s{i}"), "x", TaskStatus::Todo))
+                .collect(),
+        );
         assert!(validate_task_upsert(&task).is_err());
     }
 }

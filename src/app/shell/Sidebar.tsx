@@ -122,6 +122,11 @@ import type { PaneEdge } from "../../features/workspace/model/layout";
 import { suppressTextSelection } from "../../shared/lib/drag";
 import { LAYER } from "../../shared/lib/layers";
 import { RevealHeight } from "../../shared/ui/RevealHeight";
+import {
+  colorSurfaceStyle,
+  loadGroupColorStyle,
+  subscribeGroupColorStyle,
+} from "../../shared/ui/colorSurface";
 import { MODE_COMMAND_STYLES } from "../../features/sessions/ui/modeCommands";
 import { OPERATOR_COMMAND } from "../../features/sessions/model/operatorCommand";
 import { ORCHESTRATOR_COMMAND } from "../../features/sessions/model/orchestratorCommand";
@@ -138,7 +143,6 @@ import {
   dissolveFolder,
   folderAccent,
   folderContaining,
-  folderShellFill,
   loadPinnedSessionsCollapsed,
   loadReminderSessionsCollapsed,
   loadDraftSessionsCollapsed,
@@ -268,6 +272,12 @@ import { SidebarUpdateFooter } from "./SidebarUpdate";
 import { SourceControl } from "../../features/source-control/ui/SourceControl";
 import { GitHistoryGraph } from "../../features/source-control/ui/GitHistoryGraph";
 import { chooseNestedRepo, useNestedRepos } from "../../features/source-control/model/nestedRepos";
+import {
+  loadRepoColorMode,
+  repoColors,
+  subscribeRepoColorMode,
+} from "../../features/source-control/model/repoColors";
+import { pathKey } from "../../shared/lib/paths";
 import { SegmentedSwitch } from "../../shared/ui/SegmentedSwitch";
 import { GithubStarPrompt } from "./GithubStarPrompt";
 import { ChatPanel } from "../../features/sessions/ui/ChatPanel";
@@ -1279,12 +1289,29 @@ function SidebarComponent({
   const repoRoot = nestedRepos.repoCwd;
   const inNestedRepo = repoRoot !== gitRoot;
   const changeStats = useProjectDiffStats(repoRoot, panesOpen);
+  // Fork (L-374): how coloured session groups show their colour.
+  const groupColorStyle = useSyncExternalStore(
+    subscribeGroupColorStyle,
+    loadGroupColorStyle,
+    loadGroupColorStyle,
+  );
+  // Fork (L-372): the switcher shows each repo's Explorer colour.
+  const repoColorMode = useSyncExternalStore(
+    subscribeRepoColorMode,
+    loadRepoColorMode,
+    loadRepoColorMode,
+  );
+  const nestedRepoColors = useMemo(() => repoColors(nestedRepos.repos), [nestedRepos.repos]);
   const repoSwitch =
     nestedRepos.repos.length > 0 ? (
       <div className="flex shrink-0 overflow-x-auto px-2 pt-2 [scrollbar-width:none]">
         <SegmentedSwitch
           ariaLabel="Repository"
-          options={nestedRepos.repos.map((repo) => ({ id: repo.path, label: repo.name }))}
+          options={nestedRepos.repos.map((repo) => ({
+            id: repo.path,
+            label: repo.name,
+            dot: repoColorMode === "off" ? undefined : nestedRepoColors.get(pathKey(repo.path)),
+          }))}
           value={repoRoot}
           onChange={(path) => chooseNestedRepo(gitRoot, path)}
         />
@@ -2983,6 +3010,7 @@ function SidebarComponent({
               onFileDeleted={onFileDeleted}
               onSearch={onOpenFilesSearch}
               gitStatuses={gitStatuses}
+              nestedRepos={nestedRepos.repos}
             />
           ) : null}
         </div>
@@ -3377,7 +3405,7 @@ function SidebarComponent({
                                     savePinnedSessionsCollapsed(cwd, collapsed);
                                   }}
                                 />
-                                {expanded ? (
+                                <RevealHeight open={expanded}>
                                   <ul
                                     data-shared-hover-continuity
                                     className="flex flex-col gap-px p-1"
@@ -3393,7 +3421,7 @@ function SidebarComponent({
                                       </SessionListItem>
                                     ))}
                                   </ul>
-                                ) : null}
+                                </RevealHeight>
                               </div>
                             </li>
                           );
@@ -3413,9 +3441,12 @@ function SidebarComponent({
                           const entry = group.entry;
                           const expanded =
                             searchNarrowed || !entry.folder.collapsed;
-                          const shellFill = folderShellFill(
-                            entry.folder.colorIndex,
-                            entry.folder.customColor,
+                          const surface = colorSurfaceStyle(
+                            folderAccent(
+                              entry.folder.colorIndex,
+                              entry.folder.customColor,
+                            ),
+                            groupColorStyle,
                           );
                           const folderIndex = visibleFolderIds.indexOf(
                             entry.folder.id,
@@ -3453,14 +3484,10 @@ function SidebarComponent({
                                 <div className="pointer-events-none absolute inset-x-1 bottom-0 z-20 h-0.5 rounded-full bg-accent" />
                               ) : null}
                               <div
-                                className={`overflow-hidden rounded-md ${
-                                  shellFill ? "" : "bg-content/5"
+                                className={`overflow-hidden rounded-md transition-[background-color,box-shadow] duration-200 motion-reduce:transition-none ${
+                                  surface?.backgroundColor ? "" : "bg-content/5"
                                 }`}
-                                style={
-                                  shellFill
-                                    ? { background: shellFill }
-                                    : undefined
-                                }
+                                style={surface}
                               >
                                 {renamingFolderId === entry.folder.id ? (
                                   <FolderRenameRow
@@ -3531,8 +3558,8 @@ function SidebarComponent({
                                     }
                                   />
                                 )}
-                                {expanded ? (
-                                  <>
+                                {/* Fork (L-374): the group slides open and shut. */}
+                                <RevealHeight open={expanded}>
                                     <ul
                                       data-shared-hover-continuity
                                       className="flex flex-col gap-px p-1"
@@ -3572,8 +3599,7 @@ function SidebarComponent({
                                         </button>
                                       </div>
                                     ) : null}
-                                  </>
-                                ) : null}
+                                </RevealHeight>
                               </div>
                             </li>
                           );

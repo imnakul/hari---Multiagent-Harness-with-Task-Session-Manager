@@ -1,5 +1,40 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-20 15:45 IST — Files sent from the phone keep their names (L-375)
+
+- Type: fix
+- Why: user report: a file sent from Hari's Share panel arrived as "1565.pdf"; from the PC names stayed the same.
+- What: the paperclip picker gives a content:// address that often ends in a number, and Expo takes the file name from that address. Hari now asks Android for the file's real name (the one shown in Files) and only falls back to the old name on builds without the new native code.
+- Files: `mobile/modules/hari-live/android/.../HariFiles.kt`, `HariLiveModule.kt`, `mobile/src/features/liveUpdates/nativeLive.ts`, `mobile/src/features/share/SharePanel.tsx`; test `mobile/tests/pickedFileName.test.ts` (new).
+- Commit: uncommitted
+- Verified: Hari tsc ✅, expo lint ✅, vitest ✅ (pickedFileName, shareModel) | manual: phone check pending (needs a new native build)
+
+## 2026-11-20 15:41 IST — Group colour styles; groups and folders slide open (L-374)
+
+- Type: feature
+- Why: user feedback: project group colours didn't show, the coloured groups looked heavy, and only some lists slid open.
+- What: a new Settings › Group colours choice (Off, Tint, Background, Border, Background + border, Side bar, Tint + side bar, Fade) for session and project groups; Repository colours gets the same list. Project groups now show their colour on the whole card (before, only on the mascot, hidden while open). Explorer folders, project groups, session groups and Task list groups slide open and shut. Session groups default to Tint, a little lighter than before (12% instead of 18%).
+- Files: `src/shared/ui/colorSurface.ts` (new, + test), `repoColors.ts` (+ test), `SettingsView.tsx`, `settings.ts`, `ProjectRail.tsx`, `Sidebar.tsx`, `FileTree.tsx`, `TaskList.tsx`; tests `ProjectGroups.test.ts`, `SidebarRename.test.ts`, `Sidebar.test.ts`, `TasksView.test.ts`.
+- Commit: uncommitted
+- Verified: tsc ✅, vitest ✅ (776 files) | manual: desktop check pending
+
+## 2026-11-20 15:23 IST — Stronger repo tint; no duplicate Copy on Share link cards (L-372, L-371)
+
+- Why: user feedback: the repo tint was too faint; a link card's menu showed both Copy link and Copy, which copied the same thing.
+- What: the Explorer tint goes from 7% to 12% of the repo colour. On a Share item that is only a link (no other text, no picture), the menu drops Copy and keeps Copy link; items with more text keep both.
+- Files: `repoColors.ts` (+ test), `src/features/mobile/ui/ShareBubble.tsx`.
+- Verified: tsc ✅, vitest ✅ (repoColors, mobile feature 20 files) | manual: desktop check pending
+- Commit: uncommitted
+
+## 2026-11-20 15:08 IST — Repository colours; subtasks on desktop, Hari and Operator (L-372, L-373)
+
+- Why: user request. In a folder holding several repos it was hard to tell which repo a file belongs to; and tasks needed real steps with their own status, shown as a clean hierarchy that opens and closes smoothly, on the phone too.
+- What (L-372): each nested repo gets a colour. Explorer tints its subtree, adds a side bar, or both; the Changes switcher shows a dot. Settings › Appearance › Repository colours: Disabled / Tint (default) / Bar / Both.
+- What (L-373): tasks hold up to 100 subtasks (title + status). The task editor has a Subtasks section (add, rename, move, delete, status). List rows and Board cards show "done/total"; it slides the steps open as a tree with connector lines, ticks save at once. Hari: the same toggle and tree in Tasks (ticks queue offline), and a Subtasks section in the edit sheet. Operator `tasks.write` accepts `subtasks` (titles or `{id,title,status}`). Writers that don't send subtasks (older phones) keep the stored ones.
+- Files: see L-372 and L-373 in `docs/LOCAL-FEATURES.md`.
+- Verified: desktop tsc ✅, vitest ✅ (773 files; useQuickAttachments and iconCatalog failed under load, pass alone; TasksView.test's 140 "transformCallback" errors are the same at HEAD), windowArgs ✅, cargo clippy ✅ (no warnings in changed files), cargo fmt ✅ (changed files; existing diffs elsewhere), Rust tests ✅ (tasks 21, mobile_tools 6); Hari tsc ✅, lint ✅ (changed files), vitest ✅ (tools, toolsOffline 38) | manual: desktop and phone checks pending
+- Commit: uncommitted
+
 ## 2026-11-20 14:08 IST — Share panel: open a link card in the default browser from anywhere on it (L-371)
 
 - Why: user report: right-clicking a link card in Share showed no "Open in default browser". The link items (L-355) only appeared when the click landed exactly on the link text; most of a card (picture, description) isn't that.

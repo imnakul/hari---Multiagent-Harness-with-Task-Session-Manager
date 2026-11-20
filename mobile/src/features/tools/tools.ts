@@ -43,6 +43,9 @@ export const TASK_STATUSES = [
 ] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number]["value"];
 
+/** Fork (L-373): one step of a task; ticking it sets `completed`. */
+export type Subtask = { id: string; title: string; status: TaskStatus };
+
 export type TaskItem = {
   id: string;
   title: string;
@@ -60,6 +63,8 @@ export type TaskItem = {
   focusDate?: string | null;
   /** Past local days the task sat in Focus. */
   focusDays?: string[];
+  /** Fork (L-373): the task's steps; older desktops don't send them. */
+  subtasks?: Subtask[];
 };
 
 export type NoteItem = {
@@ -213,6 +218,8 @@ export async function updateTask(
      */
     focusDate?: string | null;
     today?: string;
+    /** Fork (L-373): the whole list of steps; desktops before 0.16.0-local67 ignore it. */
+    subtasks?: Subtask[];
   },
 ): Promise<TaskItem> {
   if (queues()) {
@@ -245,6 +252,7 @@ export type TaskFields = {
   projectCwd: string | null;
   tags: string;
   body: string;
+  subtasks: Subtask[];
 };
 
 export const taskFields = (task: TaskDetail): TaskFields => ({
@@ -253,6 +261,7 @@ export const taskFields = (task: TaskDetail): TaskFields => ({
   projectCwd: task.projectCwd ?? null,
   tags: task.tags.join(", "),
   body: task.body,
+  subtasks: task.subtasks ?? [],
 });
 
 /** What the editor changed, as `tasks.update` takes it; an emptied title is kept. */
@@ -265,6 +274,9 @@ export function taskChanges(before: TaskFields, after: TaskFields) {
     ...(after.projectCwd !== before.projectCwd ? { projectCwd: after.projectCwd } : {}),
     ...(tags.join(",") !== parseTags(before.tags).join(",") ? { tags } : {}),
     ...(after.body !== before.body ? { body: after.body } : {}),
+    ...(JSON.stringify(after.subtasks) !== JSON.stringify(before.subtasks)
+      ? { subtasks: after.subtasks }
+      : {}),
   };
 }
 
