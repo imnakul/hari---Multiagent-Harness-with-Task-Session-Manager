@@ -21,6 +21,11 @@ fn handle_click(app: &AppHandle, identifier: &str) {
     use tauri::Emitter;
     if let Some(reminder) = identifier.strip_prefix(crate::reminders::NOTIFICATION_PREFIX) {
         crate::reminders::open_from_notification(app, reminder);
+    } else if let Some(key) =
+        identifier.strip_prefix(crate::mobile_phone_notifications::NOTIFICATION_PREFIX)
+    {
+        // Fork (Hari, L-384): a phone notification opens Share on Notifications.
+        crate::mobile_phone_notifications::open_from_notification(app, key);
     } else if identifier.starts_with(crate::mobile_share::NOTIFICATION_PREFIX) {
         // Fork (Hari, L-279): an arrival from the phone opens Share.
         crate::mobile_share::open_from_notification(app);

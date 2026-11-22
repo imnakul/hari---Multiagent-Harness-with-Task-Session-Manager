@@ -61,6 +61,7 @@ export type WorktreeSwitcherProject = {
  * sessions opened from it, to that working copy and names it here. */
 export function SidebarWorktreeSwitcher({
   cwd,
+  repoCwd = cwd,
   tabStats,
   onSelect,
   pending = false,
@@ -69,6 +70,9 @@ export function SidebarWorktreeSwitcher({
   worktrees: worktreesEnabled = true,
 }: {
   cwd: string;
+  /** Fork (L-377): the repository whose worktrees are listed, when the
+   * project folder only holds repositories (the one picked beside this). */
+  repoCwd?: string;
   project?: WorktreeSwitcherProject;
   /** Off for projects without local Git, such as remote ones: the project
    * menu then has no worktree submenu. */
@@ -93,7 +97,8 @@ export function SidebarWorktreeSwitcher({
   const search = useRef<HTMLInputElement>(null);
   const activeOption = useRef<HTMLButtonElement>(null);
   const focus = useWorktreeFocus(cwd);
-  const { data, error, refresh } = useProjectWorktrees(cwd, worktreesEnabled);
+  const { data, error, refresh } = useProjectWorktrees(repoCwd, worktreesEnabled);
+  const nested = pathKey(repoCwd) !== pathKey(cwd);
   // The project folder is the default, unfocused entry; missing worktrees
   // cannot be opened, so they are left out.
   const main = data?.worktrees.find((tree) => tree.isMain);
@@ -103,11 +108,13 @@ export function SidebarWorktreeSwitcher({
   const normalizedQuery = createName.toLocaleLowerCase();
   const rows = [
     {
-      path: main?.path ?? cwd,
-      branch: main?.branch ?? null,
+      // Picking it unfocuses: sessions start in the project folder, which in
+      // a folder of repositories is not this repo's checkout.
+      path: nested ? cwd : (main?.path ?? cwd),
+      branch: nested ? null : (main?.branch ?? null),
       isMain: true,
-      label: main?.branch ?? "Project folder",
-      detail: "Project folder · all sessions",
+      label: nested ? "Project folder" : (main?.branch ?? "Project folder"),
+      detail: nested ? "All repositories · all sessions" : "Project folder · all sessions",
     },
     ...worktrees.map((tree) => ({
       path: tree.path,
@@ -182,7 +189,7 @@ export function SidebarWorktreeSwitcher({
     setCreationError(undefined);
     try {
       const tree = await createWorktree(
-        focus?.path ?? cwd,
+        focus?.path ?? repoCwd,
         createName,
         "HEAD",
         false,
@@ -212,7 +219,7 @@ export function SidebarWorktreeSwitcher({
       )
     )
       onSelect?.(undefined);
-  }, [cwd, data, focus, onSelect, pending, switchError]);
+  }, [cwd, repoCwd, data, focus, onSelect, pending, switchError]);
 
   useEffect(() => {
     if (!switchError) return;

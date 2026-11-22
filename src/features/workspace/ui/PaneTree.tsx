@@ -105,6 +105,7 @@ type Shared = Pick<
   ) => void;
   onWorktreeBaseChange: (sessionId: string, base: string) => void;
   onManageWorktrees?: () => void;
+  onShowChanges?: () => void;
   onModelChange: (sessionId: string, harness: HarnessId, model: string) => void;
   onModelSettingsChange: (
     sessionId: string,
@@ -261,6 +262,7 @@ function PaneTreeComponent({
   onWorkspaceModeChange,
   onWorktreeBaseChange,
   onManageWorktrees,
+  onShowChanges,
   onModelChange,
   onModelSettingsChange,
   onRuntimeModeChange,
@@ -851,6 +853,7 @@ function PaneTreeComponent({
                   onWorkspaceModeChange={onWorkspaceModeChange}
                   onWorktreeBaseChange={onWorktreeBaseChange}
                   onManageWorktrees={onManageWorktrees}
+                  onShowChanges={onShowChanges}
                   onModelChange={onModelChange}
                   onModelSettingsChange={onModelSettingsChange}
                   onRuntimeModeChange={onRuntimeModeChange}

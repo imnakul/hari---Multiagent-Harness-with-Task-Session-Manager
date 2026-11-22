@@ -1,5 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { projectKey } from "../../../shared/lib/paths";
+
+const accountLabel = vi.hoisted(() => ({ value: null as string | null }));
+vi.mock("../../sessions/ui/useCompactModelLabels", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../sessions/ui/useCompactModelLabels")>()),
+  sessionAccountLabel: () => accountLabel.value,
+}));
 import {
+  desktopBannerText,
   loadNotificationsEnabled,
   NOTIFICATIONS_DEFAULT,
   notificationText,
@@ -233,6 +241,63 @@ describe("notificationText", () => {
       subtitle: "Fix the sidebar",
       body: "Which database?",
     });
+  });
+});
+
+describe("desktopBannerText (L-383)", () => {
+  beforeEach(() => {
+    mockLocalStorage();
+    accountLabel.value = null;
+  });
+
+  const finished = (): Session =>
+    chat({
+      cwd: "/work/Rigorup-active",
+      model: "opus-5-5",
+      blocks: [{ id: "a1", role: "assistant", text: "All done. More." }],
+    });
+
+  it("leads with Hari-Desktop and the project, then reply, then model and account", () => {
+    accountLabel.value = "Personal";
+    expect(desktopBannerText(finished(), "finished")).toEqual({
+      title: "Hari-Desktop · Rigorup-active",
+      subtitle: "All done. More.",
+      body: "Claude Opus 5.5 · Personal",
+    });
+  });
+
+  it("leaves the account out when there is only one", () => {
+    expect(desktopBannerText(finished(), "finished").body).toBe("Claude Opus 5.5");
+  });
+
+  it("uses the same text for questions and approvals as the bell", () => {
+    const session = chat({
+      cwd: "/work/Rigorup-active",
+      blocks: [
+        {
+          id: "p1",
+          role: "approval",
+          text: "Run npm test",
+          tool: { title: "Run npm test" },
+          approval: { requestId: 1 },
+        },
+      ],
+    });
+    const event = { kind: "approval" as const, requestId: 1 };
+    expect(desktopBannerText(session, event).subtitle).toBe(
+      notificationText(session, event).body,
+    );
+    expect(notificationText(session, event).title).toBe("MonoCode");
+  });
+
+  it("uses a renamed project label", () => {
+    localStorage.setItem(
+      "monocode:tab-group:labels",
+      JSON.stringify({ [projectKey("/work/Rigorup-active")]: "Rigor" }),
+    );
+    expect(desktopBannerText(finished(), "finished").title).toBe(
+      "Hari-Desktop · Rigor",
+    );
   });
 });
 

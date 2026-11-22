@@ -9,6 +9,8 @@ export type SegmentedOption<T extends string> = {
   iconOnly?: boolean;
   /** Fork (L-372): a small colour dot before the label (a repository's colour). */
   dot?: string;
+  /** Fork (L-381): a muted count after the label (e.g. tasks in a list). */
+  count?: number;
 };
 
 /**
@@ -91,7 +93,7 @@ export function SegmentedSwitch<T extends string>({
           }`}
         />
       ) : null}
-      {options.map(({ id, label, icon: Icon, iconOnly, dot }) => {
+      {options.map(({ id, label, icon: Icon, iconOnly, dot, count }) => {
         const selected = value === id;
         return (
           <button
@@ -122,6 +124,9 @@ export function SegmentedSwitch<T extends string>({
               <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: dot }} />
             ) : null}
             {Icon && iconOnly ? null : label}
+            {count !== undefined && !(Icon && iconOnly) ? (
+              <span className={`tabular-nums ${selected ? "text-content/55" : "text-content/35"}`}>{count}</span>
+            ) : null}
           </button>
         );
       })}

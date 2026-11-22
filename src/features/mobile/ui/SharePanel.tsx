@@ -30,16 +30,20 @@ import {
   matchesShareFilter,
   matchesShareSearch,
   pinnedShares,
+  readShareFocusKey,
   readSharePanelOpen,
+  readShareView,
   readSharePanelWidth,
   saveSharePanelWidth,
   setSharePanelOpen,
+  setShareView,
   SHARE_FILTERS,
   SHARE_PANEL_DEFAULT,
   SHARE_PANEL_MIN,
   shareCounted,
   shareDays,
   subscribeSharePanel,
+  subscribeShareView,
   type ShareFilter,
 } from "../model/shareView";
 import { PhoneFilesView } from "./PhoneFilesView";
@@ -239,7 +243,10 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
   const [dragging, setDragging] = useState(false);
   const [staged, setStaged] = useState<string[]>([]);
   // Fork (Hari, L-325, L-332): Share itself, the phone's notifications, its files, or settings.
-  const [view, setView] = useState<ShareView>("share");
+  // Fork (L-384): kept in the shared view store so a phone banner can open Notifications.
+  const view: ShareView = useSyncExternalStore(subscribeShareView, readShareView, () => "share");
+  const focusKey = useSyncExternalStore(subscribeShareView, readShareFocusKey, () => null);
+  const setView = setShareView;
   const awayFromShare = view !== "share";
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -430,7 +437,7 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
       {view === "files" ? (
         <PhoneFilesView onError={setError} />
       ) : view === "notifications" ? (
-        <PhoneNotificationsView onError={setError} />
+        <PhoneNotificationsView onError={setError} focusKey={focusKey} />
       ) : view === "settings" ? (
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-3">
           <section aria-label="Phone" className="space-y-2">
@@ -597,10 +604,13 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
   const [mounted, setMounted] = useState(open);
   const [width, setWidth] = useState(readSharePanelWidth);
   const windowWidth = useWindowWidth();
-  // Fork (Hari, L-302): the history and its pictures load once the slide has
-  // ended, and give way as it starts to close, so the slide has only the
-  // chat beside it to lay out. A skeleton holds the place meanwhile.
+  // Fork (Hari, L-302): the history and its pictures load once the opening
+  // has ended, so it has only the chat beside it to lay out; a skeleton holds
+  // the place meanwhile. Fork (L-376): they then fade in, and stay while the
+  // panel closes (it has a fixed width, so nothing in it moves), instead of
+  // swapping back to the skeleton with a jump.
   const [still, setStill] = useState(false);
+  const [moving, setMoving] = useState(true);
   const frame = useRef<HTMLElement>(null);
   useEffect(() => {
     if (open) setMounted(true);
@@ -620,10 +630,16 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
     <SlidePanel
       open={open}
       appear
-      motion="unroll"
-      className={overlay ? "fixed bottom-0 right-0 top-10 z-40 justify-end" : ""}
-      onMoving={(moving) => setStill(!moving)}
-      onGone={() => setMounted(false)}
+      motion="fold"
+      className={overlay ? "fixed bottom-0 right-0 top-10 z-40 justify-end" : "justify-end"}
+      onMoving={(next) => {
+        setMoving(next);
+        if (!next) setStill(true);
+      }}
+      onGone={() => {
+        setMounted(false);
+        setStill(false);
+      }}
     >
       <aside
         ref={frame}
@@ -635,7 +651,15 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
       >
         {/* Fork (L-306): docked, the panel is clear over the wallpaper like the
             chats beside it; over another view it needs the frosted glass. */}
-        {overlay ? <GlassBackdrop /> : null}
+        {/* Fork (L-376): while it folds, a docked panel lies over the chat, so
+            it is frosted then and clears once it rests. */}
+        {overlay ? (
+          <GlassBackdrop />
+        ) : (
+          <GlassBackdrop
+            className={`popover-backdrop transition-opacity duration-200 motion-reduce:transition-none ${moving ? "opacity-100" : "opacity-0"}`}
+          />
+        )}
         <ResizeHandle
           label="Resize Share panel"
           value={width}
@@ -654,7 +678,13 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
           }}
         />
         <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-          {still ? <ShareContent onClose={() => setSharePanelOpen(false)} width={Math.min(width, max)} /> : <ShareSkeleton />}
+          {still ? (
+            <div className="agent-chat-fade-in flex min-h-0 flex-1 flex-col">
+              <ShareContent onClose={() => setSharePanelOpen(false)} width={Math.min(width, max)} />
+            </div>
+          ) : (
+            <ShareSkeleton />
+          )}
         </div>
       </aside>
     </SlidePanel>

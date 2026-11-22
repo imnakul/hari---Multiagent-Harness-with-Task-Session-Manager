@@ -133,6 +133,26 @@ describe("LiveAgentsPreview", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it("shows when a finished run ended beside how long it took (L-378)", () => {
+    const finishedAt = new Date().setHours(5, 0, 0, 0);
+    render({
+      agents: [
+        agent("a", "/repo/a"),
+        agent("b", "/repo/b", { done: true, activity: "Done", durationMs: 96_000, finishedAt }),
+      ],
+      groupLabels: {},
+      groupColors: {},
+      groupCustomColors: {},
+      groupMascots: {},
+    });
+    const card = container.querySelector<HTMLButtonElement>('[data-live-agent-card="b"]')!;
+    expect(card.textContent).toContain("Today, 5am");
+    expect(card.textContent).toContain("1m 36s");
+    expect(card.getAttribute("aria-label")).toContain("Finished Today, 5am");
+    const working = container.querySelector<HTMLButtonElement>('[data-live-agent-card="a"]')!;
+    expect(working.getAttribute("aria-label")).not.toContain("Finished");
+  });
+
   it("has no dismiss button without a handler", () => {
     render({
       agents: [agent("a", "/repo/a"), agent("b", "/repo/b")],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatFinishedAt,
   formatLiveElapsed,
   liveAgentsFromSessions,
 } from "./liveAgents";
@@ -175,6 +176,7 @@ describe("liveAgentsFromSessions", () => {
         activity: "Done",
         startedAt: 1_000,
         durationMs: 12_000,
+        finishedAt: 13_000,
         needsApproval: false,
         done: true,
       },
@@ -214,5 +216,24 @@ describe("formatLiveElapsed", () => {
     expect(formatLiveElapsed(0, 120_000)).toBe("2m");
     expect(formatLiveElapsed(0, 3_600_000)).toBe("1h");
     expect(formatLiveElapsed(0, 3_720_000)).toBe("1h 2m");
+  });
+});
+
+// Fork (L-378): when a finished run ended, beside how long it took.
+describe("formatFinishedAt", () => {
+  const now = new Date(2026, 10, 22, 14, 30).getTime();
+  it("names today and yesterday with the clock time", () => {
+    expect(formatFinishedAt(new Date(2026, 10, 22, 5, 0).getTime(), now)).toBe("Today, 5am");
+    expect(formatFinishedAt(new Date(2026, 10, 22, 0, 7).getTime(), now)).toBe("Today, 12:07am");
+    expect(formatFinishedAt(new Date(2026, 10, 21, 20, 15).getTime(), now)).toBe("Yesterday, 8:15pm");
+    expect(formatFinishedAt(new Date(2026, 10, 21, 12, 0).getTime(), now)).toBe("Yesterday, 12pm");
+  });
+  it("gives the date before that, and the year only when it differs", () => {
+    const earlier = new Date(2026, 10, 18, 21, 40);
+    const day = earlier.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    expect(formatFinishedAt(earlier.getTime(), now)).toBe(`${day}, 9:40pm`);
+    const lastYear = new Date(2025, 11, 31, 9, 5);
+    const yearDay = lastYear.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    expect(formatFinishedAt(lastYear.getTime(), now)).toBe(`${yearDay}, 9:05am`);
   });
 });

@@ -94,6 +94,7 @@ import { McpSettings } from "./McpSettings";
 import { StorageSettings } from "./StorageSettings";
 import { DebugInspector } from "../../debug-inspector/ui/DebugInspector";
 import { SettingsToggle as Toggle } from "./SettingsToggle";
+import { saveSidebarInboxTab, useSidebarInboxTab } from "../../inbox/model/sidebarInboxTab";
 import {
   useAiNotesEnabled,
   useTrackerEnabled,
@@ -2647,11 +2648,26 @@ function InboxPage({
   notificationSettingsRequest?: number;
 }) {
   const revealed = useContext(RevealedSetting);
+  const sidebarInboxTab = useSidebarInboxTab();
   return (
     <>
+      <Group title="Side panel">
+        <Row
+          id="sidebar-inbox-tab"
+          label="Show Inbox in the side panel"
+          description="Adds an Inbox tab next to Sessions, Explorer and Changes. It lists GitHub pull requests and issues for the repository you're working in."
+        >
+          <Toggle
+            label="Show Inbox in the side panel"
+            on={sidebarInboxTab}
+            onChange={saveSidebarInboxTab}
+          />
+        </Row>
+      </Group>
       <div
         id={settingDomId("project-notifications")}
         data-setting-id="project-notifications"
+        className="pt-8"
       >
         <ProjectNotificationSettings
           cwd={cwd}

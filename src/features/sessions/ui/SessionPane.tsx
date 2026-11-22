@@ -240,6 +240,8 @@ export type SessionPaneProps = {
   ) => void;
   onWorktreeBaseChange: (sessionId: string, base: string) => void;
   onManageWorktrees?: () => void;
+  /** Fork (L-385): opens the sidebar's Changes tab. */
+  onShowChanges?: () => void;
   onModelChange: (sessionId: string, harness: HarnessId, model: string) => void;
   onModelSettingsChange: (
     sessionId: string,
@@ -420,6 +422,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
   onWorkspaceModeChange,
   onWorktreeBaseChange,
   onManageWorktrees,
+  onShowChanges,
   onModelChange,
   onModelSettingsChange,
   onRuntimeModeChange,
@@ -1042,6 +1045,7 @@ const LocalSessionPane = memo(function LocalSessionPane({
       onWorktreeBaseChange={(base) => onWorktreeBaseChange(session.id, base)}
       worktreeRemoved={session.worktreeRemoved}
       onManageWorktrees={onManageWorktrees}
+      onShowChanges={onShowChanges}
       onNewTerminal={() => onNewTerminal(session.id)}
       providerAccount={
         onProviderAccountChange && supportsProviderAccounts(session.harness)

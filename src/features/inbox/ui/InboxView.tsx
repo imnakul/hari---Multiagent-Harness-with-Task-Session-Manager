@@ -557,6 +557,8 @@ export function InboxView({
     if (!target) return;
     setSource("github");
     setSearchInput("");
+    // Fork (L-380): a sidebar row can retarget an already-mounted Inbox.
+    setSelectedKey(linkedWorkItemInboxKey(target));
   }, [target]);
 
   useEffect(() => {

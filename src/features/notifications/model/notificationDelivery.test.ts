@@ -100,3 +100,20 @@ it("plays the input cue only when the question banner is not sent", async () => 
   await announceSessionInput(session, event, false);
   expect(play).toHaveBeenCalledTimes(1);
 });
+
+it("sends the Hari-Desktop banner fields with the session id as identifier (L-383)", async () => {
+  const session = {
+    ...newSession("claude", "/work/Rigorup-active"),
+    blocks: [{ id: "a1", role: "assistant" as const, text: "Shipped it." }],
+  };
+  expect(await notifySession(session, "finished", false)).toBe(true);
+  const [, args] = invoke.mock.calls.find(
+    ([command]) => command === "show_notification",
+  )!;
+  expect(args).toMatchObject({
+    sessionId: session.id,
+    title: "Hari-Desktop · Rigorup-active",
+    subtitle: "Shipped it.",
+  });
+  expect(typeof args.body).toBe("string");
+});

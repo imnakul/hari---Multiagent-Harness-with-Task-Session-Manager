@@ -1387,25 +1387,14 @@ html.has-chat-background.chat-background-effect-ready.chat-background-gradient-b
     height: 1.5rem;
     padding-top: 0;
     padding-bottom: 0;
-    opacity: 0;
-    transition: opacity 120ms ease;
-  }
-
-  /* The reply's actions answer to the reply: hovering the prompt above it,
-   * whose own actions show then, or its day stamp, leaves them hidden. */
-  .transcript-turn:hover:not(
-      :has([data-prompt-anchor]:hover, [data-day-separator]:hover)
-    )
-    > .turn-actions-hover,
-  .turn-actions-hover:focus-within,
-  .turn-actions-hover:has([aria-expanded="true"]) {
+    /* Fork (L-379): always visible. The old hover reveal never matched once
+     * the turn's children moved into the portal host (child combinator). */
     opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .user-message-actions,
-  .turn-actions-hover {
+  .user-message-actions {
     transition: none;
   }
 }

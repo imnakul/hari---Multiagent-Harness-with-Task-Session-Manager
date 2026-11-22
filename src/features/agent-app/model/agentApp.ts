@@ -1,6 +1,8 @@
 import { isBoardStatus } from "../../session-board/sessionBoard";
 import type { sessionTodoManager } from "../../session-board/sessionTodos";
 import { parseQuickAttachments } from "../../quick-composer/model/quickAttachments";
+import type { ClickupAction } from "../../clickup/model/clickupAgent";
+import { sameProjectPath } from "../../projects/model/recents";
 import {
   filterTasks,
   localDay,
@@ -13,7 +15,10 @@ import {
   type TaskFilters,
 } from "../../tasks";
 import { isHarnessAvailable } from "../../../integrations/harness/core/availability";
-import { looksLikeProject } from "../../projects/model/recents";
+import {
+  isRemoteProjectPath,
+  looksLikeProject,
+} from "../../projects/model/recents";
 import {
   mergeModelSettings,
   modelEffortSetting,
@@ -147,6 +152,11 @@ export type AgentAppHost = {
   saveTask?(task: TaskUpsert): Promise<Task>;
   updateTask?(id: string, changes: TaskChanges): Promise<Task>;
   deleteTask?(id: string): Promise<void>;
+  /** Fork (L-381): ClickUp, linked to one project. `run` is the shared `runClickupAction`. */
+  clickup?: {
+    linkedProject(): string | null;
+    run(action: ClickupAction, input: Record<string, unknown>): Promise<unknown>;
+  };
   notes(): Promise<Note[]>;
   note(id: string): Promise<Note | null>;
   saveNote(note: NoteUpsert): Promise<Note>;
@@ -271,6 +281,11 @@ const FIELDS = new Map<string, readonly string[]>([
     ],
   ],
   ["tasks.read", ["id"]],
+  // Fork (L-381): ClickUp.
+  ["clickup.lists", []],
+  ["clickup.tasks", ["list", "includeClosed", "id"]],
+  ["clickup.create", ["list", "name", "description", "assignees", "startDate", "dueDate", "priority", "status"]],
+  ["clickup.update", ["id", "name", "description", "assignees", "startDate", "dueDate", "priority", "status", "done"]],
   [
     "tasks.write",
     [
@@ -1354,6 +1369,12 @@ export async function handleAgentApp(
     }
     case "models.list":
       return {
+        ...(host.isMono(source.id)
+          ? {
+              claudeSessions:
+                "Claude sessions you start run Interactive (the claude CLI); remote projects run Structured.",
+            }
+          : {}),
         runtimeModes: RUNTIME_MODES.map((id) => ({
           id,
           label: RUNTIME_MODE_LABEL[id],
@@ -1459,6 +1480,16 @@ export async function handleAgentApp(
           "request ID must use letters, digits, underscores or hyphens",
         );
       const launch = startLaunch(source, input, host);
+      // Fork (L-382): a Mono's Claude sessions run Interactive (the real
+      // Claude app); remote projects cannot, so they stay Structured. Applied
+      // here, not in startLaunch, so session_manager.write is unchanged.
+      const monoClaude = host.isMono(source.id) && launch.harness === "claude";
+      const claudeRemote = monoClaude && isRemoteProjectPath(launch.cwd);
+      if (monoClaude && !claudeRemote)
+        launch.modelSettings = {
+          ...launch.modelSettings,
+          claudeExecution: "interactive",
+        };
       const notifyMonoId = completionRecipient(source, input, host, true);
       if (input.worktreeCwd !== undefined) {
         const chosen = (await host.worktrees(launch.cwd)).worktrees.find(
@@ -1506,6 +1537,14 @@ export async function handleAgentApp(
         model: launch.model,
         submitted: !launch.draft,
         draft: !!launch.draft,
+        ...(monoClaude
+          ? {
+              claudeExecution: claudeRemote ? "structured" : "interactive",
+              ...(claudeRemote
+                ? { note: "Remote projects run Structured." }
+                : {}),
+            }
+          : {}),
         ...(notifyMonoId ? { notifyOnComplete: true } : {}),
       };
     }
@@ -1639,6 +1678,24 @@ export async function handleAgentApp(
             preview: notePreview(body),
           })),
       };
+    }
+    case "clickup.lists":
+    case "clickup.tasks":
+    case "clickup.create":
+    case "clickup.update": {
+      const linked = host.clickup?.linkedProject() ?? null;
+      if (!host.clickup) throw new Error("ClickUp is unavailable in this app");
+      if (linked) {
+        const mono = host.monoOf?.(source.id);
+        const allowed = mono
+          ? canAccessAgentAppProject(source, linked, mono.projects)
+          : sameProjectPath(source.cwd, linked);
+        if (!allowed) {
+          const name = linked.split(/[\/]/).filter(Boolean).pop() ?? linked;
+          throw new Error(`ClickUp is linked to ${name}.`);
+        }
+      }
+      return host.clickup.run(action, input);
     }
     case "tasks.read": {
       if (!host.task) throw new Error("Tasks are unavailable in this app");

@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type JSX } from "react";
 import { BellOff, LoaderCircle, X } from "../../../shared/ui/icons";
+import { Toggle } from "../../../shared/ui/Toggle";
+import { loadPhoneBanners, savePhoneBanners, subscribePhoneBanners } from "../model/phoneBanners";
 import {
   looksLikeCode,
   maskCodes,
@@ -15,16 +17,47 @@ import { SHARE_SMALL_BUTTON, shareErrorMessage } from "./PhoneStatus";
 
 type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; list: PhoneNotices };
 
+/** Fork (L-384): how long a notice a banner pointed at stays highlighted. */
+const HIGHLIGHT_MS = 2000;
+
 /**
  * Fork (Hari, L-325): the paired phone's notifications. What's on the phone
  * now, then what left it in the last day. Dismissing one clears it on the
  * phone too. One-time codes stay dotted out until clicked.
  */
-export function PhoneNotificationsView({ onError }: { onError: (error: string) => void }): JSX.Element {
+export function PhoneNotificationsView({
+  onError,
+  focusKey = null,
+}: {
+  onError: (error: string) => void;
+  /** Fork (L-384): a notice to scroll into view and highlight, from a clicked phone banner. */
+  focusKey?: string | null;
+}): JSX.Element {
+  const banners = useSyncExternalStore(subscribePhoneBanners, loadPhoneBanners, () => false);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-stroke px-3 py-2 text-[12.5px] text-content/70">
+        <span className="min-w-0 flex-1">Show as desktop notifications</span>
+        <Toggle label="Show as desktop notifications" on={banners} onChange={savePhoneBanners} />
+      </div>
+      <PhoneNotificationsBody onError={onError} focusKey={focusKey} />
+    </div>
+  );
+}
+
+function PhoneNotificationsBody({
+  onError,
+  focusKey,
+}: {
+  onError: (error: string) => void;
+  focusKey: string | null;
+}): JSX.Element {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const latest = useRef(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     const ask = ++latest.current;
@@ -53,6 +86,20 @@ export function PhoneNotificationsView({ onError }: { onError: (error: string) =
       void unlisten.then((stop) => stop()).catch(() => {});
     };
   }, [refresh]);
+
+  // L-384: a clicked banner scrolls its notice into view and marks it; if it is gone, the view just opens.
+  const ready = load.kind === "ready";
+  useEffect(() => {
+    if (!focusKey || !ready) return;
+    const target = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-notice-key]") ?? [])].find(
+      (element) => element.dataset.noticeKey === focusKey,
+    );
+    if (!target) return;
+    target.scrollIntoView({ block: "nearest" });
+    setHighlighted(focusKey);
+    const timer = window.setTimeout(() => setHighlighted(null), HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [focusKey, ready]);
 
   const dismiss = (key: string) => {
     // Gone at once; the list event brings it back if the computer refused.
@@ -125,6 +172,7 @@ export function PhoneNotificationsView({ onError }: { onError: (error: string) =
       icon={list.icons[notice.package]}
       time={noticeTime(notice.postedAt, now)}
       masked={looksLikeCode(notice) && !revealed.has(notice.key)}
+      highlighted={highlighted === notice.key}
       onPhone={onPhone}
       onReveal={() => reveal(notice.key)}
       onDismiss={() => dismiss(notice.key)}
@@ -132,7 +180,7 @@ export function PhoneNotificationsView({ onError }: { onError: (error: string) =
   );
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto py-1">
+    <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
       <h4 className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-content/45">On phone</h4>
       {list.onPhone.length ? (
         <ul>{list.onPhone.map((notice) => row(notice, true))}</ul>
@@ -159,6 +207,7 @@ function NoticeRow({
   icon,
   time,
   masked,
+  highlighted,
   onPhone,
   onReveal,
   onDismiss,
@@ -167,6 +216,7 @@ function NoticeRow({
   icon: string | undefined;
   time: string;
   masked: boolean;
+  highlighted: boolean;
   onPhone: boolean;
   onReveal: () => void;
   onDismiss: () => void;
@@ -174,7 +224,12 @@ function NoticeRow({
   const title = masked ? maskCodes(notice.title) : notice.title;
   const body = masked ? maskCodes(notice.text) : notice.text;
   return (
-    <li className="group flex min-w-0 items-start gap-2.5 px-3 py-2 hover:bg-content/[0.04]">
+    <li
+      data-notice-key={notice.key}
+      className={`group flex min-w-0 items-start gap-2.5 px-3 py-2 transition-colors duration-300 hover:bg-content/[0.04] ${
+        highlighted ? "bg-accent/15" : ""
+      }`}
+    >
       {icon ? (
         <img src={`data:image/png;base64,${icon}`} alt="" className="mt-0.5 size-6 shrink-0 rounded-md" />
       ) : (

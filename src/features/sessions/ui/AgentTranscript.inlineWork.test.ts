@@ -529,6 +529,29 @@ it("waits for the final reply's reveal, then shows its artifact before the actio
   ).toBeTruthy();
 });
 
+it("keeps a Mono reply's action bar visible without hover, inside the gap (L-379)", () => {
+  const css = readFileSync("src/styles/index.css", "utf8");
+  const bar = css.match(/\.turn-actions-hover\s*\{[^}]+\}/)!;
+  const gap = css.match(/\.transcript-turn-mono\s*\{[^}]+\}/)!;
+  const hoverStyles = document.createElement("style");
+  hoverStyles.textContent = `${bar[0]}\n${gap[0]}`;
+  document.head.append(hoverStyles);
+  render([
+    { id: "user", role: "user", text: "Inspect" },
+    tool("first"),
+    { id: "answer", role: "assistant", text: "Everything passed." },
+  ]);
+  const actions = container.querySelector<HTMLElement>("[data-turn-actions]")!;
+  expect(actions.classList.contains("turn-actions-hover")).toBe(true);
+  expect(getComputedStyle(actions).opacity).toBe("1");
+  expect(getComputedStyle(actions).position).toBe("absolute");
+  const turn = actions.closest<HTMLElement>(".transcript-turn-mono")!;
+  expect(getComputedStyle(turn).paddingBottom).toBe("24px");
+  // The old hover reveal is gone: nothing may hide the bar again.
+  expect(css).not.toMatch(/\.turn-actions-hover[^{]*\{[^}]*opacity:\s*0/);
+  hoverStyles.remove();
+});
+
 it("shows only the final reply, with no separate work summary or opening narration", () => {
   render([
     { id: "user", role: "user", text: "Inspect" },

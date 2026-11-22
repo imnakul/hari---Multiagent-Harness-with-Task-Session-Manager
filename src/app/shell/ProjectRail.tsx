@@ -19,6 +19,7 @@ import {
   Whiteboard,
   SmartPhone,
   Globe,
+  ListBullet,
 } from "../../shared/ui/icons";
 import {
   useEffect,
@@ -157,6 +158,9 @@ type Props = {
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  /** Fork (L-381): shown while ClickUp is linked to the project in view. */
+  onOpenClickup?: () => void;
+  clickupActive?: boolean;
   onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   automationsActive?: boolean;
@@ -220,6 +224,8 @@ export function ProjectRail({
   kanbanActive = false,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenClickup,
+  clickupActive = false,
   onOpenShare,
   onOpenBrowser,
   automationsActive = false,
@@ -537,6 +543,15 @@ export function ProjectRail({
                 onClick={onOpenWhiteboard}
                 active={whiteboardActive}
                 ariaLabel="Whiteboard"
+              />
+            ) : null}
+            {onOpenClickup ? (
+              <RailAction
+                label="ClickUp"
+                icon={ListBullet}
+                onClick={onOpenClickup}
+                active={clickupActive}
+                ariaLabel="ClickUp"
               />
             ) : null}
             {onOpenShare ? (

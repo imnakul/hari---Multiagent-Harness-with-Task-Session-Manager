@@ -193,6 +193,8 @@ export function BoardColumn({
   dimmed = false,
   children,
   columnProps,
+  grow,
+  edge,
 }: {
   id: string;
   label: string;
@@ -209,6 +211,10 @@ export function BoardColumn({
   highlighted?: boolean;
   children: ReactNode;
   columnProps?: HTMLAttributes<HTMLElement> & Record<`data-${string}`, string>;
+  /** Share of the row while columns fill the board (flex-grow); default 1. */
+  grow?: number;
+  /** Extra content pinned to the column, such as a divider on its right edge. */
+  edge?: ReactNode;
 }) {
   const section = useRef<HTMLElement>(null);
   const wrapped = useContext(WrapContext);
@@ -228,7 +234,7 @@ export function BoardColumn({
         wrapped
           ? undefined
           : fixed === null
-            ? { minWidth: fit ? 0 : fillMin }
+            ? { minWidth: fit ? 0 : fillMin, flexGrow: grow }
             : { flexBasis: fixed, minWidth: resize?.min ?? fillMin }
       }
       className={`relative flex min-h-0 flex-col rounded-xl transition-colors duration-100 ${
@@ -276,6 +282,7 @@ export function BoardColumn({
           onReset={resize.onReset}
         />
       ) : null}
+      {wrapped ? null : edge}
     </section>
   );
 }

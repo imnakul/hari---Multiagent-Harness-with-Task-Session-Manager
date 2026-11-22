@@ -34,6 +34,7 @@ mod inbox_media;
 mod interactive_delivery;
 mod jira;
 mod jsonc;
+mod clickup;
 mod linear;
 mod link_preview;
 #[cfg(target_os = "macos")]
@@ -691,6 +692,20 @@ pub fn run() {
             azure_devops::azure_devops_work_item_thread,
             azure_devops::azure_devops_work_item_comment,
             azure_devops::azure_devops_mr_diff,
+            clickup::clickup_status,
+            clickup::clickup_set_token,
+            clickup::clickup_disconnect,
+            clickup::clickup_me,
+            clickup::clickup_list,
+            clickup::clickup_list_members,
+            clickup::clickup_tasks,
+            clickup::clickup_task,
+            clickup::clickup_task_details,
+            clickup::clickup_create_task,
+            clickup::clickup_update_task,
+            clickup::clickup_post_comment,
+            clickup::clickup_download_attachment,
+            clickup::clickup_save_attachment,
             linear::linear_status,
             linear::linear_set_token,
             linear::linear_list_teams,

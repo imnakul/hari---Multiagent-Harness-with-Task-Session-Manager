@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
-import { formatLiveElapsed, type LiveAgent } from "../model/liveAgents";
+import { formatFinishedAt, formatLiveElapsed, type LiveAgent } from "../model/liveAgents";
 import { projectKey, projectName } from "../../../shared/lib/paths";
 import {
   loadTabGroupColors,
@@ -171,7 +171,10 @@ function LiveAgentCard({
       ? "Done"
       : agent.activity;
   const live = !agent.needsApproval && !agent.done;
-  const title = [agent.title, project, activity, elapsed]
+  const finished =
+    agent.done && agent.finishedAt != null ? formatFinishedAt(agent.finishedAt, now) : "";
+  const finishedLabel = finished ? `Finished ${finished}` : "";
+  const title = [agent.title, project, activity, finishedLabel, elapsed]
     .filter(Boolean)
     .join("\n");
 
@@ -182,7 +185,7 @@ function LiveAgentCard({
       <button
         type="button"
         title={title}
-        aria-label={[agent.title, project, activity, elapsed]
+        aria-label={[agent.title, project, activity, finishedLabel, elapsed]
           .filter(Boolean)
           .join(", ")}
         aria-current={selected ? "true" : undefined}
@@ -233,6 +236,14 @@ function LiveAgentCard({
         <span className="mt-1 flex min-w-0 items-center gap-1.5 pl-4 text-[11px] leading-tight text-content/45">
           <HarnessIcon harness={agent.harness} className="size-3 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{project}</span>
+          {finished ? (
+            <span className="shrink-0 tabular-nums">{finished}</span>
+          ) : null}
+          {finished && elapsed ? (
+            <span aria-hidden className="shrink-0 text-content/30">
+              ·
+            </span>
+          ) : null}
           {elapsed ? (
             <span className="shrink-0 tabular-nums">{elapsed}</span>
           ) : null}

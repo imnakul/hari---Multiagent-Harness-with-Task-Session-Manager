@@ -17,6 +17,9 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Window};
 
+/// Identifier prefix of a desktop banner for a phone notification (L-384).
+pub(crate) const NOTIFICATION_PREFIX: &str = "hari-phone:";
+const SHARE_OPEN_EVENT: &str = "monocode-share-open";
 const METHOD: &str = "phone.notifications";
 const CHANGE_EVENT: &str = "monocode-phone-notifications-changed";
 const MAX_ITEMS: usize = 150;
@@ -315,12 +318,50 @@ pub fn mobile_phone_notifications_clear(window: Window, app: AppHandle) -> Resul
     Ok(())
 }
 
+/// Payload of the event that opens Share on the Notifications view, scrolled
+/// to one notice.
+fn open_payload(key: &str) -> Value {
+    json!({ "view": "notifications", "key": key })
+}
+
+/// Clicked phone banner: bring the main window forward and open Share on
+/// Notifications at that notice.
+pub(crate) fn open_from_notification(app: &AppHandle, key: &str) {
+    use tauri::Manager;
+    let handle = app.clone();
+    let payload = open_payload(key);
+    let _ = app.run_on_main_thread(move || {
+        let mut windows = handle.windows();
+        windows.retain(|label, _| crate::window::is_workspace_window(label));
+        let target = windows
+            .values()
+            .find(|window| window.is_focused().unwrap_or(false))
+            .or_else(|| windows.get("main"))
+            .or_else(|| windows.values().min_by_key(|window| window.label()));
+        if let Some(window) = target {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        let _ = handle.emit(SHARE_OPEN_EVENT, payload);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn notice(key: &str, posted_at: u64) -> Value {
         json!({ "key": key, "package": "com.chat", "app": "Chat", "title": "Ann", "text": "Hi", "postedAt": posted_at })
+    }
+
+    #[test]
+    fn a_clicked_banner_opens_share_on_notifications_at_its_key() {
+        assert!(NOTIFICATION_PREFIX.ends_with(':'));
+        assert_eq!(
+            open_payload("k1"),
+            json!({ "view": "notifications", "key": "k1" })
+        );
     }
 
     #[test]

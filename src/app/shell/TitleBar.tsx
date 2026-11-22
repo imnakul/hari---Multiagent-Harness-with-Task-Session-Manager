@@ -3,6 +3,7 @@ import { useSessionMetadataHoverCard } from "../../features/sessions/ui/SessionM
 import { useSessionLabel } from "../../features/sessions/ui/useSessionMetadata";
 import {
   CheckCircle,
+  ListBullet,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -91,6 +92,7 @@ const APP_VIEW_ICONS = {
   activity: Activity,
   automations: Zap,
   whiteboard: Whiteboard,
+  clickup: ListBullet,
   share: SmartPhone,
   browser: Globe,
 };

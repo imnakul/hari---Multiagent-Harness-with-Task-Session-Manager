@@ -22,7 +22,9 @@ export function useCompactModelLabels(): boolean {
 }
 
 /** Prefer the actual in-flight turn model if the next-turn choice changed. */
-export function compactModelLabel(session: SessionSummary): string {
+export function compactModelLabel(
+  session: Pick<SessionSummary, "harness" | "model" | "activeTurnModel">,
+): string {
   const active = session.activeTurnModel;
   if (active?.name) return active.name;
   return resolveModel(session.harness, session.model).name;

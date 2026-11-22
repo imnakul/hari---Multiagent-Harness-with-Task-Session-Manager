@@ -6,6 +6,15 @@ import {
   type NotificationSubject,
 } from "./notificationPreferences";
 import { monoReplyText } from "../../monos/model/monoReaction";
+import { projectKey, projectName } from "../../../shared/lib/paths";
+import {
+  loadTabGroupLabels,
+  resolveTabGroupLabel,
+} from "../../workspace/model/tabGroups";
+import {
+  compactModelLabel,
+  sessionAccountLabel,
+} from "../../sessions/ui/useCompactModelLabels";
 import { knownNotificationProject } from "./notificationProjects";
 import { recordCenterNotification } from "./notificationCenter";
 
@@ -209,6 +218,29 @@ export function notificationText(
   };
 }
 
+/**
+ * Fork (L-383): the desktop banner reads "Hari-Desktop · <project>", then the
+ * reply (or question / approval), then "<model> · <account>". The bell and
+ * phone entries keep `notificationText`.
+ */
+export function desktopBannerText(
+  session: Session,
+  event: NotificationEvent,
+): NotificationText {
+  const label = resolveTabGroupLabel(
+    projectKey(session.cwd),
+    loadTabGroupLabels(),
+    projectName(session.cwd),
+  );
+  return {
+    title: `Hari-Desktop · ${label}`,
+    subtitle: notificationText(session, event).body,
+    body: [compactModelLabel(session), sessionAccountLabel(session)]
+      .filter(Boolean)
+      .join(" · "),
+  };
+}
+
 /** First paragraph, whitespace collapsed; macOS wraps and truncates the rest. */
 function clip(text: string): string {
   const paragraph =
@@ -328,7 +360,7 @@ async function notifyProjectSession(
     sessionVisible,
   });
   if (!decision) return false;
-  const { title, subtitle, body } = notificationText(session, event);
+  const { title, subtitle, body } = desktopBannerText(session, event);
   try {
     await invoke("show_notification", {
       sessionId: session.id,

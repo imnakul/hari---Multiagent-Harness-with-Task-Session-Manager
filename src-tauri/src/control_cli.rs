@@ -82,7 +82,7 @@ const ACTIONS: [&str; 12] = [
     "list", "delegate", "get", "steer", "message", "retry", "cancel", "wait", "review", "finish",
     "respond", "answer",
 ];
-const APP_ACTIONS: [&str; 43] = [
+const APP_ACTIONS: [&str; 47] = [
     "session_manager.list",
     "session_manager.read",
     "session_manager.write",
@@ -110,6 +110,10 @@ const APP_ACTIONS: [&str; 43] = [
     "tasks.read",
     "tasks.write",
     "tasks.delete",
+    "clickup.lists",
+    "clickup.tasks",
+    "clickup.create",
+    "clickup.update",
     "artifacts.list",
     "artifacts.read",
     "artifacts.write",
@@ -170,6 +174,7 @@ Actions:
                   session in this project, including one just created. Set
                   draft:true to save the prompt unsent; no agent turn runs.
                   Otherwise the turn is submitted.
+                  A Mono's Claude sessions run Interactive.
                   Submitted sessions notify the calling Mono by default when
                   this turn completes, fails or is cancelled. The Mono reviews
                   it and reports back once idle. Set notifyOnComplete:false
@@ -290,6 +295,20 @@ Actions:
                   clear source links. Reuse --request-id on retries.
                   A Mono may pass "project":"<path or name>" instead of projectCwd.
   tasks.delete   {"id":"..."}  Delete one task.
+
+  clickup.lists  {}  The ClickUp lists set up in the ClickUp page, with their
+                  statuses and members. Only for the project ClickUp is linked to.
+  clickup.tasks  {"list":"Bugs","includeClosed":false}  Open tasks of one list (or
+                  every list when omitted); {"id":"..."} reads one task with its
+                  description. At most 100 tasks.
+  clickup.create {"list":"Bugs","name":"Fix login","assignees":["nakul"],
+                  "dueDate":"2026-11-30","priority":"high"}
+                  Create a task; returns {id, url}. Also: description (Markdown),
+                  startDate (YYYY-MM-DD), status. Assignees are usernames, emails
+                  or IDs of the list's members. priority: urgent, high, normal, low.
+  clickup.update {"id":"...","done":true,"dueDate":null}  Change a task; omitted
+                  fields stay as they are. assignees is the full new list.
+                  done:true moves it to the list's done status.
 
   artifacts.list {"limit":30,"offset":0}  Mono or habit only. Saved artifact titles.
   artifacts.read {"id":"..."}  Full content of one artifact.
@@ -800,7 +819,16 @@ mod tests {
 
     #[test]
     fn app_mode_exposes_task_crud_and_documents_combined_filters() {
-        for action in ["tasks.list", "tasks.read", "tasks.write", "tasks.delete"] {
+        for action in [
+            "tasks.list",
+            "tasks.read",
+            "tasks.write",
+            "tasks.delete",
+            "clickup.lists",
+            "clickup.tasks",
+            "clickup.create",
+            "clickup.update",
+        ] {
             assert!(matches!(
                 parse_args_for(&args(&[action, "--json", "{}"]), true),
                 Ok(Parsed::Call(_, _, _))

@@ -202,3 +202,35 @@ export function matchesShareSearch(entry: ShareEntry, query: string): boolean {
 export function shareCounted(items: readonly ShareEntry[]): number {
   return items.filter((entry) => !entry.pinned && !entry.saved).length;
 }
+
+/**
+ * Fork (Hari, L-384): which of Share's views is showing, and the phone
+ * notification a clicked banner asks to scroll to. The panel keeps this in
+ * step; the banner hook reads it so it stays quiet while Notifications is open.
+ */
+export type ShareViewId = "share" | "notifications" | "files" | "settings";
+
+let shareView: ShareViewId = "share";
+let shareFocusKey: string | null = null;
+const viewListeners = new Set<() => void>();
+
+export function readShareView(): ShareViewId {
+  return shareView;
+}
+
+/** The notice a clicked banner points at; null once the view has used it. */
+export function readShareFocusKey(): string | null {
+  return shareFocusKey;
+}
+
+export function setShareView(view: ShareViewId, focusKey: string | null = null): void {
+  if (view === shareView && focusKey === shareFocusKey) return;
+  shareView = view;
+  shareFocusKey = focusKey;
+  for (const listener of viewListeners) listener();
+}
+
+export function subscribeShareView(listener: () => void): () => void {
+  viewListeners.add(listener);
+  return () => viewListeners.delete(listener);
+}

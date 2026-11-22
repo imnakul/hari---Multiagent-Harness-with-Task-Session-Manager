@@ -8,6 +8,11 @@ import { Composer } from "./Composer";
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+// The repos chip (L-385) looks up nested repos through invoke; these tests count only paste calls.
+vi.mock("../../source-control/model/nestedRepos", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../source-control/model/nestedRepos")>()),
+  useNestedRepos: () => ({ repos: [], repoCwd: "", refresh: () => {} }),
+}));
 vi.mock("@tauri-apps/api/webview", () => ({
   getCurrentWebview: () => ({
     onDragDropEvent: async () => () => undefined,

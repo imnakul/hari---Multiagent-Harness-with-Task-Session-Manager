@@ -231,10 +231,19 @@ pub fn copy_file_to_clipboard(path: String) -> Result<(), String> {
         }
         write_file_to(&objc2_app_kit::NSPasteboard::generalPasteboard(), &path)
     }
+    // Fork (L-381): Windows and Linux put the file itself on the clipboard too
+    // (a file list: Explorer and chat apps paste it as the file).
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = path;
-        Err("Copying files to the clipboard is only supported on macOS".into())
+        let path = std::path::PathBuf::from(path);
+        let metadata =
+            std::fs::metadata(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+        if !metadata.is_file() {
+            return Err(format!("{} is not a file", path.display()));
+        }
+        arboard::Clipboard::new()
+            .and_then(|mut clipboard| clipboard.set().file_list(&[&path]))
+            .map_err(|error| error.to_string())
     }
 }
 

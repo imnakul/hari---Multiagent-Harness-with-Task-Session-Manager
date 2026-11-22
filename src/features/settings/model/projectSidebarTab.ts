@@ -3,11 +3,16 @@ import { loadSidebarTabOrder, type SidebarTabId } from "./appearance";
 
 const KEY = "monocode.projectSidebarTabs.v1";
 
-type ProjectSidebarTab = Exclude<SidebarTabId, "inbox">;
+type ProjectSidebarTab = SidebarTabId;
 type StoredTabs = Record<string, ProjectSidebarTab>;
 
 function isProjectSidebarTab(value: unknown): value is ProjectSidebarTab {
-  return value === "sessions" || value === "files" || value === "changes";
+  return (
+    value === "sessions" ||
+    value === "files" ||
+    value === "changes" ||
+    value === "inbox"
+  );
 }
 
 function readAll(): StoredTabs {
@@ -35,7 +40,7 @@ function writeAll(tabs: StoredTabs): void {
 
 export function loadProjectSidebarTab(project: string): ProjectSidebarTab {
   const saved = readAll()[pathKey(project)];
-  return saved ?? loadSidebarTabOrder().find(isProjectSidebarTab) ?? "sessions";
+  return saved ?? loadSidebarTabOrder().find((tab) => tab !== "inbox") ?? "sessions";
 }
 
 export function saveProjectSidebarTab(

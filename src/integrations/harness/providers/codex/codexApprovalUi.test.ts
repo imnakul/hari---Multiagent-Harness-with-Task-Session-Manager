@@ -280,7 +280,7 @@ describe("Codex requests reach the chat and notifications", () => {
     expect(sent.some((m) => m.id === 91)).toBe(false);
     expect(invoke).toHaveBeenCalledWith(
       "show_notification",
-      expect.objectContaining({ sessionId: session.id, body: "Source" }),
+      expect.objectContaining({ sessionId: session.id, subtitle: "Source" }),
     );
     const buttons = () => Array.from(container.querySelectorAll("button"));
     await act(async () =>
@@ -320,7 +320,7 @@ describe("Codex requests reach the chat and notifications", () => {
       "show_notification",
       expect.objectContaining({
         sessionId: session.id,
-        body: expect.stringContaining("Approve:"),
+        subtitle: expect.stringContaining("Approve:"),
       }),
     );
     await act(async () =>
@@ -362,7 +362,7 @@ describe("Codex requests reach the chat and notifications", () => {
       expect(invoke).toHaveBeenCalledWith(
         "show_notification",
         expect.objectContaining({
-          body: expect.stringContaining("Read this source?"),
+          subtitle: expect.stringContaining("Read this source?"),
         }),
       );
       await act(async () => {

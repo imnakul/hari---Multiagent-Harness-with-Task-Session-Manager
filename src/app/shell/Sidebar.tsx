@@ -14,6 +14,7 @@ import {
   SidebarWorktreeSwitcher,
   type ProjectMenuFlyout,
 } from "../../features/source-control/ui/SidebarWorktreeSwitcher";
+import { NestedRepoPicker } from "../../features/source-control/ui/NestedRepoPicker";
 import {
   CurrentProjectIcon,
   useProjectLabel,
@@ -57,6 +58,7 @@ import {
   X,
   Zap,
   Whiteboard,
+  ListBullet,
   Globe,
   SmartPhone,
   type IconComponent,
@@ -231,6 +233,8 @@ import { LiveAgentsPreview } from "../../features/sessions/ui/LiveAgentsPreview"
 import { ProjectRail } from "./ProjectRail";
 import type { ProviderRailEntry } from "./ProviderRail";
 import type { NativeProvider } from "../../features/provider-sessions/model/providerSessions";
+import { InboxSidebarPane } from "../../features/inbox/ui/InboxSidebarPane";
+import { useSidebarInboxTab } from "../../features/inbox/model/sidebarInboxTab";
 import { InboxNotificationMenu } from "../../features/inbox/ui/InboxNotificationMenu";
 import { RailAction, RailSearch } from "./RailAction";
 import { TerminalSpinner } from "../../features/sessions/ui/TerminalSpinner";
@@ -277,8 +281,6 @@ import {
   repoColors,
   subscribeRepoColorMode,
 } from "../../features/source-control/model/repoColors";
-import { pathKey } from "../../shared/lib/paths";
-import { SegmentedSwitch } from "../../shared/ui/SegmentedSwitch";
 import { GithubStarPrompt } from "./GithubStarPrompt";
 import { ChatPanel } from "../../features/sessions/ui/ChatPanel";
 import { SharedHoverHighlight } from "../../features/sessions/ui/SharedHoverHighlight";
@@ -457,12 +459,17 @@ type Props = {
   onSearch?: () => void;
   onOpenInbox?: () => void;
   onOpenInboxItem?: (item: LinkedWorkItem, sessionId: string) => void;
+  /** Fork (L-380): a row of the Inbox tab; opens the full Inbox on that item. */
+  onOpenInboxPaneItem?: (item: LinkedWorkItem) => void;
   onOpenNotes?: () => void;
   onOpenActivity?: () => void;
   onOpenTasks?: () => void;
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  /** Fork (L-381): shown while ClickUp is linked to the project in view. */
+  onOpenClickup?: () => void;
+  clickupActive?: boolean;
   onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   onGoToFile?: () => void;
@@ -600,12 +607,15 @@ function SidebarComponent({
   onSearch,
   onOpenInbox,
   onOpenInboxItem,
+  onOpenInboxPaneItem,
   onOpenNotes,
   onOpenActivity,
   onOpenTasks,
   onOpenKanban,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenClickup,
+  clickupActive = false,
   onOpenShare,
   onOpenBrowser,
   onGoToFile,
@@ -1137,7 +1147,10 @@ function SidebarComponent({
   const sessionListKey = `${cwd}\0${sessionFilters.showArchived}\0${sessionFilters.time}\0${sessionFilters.hiddenHarnesses.join(",")}\0${sessionFilters.status.working}\0${sessionFilters.status.needsApproval}\0${sessionFilters.status.done}\0${searchQuery}`;
   const sessionHarnesses = harnessesInSessions(projectSessions);
   const narrowedByUser = searchNarrowed || filtersActive;
-  const visibleTabs = tabOrder.filter((itemId) => itemId !== "inbox");
+  // Fork (L-380): Inbox is a tab only while its switch is on, in the classic layout.
+  const sidebarInboxTab = useSidebarInboxTab();
+  const showInboxTab = sidebarInboxTab && !inset;
+  const visibleTabs = tabOrder.filter((itemId) => itemId !== "inbox" || showInboxTab);
   const onReorderTabs = (ids: SidebarTab[]) => {
     const reordered = new Set(ids);
     let index = 0;
@@ -1188,6 +1201,7 @@ function SidebarComponent({
     kanbanActive ||
     automationsActive ||
     whiteboardActive ||
+    clickupActive ||
     shareActive ||
     browserActive ||
     settingsOpen;
@@ -1217,6 +1231,7 @@ function SidebarComponent({
     !monoViewActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !clickupActive &&
     !shareActive &&
     !browserActive &&
     !settingsOpen;
@@ -1234,6 +1249,7 @@ function SidebarComponent({
     !kanbanActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !clickupActive &&
     !shareActive &&
     !browserActive &&
     !settingsOpen;
@@ -1285,8 +1301,12 @@ function SidebarComponent({
   );
   // Fork (L-370): a project folder holding several repositories works on the
   // one picked in Changes; Explorer and search stay on the whole folder.
-  const nestedRepos = useNestedRepos(gitRoot, panesOpen && !remoteProject);
-  const repoRoot = nestedRepos.repoCwd;
+  // Fork (L-377): the pick moved to the header beside the Workspace chooser,
+  // so the repos are found for the project folder whether or not a pane is
+  // open. A session working in a checkout of its own (a worktree) keeps
+  // Changes on that checkout.
+  const nestedRepos = useNestedRepos(cwd, !remoteProject);
+  const repoRoot = sameProjectPath(gitRoot, cwd) ? nestedRepos.repoCwd : gitRoot;
   const inNestedRepo = repoRoot !== gitRoot;
   const changeStats = useProjectDiffStats(repoRoot, panesOpen);
   // Fork (L-374): how coloured session groups show their colour.
@@ -1302,20 +1322,15 @@ function SidebarComponent({
     loadRepoColorMode,
   );
   const nestedRepoColors = useMemo(() => repoColors(nestedRepos.repos), [nestedRepos.repos]);
-  const repoSwitch =
+  const repoPicker =
     nestedRepos.repos.length > 0 ? (
-      <div className="flex shrink-0 overflow-x-auto px-2 pt-2 [scrollbar-width:none]">
-        <SegmentedSwitch
-          ariaLabel="Repository"
-          options={nestedRepos.repos.map((repo) => ({
-            id: repo.path,
-            label: repo.name,
-            dot: repoColorMode === "off" ? undefined : nestedRepoColors.get(pathKey(repo.path)),
-          }))}
-          value={repoRoot}
-          onChange={(path) => chooseNestedRepo(gitRoot, path)}
-        />
-      </div>
+      <NestedRepoPicker
+        repos={nestedRepos.repos}
+        value={nestedRepos.repoCwd}
+        colors={repoColorMode === "off" ? undefined : nestedRepoColors}
+        onChange={(path) => chooseNestedRepo(cwd, path)}
+        onOpen={nestedRepos.refresh}
+      />
     ) : null;
 
   useEffect(() => {
@@ -2821,6 +2836,7 @@ function SidebarComponent({
     <SidebarWorktreeSwitcher
       worktrees={!remoteProject}
       cwd={cwd}
+      repoCwd={nestedRepos.repoCwd}
       tabStats={worktreeTabStats}
       onSelect={onSelectWorkspace}
       pending={workspaceSwitchPending}
@@ -2869,6 +2885,7 @@ function SidebarComponent({
             Workspace
           </span>
         )}
+        {repoPicker}
       </div>
       {/* Inset, a new session is the + at the end of the title bar's tabs. */}
       <WorkspaceTitleActions
@@ -2952,6 +2969,12 @@ function SidebarComponent({
           active: whiteboardActive,
           onClick: onOpenWhiteboard,
         },
+        onOpenClickup && {
+          label: "ClickUp",
+          icon: ListBullet,
+          active: clickupActive,
+          onClick: onOpenClickup,
+        },
         onOpenShare && {
           label: "Share",
           icon: SmartPhone,
@@ -3021,11 +3044,19 @@ function SidebarComponent({
       )}
     </div>
   );
+  // Layouts without the workspace header (the project picker stands in for
+  // it) keep the repo picker at the top of Changes and History.
+  const paneRepoPicker =
+    repoPicker && !(railVisible || inset || compactRailVisible) ? (
+      <div className="flex h-9 shrink-0 items-center border-b border-stroke px-2">
+        {repoPicker}
+      </div>
+    ) : null;
   const changesPane = (
     <>
       {paneTab === "changes" ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {repoSwitch}
+          {paneRepoPicker}
           <SourceControl
             cwd={repoRoot}
             enabled={panesOpen}
@@ -3068,7 +3099,7 @@ function SidebarComponent({
       aria-label="History"
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {repoSwitch}
+      {paneRepoPicker}
       <GitHistoryGraph
         cwd={repoRoot}
         enabled={panesOpen}
@@ -3176,6 +3207,7 @@ function SidebarComponent({
               kanbanActive={kanbanActive}
               onOpenAutomations={onOpenAutomations}
               onOpenWhiteboard={onOpenWhiteboard}
+              onOpenClickup={onOpenClickup}
               onOpenShare={onOpenShare}
               onOpenBrowser={onOpenBrowser}
               searchActive={searchActive}
@@ -3185,6 +3217,7 @@ function SidebarComponent({
               onOpenActivity={onOpenActivity}
               automationsActive={automationsActive}
               whiteboardActive={whiteboardActive}
+              clickupActive={clickupActive}
               shareActive={shareActive}
               browserActive={browserActive}
               inboxUnseen={inboxUnseen}
@@ -3641,6 +3674,14 @@ function SidebarComponent({
           </div>
         </div>
         {paneHost ? null : changesPane}
+        {!paneHost && paneTab === "inbox" && showInboxTab && onOpenInbox ? (
+          <InboxSidebarPane
+            cwd={repoRoot}
+            remote={remoteProject}
+            onOpenItem={(item) => (onOpenInboxPaneItem ? onOpenInboxPaneItem(item) : onOpenInbox())}
+            onOpenInbox={onOpenInbox}
+          />
+        ) : null}
         {showSidebarFooter ? (
           <>
             <LiveAgentsPreview
@@ -3805,10 +3846,12 @@ function SidebarComponent({
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
           onOpenWhiteboard={onOpenWhiteboard}
+          onOpenClickup={onOpenClickup}
           onOpenShare={onOpenShare}
           onOpenBrowser={onOpenBrowser}
           automationsActive={automationsActive}
           whiteboardActive={whiteboardActive}
+          clickupActive={clickupActive}
           shareActive={shareActive}
           browserActive={browserActive}
           onOpenSettings={onOpenSettings}
@@ -3852,10 +3895,12 @@ function SidebarComponent({
           kanbanActive={kanbanActive}
           onOpenAutomations={onOpenAutomations}
           onOpenWhiteboard={onOpenWhiteboard}
+          onOpenClickup={onOpenClickup}
           onOpenShare={onOpenShare}
           onOpenBrowser={onOpenBrowser}
           automationsActive={automationsActive}
           whiteboardActive={whiteboardActive}
+          clickupActive={clickupActive}
           shareActive={shareActive}
           browserActive={browserActive}
           onTogglePanel={onToggleProjectRail}
@@ -4010,6 +4055,7 @@ function SidebarProjectPicker({
   onOpenKanban,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenClickup,
   onOpenShare,
   onOpenBrowser,
   searchActive = false,
@@ -4020,6 +4066,7 @@ function SidebarProjectPicker({
   kanbanActive = false,
   automationsActive = false,
   whiteboardActive = false,
+  clickupActive = false,
   shareActive = false,
   browserActive = false,
   inboxUnseen = false,
@@ -4040,6 +4087,7 @@ function SidebarProjectPicker({
   onOpenKanban?: () => void;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenClickup?: () => void;
   onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   searchActive?: boolean;
@@ -4050,6 +4098,7 @@ function SidebarProjectPicker({
   kanbanActive?: boolean;
   automationsActive?: boolean;
   whiteboardActive?: boolean;
+  clickupActive?: boolean;
   shareActive?: boolean;
   browserActive?: boolean;
   inboxUnseen?: boolean;
@@ -4149,6 +4198,15 @@ function SidebarProjectPicker({
             <Whiteboard className="size-3.5" strokeWidth={1.75} />
           </IconButton>
         ) : null}
+        {onOpenClickup ? (
+          <IconButton
+            label="ClickUp"
+            active={clickupActive}
+            onClick={onOpenClickup}
+          >
+            <ListBullet className="size-3.5" strokeWidth={1.75} />
+          </IconButton>
+        ) : null}
         {onOpenShare ? (
           <IconButton label="Share" active={shareActive} onClick={onOpenShare}>
             <SmartPhone className="size-3.5" strokeWidth={1.75} />
@@ -4220,10 +4278,12 @@ function CompactProjectRail({
   kanbanActive = false,
   onOpenAutomations,
   onOpenWhiteboard,
+  onOpenClickup,
   onOpenShare,
   onOpenBrowser,
   automationsActive,
   whiteboardActive = false,
+  clickupActive = false,
   shareActive = false,
   browserActive = false,
   onOpenSettings,
@@ -4265,10 +4325,12 @@ function CompactProjectRail({
   kanbanActive?: boolean;
   onOpenAutomations?: () => void;
   onOpenWhiteboard?: () => void;
+  onOpenClickup?: () => void;
   onOpenShare?: () => void;
   onOpenBrowser?: () => void;
   automationsActive: boolean;
   whiteboardActive?: boolean;
+  clickupActive?: boolean;
   shareActive?: boolean;
   browserActive?: boolean;
   onOpenSettings?: () => void;
@@ -4320,6 +4382,7 @@ function CompactProjectRail({
     !kanbanActive &&
     !automationsActive &&
     !whiteboardActive &&
+    !clickupActive &&
     !shareActive &&
     !browserActive &&
     !monoViewActive;
@@ -4497,6 +4560,14 @@ function CompactProjectRail({
             icon={Whiteboard}
             active={whiteboardActive}
             onClick={action(whiteboardActive, onOpenWhiteboard)}
+          />
+        ) : null}
+        {onOpenClickup ? (
+          <CompactRailAction
+            label="ClickUp"
+            icon={ListBullet}
+            active={clickupActive}
+            onClick={action(clickupActive, onOpenClickup)}
           />
         ) : null}
         {onOpenShare ? (

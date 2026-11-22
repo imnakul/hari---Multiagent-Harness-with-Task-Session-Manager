@@ -49,7 +49,7 @@ function question(
 function banners() {
   return invoke.mock.calls
     .filter(([command]) => command === "show_notification")
-    .map(([, args]) => ({ sessionId: args?.sessionId, body: args?.body }));
+    .map(([, args]) => ({ sessionId: args?.sessionId, body: args?.subtitle }));
 }
 
 describe("input notification delivery", () => {

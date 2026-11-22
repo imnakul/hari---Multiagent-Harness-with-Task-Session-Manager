@@ -327,3 +327,35 @@ it("prevents duplicate creation and keeps its progress visible", async () => {
   });
   expect(trigger().getAttribute("aria-busy")).toBe("false");
 });
+
+// Fork (L-377): a project folder of repositories lists the chosen repo's
+// worktrees; its first row is still the unfocused project folder.
+it("lists and creates the chosen repository's worktrees in a folder of repositories", async () => {
+  vi.mocked(useProjectWorktrees).mockReturnValue({
+    data: {
+      worktrees: [tree("/picker/teacher", "main", true), tree("/teacher-a", "feature-a")],
+      defaultRoot: "/teacher-worktrees",
+    },
+    refresh,
+  });
+  vi.mocked(createWorktree).mockResolvedValue(tree("/teacher-new", "fresh"));
+  await act(async () =>
+    root.render(
+      createElement(SidebarWorktreeSwitcher, {
+        cwd: "/picker",
+        repoCwd: "/picker/teacher",
+        onSelect: select,
+      }),
+    ),
+  );
+  expect(vi.mocked(useProjectWorktrees)).toHaveBeenLastCalledWith("/picker/teacher", true);
+  await act(async () => trigger().click());
+  expect(option("Project folder").textContent).toContain("All repositories");
+  await act(async () => option("Project folder").click());
+  expect(select).toHaveBeenLastCalledWith(undefined);
+
+  await act(async () => trigger().click());
+  await typeQuery("fresh");
+  await act(async () => createButton()!.click());
+  expect(vi.mocked(createWorktree)).toHaveBeenCalledWith("/picker/teacher", "fresh", "HEAD", false);
+});

@@ -256,8 +256,10 @@ import {
 } from "../features/settings/model/uiScale";
 import { resolveZoomKeybinding } from "../features/settings/model/zoomKeybinding";
 import { subscribeOpenInBrowser, subscribeShowBrowser } from "../features/browser/model/browserRequest";
-import { SHARE_OPEN_EVENT } from "../features/mobile/model/mobileShare";
-import { setSharePanelOpen, toggleSharePanel } from "../features/mobile/model/shareView";
+import { parseShareOpenTarget, SHARE_OPEN_EVENT } from "../features/mobile/model/mobileShare";
+import { setSharePanelOpen, setShareView, toggleSharePanel } from "../features/mobile/model/shareView";
+import { loadSidebarInboxTab, useSidebarInboxTab } from "../features/inbox/model/sidebarInboxTab";
+import { usePhoneNotificationBanners } from "../features/mobile/hooks/usePhoneNotificationBanners";
 import { SharePanel } from "../features/mobile/ui/SharePanel";
 import {
   browserStore,
@@ -271,6 +273,7 @@ import { resolveAppShortcut } from "../features/settings/model/appShortcuts";
 import { toggleSessionPanel } from "../features/sessions/model/sessionPanel";
 import { runUpdateFlow } from "./model/updater";
 import {
+  attachmentsFromPaths,
   displayAttachments,
   prepareAttachments,
 } from "../features/sessions/model/attachments";
@@ -492,6 +495,7 @@ import {
   type OpenFileFn,
 } from "../features/search/model/search";
 import {
+  defaultSessionChoice,
   mergeModelSettings,
   nativeModelId,
   preferredModelSettings,
@@ -932,6 +936,10 @@ import {
 import { SessionSurface } from "../features/sessions/ui/SessionSurface";
 import { ProjectTerminalDock } from "../features/terminal/ui/ProjectTerminalDock";
 import { lazySurface } from "../shared/ui/lazySurface";
+import { runClickupAction } from "../features/clickup/model/clickupAgent";
+import { clickupApi } from "../features/clickup/model/clickupApi";
+import { loadClickupConfig, clickupVisibleFor, useClickupConfig } from "../features/clickup/model/clickupConfig";
+import { clickupStore } from "../features/clickup/model/clickupStore";
 import {
   useActivityRecorder,
   useTrackerEnabled,
@@ -1178,6 +1186,14 @@ const WhiteboardView = lazySurface(
   async () => {
     const module = await import("../features/whiteboard/ui/WhiteboardView");
     return { default: module.WhiteboardView };
+  },
+  { suspense: false },
+);
+// Fork (L-381): ClickUp loads on first open.
+const ClickupView = lazySurface(
+  async () => {
+    const module = await import("../features/clickup/ui/ClickupView");
+    return { default: module.ClickupView };
   },
   { suspense: false },
 );
@@ -1770,6 +1786,8 @@ function Workspace({
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
   const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
+  // Fork (L-381): the ClickUp view.
+  const [clickupViewOpen, setClickupViewOpen] = useState(false);
   // Fork (L-287): Share with the paired phone.
   // Fork (L-290): Share is a side panel (SharePanel), never an app view now.
   const shareViewOpen = false;
@@ -1802,7 +1820,9 @@ function Workspace({
         ? recordKind
         : automationsViewOpen
           ? "automations"
-          : whiteboardViewOpen
+          : clickupViewOpen
+            ? "clickup"
+            : whiteboardViewOpen
             ? "whiteboard"
             : shareViewOpen
               ? "share"
@@ -2198,6 +2218,7 @@ function Workspace({
       (!recordsViewOpen || (boardOpen && boardPaneVisible)) &&
       !automationsViewOpen &&
       !whiteboardViewOpen &&
+      !clickupViewOpen &&
       !shareViewOpen &&
       !browserViewOpen &&
       !settingsOpen &&
@@ -2208,6 +2229,7 @@ function Workspace({
           !recordsViewOpen &&
           !automationsViewOpen &&
           !whiteboardViewOpen &&
+          !clickupViewOpen &&
           !shareViewOpen &&
           !browserViewOpen &&
           !settingsOpen
@@ -2219,6 +2241,7 @@ function Workspace({
       !notesViewOpen &&
       !automationsViewOpen &&
       !whiteboardViewOpen &&
+      !clickupViewOpen &&
       !shareViewOpen &&
       !browserViewOpen &&
       !settingsOpen
@@ -2233,6 +2256,8 @@ function Workspace({
   automationsViewOpenRef.current = automationsViewOpen;
   const whiteboardViewOpenRef = useRef(whiteboardViewOpen);
   whiteboardViewOpenRef.current = whiteboardViewOpen;
+  const clickupViewOpenRef = useRef(clickupViewOpen);
+  clickupViewOpenRef.current = clickupViewOpen;
   const shareViewOpenRef = useRef(shareViewOpen);
   shareViewOpenRef.current = shareViewOpen;
   const browserViewOpenRef = useRef(browserViewOpen);
@@ -2246,6 +2271,7 @@ function Workspace({
     recordsViewOpen ||
     automationsViewOpen ||
     whiteboardViewOpen ||
+    clickupViewOpen ||
     shareViewOpen ||
     browserViewOpen ||
     Boolean(monoViewId);
@@ -2685,12 +2711,12 @@ function Workspace({
         showRightPanel(tab);
         return;
       }
+      // Fork (L-380): Inbox is a sidebar tab only while its switch is on in the classic layout.
+      const inboxTabShown = !insetLayoutRef.current && loadSidebarInboxTab();
+      const next: SidebarTabId = tab === "inbox" && !inboxTabShown ? "sessions" : tab;
       const cwd = project ?? sidebarCwdRef.current;
-      saveProjectSidebarTab(cwd, tab);
-      setSidebarTabSelection({
-        project: pathKey(cwd),
-        tab: tab === "inbox" ? "sessions" : tab,
-      });
+      saveProjectSidebarTab(cwd, next);
+      setSidebarTabSelection({ project: pathKey(cwd), tab: next });
     },
     [showRightPanel],
   );
@@ -3022,6 +3048,7 @@ function Workspace({
             (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
             !automationsViewOpenRef.current &&
             !whiteboardViewOpenRef.current &&
+            !clickupViewOpenRef.current &&
             !shareViewOpenRef.current &&
             !browserViewOpenRef.current &&
             !settingsOpenRef.current
@@ -3063,6 +3090,7 @@ function Workspace({
     recordsViewOpen,
     automationsViewOpen,
     whiteboardViewOpen,
+    clickupViewOpen,
     shareViewOpen,
     browserViewOpen,
     settingsOpen,
@@ -3742,6 +3770,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setClickupViewOpen(false);
     setBrowserViewOpen(false);
     const cwd = sidebarCwd;
     const session = newWorkspaceSession(cwd, sessionDefaults?.runtimeMode);
@@ -3764,6 +3793,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       const existing = findRemoteSessionTab(
         tabsRef.current,
@@ -3828,6 +3858,7 @@ function Workspace({
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
         setWhiteboardViewOpen(false);
+        setClickupViewOpen(false);
         setBrowserViewOpen(false);
         const cwd =
           item.projectPath || active?.cwd || sessionDefaults?.cwd || projectCwd;
@@ -3898,6 +3929,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       const cwd =
         (card.sourceCwd && looksLikeProject(card.sourceCwd)
@@ -6234,6 +6266,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       lastMonoIdRef.current = monoId;
       const session = await ensureMonoSession(monoId, {
@@ -6262,6 +6295,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setMonoViewId(session.id);
       if (insetLayoutRef.current) {
@@ -6718,6 +6752,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       if (looksLikeProject(session.cwd))
         setProjectCwd(normalizeProjectPath(session.cwd));
@@ -6837,6 +6872,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
@@ -7518,6 +7554,7 @@ function Workspace({
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
             whiteboardViewOpenRef.current ||
+            clickupViewOpenRef.current ||
             shareViewOpenRef.current ||
             browserViewOpenRef.current ||
             settingsOpenRef.current ||
@@ -7808,6 +7845,7 @@ function Workspace({
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setClickupViewOpen(false);
     setBrowserViewOpen(false);
     setSelectedProvider((current) => (current === provider ? null : provider));
     setSessionSidebarOpen(true);
@@ -7841,6 +7879,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setSettingsOpen(false);
       setFilePickerOpen(false);
@@ -8477,6 +8516,7 @@ function Workspace({
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
 
       // At most one folder can take the blank session, and it keeps the
@@ -11300,6 +11340,7 @@ function Workspace({
           setRecordsViewOpen(false);
           setAutomationsViewOpen(false);
           setWhiteboardViewOpen(false);
+          setClickupViewOpen(false);
           setBrowserViewOpen(false);
           setSidebarTab("sessions", session.cwd);
         }
@@ -11463,6 +11504,7 @@ function Workspace({
             setRecordsViewOpen(false);
             setAutomationsViewOpen(false);
             setWhiteboardViewOpen(false);
+            setClickupViewOpen(false);
             setBrowserViewOpen(false);
             setSidebarTab("sessions", cwd);
           },
@@ -14653,6 +14695,15 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                 throw error;
               }
             },
+            clickup: {
+              linkedProject: () => loadClickupConfig().projectPath,
+              run: (action, input) =>
+                runClickupAction(action, input, {
+                  lists: loadClickupConfig().lists,
+                  store: clickupStore,
+                  api: clickupApi,
+                }),
+            },
             sessions: async (cwd): Promise<AppSessionListing[]> => {
               const stored = await listSessionsByProject(cwd);
               const byId = new Map<string, AppSessionListing>();
@@ -15155,6 +15206,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       onOpenApprovalSession(sessionId, intent);
     },
@@ -15449,6 +15501,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setClickupViewOpen(false);
     setBrowserViewOpen(false);
     setFilePickerInitialQuery("");
     setFilePickerResetToken((token) => token + 1);
@@ -15460,6 +15513,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setClickupViewOpen(false);
     setBrowserViewOpen(false);
     setFilePickerInitialQuery(">");
     setFilePickerResetToken((token) => token + 1);
@@ -15478,6 +15532,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setClickupViewOpen(false);
     setBrowserViewOpen(false);
     setSidebarTab("files");
     setFilesSearchOpen(true);
@@ -15497,6 +15552,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setSearchViewOpen(true);
       setSearchViewFocusToken((token) => token + 1);
@@ -15518,10 +15574,51 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setInboxViewOpen(true);
     });
   }, []);
+
+  // Fork (L-380): the item a sidebar Inbox row asks the full Inbox to open on.
+  const [inboxTarget, setInboxTarget] = useState<LinkedWorkItem | null>(null);
+  // Fork (L-380): an Inbox tab row opens its details in the side panel next
+  // to the chat in view, like a session's linked item. With no chat tab open
+  // there is nothing to sit beside, so the full Inbox opens on the item.
+  const inboxPaneSessionId = activeTab
+    ? (activeTabSessionIds.find((id) => id === activeTab.focusedId) ??
+      activeTabSessionIds[0])
+    : undefined;
+  const onOpenInboxPaneItem = useCallback(
+    (item: LinkedWorkItem) => {
+      const sessionId = inboxPaneSessionId;
+      if (!sessionId) {
+        setInboxTarget(item);
+        onOpenInbox();
+        return;
+      }
+      linkedWorkItemPanelRequest.current += 1;
+      setFilePickerOpen(false);
+      setSettingsOpen(false);
+      setSearchViewOpen(false);
+      setRecordsViewOpen(false);
+      setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
+      setBrowserViewOpen(false);
+      setInboxViewOpen(false);
+      const cwd =
+        sessionsRef.current.find((session) => session.id === sessionId)?.cwd ??
+        sidebarCwd;
+      setLinkedWorkItemPanels((current) => {
+        const next = new Map(current);
+        next.delete(sessionId);
+        next.set(sessionId, { item, sessionId, cwd });
+        return next;
+      });
+    },
+    [inboxPaneSessionId, onOpenInbox, sidebarCwd],
+  );
 
   const onOpenLinkedWorkItem = useCallback(
     (item: LinkedWorkItem, sessionId: string) => {
@@ -15533,6 +15630,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setInboxViewOpen(false);
       const cwd =
@@ -15558,6 +15656,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   );
 
   const onLeaveInbox = useCallback(() => {
+    setInboxTarget(null);
     setInboxViewOpen(false);
   }, []);
 
@@ -15640,6 +15739,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("notes");
       setRecordsViewOpen(true);
@@ -15657,6 +15757,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("tasks");
       setRecordsViewOpen(true);
@@ -15674,6 +15775,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("kanban");
       setRecordsViewOpen(true);
@@ -15692,6 +15794,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setRecordKind("activity");
       setRecordsViewOpen(true);
@@ -15722,6 +15825,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setInboxViewOpen(false);
       setRecordsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setAutomationsViewOpen(true);
     });
@@ -15751,12 +15855,104 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setWhiteboardViewOpen(false);
   }, []);
 
+  // Fork (L-381): ClickUp tasks for the project it is linked to.
+  const onOpenClickup = useCallback(() => {
+    workspaceNavigation.cancel();
+    startTransition(() => {
+      closeMonoView();
+      rememberAppView("clickup");
+      setFilePickerOpen(false);
+      setSettingsOpen(false);
+      setSearchViewOpen(false);
+      setInboxViewOpen(false);
+      setRecordsViewOpen(false);
+      setAutomationsViewOpen(false);
+      setWhiteboardViewOpen(false);
+      setBrowserViewOpen(false);
+      setClickupViewOpen(true);
+    });
+  }, []);
+
+  const onLeaveClickup = useCallback(() => {
+    setClickupViewOpen(false);
+  }, []);
+
+  const clickupConfig = useClickupConfig();
+  const clickupInSidebar = clickupVisibleFor(
+    clickupConfig,
+    projectCwd === "~" ? null : projectCwd,
+    sameProjectPath,
+  );
+  const clickupMonos = useMemo(
+    () =>
+      listMonos().map((mono) => ({
+        id: mono.id,
+        name: monoLook(mono).name,
+        sessionId: mono.sessionId,
+        projects: mono.projects,
+      })),
+    // The roster is read through its snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [monosSnap],
+  );
+  // New session: an unsent draft of the task in the linked project, shown right away.
+  const onClickupStartSession = useCallback(
+    (text: string, projectPath: string, filePaths: readonly string[]) => {
+      const choice = defaultSessionChoice(projectPath);
+      void (async () => {
+        const attachments = await attachmentsFromPaths([...filePaths]);
+        await launchQuickSession(
+          {
+            prompt: text,
+            draft: true,
+            reveal: true,
+            cwd: projectPath,
+            harness: choice.harness,
+            model: choice.model,
+            attachments,
+          },
+          crypto.randomUUID(),
+          undefined,
+          undefined,
+          true,
+        );
+      })().catch((error: unknown) => console.warn("ClickUp: could not start a session", error));
+    },
+    [launchQuickSession],
+  );
+  // Give to a Mono: an unsent draft in that Mono's conversation, then open it.
+  const onClickupGiveToMono = useCallback(
+    (monoId: string, text: string, filePaths: readonly string[]) => {
+      const mono = findMono(monoId);
+      if (!mono?.sessionId) return;
+      const sessionId = mono.sessionId;
+      void (async () => {
+        const attachments = await attachmentsFromPaths([...filePaths]);
+        const target = await ensureOpenSessionRef.current(sessionId);
+        if (!target || target.busy || sessionDraftBlock(target)) {
+          console.warn("ClickUp: that Mono is busy or already has a draft");
+        } else {
+          flushSync(() =>
+            saveDraftRef.current(sessionId, text, attachments, crypto.randomUUID()),
+          );
+        }
+        void onOpenMono(monoId);
+      })().catch((error: unknown) => console.warn("ClickUp: could not give the task to a Mono", error));
+    },
+    [onOpenMono],
+  );
+
   // Fork (L-287, L-290): Share with the paired phone, a panel on the right.
   // The title-bar phone button toggles it; a clicked arrival toast opens it.
   const onOpenShare = useCallback(() => toggleSharePanel(), []);
+  usePhoneNotificationBanners();
   useEffect(() => {
-    const opens = listen(SHARE_OPEN_EVENT, () => {
-      if (document.hasFocus()) setSharePanelOpen(true);
+    const opens = listen(SHARE_OPEN_EVENT, (event) => {
+      if (!document.hasFocus()) return;
+      // Fork (L-384): a clicked phone banner opens Notifications at its notice.
+      const target = parseShareOpenTarget(event.payload);
+      if (target) setShareView("notifications", target.key);
+      setSharePanelOpen(true);
     });
     return () => {
       void opens.then((unlisten) => unlisten());
@@ -15784,6 +15980,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(true);
     });
   }, []);
@@ -15814,6 +16011,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         throw new Error("This conversation is no longer available.");
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       setSearchViewOpen(false);
       setInboxViewOpen(false);
@@ -15850,6 +16048,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         setRecordsViewOpen(false);
         setAutomationsViewOpen(false);
         setWhiteboardViewOpen(false);
+        setClickupViewOpen(false);
         setBrowserViewOpen(false);
         if (section) {
           setSettingsSection(section);
@@ -15926,6 +16125,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       activity: leavingFocus(onOpenActivity),
       automations: leavingFocus(onOpenAutomations),
       whiteboard: leavingFocus(onOpenWhiteboard),
+      clickup: leavingFocus(onOpenClickup),
       share: leavingFocus(onOpenShare),
       browser: leavingFocus(() => onOpenBrowser()),
       settings: leavingFocus(onOpenSettings),
@@ -16009,11 +16209,16 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     if (automationsViewOpen) {
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       return;
     }
     if (whiteboardViewOpen) {
       setWhiteboardViewOpen(false);
+      return;
+    }
+    if (clickupViewOpen) {
+      setClickupViewOpen(false);
       return;
     }
     if (shareViewOpen) {
@@ -16039,6 +16244,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     recordsViewOpen,
     automationsViewOpen,
     whiteboardViewOpen,
+    clickupViewOpen,
     shareViewOpen,
     browserViewOpen,
   ]);
@@ -16050,13 +16256,16 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setRecordsViewOpen(false);
     setAutomationsViewOpen(false);
     setWhiteboardViewOpen(false);
+    setClickupViewOpen(false);
     setBrowserViewOpen(false);
     onVisitForward();
   }, [onVisitForward]);
 
+  // Fork (L-380): a stored Inbox tab falls back to Sessions when its switch is off or the layout is inset.
+  const sidebarInboxTab = useSidebarInboxTab();
   useEffect(() => {
-    if (sidebarTab === "inbox") setSidebarTab("sessions");
-  }, [sidebarTab]);
+    if (sidebarTab === "inbox" && (!sidebarInboxTab || insetLayout)) setSidebarTab("sessions");
+  }, [sidebarTab, sidebarInboxTab, insetLayout, setSidebarTab]);
 
   useEffect(() => {
     if (!dockVisible) setProjectTerminalFocused(false);
@@ -16192,6 +16401,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
           activity: onOpenActivity,
           automations: onOpenAutomations,
           whiteboard: onOpenWhiteboard,
+          clickup: onOpenClickup,
           share: onOpenShare,
           browser: () => onOpenBrowser(),
         };
@@ -16204,6 +16414,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setRecordsViewOpen(false);
       setAutomationsViewOpen(false);
       setWhiteboardViewOpen(false);
+      setClickupViewOpen(false);
       setBrowserViewOpen(false);
       activateTab(id);
     },
@@ -16604,6 +16815,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
             (recordsViewOpenRef.current && !boardPaneVisibleRef.current) ||
             automationsViewOpenRef.current ||
             whiteboardViewOpenRef.current ||
+            clickupViewOpenRef.current ||
             shareViewOpenRef.current ||
             browserViewOpenRef.current ||
             settingsOpenRef.current ||
@@ -16706,6 +16918,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         (!recordsViewOpenRef.current || boardPaneVisibleRef.current) &&
         !automationsViewOpenRef.current &&
         !whiteboardViewOpenRef.current &&
+        !clickupViewOpenRef.current &&
         !shareViewOpenRef.current &&
         !browserViewOpenRef.current &&
         !(
@@ -17131,6 +17344,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     onWorkspaceModeChange,
     onWorktreeBaseChange,
     onManageWorktrees,
+    onShowChanges: onShowSourceControl,
     onModelChange,
     onModelSettingsChange,
     onRuntimeModeChange,
@@ -17490,6 +17704,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     automationsViewOpen ||
     browserViewOpen ||
     whiteboardViewOpen ||
+    clickupViewOpen ||
     shareViewOpen;
   const compactProjectRail = collapsedProjectRailMode === "compact";
   const compactRailActive = compactProjectRail && !projectRailOpen;
@@ -17795,6 +18010,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
         automationsViewOpen ||
         browserViewOpen ||
         whiteboardViewOpen ||
+        clickupViewOpen ||
         shareViewOpen
       }
       canGoForward={tabVisitNav.canForward}
@@ -17825,9 +18041,11 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onSearch={sidebarPages.search}
       onOpenInbox={sidebarPages.inbox}
       onOpenInboxItem={onOpenLinkedWorkItem}
+      onOpenInboxPaneItem={onOpenInboxPaneItem}
       onOpenNotes={notesEnabled ? sidebarPages.notes : undefined}
       onOpenAutomations={sidebarPages.automations}
       onOpenWhiteboard={sidebarPages.whiteboard}
+      onOpenClickup={clickupInSidebar ? sidebarPages.clickup : undefined}
       onOpenBrowser={sidebarPages.browser}
       onGoToFile={onGoToFile}
       searchActive={searchViewOpen}
@@ -17837,6 +18055,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       activityActive={activityViewOpen}
       automationsActive={automationsViewOpen}
       whiteboardActive={whiteboardViewOpen}
+      clickupActive={clickupViewOpen}
       browserActive={browserViewOpen}
       notesEnabled={notesEnabled}
       // The inset layout has no project rail: the sidebar header's menu
@@ -18261,6 +18480,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                       automationsViewOpen ||
                       browserViewOpen ||
                       whiteboardViewOpen ||
+                      clickupViewOpen ||
                       shareViewOpen
                         ? "hidden"
                         : "flex min-h-0 min-w-0 flex-1 flex-col"
@@ -18273,6 +18493,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                       automationsViewOpen ||
                       browserViewOpen ||
                       whiteboardViewOpen ||
+                      clickupViewOpen ||
                       shareViewOpen
                     }
                     inert={
@@ -18282,6 +18503,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                       (recordsViewOpen && !boardOpen) ||
                       automationsViewOpen ||
                       whiteboardViewOpen ||
+                      clickupViewOpen ||
                       shareViewOpen ||
                       browserViewOpen ||
                       undefined
@@ -18524,6 +18746,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                                 !recordsViewOpen &&
                                 !automationsViewOpen &&
                                 !whiteboardViewOpen &&
+                                !clickupViewOpen &&
                                 !shareViewOpen &&
                                 !browserViewOpen &&
                                 !monoViewId &&
@@ -18612,6 +18835,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                   (insetLayout && openAppViews.includes("inbox")) ? (
                     <AppViewSurface active={inboxViewOpen}>
                       <InboxView
+                        target={inboxTarget}
                         tabbed={insetLayout}
                         active={inboxViewOpen}
                         cwd={sidebarCwd}
@@ -18798,6 +19022,26 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                         cwd={projectCwd}
                         onClose={onLeaveWhiteboard}
                         onToggleSidebar={onToggleSidebar}
+                      />
+                    </AppViewSurface>
+                  ) : null}
+                  {clickupViewOpen ||
+                  (insetLayout && openAppViews.includes("clickup")) ? (
+                    <AppViewSurface active={clickupViewOpen}>
+                      <ClickupView
+                        tabbed={insetLayout}
+                        besideRail={
+                          insetLayout || projectRailOpen || compactProjectRail
+                        }
+                        compactRail={!insetLayout && compactRailActive}
+                        projects={recents.map((recent) => recent.path)}
+                        currentProject={projectCwd === "~" ? null : projectCwd}
+                        monos={clickupMonos}
+                        samePath={sameProjectPath}
+                        onClose={onLeaveClickup}
+                        onToggleSidebar={onToggleSidebar}
+                        onStartSession={onClickupStartSession}
+                        onGiveToMono={onClickupGiveToMono}
                       />
                     </AppViewSurface>
                   ) : null}

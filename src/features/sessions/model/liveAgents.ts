@@ -16,6 +16,8 @@ export type LiveAgent = {
   activity: string;
   startedAt?: number;
   durationMs?: number;
+  /** Fork (L-378): when a finished run ended (its start plus its duration). */
+  finishedAt?: number;
   needsApproval: boolean;
   done: boolean;
 };
@@ -57,6 +59,40 @@ export function formatLiveElapsed(startedAt: number, now: number): string {
   return minRest ? `${hours}h ${minRest}m` : `${hours}h`;
 }
 
+function clockLabel(date: Date): string {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const hour = hours % 12 || 12;
+  const suffix = hours < 12 ? "am" : "pm";
+  return minutes ? `${hour}:${String(minutes).padStart(2, "0")}${suffix}` : `${hour}${suffix}`;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/**
+ * Fork (L-378): when a run finished, in local time: "Today, 5am",
+ * "Yesterday, 8:15pm", then "Nov 18, 9:40pm" (with the year when it isn't
+ * this year's).
+ */
+export function formatFinishedAt(finishedAt: number, now: number): string {
+  const date = new Date(finishedAt);
+  const today = new Date(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const day = sameDay(date, today)
+    ? "Today"
+    : sameDay(date, yesterday)
+      ? "Yesterday"
+      : date.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+        });
+  return `${day}, ${clockLabel(date)}`;
+}
+
 function toLiveAgent(session: Session, unseenFinished: boolean): LiveAgent {
   const pending = session.blocks.find(
     (block) => block.approval && !block.approval.decided,
@@ -78,6 +114,7 @@ function toLiveAgent(session: Session, unseenFinished: boolean): LiveAgent {
         : activityLabel(activityBlock, session.cwd),
     startedAt: turnStartedAt(session.blocks),
     durationMs: done ? turnDurationMs(session.blocks) : undefined,
+    finishedAt: done ? turnFinishedAt(session.blocks) : undefined,
     needsApproval: Boolean(pending) || Boolean(pendingQuestion),
     done,
   };
@@ -108,6 +145,12 @@ function turnStartedAt(blocks: Block[]): number | undefined {
     if (blocks[i].role === "user") return blocks[i].startedAt;
   }
   return undefined;
+}
+
+function turnFinishedAt(blocks: Block[]): number | undefined {
+  const startedAt = turnStartedAt(blocks);
+  const durationMs = turnDurationMs(blocks);
+  return startedAt != null && durationMs != null ? startedAt + durationMs : undefined;
 }
 
 function turnDurationMs(blocks: Block[]): number | undefined {

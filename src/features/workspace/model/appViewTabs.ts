@@ -7,6 +7,7 @@ export const APP_VIEW_LABELS = {
   activity: "Activity",
   automations: "Automations",
   whiteboard: "Whiteboard",
+  clickup: "ClickUp",
   share: "Share",
   browser: "Browser",
 } as const;

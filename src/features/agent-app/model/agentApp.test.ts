@@ -15,7 +15,7 @@ import type { Worktree } from "../../source-control/model/worktrees";
 import { handleAgentApp, notePreview, canAccessAgentAppProject, type AgentAppHost } from "./agentApp";
 
 vi.mock("../../../integrations/harness/core/availability", () => ({
-  isHarnessAvailable: (id: string) => id === "codex",
+  isHarnessAvailable: (id: string) => id === "codex" || id === "claude",
 }));
 
 const note: Note = {
@@ -1513,5 +1513,102 @@ describe("agent app commands", () => {
         host,
       ),
     ).rejects.toThrow("body is required");
+  });
+});
+
+describe("Mono-started Claude sessions run Interactive (L-382)", () => {
+  beforeEach(() => {
+    setHarnessModels("claude", [
+      {
+        id: "claude:test",
+        harness: "claude",
+        name: "Claude test",
+        settings: [],
+      },
+    ]);
+  });
+
+  function monoFixture(cwd = "/tmp/project") {
+    const { source, host } = fixture();
+    source.cwd = cwd;
+    source.harness = "claude";
+    source.model = "claude:test";
+    host.isMono = (id) => id === source.id;
+    host.monoOf = () => ({ id: "mono", projects: [cwd] });
+    return { source, host };
+  }
+  const startArgs = { prompt: "Go", harness: "claude", model: "claude:test" };
+
+  it("forces interactive, even over an inherited structured setting (AC-D1, D3)", async () => {
+    const { source, host } = monoFixture();
+    source.modelSettings = { claudeExecution: "structured" };
+    const result = await handleAgentApp(source, "r1", "sessions.start", startArgs, host);
+    expect(vi.mocked(host.start).mock.calls[0][0].modelSettings).toMatchObject({
+      claudeExecution: "interactive",
+    });
+    expect(result).toMatchObject({ claudeExecution: "interactive" });
+  });
+
+  it("keeps remote projects Structured and says so (AC-D2)", async () => {
+    const { source, host } = monoFixture("remote://host/home/app");
+    source.modelSettings = { claudeExecution: "structured" };
+    const result = await handleAgentApp(source, "r2", "sessions.start", startArgs, host);
+    expect(vi.mocked(host.start).mock.calls[0][0].modelSettings).toMatchObject({
+      claudeExecution: "structured",
+    });
+    expect(result).toMatchObject({
+      claudeExecution: "structured",
+      note: "Remote projects run Structured.",
+    });
+  });
+
+  it("leaves a regular session's launch as before (AC-D4)", async () => {
+    const { source, host } = monoFixture();
+    host.isMono = () => false;
+    const result = await handleAgentApp(source, "r3", "sessions.start", startArgs, host);
+    expect(
+      vi.mocked(host.start).mock.calls[0][0].modelSettings?.claudeExecution,
+    ).toBeUndefined();
+    expect(result).not.toHaveProperty("claudeExecution");
+  });
+
+  it("leaves non-Claude launches alone (AC-D5)", async () => {
+    const { source, host } = monoFixture();
+    const result = await handleAgentApp(
+      source,
+      "r4",
+      "sessions.start",
+      { prompt: "Go", harness: "codex", model: "codex:test" },
+      host,
+    );
+    expect(
+      vi.mocked(host.start).mock.calls[0][0].modelSettings?.claudeExecution,
+    ).toBeUndefined();
+    expect(result).not.toHaveProperty("claudeExecution");
+  });
+
+  it("still rejects an explicit claudeExecution setting (AC-D6)", async () => {
+    const { source, host } = monoFixture();
+    await expect(
+      handleAgentApp(
+        source,
+        "r5",
+        "sessions.start",
+        { ...startArgs, modelSettings: { claudeExecution: "structured" } },
+        host,
+      ),
+    ).rejects.toThrow("Invalid model setting claudeExecution");
+  });
+
+  it("tells only Monos about Claude sessions in models.list (AC-D7)", async () => {
+    const { source, host } = monoFixture();
+    expect(await handleAgentApp(source, "m1", "models.list", {}, host)).toMatchObject({
+      claudeSessions:
+        "Claude sessions you start run Interactive (the claude CLI); remote projects run Structured.",
+    });
+    host.isMono = () => false;
+    expect(await handleAgentApp(source, "m2", "models.list", {}, host)).not.toHaveProperty(
+      "claudeSessions",
+    );
   });
 });

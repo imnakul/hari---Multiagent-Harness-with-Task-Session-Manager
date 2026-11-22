@@ -117,6 +117,8 @@ import type { ProcessedUsage } from "../model/tokenAccounting";
 import type { Block } from "../model/session";
 import { AttachmentChip, PendingAttachmentChip } from "./AttachmentChip";
 import { BranchPicker } from "../../source-control/ui/BranchPicker";
+import { NestedReposChip } from "../../source-control/ui/NestedReposChip";
+import { useNestedRepos } from "../../source-control/model/nestedRepos";
 import { WorktreePicker } from "../../source-control/ui/WorktreePicker";
 import {
   isWorkspaceModeShortcut,
@@ -337,6 +339,8 @@ type Props = {
   onWorktreeBaseChange?: (base: string) => void;
   worktreeRemoved?: boolean;
   onManageWorktrees?: () => void;
+  /** Fork (L-385): opens the sidebar's Changes tab, from the repos chip. */
+  onShowChanges?: () => void;
   onNewTerminal?: () => void;
   onModelChange: (harness: HarnessId, model: string) => void;
   /** Account choice for the model picker (fork, L-96). */
@@ -486,6 +490,7 @@ export function Composer({
   onWorktreeBaseChange,
   worktreeRemoved = false,
   onManageWorktrees,
+  onShowChanges,
   onNewTerminal,
   onModelChange,
   providerAccount,
@@ -625,6 +630,15 @@ export function Composer({
   const remote = remoteSession;
   // Local indexes (files, skills) must never read a remote session's path.
   const localCwd = remote ? "" : executionCwd;
+  // Fork (L-385): a folder holding several repos has no one branch, and a
+  // worktree would hold one repo only, so the chat runs in the folder itself.
+  const nestedRepos = useNestedRepos(executionCwd, !remote && !hideBranchPicker);
+  const multiRepo = nestedRepos.repos.length > 0;
+  useEffect(() => {
+    if (multiRepo && draftWorkspace && workspaceMode === "worktree") {
+      onWorkspaceModeChange?.("current");
+    }
+  }, [multiRepo, draftWorkspace, workspaceMode, onWorkspaceModeChange]);
   // Inactive tabs stay mounted. Their composers let go of the project listing
   // and pick it up again when shown.
   const fileCwd = enabled ? localCwd : "";
@@ -2226,7 +2240,15 @@ export function Composer({
           onClose={() => ref.current?.focus()}
         />
       ) : null}
-      {hideBranchPicker ? null : draftWorkspace &&
+      {hideBranchPicker ? null : multiRepo ? (
+        <NestedReposChip
+          cwd={executionCwd}
+          repos={nestedRepos.repos}
+          enabled={enabled}
+          onShowChanges={onShowChanges}
+          onClose={() => ref.current?.focus()}
+        />
+      ) : draftWorkspace &&
         onWorkspaceModeChange &&
         onWorktreeBaseChange ? (
         <>

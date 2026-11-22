@@ -37,6 +37,18 @@ export const SHARE_CHANGE_EVENT = "monocode-share-changed";
 /** Sent when an arrival toast is clicked: Share opens. */
 export const SHARE_OPEN_EVENT = "monocode-share-open";
 
+/**
+ * Fork (L-384): the payload of a clicked phone-notification banner,
+ * `{ view: "notifications", key }`. Anything else (the plain Share toast sends
+ * no payload) yields null.
+ */
+export function parseShareOpenTarget(raw: unknown): { key: string } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const view: unknown = Reflect.get(raw, "view");
+  const key: unknown = Reflect.get(raw, "key");
+  return view === "notifications" && typeof key === "string" && key ? { key } : null;
+}
+
 const KINDS: readonly ShareKind[] = ["text", "link", "clipboard", "file"];
 const isKind = (value: unknown): value is ShareKind =>
   typeof value === "string" && KINDS.some((kind) => kind === value);

@@ -807,6 +807,12 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
     keywords: "api key issues teams connect",
   },
   {
+    id: "sidebar-inbox-tab",
+    section: "inbox",
+    label: "Show Inbox in the side panel",
+    keywords: "sidebar tab github pull requests issues",
+  },
+  {
     id: "show-archived",
     section: "archive",
     label: "Show archived in the sidebar",
