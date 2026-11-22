@@ -1,12 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-22 15:57 IST — Release 0.16.0-local68; tests follow the repos chip and new banner layout
+
+- Type: chore
+- Why: user asked to commit, push and release. Two Composer paste tests counted the repos chip lookup (L-385) as a clipboard call, and four Codex banner tests still expected the reply in the banner body after L-383 moved it to the subtitle.
+- What: version 0.16.0-local68. The paste tests stub the nested-repos lookup; the Codex tests check the subtitle.
+- Files: `src/features/sessions/ui/Composer.pasteImage.test.ts`, `src/integrations/harness/providers/codex/codexApprovalUi.test.ts`, version files.
+- Commit: 3d75f39e (in 0.16.0-local68)
+- Verified: tsc ✅, vitest full ✅ after fixes, cargo test --lib: 983 pass, 2 fail in `fs.rs` git-path tests (untouched by this release, already failing before it)
+
 ## 2026-11-22 15:52 IST — ClickUp: open, copy and save attachments; write comments; Start session brings details and files; New task in the side panel (L-381)
 
 - Type: feature
 - Why: user: attachments only opened ClickUp's web page; asked to open them on the desktop, copy the file in one click, save a copy, post comments as them, have Start session carry the task's details and attachments, and show New task in the side panel.
 - What: clicking an attachment downloads it once through the ClickUp connection (into the app cache) and opens it in the default app; Copy puts the file itself on the clipboard (now on Windows and Linux too, not only macOS); Save as writes a copy where you choose; Open in ClickUp is still there. A comment box under Comments posts as you (Ctrl+Enter; hidden on read-only lists). Start session (new session or a Mono) now sends status, priority, list, assignees, dates, tags and filled-in custom fields, and attaches up to 10 of the task's files (over 20 MB or failed ones are named instead); the button reads "Gathering files…" meanwhile. New task opens in the same resizable side panel instead of a dialog.
 - Files: `src-tauri/src/clickup.rs` (`clickup_post_comment`, `clickup_download_attachment`, `clickup_save_attachment`; token only sent to ClickUp hosts, redirects followed without it, 200 MB cap), `src-tauri/src/lib.rs`, `src-tauri/src/pasteboard.rs` (Windows/Linux file copy via arboard), `src/features/clickup/model/clickupApi.ts`, `clickupTasks.ts` (`sessionPromptForTask` extras), new `clickupSessionContext.ts`, `src/features/clickup/ui/ClickupTaskDetails.tsx`, `ClickupTaskPanel.tsx`, `ClickupView.tsx` (`CreateTaskPanel`), `src/app/App.tsx` (attachments into the composer / Mono draft); tests `ClickupView.test.ts`, `clickupTasks.test.ts`, cargo `clickup`.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: tsc ✅, vitest ✅ (clickup 43), cargo test clickup ✅ (12), clippy (no new warnings) | manual: desktop check pending; whether ClickUp accepts the API token for file downloads is unverified (falls back to a plain request)
 
 ## 2026-11-22 15:35 IST — ClickUp: resizable task panel, even Board spacing, no Mark done (L-381)
@@ -15,7 +24,7 @@
 - Why: user: the gap between the open task and the board columns was uneven; remove Mark done; let the task panel be resized.
 - What: the task panel can be dragged wider or narrower from its left edge (double-click resets; the width is remembered, up to 70% of the window). On the Board it sits 12px from the last column and from the window edges, the same as the gap between columns. The Mark done / Reopen button is gone (status is still set from the Status field).
 - Files: `src/features/clickup/ui/ClickupView.tsx`, `ClickupTaskPanel.tsx`, `src/features/clickup/model/clickupViewState.ts` (`panelWidth`); test `clickupViewState.test.ts`.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: tsc ✅, vitest ✅ (clickup 39) | manual: desktop check pending
 
 ## 2026-11-22 15:29 IST — Share panel: folds down first, then the chat makes room (L-376)
@@ -24,7 +33,7 @@
 - Why: user: the desktop Share panel still looked like it came in from the right edge, opening and closing.
 - What: the fold and the chat narrowing ran together, so below the unrolling panel the chat's edge swept left, which read as a slide from the right. They now take turns: opening, the panel folds down from the top over the chat (300 ms), then the chat narrows smoothly underneath it (220 ms); closing, the chat widens back underneath first (180 ms), then the panel folds up (220 ms). Over another view (overlay) there is no chat step. Turning around mid-way keeps the room already made.
 - Files: `src/shared/ui/SlidePanel.tsx`; test `src/shared/ui/SlidePanel.test.ts`.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: tsc ✅, vitest ✅ (shared, mobile, browser: 64 files, 400 tests) | manual: desktop check pending
 
 ## 2026-11-22 15:26 IST — ClickUp: counts in the Status filter and list tabs (L-381)
@@ -33,7 +42,7 @@
 - What: Each status in the Status dropdown shows how many tasks it has, and each list tab (All, and every list) shows its task count. Counts follow Show done and "Assignee: me"; list counts also follow the Status pick, so a tab shows what you would see after switching to it.
 - Why: user asked for counts in the status filter and list switcher.
 - Files: [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [SegmentedSwitch.tsx](src/shared/ui/SegmentedSwitch.tsx) (optional `count` on an option)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (clickup 39, shared 253) lint — (no ESLint config) build —
 
 ## 2026-11-22 15:24 IST — ClickUp: Table groups slide open and shut (L-381)
@@ -42,7 +51,7 @@
 - What: Folding or opening a group in the Table now slides smoothly like the List and the sidebar, instead of jumping. Each cell's content runs the same reveal animation, and the rows are removed once it ends.
 - Why: user reported the Table fold jumping.
 - Files: [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx) (`ClickupTableRows`), [RevealHeight.tsx](src/shared/ui/RevealHeight.tsx) (logic moved into a shared `useRevealHeight` hook; `RevealHeight` behaves the same)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (1140 across clickup, shared, workspace, app) lint — (no ESLint config) build —
 
 ## 2026-11-22 15:22 IST — ClickUp: Board fits the pane height, empty groups hidden, Status filter (L-381)
@@ -54,7 +63,7 @@
   - New "Status" multi-select dropdown in the view row (the app's shared dropdown): pick the statuses to see, or "All statuses". The choice is remembered. Picks that no longer exist (Show done off, list unlinked) are ignored, so a stale filter never empties the page.
 - Why: user asked for a fixed board height, no empty columns, and a status filter.
 - Files: [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx), [clickupViewState.ts](src/features/clickup/model/clickupViewState.ts)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (39) lint — (no ESLint config) build —
 
 ## 2026-11-22 15:19 IST — ClickUp: whole group row folds in List and Table (L-381)
@@ -63,7 +72,7 @@
 - What: In List and Table, clicking anywhere on a group's row (TO DO, IN PROGRESS…) folds or opens it, not only the status label. The hover highlight covers the whole row.
 - Why: user asked for the full row to be clickable.
 - Files: [ClickupBits.tsx](src/features/clickup/ui/ClickupBits.tsx), [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (38) lint — (no ESLint config) build —
 
 ## 2026-11-22 15:06 IST — ClickUp: resizable Board columns (L-381)
@@ -73,7 +82,7 @@
 - Follow-up (same day): the first version gave every column one shared width and let the row scroll sideways; with many statuses all columns were squeezed to the minimum, so dragging did nothing, and the row ran past the screen with no visible scrollbar.
 - Why: user asked for column resizing in the ClickUp Board.
 - Files: [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx), [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [clickupViewState.ts](src/features/clickup/model/clickupViewState.ts), [BoardColumns.tsx](src/shared/ui/board/BoardColumns.tsx) (optional `grow` and `edge` props)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (241, incl. Task Manager and session boards) lint — (no ESLint config) build —
 
 ## 2026-11-22 15:05 IST — ClickUp: full task details, shared dropdowns, smooth folds, X close (L-381)
@@ -87,7 +96,7 @@
   - Fixed the Assignee button cutting names on the letter "s" ("Nakul Sriva" → "Nakul").
 - Why: user asked for all task details (links and attachments first), shared dropdowns, smooth folds and an X close button.
 - Files: [clickup.rs](src-tauri/src/clickup.rs), [lib.rs](src-tauri/src/lib.rs), [clickupApi.ts](src/features/clickup/model/clickupApi.ts), [clickupViewState.ts](src/features/clickup/model/clickupViewState.ts), [ClickupTaskDetails.tsx](src/features/clickup/ui/ClickupTaskDetails.tsx), [ClickupTaskPanel.tsx](src/features/clickup/ui/ClickupTaskPanel.tsx), [ClickupTaskForm.tsx](src/features/clickup/ui/ClickupTaskForm.tsx), [ClickupAssigneePicker.tsx](src/features/clickup/ui/ClickupAssigneePicker.tsx), [ClickupSetup.tsx](src/features/clickup/ui/ClickupSetup.tsx), [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (clickup 37, cargo clickup 9) lint — (no ESLint config) build —
 
 ## 2026-11-22 14:50 IST — ClickUp: list tabs in the view row, "Assignee: me" filter (L-381)
@@ -99,7 +108,7 @@
   - The app asks ClickUp once who the token belongs to (new `clickup_me` command). If that fails, the button stays hidden and every task shows.
 - Why: user asked for the tabs in the second row and a quick "my tasks" filter.
 - Files: [clickup.rs](src-tauri/src/clickup.rs), [lib.rs](src-tauri/src/lib.rs), [clickupApi.ts](src/features/clickup/model/clickupApi.ts), [clickupViewState.ts](src/features/clickup/model/clickupViewState.ts), [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [icons.tsx](src/shared/ui/icons.tsx)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (clickup 33, cargo clickup 8) lint — (no ESLint config) build —
 
 ## 2026-11-22 14:46 IST — ClickUp: List, Table and Board, grouped by status, with sorting (L-381)
@@ -113,7 +122,7 @@
   - The view, grouping, sort and folded groups are remembered on this device.
 - Why: user asked for ClickUp-like views, status grouping and sort options, reusing the Task Manager's pieces.
 - Files: [clickup.rs](src-tauri/src/clickup.rs) (created/closed dates, custom ID, tags, custom fields), [clickupApi.ts](src/features/clickup/model/clickupApi.ts), [clickupViewState.ts](src/features/clickup/model/clickupViewState.ts), [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx), [ClickupBits.tsx](src/features/clickup/ui/ClickupBits.tsx), [ClickupTaskRow.tsx](src/features/clickup/ui/ClickupTaskRow.tsx), [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [clickupTasks.ts](src/features/clickup/model/clickupTasks.ts) (old fixed sort removed)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ tests ✅ (clickup 32, cargo clickup 8) lint — (no ESLint config) build —
 
 ## 2026-11-22 14:27 IST — Repos chip in the composer; Inbox tab opens items beside the chat; ClickUp in every sidebar; Inbox switch card (L-385, L-380, L-381)
@@ -126,7 +135,7 @@
   - Settings › Inbox: "Show Inbox in the side panel" sits in its own "Side panel" card, lined up with the other sections.
 - Why: user found "No repo" in a multi-repo folder, Inbox clicks leaving the session, ClickUp missing in the classic layout, and the switch out of line.
 - Files: [NestedReposChip.tsx](src/features/source-control/ui/NestedReposChip.tsx), [NestedReposChip.test.ts](src/features/source-control/ui/NestedReposChip.test.ts), [Composer.tsx](src/features/sessions/ui/Composer.tsx), [SessionPane.tsx](src/features/sessions/ui/SessionPane.tsx), [PaneTree.tsx](src/features/workspace/ui/PaneTree.tsx), [App.tsx](src/app/App.tsx), [Sidebar.tsx](src/app/shell/Sidebar.tsx), [ProjectRail.tsx](src/app/shell/ProjectRail.tsx), [SettingsView.tsx](src/features/settings/ui/SettingsView.tsx)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ lint — (no ESLint config) tests ✅ (shell, inbox, settings, clickup, composer, workspace, chip) build —
 
 ## 2026-11-22 14:00 IST — Inbox tab keeps its rows while refreshing (L-380 rework)
@@ -135,7 +144,7 @@
 - What: pressing Refresh in the Inbox tab no longer blanks the list until GitHub answers; the rows stay and the Refresh icon spins. Opening another repository still starts from the loading state, so one repository's items never show under another.
 - Why: spec review found the pane reset to "checking" on every refresh.
 - Files: [InboxSidebarPane.tsx](src/features/inbox/ui/InboxSidebarPane.tsx), [InboxSidebarPane.test.ts](src/features/inbox/ui/InboxSidebarPane.test.ts)
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ lint — (no ESLint config) tests ✅ (InboxSidebarPane 8) build —
 
 ## 2026-11-22 13:50 IST — Mono reply bar, Inbox tab, ClickUp page, Interactive Mono sessions, Hari banners (L-379 to L-384)
@@ -143,7 +152,7 @@
 - Type: feature
 - What: six parts of `docs/specs/mono-bar-inbox-clickup-interactive-plan.md`. A: the Mono reply bar stays visible (L-379). B: a GitHub Inbox tab in the project sidebar, switched on in Settings (L-380). C: a ClickUp page for the lists linked to a project, with the token in the OS keychain, task create/edit/done, start a session or give a task to a Mono, and four `clickup.*` agent actions (L-381). D: Claude sessions a Mono starts run Interactive and tell the Mono when done (L-382). E: Hari-Desktop banners show reply, project, model and account (L-383). F: phone notifications show as Hari-Phone banners (L-384).
 - Files: `src/features/clickup/`, `src-tauri/src/clickup.rs`, `src/features/inbox/ui/InboxSidebarPane.tsx`, `src/features/mobile/model/phoneBanners.ts`, `src/features/agent-app/model/agentApp.ts`, `src/app/App.tsx`, `src/app/shell/Sidebar.tsx`, `src/app/shell/TitleBar.tsx`, `src-tauri/src/{control_cli,notifications,mobile_phone_notifications,lib}.rs`, and the tests beside them.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: typecheck ✅ lint — (no ESLint config in the repo) tests ✅ (352 files, 3838 tests; unhandled `transformCallback` errors from Tauri event listeners in settings tests; the same errors appear on `4382809e`, so they predate this work) cargo ✅ (clickup 7, control_cli 11, notifications 13, mobile_phone 7) build —. Desktop behaviour not checked: manual checklist in the report.
 
 ## 2026-11-22 08:54 IST — Plan: Mono reply bar, Inbox tab, ClickUp panel, Monos starting Interactive Claude
@@ -152,7 +161,7 @@
 - Why: user asked to record the agreed next work before building any of it.
 - What: a full Complex spec (for a worker agent, with acceptance criteria, tests and manual checks) covering six parts: Mono reply bar, Inbox tab, ClickUp panel (answers recorded), Mono-started Claude sessions run Interactive (normal chats unchanged), Hari-Desktop banners with reply, project, model and account, and phone notifications as Hari-Phone desktop banners. It also records why the Mono reply bar never appears (the hover rule expects a direct child; upstream's later portal host wraps it).
 - Files: `docs/specs/mono-bar-inbox-clickup-interactive-plan.md`, `docs/specs/SPECS.md`.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: docs only
 
 ## 2026-11-22 08:35 IST — Working panel shows when a run finished (L-378)
@@ -161,7 +170,7 @@
 - Why: user request: the Working panel's finished cards showed how long a run took but not when it finished.
 - What: finished cards now show the finish time before the duration: "Today, 5am · 1m 36s", "Yesterday, 8:15pm · 3m 17s", and the date and time before that (year only when it differs). Shown in the sidebar and the project rail.
 - Files: `src/features/sessions/model/liveAgents.ts`, `src/features/sessions/ui/LiveAgentsPreview.tsx`; tests `liveAgents.test.ts`, `LiveAgentsPreview.test.ts`.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: tsc ✅, vitest ✅ (app/shell + sessions: 224 files, 2321 tests) | manual: desktop check pending
 
 ## 2026-11-22 08:30 IST — Repository dropdown beside Workspace (L-377)
@@ -170,7 +179,7 @@
 - Why: user request: in a project folder holding several repos, pick the repo from a dropdown at the top beside the Workspace chooser instead of tabs in Changes; and the Workspace chooser didn't work for the chosen repo.
 - What: a Repository dropdown (with each repo's colour dot) now sits beside Workspace in the sidebar header; Changes and History follow it. Workspace lists and creates worktrees of the chosen repo; before, it looked in the project folder, which isn't a repository, so it found none. Picking another repo while on one of the old repo's worktrees returns to the project folder. Layouts without that header show the dropdown at the top of Changes and History.
 - Files: `src/features/source-control/ui/NestedRepoPicker.tsx` (new, + test), `nestedRepos.ts`, `SidebarWorktreeSwitcher.tsx` (+ test), `src/app/shell/Sidebar.tsx`.
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: tsc ✅, vitest ✅ (source-control 29 files / 189 tests; app/shell, shared/ui, mobile, windowArgs 61 files / 418 tests) | manual: desktop check pending
 
 ## 2026-11-20 15:59 IST — Share panel folds down from the top (L-376)
@@ -181,7 +190,7 @@
 - Follow-up (user: "still jumping", dev server): three jumps found. The chat beside the docked panel snapped to its new width at the start of opening and after closing; it now narrows and widens with the panel. The placeholder swapped to the messages with a jump at the end of opening; the messages now fade in. Closing swapped the messages back to the placeholder; they now stay until it has closed.
 - Follow-up (user: should fold out from the top, where the button is, and fold back up): the panel now stays at its resting spot and is uncovered from its top edge down with a slight tilt that flattens, and folds back up to close; nothing slides in from the side. Its slot widens underneath so the chat narrows smoothly, and the panel is frosted while it moves because it briefly lies over the chat.
 - Files: `src/shared/ui/SlidePanel.tsx`, `src/features/mobile/ui/SharePanel.tsx`; test `src/shared/ui/SlidePanel.test.ts` (new).
-- Commit: uncommitted
+- Commit: 3d75f39e (in 0.16.0-local68)
 - Verified: tsc ✅, vitest ✅ (shared/ui, mobile, browser, SessionPanel: 40 files, 176 tests) | manual: desktop check pending
 
 ## 2026-11-20 15:45 IST — Files sent from the phone keep their names (L-375)
