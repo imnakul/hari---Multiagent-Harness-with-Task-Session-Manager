@@ -1,5 +1,14 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-24 18:12 IST — Release 0.16.0-local70
+
+- Type: chore
+- Why: user asked to push and release.
+- What: version 0.16.0-local70, carrying L-392 to L-394 (Whiteboard drawings land, sheet backgrounds, Whiteboard tool for chats).
+- Files: version files (`package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`).
+- Commit: release commit after c4b15652
+- Verified: tsc ✅, vitest full ✅ (794 files, 8394 tests; iconCatalog timed out under load and passes alone, unrelated) | cargo ✅ (control_cli) | manual: desktop checks pending
+
 ## 2026-11-24 10:53 IST — Draw on the Whiteboard from any chat (L-394)
 
 - Type: feature
@@ -7,7 +16,7 @@
 - Why: user asked to choose Whiteboard in the chat composer and get visuals drawn on a new sheet.
 - Files: [whiteboardTool.ts](src/features/whiteboard/model/whiteboardTool.ts), [agentApp.ts](src/features/agent-app/model/agentApp.ts), [operatorCommand.ts](src/features/sessions/model/operatorCommand.ts), [Composer.tsx](src/features/sessions/ui/Composer.tsx), [modeCommands.tsx](src/features/sessions/ui/modeCommands.tsx), [monocodeToolCall.ts](src/features/sessions/model/monocodeToolCall.ts), [App.tsx](src/app/App.tsx), [WhiteboardView.tsx](src/features/whiteboard/ui/WhiteboardView.tsx), [control_cli.rs](src-tauri/src/control_cli.rs), tests
 - Spec: [whiteboard-backgrounds-and-draw-tool-plan.md](../specs/whiteboard-backgrounds-and-draw-tool-plan.md)
-- Commit: uncommitted
+- Commit: c4b15652 (in 0.16.0-local70)
 - Verified: typecheck ✅ tests ✅ (whiteboard, sessions, agent-app: 214 files, 2277 tests) cargo ✅ (control_cli, 12) lint — (ESLint config broken) build — | manual: desktop checks pending
 
 ## 2026-11-24 10:53 IST — Sheet backgrounds: colour, opacity and patterns (L-393)
@@ -17,7 +26,7 @@
 - Why: user asked for a dot surface and custom backgrounds per sheet.
 - Files: [sheetBackground.ts](src/features/whiteboard/model/sheetBackground.ts), [sheets.ts](src/features/whiteboard/model/sheets.ts), [SheetBackgroundMenu.tsx](src/features/whiteboard/ui/SheetBackgroundMenu.tsx), [WhiteboardTopBar.tsx](src/features/whiteboard/ui/WhiteboardTopBar.tsx), [WhiteboardView.tsx](src/features/whiteboard/ui/WhiteboardView.tsx), [icons.tsx](src/shared/ui/icons.tsx), [sheetBackground.test.ts](src/features/whiteboard/model/sheetBackground.test.ts)
 - Spec: [whiteboard-backgrounds-and-draw-tool-plan.md](../specs/whiteboard-backgrounds-and-draw-tool-plan.md)
-- Commit: uncommitted
+- Commit: c4b15652 (in 0.16.0-local70)
 - Verified: typecheck ✅ tests ✅ lint — build — | manual: desktop checks pending
 
 ## 2026-11-24 10:53 IST — Whiteboard drawings no longer vanish (L-392)
@@ -27,7 +36,7 @@
 - Why: user saw an empty canvas after three drawing replies.
 - Root cause (from the code; not reproduced in the UI): Excalidraw hands over its API before the editor is mounted, and drawings sent to it then were dropped. A second race let an effect use the previous sheet's editor right after a switch.
 - Files: [whiteboardApi.ts](src/features/whiteboard/model/whiteboardApi.ts), [WhiteboardView.tsx](src/features/whiteboard/ui/WhiteboardView.tsx), [whiteboardRuns.ts](src/features/whiteboard/model/whiteboardRuns.ts), tests
-- Commit: uncommitted
+- Commit: c4b15652 (in 0.16.0-local70)
 - Verified: typecheck ✅ tests ✅ lint — build — | manual: desktop checks pending
 
 ## 2026-11-24 07:07 IST — Release 0.16.0-local69
