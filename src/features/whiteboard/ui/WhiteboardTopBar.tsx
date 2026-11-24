@@ -14,6 +14,7 @@ import {
   Hand,
   Lock,
   Magnet,
+  PaintBucket,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -29,6 +30,8 @@ import {
 } from "../../../shared/ui/icons";
 import { sortedSheets, type WhiteboardSheet } from "../model/sheets";
 import { WHITEBOARD_FONTS, whiteboardFont } from "../model/whiteboardFonts";
+import { isDefaultBackground, type SheetBackground } from "../model/sheetBackground";
+import { SheetBackgroundMenu } from "./SheetBackgroundMenu";
 
 export type ExportKind = "png" | "svg" | "excalidraw";
 
@@ -151,6 +154,8 @@ export function WhiteboardTopBar({
   activeTool,
   fontId,
   grid,
+  background,
+  onBackground,
   snap,
   zoom,
   chatOpen,
@@ -185,6 +190,8 @@ export function WhiteboardTopBar({
   activeTool: string;
   fontId: number;
   grid: boolean;
+  background: SheetBackground;
+  onBackground: (background: SheetBackground) => void;
   snap: boolean;
   zoom: number;
   chatOpen: boolean;
@@ -216,11 +223,12 @@ export function WhiteboardTopBar({
   onToggleChat: () => void;
   iconButtonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const [menu, setMenu] = useState<"sheets" | "font" | "export" | "more" | null>(null);
+  const [menu, setMenu] = useState<"sheets" | "font" | "export" | "more" | "background" | null>(null);
   const sheetButton = useRef<HTMLButtonElement>(null);
   const fontButton = useRef<HTMLButtonElement>(null);
   const exportButton = useRef<HTMLButtonElement>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
+  const backgroundButton = useRef<HTMLButtonElement>(null);
   const locked = !!sheet?.locked;
   const editable = ready && !locked;
   const font = whiteboardFont(fontId) ?? WHITEBOARD_FONTS[0]!;
@@ -337,6 +345,20 @@ export function WhiteboardTopBar({
       <ToolButton label="Grid" pressed={grid} disabled={!ready} onClick={onGrid}>
         <Grid aria-hidden className="size-3.5" />
       </ToolButton>
+      <button
+        ref={backgroundButton}
+        type="button"
+        aria-label="Sheet background"
+        title="Sheet background: pattern and fill"
+        aria-haspopup="dialog"
+        aria-expanded={menu === "background"}
+        aria-pressed={!isDefaultBackground(background)}
+        disabled={!sheet}
+        onClick={() => toggle("background")}
+        className={`${ICON_BUTTON} ${isDefaultBackground(background) ? "text-content/60" : "bg-content/10 text-accent"}`}
+      >
+        <PaintBucket aria-hidden className="size-3.5" />
+      </button>
       <ToolButton label="Snap to objects" pressed={snap} disabled={!editable} onClick={onSnap}>
         <Magnet aria-hidden className="size-3.5" />
       </ToolButton>
@@ -454,6 +476,21 @@ export function WhiteboardTopBar({
             <FolderOpen aria-hidden className="size-3.5" />
             Show in folder
           </button>
+        </Popover>
+      ) : null}
+
+      {menu === "background" ? (
+        <Popover
+          anchor={backgroundButton}
+          side="bottom"
+          align="start"
+          gap={4}
+          width={300}
+          role="dialog"
+          aria-label="Sheet background"
+          onDismiss={close}
+        >
+          <SheetBackgroundMenu background={background} onChange={onBackground} />
         </Popover>
       ) : null}
 

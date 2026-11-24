@@ -51,8 +51,18 @@ describe("whiteboard runs (L-223)", () => {
     unregister();
 
     expect(drawOrQueue("open", OPS, 2)).toBe(WAITING_NOTE);
-    expect(takePending("open")).toEqual({ ops: OPS, at: 2 });
+    expect(takePending("open")).toEqual([{ ops: OPS, at: 2 }]);
     expect(takePending("open")).toBeUndefined();
+  });
+
+  it("keeps every queued drawing in order (L-394)", () => {
+    const later = { add: [], remove: ["a"] } as unknown as WhiteboardOps;
+    expect(drawOrQueue("closed", OPS, 1)).toBe(WAITING_NOTE);
+    expect(drawOrQueue("closed", later, 2)).toBe(WAITING_NOTE);
+    expect(takePending("closed")).toEqual([
+      { ops: OPS, at: 1 },
+      { ops: later, at: 2 },
+    ]);
   });
 
   it("says when nothing changed", () => {

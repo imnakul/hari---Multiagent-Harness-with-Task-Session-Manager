@@ -33,6 +33,7 @@ const ACTION_LABELS: Record<string, string> = {
   "clickup.tasks": "List ClickUp tasks",
   "clickup.create": "Create ClickUp task",
   "clickup.update": "Update ClickUp task",
+  "whiteboard.draw": "Draw on the Whiteboard",
   "notes.list": "List notes",
   "notes.read": "Read a note",
   "notes.write": "Write a note",

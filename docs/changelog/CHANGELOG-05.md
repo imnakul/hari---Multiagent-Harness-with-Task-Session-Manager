@@ -1,5 +1,35 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-24 10:53 IST — Draw on the Whiteboard from any chat (L-394)
+
+- Type: feature
+- What: the composer's + menu has Whiteboard (also `/whiteboard`). With it on, the agent draws its answer on a new Whiteboard sheet: the Whiteboard opens on that sheet and the drawing appears. The agent can come back to the same sheet to change it. It works with every harness, because it is a MonoCode app CLI action (`whiteboard.draw`) like Notes or Tasks.
+- Why: user asked to choose Whiteboard in the chat composer and get visuals drawn on a new sheet.
+- Files: [whiteboardTool.ts](src/features/whiteboard/model/whiteboardTool.ts), [agentApp.ts](src/features/agent-app/model/agentApp.ts), [operatorCommand.ts](src/features/sessions/model/operatorCommand.ts), [Composer.tsx](src/features/sessions/ui/Composer.tsx), [modeCommands.tsx](src/features/sessions/ui/modeCommands.tsx), [monocodeToolCall.ts](src/features/sessions/model/monocodeToolCall.ts), [App.tsx](src/app/App.tsx), [WhiteboardView.tsx](src/features/whiteboard/ui/WhiteboardView.tsx), [control_cli.rs](src-tauri/src/control_cli.rs), tests
+- Spec: [whiteboard-backgrounds-and-draw-tool-plan.md](../specs/whiteboard-backgrounds-and-draw-tool-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (whiteboard, sessions, agent-app: 214 files, 2277 tests) cargo ✅ (control_cli, 12) lint — (ESLint config broken) build — | manual: desktop checks pending
+
+## 2026-11-24 10:53 IST — Sheet backgrounds: colour, opacity and patterns (L-393)
+
+- Type: feature
+- What: a paint bucket button beside Grid on the Whiteboard sets the open sheet's background. Default keeps today's look. You can also pick a fill colour (presets or your own) with opacity, and a pattern: dots, grid, lines or graph paper. Patterns move and zoom with the canvas. Each sheet remembers its own background.
+- Why: user asked for a dot surface and custom backgrounds per sheet.
+- Files: [sheetBackground.ts](src/features/whiteboard/model/sheetBackground.ts), [sheets.ts](src/features/whiteboard/model/sheets.ts), [SheetBackgroundMenu.tsx](src/features/whiteboard/ui/SheetBackgroundMenu.tsx), [WhiteboardTopBar.tsx](src/features/whiteboard/ui/WhiteboardTopBar.tsx), [WhiteboardView.tsx](src/features/whiteboard/ui/WhiteboardView.tsx), [icons.tsx](src/shared/ui/icons.tsx), [sheetBackground.test.ts](src/features/whiteboard/model/sheetBackground.test.ts)
+- Spec: [whiteboard-backgrounds-and-draw-tool-plan.md](../specs/whiteboard-backgrounds-and-draw-tool-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ lint — build — | manual: desktop checks pending
+
+## 2026-11-24 10:53 IST — Whiteboard drawings no longer vanish (L-392)
+
+- Type: fix
+- What: the Whiteboard chat could say "Drew 24" while the sheet stayed empty. Drawings now wait until the editor is fully open. Several drawings queued for a closed sheet all appear, in order.
+- Why: user saw an empty canvas after three drawing replies.
+- Root cause (from the code; not reproduced in the UI): Excalidraw hands over its API before the editor is mounted, and drawings sent to it then were dropped. A second race let an effect use the previous sheet's editor right after a switch.
+- Files: [whiteboardApi.ts](src/features/whiteboard/model/whiteboardApi.ts), [WhiteboardView.tsx](src/features/whiteboard/ui/WhiteboardView.tsx), [whiteboardRuns.ts](src/features/whiteboard/model/whiteboardRuns.ts), tests
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ lint — build — | manual: desktop checks pending
+
 ## 2026-11-24 07:07 IST — Release 0.16.0-local69
 
 - Type: chore

@@ -97,6 +97,11 @@ import {
   supersedeMemoryEntry,
   topicName,
 } from "../../monos/model/monoMemory";
+import {
+  parseWhiteboardDrawInput,
+  type WhiteboardDrawInput,
+  type WhiteboardDrawResult,
+} from "../../whiteboard/model/whiteboardTool";
 
 export type AppSessionListing = {
   id: string;
@@ -156,6 +161,10 @@ export type AgentAppHost = {
   clickup?: {
     linkedProject(): string | null;
     run(action: ClickupAction, input: Record<string, unknown>): Promise<unknown>;
+  };
+  /** Fork (L-394): opens the Whiteboard and draws there (new sheet unless sheetId is given). */
+  whiteboard?: {
+    draw(input: WhiteboardDrawInput): Promise<WhiteboardDrawResult>;
   };
   notes(): Promise<Note[]>;
   note(id: string): Promise<Note | null>;
@@ -286,6 +295,8 @@ const FIELDS = new Map<string, readonly string[]>([
   ["clickup.tasks", ["list", "includeClosed", "id"]],
   ["clickup.create", ["list", "name", "description", "assignees", "startDate", "dueDate", "priority", "status"]],
   ["clickup.update", ["id", "name", "description", "assignees", "startDate", "dueDate", "priority", "status", "done"]],
+  // Fork (L-394): draw on the Whiteboard.
+  ["whiteboard.draw", ["name", "sheetId", "ops"]],
   [
     "tasks.write",
     [
@@ -1696,6 +1707,10 @@ export async function handleAgentApp(
         }
       }
       return host.clickup.run(action, input);
+    }
+    case "whiteboard.draw": {
+      if (!host.whiteboard) throw new Error("The Whiteboard is unavailable in this app");
+      return host.whiteboard.draw(parseWhiteboardDrawInput(input));
     }
     case "tasks.read": {
       if (!host.task) throw new Error("Tasks are unavailable in this app");

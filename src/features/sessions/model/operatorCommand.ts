@@ -11,15 +11,34 @@ export const OPERATOR_COMMAND: BuiltinSkill = {
   source: "monocode",
 };
 
+/**
+ * Fork (L-394): the composer's Whiteboard item. It turns on app access like
+ * /operator and asks the agent to draw its answer with whiteboard.draw.
+ */
+export const WHITEBOARD_COMMAND: BuiltinSkill = {
+  kind: "builtin",
+  name: "whiteboard",
+  invocation: "whiteboard",
+  description: "Draw the answer as a visual on a new Whiteboard sheet.",
+  scope: "builtin",
+  source: "monocode",
+};
+
 /** Activate app access with a leading composer command. */
 export function consumeOperatorCommand(text: string): {
   text: string;
   matched: boolean;
+  /** /whiteboard: app access plus the instruction to draw on the Whiteboard. */
+  whiteboard: boolean;
 } {
   // Keep the old spellings as unlisted aliases for existing drafts and threads.
-  const match = text.match(/^\s*\/(?:operator|mono|monocode)(?=\s|$)\s*/i);
-  if (!match) return { text, matched: false };
-  return { text: text.slice(match[0].length), matched: true };
+  const match = text.match(/^\s*\/(operator|mono|monocode|whiteboard)(?=\s|$)\s*/i);
+  if (!match) return { text, matched: false, whiteboard: false };
+  return {
+    text: text.slice(match[0].length),
+    matched: true,
+    whiteboard: match[1]?.toLowerCase() === WHITEBOARD_COMMAND.name,
+  };
 }
 
 const LEGACY_COMMAND = /^\s*\/(?:mono|monocode)(?=\s|$)\s*/i;

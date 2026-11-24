@@ -14,6 +14,7 @@ import {
   CircleDashed,
   CursorMagicSelection,
   FilePlus,
+  Whiteboard,
   Plus,
   Share,
   Square,
@@ -187,6 +188,7 @@ import {
   consumeOperatorCommand,
   operatorEnabledInThread,
   OPERATOR_COMMAND,
+  WHITEBOARD_COMMAND,
 } from "../model/operatorCommand";
 import {
   consumeOrchestratorCommand,
@@ -604,6 +606,8 @@ export function Composer({
   useEffect(() => { if (!liveInteractiveTerminal && !interactiveDiagnosticsAvailable) setInteractiveTerminalOpen(false); }, [liveInteractiveTerminal, interactiveDiagnosticsAvailable]);
   const [planSelected, setPlanSelected] = useState(false);
   const [operatorSelected, setOperatorSelected] = useState(false);
+  // Fork (L-394): draw this message's answer on the Whiteboard.
+  const [whiteboardSelected, setWhiteboardSelected] = useState(false);
   const [orchestrationSelected, setOrchestrationSelected] = useState(false);
   const [draftSelected, setDraftSelected] = useState(false);
   const [slash, setSlash] = useState<SlashToken | null>(null);
@@ -706,6 +710,7 @@ export function Composer({
             SESSION_FOLDER_COMMAND,
             MCP_COMMAND,
             OPERATOR_COMMAND,
+            WHITEBOARD_COMMAND,
             ...(hideTopBar ? [] : [ORCHESTRATOR_COMMAND]),
             PLAN_COMMAND,
             ...(canSaveDraft && onSaveDraft ? [DRAFT_COMMAND] : []),
@@ -713,7 +718,7 @@ export function Composer({
             ...(supportsBtwHarness(harness) ? [BTW_COMMAND] : []),
             ...skills.filter(
               (skill) =>
-                ![OPERATOR_COMMAND.name, "mono", "monocode"].includes(
+                ![OPERATOR_COMMAND.name, WHITEBOARD_COMMAND.name, "mono", "monocode"].includes(
                   skill.name,
                 ) &&
                 (skill.kind === "native" ||
@@ -825,6 +830,7 @@ export function Composer({
   const orchestrationActive =
     orchestrationSelected || leadingMode?.name === ORCHESTRATOR_COMMAND.name;
   const draftActive = draftSelected || leadingMode?.name === DRAFT_COMMAND.name;
+  const whiteboardActive = whiteboardSelected || leadingMode?.name === WHITEBOARD_COMMAND.name;
   const planActive = planSelected || leadingMode?.name === PLAN_COMMAND.name;
 
   /** Turning a mode off also drops its leading command from the text. */
@@ -1203,6 +1209,7 @@ export function Composer({
     setDraft("");
     onDraftChange?.("");
     setDraftSelected(false);
+    setWhiteboardSelected(false);
     setPlanSelected(false);
     setOrchestrationSelected(false);
     setSessionFolderSelected(false);
@@ -1737,10 +1744,13 @@ export function Composer({
     const text = isNativeCommandPrompt(orchestratorCommand.text, harness)
       ? orchestratorCommand.text
       : composeInboxMessage(inboxCard, orchestratorCommand.text);
-    const submittedText =
-      operatorSelected && !consumeOperatorCommand(text).matched
-        ? `/operator ${text}`
-        : text;
+    const submittedText = consumeOperatorCommand(text).matched
+      ? text
+      : whiteboardSelected
+        ? `/whiteboard ${text}`
+        : operatorSelected
+          ? `/operator ${text}`
+          : text;
     const files = attachmentsRef.current;
     if (!text && files.length === 0 && !noteCard && !handoffCard) return;
     // Clear the parent draft before onSubmit. The app can synchronously remount
@@ -1821,6 +1831,7 @@ export function Composer({
     onEditingLastTurnChange?.(false);
     setPlanSelected(false);
     setOperatorSelected(false);
+    setWhiteboardSelected(false);
     setOrchestrationSelected(false);
     setSessionFolderSelected(false);
     setSessionFolderOpen(false);
@@ -2758,6 +2769,7 @@ export function Composer({
                         setOperatorSelected(false);
                         setOrchestrationSelected(false);
                         setDraftSelected(false);
+                        setWhiteboardSelected(false);
                         setPlusOpen(false);
                         ref.current?.focus();
                       }}
@@ -2798,6 +2810,7 @@ export function Composer({
                         setPlanSelected(false);
                         setOrchestrationSelected(false);
                         setDraftSelected(false);
+                        setWhiteboardSelected(false);
                         setPlusOpen(false);
                         ref.current?.focus();
                       }}
@@ -2818,6 +2831,36 @@ export function Composer({
                       ) : null}
                     </button>
                   ) : null}
+                  {!remote ? (
+                    <button
+                      type="button"
+                      aria-pressed={whiteboardActive}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setWhiteboardSelected(!whiteboardActive);
+                        if (whiteboardActive) clearLeadingMode(WHITEBOARD_COMMAND.name);
+                        setOperatorSelected(false);
+                        setPlanSelected(false);
+                        setOrchestrationSelected(false);
+                        setDraftSelected(false);
+                        setPlusOpen(false);
+                        ref.current?.focus();
+                      }}
+                      data-shared-hover-item
+                      className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left text-content hover:bg-content/10"
+                    >
+                      <Whiteboard className="mt-0.5 size-4 shrink-0 text-teal-300/80" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13px]">Whiteboard</span>
+                        <span className="block truncate whitespace-nowrap text-[11px] leading-4 text-content/45">
+                          Draw the answer on a new Whiteboard sheet
+                        </span>
+                      </span>
+                      {whiteboardActive ? (
+                        <Check className="mt-0.5 size-3.5 shrink-0 text-teal-300/80" />
+                      ) : null}
+                    </button>
+                  ) : null}
                   {!remote && !hideTopBar && (
                     <button
                       type="button"
@@ -2831,6 +2874,7 @@ export function Composer({
                         setPlanSelected(false);
                         setOperatorSelected(false);
                         setDraftSelected(false);
+                        setWhiteboardSelected(false);
                         setPlusOpen(false);
                         ref.current?.focus();
                       }}
@@ -2865,6 +2909,7 @@ export function Composer({
                         setPlanSelected(false);
                         setOperatorSelected(false);
                         setOrchestrationSelected(false);
+                        setWhiteboardSelected(false);
                         setPlusOpen(false);
                         ref.current?.focus();
                       }}
@@ -2902,6 +2947,16 @@ export function Composer({
                     clearLeadingMode(OPERATOR_COMMAND.name);
                     ref.current?.focus();
                   }}
+              />
+            ) : null}
+            {!compact && whiteboardActive ? (
+              <ModeCommandPill
+                name={WHITEBOARD_COMMAND.name}
+                onClear={() => {
+                  setWhiteboardSelected(false);
+                  clearLeadingMode(WHITEBOARD_COMMAND.name);
+                  ref.current?.focus();
+                }}
               />
             ) : null}
             {!compact && orchestrationActive ? (

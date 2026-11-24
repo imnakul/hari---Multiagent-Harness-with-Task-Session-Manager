@@ -52,10 +52,20 @@ import {
   openSheet,
   removeSheet,
   renameSheet,
+  setSheetBackground,
   setSheetLocked,
   sortedSheets,
   type WhiteboardIndex,
+  type WhiteboardSheet,
 } from "../model/sheets";
+import {
+  DEFAULT_SHEET_BACKGROUND,
+  fillCss,
+  patternStyle,
+  themeForBackground,
+  type CanvasView,
+  type SheetBackground,
+} from "../model/sheetBackground";
 import {
   loadSheetChat,
   loadSheetScene,
@@ -85,18 +95,26 @@ import {
   type ChatDock,
 } from "../model/whiteboardPrefs";
 import { applyWhiteboardOps, type WhiteboardSkeleton } from "../model/whiteboardScene";
+import { adoptWhenMounted } from "../model/whiteboardApi";
 import { iconSvg, svgDataUrl, type CatalogIcon } from "./iconCatalog";
 import { IconLibraryPicker } from "./IconLibraryPicker";
 import { RadialToolMenu, type WheelAction } from "./RadialToolMenu";
 import { WhiteboardChat } from "./WhiteboardChat";
 import {
+  drawOrQueue,
   forgetSheet,
   publishChat,
   publishedChat,
   registerCanvas,
   takePending,
+  WAITING_NOTE,
   withDrawnNote,
 } from "../model/whiteboardRuns";
+import {
+  serveWhiteboardDraws,
+  type WhiteboardDrawInput,
+  type WhiteboardDrawResult,
+} from "../model/whiteboardTool";
 import { WhiteboardTopBar, type ExportKind } from "./WhiteboardTopBar";
 
 registerWhiteboardFonts(FONT_FAMILY as unknown as Record<string, number>);
@@ -196,6 +214,11 @@ export function WhiteboardView({
   const [activeTool, setActiveTool] = useState<string>("selection");
   const [fontId, setFontId] = useState<number>(DEFAULT_WHITEBOARD_FONT_ID);
   const [zoom, setZoom] = useState(1);
+  // Fork (L-393): where the canvas is scrolled, so the sheet pattern moves with the drawing.
+  const [view, setView] = useState<CanvasView>({ scrollX: 0, scrollY: 0, zoom: 1 });
+  // A background being dragged (opacity, colour picker) shows at once and is saved shortly after.
+  const [backgroundDraft, setBackgroundDraft] = useState<{ id: string; background: SheetBackground } | null>(null);
+  const backgroundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [grid, setGrid] = useState(rememberedGrid);
   const [snap, setSnap] = useState(rememberedSnap);
   const [chatOpen, setChatOpen] = useState(rememberedChatOpen);
@@ -216,6 +239,26 @@ export function WhiteboardView({
   const savedVersion = useRef(new Map<string, string>());
   const saveTimer = useRef<number | undefined>(undefined);
   const blockedSaves = useRef(new Set<string>());
+
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  // Fork (L-392): take Excalidraw's API only from the editor that really mounted.
+  // The editor is built while rendering its sheet, so the open sheet then is its sheet.
+  // Which sheet each adopted editor shows: right after a switch, effects still see the
+  // previous editor for one render, and must not treat it as the new sheet's.
+  const apiSheets = useRef(new WeakMap<ExcalidrawImperativeAPI, string>());
+  const adoptApi = useCallback((candidate: ExcalidrawImperativeAPI) => {
+    const sheetId = activeIdRef.current;
+    if (!sheetId) return;
+    adoptWhenMounted(
+      candidate,
+      (adopted) => {
+        apiSheets.current.set(adopted, sheetId);
+        setApi(adopted);
+      },
+      () => activeIdRef.current === sheetId,
+    );
+  }, []);
 
   const sheet = index?.sheets.find((item) => item.id === activeId);
   const locked = !!sheet?.locked;
@@ -354,7 +397,7 @@ export function WhiteboardView({
 
   // The first scene after a load is what's on disk; don't write it back.
   useEffect(() => {
-    if (!api || !activeId) return;
+    if (!api || !activeId || apiSheets.current.get(api) !== activeId) return;
     savedVersion.current.set(
       activeId,
       sceneVersion({
@@ -363,7 +406,9 @@ export function WhiteboardView({
         files: api.getFiles(),
       }),
     );
-    setZoom(api.getAppState().zoom.value);
+    const state = api.getAppState();
+    setZoom(state.zoom.value);
+    setView({ scrollX: state.scrollX, scrollY: state.scrollY, zoom: state.zoom.value });
   }, [api, activeId]);
 
   const onChange = useCallback(
@@ -406,6 +451,49 @@ export function WhiteboardView({
     setActiveId(created.id);
   };
 
+  // Fork (L-394): `whiteboard.draw` from a chat makes (or reopens) its sheet here,
+  // switches to it and draws; a sheet still loading draws as soon as it opens.
+  const serveDraw = useRef<((input: WhiteboardDrawInput) => WhiteboardDrawResult) | null>(null);
+  serveDraw.current = (input) => {
+    const current = indexRef.current;
+    if (!current) throw new Error("The Whiteboard is still loading. Try again.");
+    let target: WhiteboardSheet;
+    if (input.sheetId) {
+      const found = current.sheets.find((item) => item.id === input.sheetId);
+      if (!found)
+        throw new Error(`No Whiteboard sheet has id ${input.sheetId}. Leave out sheetId to make a new sheet.`);
+      if (found.locked)
+        throw new Error(`"${found.name}" is locked (view only). Ask the user to unlock it, or draw on a new sheet.`);
+      target = found;
+      switchSheet(found.id);
+    } else {
+      flushSave();
+      latest.current = null;
+      const { index: next, sheet: created } = createSheet(current, newSheetId(), Date.now(), input.name);
+      commitIndex(next);
+      setWheel(null);
+      setIconsOpen(false);
+      setActiveId(created.id);
+      target = created;
+    }
+    const note = drawOrQueue(target.id, input.ops, Date.now());
+    return {
+      sheetId: target.id,
+      name: target.name,
+      created: !input.sheetId,
+      note: note === WAITING_NOTE ? "Drawing as the sheet opens" : note,
+    };
+  };
+  const indexReady = index !== null;
+  useEffect(() => {
+    if (!indexReady) return;
+    return serveWhiteboardDraws(async (input) => {
+      const serve = serveDraw.current;
+      if (!serve) throw new Error("The Whiteboard is still loading. Try again.");
+      return serve(input);
+    });
+  }, [indexReady]);
+
   const deleteSheet = async () => {
     if (!sheet) return;
     const confirmed = await ask(
@@ -442,6 +530,48 @@ export function WhiteboardView({
     const current = indexRef.current;
     if (current && sheet) commitIndex(renameSheet(current, sheet.id, name, Date.now()));
   };
+
+  const commitBackground = useCallback(
+    (id: string, background: SheetBackground) => {
+      const current = indexRef.current;
+      if (current) commitIndex(setSheetBackground(current, id, background));
+    },
+    [commitIndex],
+  );
+
+  const changeBackground = (background: SheetBackground) => {
+    if (!sheet) return;
+    const id = sheet.id;
+    setBackgroundDraft({ id, background });
+    if (backgroundTimer.current) clearTimeout(backgroundTimer.current);
+    backgroundTimer.current = setTimeout(() => {
+      backgroundTimer.current = null;
+      commitBackground(id, background);
+      setBackgroundDraft((draft) => (draft?.background === background ? null : draft));
+    }, 300);
+  };
+
+  // Leaving the sheet (or the Whiteboard) saves a background still being dragged.
+  const pendingBackground = useRef(backgroundDraft);
+  pendingBackground.current = backgroundDraft;
+  useEffect(
+    () => () => {
+      const draft = pendingBackground.current;
+      if (!backgroundTimer.current || !draft) return;
+      clearTimeout(backgroundTimer.current);
+      backgroundTimer.current = null;
+      commitBackground(draft.id, draft.background);
+      setBackgroundDraft(null);
+    },
+    [activeId, commitBackground],
+  );
+
+  const background =
+    (backgroundDraft && backgroundDraft.id === sheet?.id ? backgroundDraft.background : sheet?.background) ??
+    DEFAULT_SHEET_BACKGROUND;
+  const sheetFill = fillCss(background);
+  const sheetPattern = ready ? patternStyle(background, view) : null;
+  const canvasTheme = themeForBackground(background) ?? (light ? "light" : "dark");
 
   const toggleLock = () => {
     const current = indexRef.current;
@@ -734,16 +864,17 @@ export function WhiteboardView({
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
   useEffect(() => {
-    if (!api || !activeId) return;
+    if (!api || !activeId || apiSheets.current.get(api) !== activeId) return;
     const id = activeId;
     const draw = (ops: WhiteboardOps) => (lockedRef.current ? "Not drawn: the sheet is locked" : applyOps(ops));
     const waiting = takePending(id);
     if (waiting) {
-      const note = draw(waiting.ops) ?? "Nothing to change";
+      // In the order they arrived, so a later drawing can change or remove an earlier one.
+      const drawn = waiting.map(({ ops, at }) => ({ at, note: draw(ops) ?? "Nothing to change" }));
       void (async () => {
         const chat = publishedChat(id) ?? (await loadSheetChat(id).catch(() => null));
         if (!chat) return;
-        const next = withDrawnNote(chat, waiting.at, note);
+        const next = drawn.reduce((messages, { at, note }) => withDrawnNote(messages, at, note), chat);
         publishChat(id, next);
         await saveSheetChat(id, next).catch(() => undefined);
       })();
@@ -781,6 +912,8 @@ export function WhiteboardView({
       activeTool={activeTool}
       fontId={fontId}
       grid={grid}
+      background={background}
+      onBackground={changeBackground}
       snap={snap}
       zoom={zoom}
       chatOpen={chatOpen}
@@ -851,7 +984,15 @@ export function WhiteboardView({
       )}
 
       <div className={`flex min-h-0 flex-1 ${dock === "bottom" ? "flex-col" : ""}`}>
-        <div ref={canvasBox} className="relative min-h-0 min-w-0 flex-1">
+        <div ref={canvasBox} className="relative isolate min-h-0 min-w-0 flex-1">
+          {sheetFill || sheetPattern ? (
+            <div
+              aria-hidden
+              data-whiteboard-sheet-background
+              className="pointer-events-none absolute inset-0 -z-10"
+              style={{ backgroundColor: sheetFill ?? undefined, ...sheetPattern }}
+            />
+          ) : null}
           {indexError ? (
             <div role="alert" className="flex h-full items-center justify-center p-6 text-center text-[13px] text-red-300/90">
               Couldn't open the whiteboards folder: {indexError}
@@ -868,10 +1009,13 @@ export function WhiteboardView({
             <Excalidraw
               key={loaded.id}
               initialData={loaded.data}
-              excalidrawAPI={setApi}
+              excalidrawAPI={adoptApi}
               onChange={onChange}
-              onScrollChange={(_x, _y, value) => setZoom(value.value)}
-              theme={light ? "light" : "dark"}
+              onScrollChange={(scrollX, scrollY, value) => {
+                setZoom(value.value);
+                setView({ scrollX, scrollY, zoom: value.value });
+              }}
+              theme={canvasTheme}
               viewModeEnabled={locked}
               gridModeEnabled={grid}
               objectsSnapModeEnabled={snap}

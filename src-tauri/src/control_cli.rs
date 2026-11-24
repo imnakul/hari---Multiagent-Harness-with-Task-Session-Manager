@@ -82,7 +82,7 @@ const ACTIONS: [&str; 12] = [
     "list", "delegate", "get", "steer", "message", "retry", "cancel", "wait", "review", "finish",
     "respond", "answer",
 ];
-const APP_ACTIONS: [&str; 47] = [
+const APP_ACTIONS: [&str; 48] = [
     "session_manager.list",
     "session_manager.read",
     "session_manager.write",
@@ -114,6 +114,7 @@ const APP_ACTIONS: [&str; 47] = [
     "clickup.tasks",
     "clickup.create",
     "clickup.update",
+    "whiteboard.draw",
     "artifacts.list",
     "artifacts.read",
     "artifacts.write",
@@ -309,6 +310,24 @@ Actions:
   clickup.update {"id":"...","done":true,"dueDate":null}  Change a task; omitted
                   fields stay as they are. assignees is the full new list.
                   done:true moves it to the list's done status.
+
+  whiteboard.draw {"name":"Sign-in flow","ops":{"add":[
+                    {"type":"rectangle","id":"login","x":0,"y":0,"width":180,"height":70,"label":"Login"},
+                    {"type":"diamond","id":"ok","x":260,"y":-10,"width":160,"height":90,"label":"Valid?"},
+                    {"type":"arrow","from":"login","to":"ok","label":"submit"},
+                    {"type":"text","x":0,"y":-60,"text":"Sign-in","fontSize":28}]}}
+                  Make a new Whiteboard sheet, open it and draw. Returns
+                  {sheetId,name,created,note}. Pass {"sheetId":"...","ops":{...}}
+                  to change that sheet later; locked sheets refuse changes.
+                  ops: add (new elements), update ([{"id":"login","label":"Sign in",
+                  "x":40}]), remove (["id"]), clear (true starts over).
+                  Types: rectangle, ellipse, diamond (x, y, width, height, label),
+                  text (x, y, text, fontSize), arrow or line (from/to ids, or
+                  x, y, endX, endY; label). Pixels, y down; about 60px between
+                  shapes; a box is about 180x70. Styles: strokeColor and
+                  backgroundColor (hex or transparent), strokeStyle solid, dashed
+                  or dotted, fillStyle solid, hachure or cross-hatch.
+                  At most 60 new elements per call.
 
   artifacts.list {"limit":30,"offset":0}  Mono or habit only. Saved artifact titles.
   artifacts.read {"id":"..."}  Full content of one artifact.
@@ -843,6 +862,20 @@ mod tests {
         assert!(text.contains("use null for Personal"));
         assert!(text.contains("Omitted fields stay unchanged"));
         assert!(parse_args_for(&args(&["tasks.unknown"]), true).is_err());
+    }
+
+    #[test]
+    fn app_mode_exposes_whiteboard_draw_and_documents_its_ops() {
+        assert!(matches!(
+            parse_args_for(&args(&["whiteboard.draw", "--json", "{\"ops\":{\"add\":[]}}"]), true),
+            Ok(Parsed::Call(_, _, _))
+        ));
+        // App access only: the orchestration control CLI never draws.
+        assert!(parse_args_for(&args(&["whiteboard.draw", "--json", "{}"]), false).is_err());
+        let text = app_help();
+        assert!(text.contains("whiteboard.draw"));
+        assert!(text.contains("\"sheetId\""));
+        assert!(text.contains("At most 60 new elements per call"));
     }
 
     #[test]

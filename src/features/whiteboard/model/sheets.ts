@@ -1,3 +1,5 @@
+import { isDefaultBackground, parseSheetBackground, type SheetBackground } from "./sheetBackground";
+
 /**
  * Whiteboard sheets (fork, L-194): an index of named sheets, each saved as
  * `<dir>/<id>.excalidraw`, with its agent chat in `<dir>/<id>.chat.json`.
@@ -11,6 +13,8 @@ export type WhiteboardSheet = {
   locked: boolean;
   /** Set once the scene file has been written; a new sheet has none yet. */
   saved: boolean;
+  /** Fork (L-393): fill and pattern behind the drawing; absent is the default look. */
+  background?: SheetBackground;
 };
 
 export type WhiteboardIndex = {
@@ -55,6 +59,7 @@ export function parseWhiteboardIndex(raw: string | null | undefined): Whiteboard
         updatedAt: sheet.updatedAt,
         locked: sheet.locked === true,
         saved: sheet.saved !== false,
+        ...withBackground(parseSheetBackground((sheet as { background?: unknown }).background)),
       }));
     const lastOpenedId =
       typeof data.lastOpenedId === "string" && seen.has(data.lastOpenedId)
@@ -139,6 +144,20 @@ export function setSheetLocked(
   return patchSheet(index, id, (sheet) =>
     sheet.locked === locked ? sheet : { ...sheet, locked },
   );
+}
+
+const withBackground = (background: SheetBackground | undefined) => (background ? { background } : {});
+
+/** The default background removes the setting, so old index files stay unchanged. */
+export function setSheetBackground(
+  index: WhiteboardIndex,
+  id: string,
+  background: SheetBackground,
+): WhiteboardIndex {
+  return patchSheet(index, id, (sheet) => {
+    const { background: _old, ...rest } = sheet;
+    return isDefaultBackground(background) ? (sheet.background ? rest : sheet) : { ...rest, background: { ...background } };
+  });
 }
 
 export function markSheetSaved(

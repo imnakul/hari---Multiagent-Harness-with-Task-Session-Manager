@@ -5,6 +5,7 @@ import {
   operatorEnabledInThread,
   operatorUserPrompt,
   OPERATOR_COMMAND,
+  WHITEBOARD_COMMAND,
 } from "./operatorCommand";
 
 describe("Operator composer command", () => {
@@ -31,25 +32,41 @@ describe("Operator composer command", () => {
     expect(consumeOperatorCommand("/operator list my notes")).toEqual({
       text: "list my notes",
       matched: true,
+      whiteboard: false,
     });
     expect(consumeOperatorCommand("  /OPERATOR\nstart a session")).toEqual({
       text: "start a session",
       matched: true,
+      whiteboard: false,
     });
     expect(consumeOperatorCommand("/operator-extra list notes")).toEqual({
       text: "/operator-extra list notes",
       matched: false,
+      whiteboard: false,
     });
     expect(consumeOperatorCommand("Explain /operator")).toEqual({
       text: "Explain /operator",
       matched: false,
+      whiteboard: false,
     });
     for (const alias of ["/mono", "/monocode"]) {
       expect(consumeOperatorCommand(`${alias} list notes`)).toEqual({
         text: "list notes",
         matched: true,
+        whiteboard: false,
       });
     }
+  });
+
+  it("turns on app access and the Whiteboard for /whiteboard (L-394)", () => {
+    expect(consumeOperatorCommand("/whiteboard draw the sign-in flow")).toEqual({
+      text: "draw the sign-in flow",
+      matched: true,
+      whiteboard: true,
+    });
+    expect(consumeOperatorCommand("/Whiteboard")).toEqual({ text: "", matched: true, whiteboard: true });
+    expect(consumeOperatorCommand("/whiteboards x").matched).toBe(false);
+    expect(WHITEBOARD_COMMAND.invocation).toBe("whiteboard");
   });
 
   it("keeps access for later turns when a submitted user turn enabled it", () => {

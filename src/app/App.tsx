@@ -138,6 +138,7 @@ import {
   setWhiteboardViewing,
   subscribeRuns,
 } from "../features/whiteboard/model/whiteboardRuns";
+import { requestWhiteboardDraw, whiteboardToolContext } from "../features/whiteboard/model/whiteboardTool";
 import { useStableValue } from "../shared/hooks/useStableValue";
 import { useDragResize } from "../shared/hooks/useDragResize";
 import { beginLayoutTransition } from "../shared/lib/layoutTransition";
@@ -1791,6 +1792,8 @@ function Workspace({
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
   const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
+  // Fork (L-394): app actions run from a listener set up before onOpenWhiteboard exists.
+  const openWhiteboardRef = useRef<() => void>(() => undefined);
   // Fork (L-391): dot on the sidebar's Whiteboard when a reply lands while it is closed.
   const whiteboardUnseen = useSyncExternalStore(subscribeRuns, hasUnseenWhiteboardReply);
   useEffect(() => setWhiteboardViewing(whiteboardViewOpen), [whiteboardViewOpen]);
@@ -9600,7 +9603,9 @@ function Workspace({
         !current.blocks.some((block) => block.role === "user" && !block.draft);
       const promptText = operatorCommand.matched
         ? operatorCommand.text.trim() ||
-          "Explain what you can do in MonoCode with the app CLI."
+          (operatorCommand.whiteboard
+            ? "Ask me what I would like drawn on the Whiteboard."
+            : "Explain what you can do in MonoCode with the app CLI.")
         : sendText;
       const rawCommand =
         !operatorCommand.matched &&
@@ -10805,8 +10810,10 @@ function Workspace({
           if (operatorCommand.matched || handAgent) {
             const cli = `${shellPath(await invoke<string>("app_cli_path"))} app`;
             appContext.push(
-              `<monocode_app>\n${handAgent ? "App access is always enabled in this thread, limited to your assigned projects." : "The user's Operator command enables app access in this thread, including later turns without the command."} You can start session tabs or split session panes right or down, list and create project worktrees, choose a new session's checkout, read, continue, stop, archive or delete other in-scope project sessions, save unsent drafts, organize session folders, and read or write saved notes and Tasks through the local CLI. Use the supported CLI/API to create, submit and track sessions. Never insert or edit MonoCode internal SQLite database rows: that bypasses live agents, request receipts and the Session Manager run ledger, and stored assistant text is not proof a worker ran. Session Manager supports prepared Todos with session_manager.list/read/write/delete/start, plus run-scoped remove/clear of done and stopped cards (both shown in the Done column). Saving a Todo does not launch an agent; start it explicitly. Todos preserve project, provider/model/settings/effort, permissions, prompt, files/images, and workspace/base. Operator can manage Todos across local projects via projectCwd; Monos and habit runs must stay within their assigned projects. Task Manager uses the existing tasks.* actions. Tasks support status, tags, Personal/project association, source links, completion and deletion; tasks.list filters by status/statuses, tags (all or any), projectCwd and query with pagination. Only stop, archive, or delete eligible project sessions returned by sessions.list; never target this caller session, a Mono, a habit run, or an orchestrator session. Run \`${cli} --help\` for exact commands and JSON fields, then use it as needed for the user's request. When reading another session, start with its latest two or three user/assistant exchanges. Request older exchanges with nextBefore or a larger excerpt only if needed. The CLI uses a session credential already in your environment; never print it. New sessions inherit this session's permission mode unless runtimeMode is set explicitly. For a new session with a draft, call sessions.start with its prompt and draft:true; do not submit a seed prompt. Sessions you start appear in the sidebar under this session without opening; set placement right/down or reveal:true only when the user asks to see them. The returned ID can be used as besideSessionId to split its pane again or moved into a folder immediately. A normal sessions.start submits its prompt but returns after acceptance, so do not wait for that agent to finish before organizing it.\n</monocode_app>`,
+              `<monocode_app>\n${handAgent ? "App access is always enabled in this thread, limited to your assigned projects." : "The user's Operator command enables app access in this thread, including later turns without the command."} You can start session tabs or split session panes right or down, list and create project worktrees, choose a new session's checkout, read, continue, stop, archive or delete other in-scope project sessions, save unsent drafts, organize session folders, read or write saved notes and Tasks, and draw diagrams on the Whiteboard (whiteboard.draw) through the local CLI. Use the supported CLI/API to create, submit and track sessions. Never insert or edit MonoCode internal SQLite database rows: that bypasses live agents, request receipts and the Session Manager run ledger, and stored assistant text is not proof a worker ran. Session Manager supports prepared Todos with session_manager.list/read/write/delete/start, plus run-scoped remove/clear of done and stopped cards (both shown in the Done column). Saving a Todo does not launch an agent; start it explicitly. Todos preserve project, provider/model/settings/effort, permissions, prompt, files/images, and workspace/base. Operator can manage Todos across local projects via projectCwd; Monos and habit runs must stay within their assigned projects. Task Manager uses the existing tasks.* actions. Tasks support status, tags, Personal/project association, source links, completion and deletion; tasks.list filters by status/statuses, tags (all or any), projectCwd and query with pagination. Only stop, archive, or delete eligible project sessions returned by sessions.list; never target this caller session, a Mono, a habit run, or an orchestrator session. Run \`${cli} --help\` for exact commands and JSON fields, then use it as needed for the user's request. When reading another session, start with its latest two or three user/assistant exchanges. Request older exchanges with nextBefore or a larger excerpt only if needed. The CLI uses a session credential already in your environment; never print it. New sessions inherit this session's permission mode unless runtimeMode is set explicitly. For a new session with a draft, call sessions.start with its prompt and draft:true; do not submit a seed prompt. Sessions you start appear in the sidebar under this session without opening; set placement right/down or reveal:true only when the user asks to see them. The returned ID can be used as besideSessionId to split its pane again or moved into a folder immediately. A normal sessions.start submits its prompt but returns after acceptance, so do not wait for that agent to finish before organizing it.\n</monocode_app>`,
             );
+            // Fork (L-394): the composer's Whiteboard item asks for a drawing.
+            if (operatorCommand.whiteboard) appContext.push(whiteboardToolContext(cli));
           }
           // A Mono reads who it is ahead of the message, so it never takes it
           // for something the user pasted. A command must stay first.
@@ -14703,6 +14710,12 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                 throw error;
               }
             },
+            whiteboard: {
+              draw: (input) => {
+                openWhiteboardRef.current();
+                return requestWhiteboardDraw(input);
+              },
+            },
             clickup: {
               linkedProject: () => loadClickupConfig().projectPath,
               run: (action, input) =>
@@ -15858,6 +15871,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       setWhiteboardViewOpen(true);
     });
   }, []);
+  openWhiteboardRef.current = onOpenWhiteboard;
 
   const onLeaveWhiteboard = useCallback(() => {
     setWhiteboardViewOpen(false);

@@ -13,7 +13,8 @@ export const WAITING_NOTE = "Draws when you open this sheet";
 type Draw = (ops: WhiteboardOps) => string | null;
 
 const running = new Map<string, AbortController>();
-const pending = new Map<string, { ops: WhiteboardOps; at: number }>();
+/** Fork (L-394): every drawing waiting for a sheet, oldest first; they draw in turn. */
+const pending = new Map<string, { ops: WhiteboardOps; at: number }[]>();
 const canvases = new Map<string, Draw>();
 /** The newest chat for a sheet, ahead of the save on disk. */
 const chats = new Map<string, WhiteboardChatMessage[]>();
@@ -107,12 +108,13 @@ export function registerCanvas(sheetId: string, draw: Draw): () => void {
 export function drawOrQueue(sheetId: string, ops: WhiteboardOps, at: number): string {
   const draw = canvases.get(sheetId);
   if (draw) return draw(ops) ?? "Nothing to change";
-  pending.set(sheetId, { ops, at });
+  const earlier = pending.get(sheetId) ?? [];
+  pending.set(sheetId, [...earlier, { ops, at }]);
   return WAITING_NOTE;
 }
 
-/** Changes waiting for this sheet, removed as they are handed over. */
-export function takePending(sheetId: string): { ops: WhiteboardOps; at: number } | undefined {
+/** Changes waiting for this sheet, oldest first, removed as they are handed over. */
+export function takePending(sheetId: string): { ops: WhiteboardOps; at: number }[] | undefined {
   const waiting = pending.get(sheetId);
   pending.delete(sheetId);
   return waiting;

@@ -5,11 +5,12 @@ import {
   CursorMagicSelection,
   MessageSquare,
   Share,
+  Whiteboard,
   X,
 } from "../../../shared/ui/icons";
 import { BTW_COMMAND } from "../model/btw";
 import { DRAFT_COMMAND } from "../model/draftCommand";
-import { OPERATOR_COMMAND } from "../model/operatorCommand";
+import { OPERATOR_COMMAND, WHITEBOARD_COMMAND } from "../model/operatorCommand";
 import { ORCHESTRATOR_COMMAND } from "../model/orchestratorCommand";
 import { PLAN_COMMAND } from "../model/plan";
 
@@ -52,6 +53,22 @@ export const MODE_COMMAND_STYLES: Record<string, ModeCommandStyle> = {
       label: "Operator",
       description: "Give this thread access to MonoCode",
       iconClassName: "text-sky-300/80",
+    },
+  },
+  // Fork (L-394).
+  [WHITEBOARD_COMMAND.name]: {
+    Icon: Whiteboard,
+    className: "text-teal-700 dark:text-teal-200/90",
+    pill: {
+      label: "Whiteboard",
+      title: "Whiteboard",
+      className:
+        "bg-teal-500/15 font-medium text-teal-700 hover:bg-teal-500/20 dark:bg-teal-400/10 dark:text-teal-200/90 dark:hover:bg-teal-400/15",
+    },
+    menu: {
+      label: "Whiteboard",
+      description: "Draw the answer on a new Whiteboard sheet",
+      iconClassName: "text-teal-300/80",
     },
   },
   [ORCHESTRATOR_COMMAND.name]: {
