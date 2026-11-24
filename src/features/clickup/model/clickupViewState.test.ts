@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LIST_INFO, MEMBER_ANA, MEMBER_BEN, makeTask } from "./clickupTestKit";
 import {
   DEFAULT_CLICKUP_VIEW_STATE,
-  filterByStatus,
+  withoutHiddenStatuses,
   firstName,
   customFieldColumns,
   groupClickupTasks,
@@ -22,8 +22,10 @@ describe("ClickUp view state (L-381)", () => {
     expect(parseClickupViewState(null)).toEqual(DEFAULT_CLICKUP_VIEW_STATE);
     expect(
       parseClickupViewState({ view: "board", groupBy: "nope", sort: { field: "priority", dir: "desc" }, collapsed: ["a", 3] }),
-    ).toEqual({ view: "board", groupBy: "status", sort: { field: "priority", dir: "desc" }, collapsed: ["a"], mine: false, boardColumnWeights: {}, statuses: [], panelWidth: 380 });
-    expect(parseClickupViewState({ statuses: [" To Do ", 4] }).statuses).toEqual(["to do"]);
+    ).toEqual({ view: "board", groupBy: "status", sort: { field: "priority", dir: "desc" }, collapsed: ["a"], mine: false, boardColumnWeights: {}, hiddenStatuses: [], panelWidth: 380 });
+    expect(parseClickupViewState({ hiddenStatuses: [" To Do ", 4] }).hiddenStatuses).toEqual(["to do"]);
+    // L-387: the older "statuses to show" pick is dropped, so every status shows again.
+    expect(parseClickupViewState({ statuses: ["to do"] }).hiddenStatuses).toEqual([]);
     // The task panel width is clamped to its bounds; junk falls back to the default.
     expect(parseClickupViewState({ panelWidth: 5000 }).panelWidth).toBe(1000);
     expect(parseClickupViewState({ panelWidth: "wide" }).panelWidth).toBe(380);
@@ -101,12 +103,12 @@ describe("ClickUp view state (L-381)", () => {
     expect(customFieldColumns(tasks).map((column) => column.name)).toEqual(["Severity", "Report Type"]);
   });
 
-  it("filters by picked statuses, ignoring picks that are no longer available", () => {
+  it("hides the statuses unticked in the Status menu (L-387)", () => {
     const tasks = [makeTask("1", { status: open }), makeTask("2", { status: doing })];
-    expect(filterByStatus(tasks, ["to do"], ["to do", "in progress"]).map((task) => task.id)).toEqual(["1"]);
-    expect(filterByStatus(tasks, [], ["to do"]).map((task) => task.id)).toEqual(["1", "2"]);
-    // A pick that no longer exists (Show done off, list unlinked) never empties the page.
-    expect(filterByStatus(tasks, ["complete"], ["to do", "in progress"]).map((task) => task.id)).toEqual(["1", "2"]);
+    expect(withoutHiddenStatuses(tasks, []).map((task) => task.id)).toEqual(["1", "2"]);
+    expect(withoutHiddenStatuses(tasks, ["in progress"]).map((task) => task.id)).toEqual(["1"]);
+    // A hidden status no task has hides nothing.
+    expect(withoutHiddenStatuses(tasks, ["complete"]).map((task) => task.id)).toEqual(["1", "2"]);
   });
 
   it("takes the first word of a username for the Assignee button", () => {

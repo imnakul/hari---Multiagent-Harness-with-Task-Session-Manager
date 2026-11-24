@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { X } from "../../../shared/ui/icons";
+import { ChevronLeft, X } from "../../../shared/ui/icons";
+import { ProjectChatList, type FocusChatInfo } from "../../focus/ui/FocusPicker";
+import { useProjectMarks } from "../../projects/ui/ProjectMark";
+import { projectName } from "../../../shared/lib/paths";
 import { Popover } from "../../../shared/ui/Popover";
 import type { ClickupListInfo, ClickupMember, ClickupTask, ClickupTaskInput } from "../model/clickupApi";
 import { describeClickupError } from "../model/clickupMessages";
@@ -9,6 +12,7 @@ import {
   taskPatch,
   type ClickupTaskDraft,
 } from "../model/clickupTasks";
+import { ClickupCopyButton } from "./ClickupCopyButton";
 import { ClickupTaskDetails } from "./ClickupTaskDetails";
 import { ClickupTaskForm } from "./ClickupTaskForm";
 
@@ -43,6 +47,9 @@ export function ClickupTaskPanel({
   onSave,
   onNewSession,
   onGiveToMono,
+  project,
+  sessionStatus,
+  onContinueSession,
 }: {
   task: ClickupTask;
   listName: string;
@@ -56,12 +63,20 @@ export function ClickupTaskPanel({
   /** Both gather the task's details and files first, then hand them over. */
   onNewSession: () => Promise<void>;
   onGiveToMono: (monoId: string) => Promise<void>;
+  /** Fork (L-389): the linked project, whose chats "Continue in a session" lists; null when none is linked. */
+  project: string | null;
+  sessionStatus?: (sessionId: string) => FocusChatInfo["status"];
+  /** Sends the task to that chat now, or queues it while the chat is replying. */
+  onContinueSession: (sessionId: string) => Promise<void>;
 }): JSX.Element {
+  const marks = useProjectMarks();
   const [snapshot, setSnapshot] = useState<ClickupTaskDraft>(() => draftFromTask(task));
   const [draft, setDraft] = useState<ClickupTaskDraft>(snapshot);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The Start session menu, or its chat list (Continue in a session).
+  const [menuView, setMenuView] = useState<"menu" | "chats">("menu");
   const [starting, setStarting] = useState(false);
   const startWith = (handOff: () => Promise<void>): void => {
     setMenuOpen(false);
@@ -118,6 +133,7 @@ export function ClickupTaskPanel({
     <aside aria-label="Task" className="flex h-full min-h-0 w-full flex-col">
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-stroke px-3">
         <span className="min-w-0 flex-1 truncate text-[12px] text-content/60">{listName}</span>
+        <ClickupCopyButton task={task} label="Copy task" className={ICON_BUTTON} />
         <button type="button" aria-label="Close task" title="Close" className={ICON_BUTTON} onClick={onClose}>
           <X aria-hidden className="size-4" />
         </button>
@@ -167,7 +183,10 @@ export function ClickupTaskPanel({
             aria-expanded={menuOpen}
             aria-busy={starting}
             disabled={starting}
-            onClick={() => setMenuOpen((current) => !current)}
+            onClick={() => {
+              setMenuView("menu");
+              setMenuOpen((current) => !current);
+            }}
           >
             {starting ? "Gathering files…" : "Start session"}
           </button>
@@ -177,7 +196,39 @@ export function ClickupTaskPanel({
         </div>
       </footer>
       {menuOpen ? (
-        <Popover anchor={menuAnchor} side="top" align="start" width={240} onDismiss={() => setMenuOpen(false)}>
+        <Popover
+          anchor={menuAnchor}
+          side="top"
+          align="start"
+          width={menuView === "chats" ? 320 : 240}
+          onDismiss={() => setMenuOpen(false)}
+          className={menuView === "chats" ? "flex flex-col overflow-hidden" : undefined}
+        >
+          {menuView === "chats" && project ? (
+            <>
+              <div className="flex h-8 shrink-0 items-center gap-1 border-b border-stroke px-1">
+                <button
+                  type="button"
+                  aria-label="Back"
+                  title="Back"
+                  onClick={() => setMenuView("menu")}
+                  className="grid size-6 shrink-0 place-items-center rounded-md text-content/55 hover:bg-content/8 hover:text-content"
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" strokeWidth={1.75} />
+                </button>
+                <span className="min-w-0 truncate text-[12px] font-medium text-content/70">
+                  Continue in a chat in {projectName(project)}
+                </span>
+              </div>
+              <ProjectChatList
+                className="h-[340px]"
+                cwd={project}
+                marks={marks}
+                statusOf={sessionStatus}
+                onPick={(sessionId) => startWith(() => onContinueSession(sessionId))}
+              />
+            </>
+          ) : (
           <div role="menu" className="py-1">
             <button
               type="button"
@@ -186,6 +237,16 @@ export function ClickupTaskPanel({
               onClick={() => startWith(onNewSession)}
             >
               New session
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!project}
+              title={project ? "Sends the task to a chat; a chat that is replying gets it next" : "Link a project in ClickUp setup first"}
+              className={MENU_ITEM}
+              onClick={() => setMenuView("chats")}
+            >
+              Continue in a session…
             </button>
             {monos.length === 0 ? (
               <button type="button" role="menuitem" disabled className={MENU_ITEM}>
@@ -210,6 +271,7 @@ export function ClickupTaskPanel({
               </>
             )}
           </div>
+          )}
         </Popover>
       ) : null}
     </aside>

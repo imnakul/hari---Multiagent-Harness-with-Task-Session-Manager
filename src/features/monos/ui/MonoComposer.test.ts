@@ -233,3 +233,19 @@ it("inserts a picked emoji where the cursor was, beside attach", async () => {
   render();
   expect(container.querySelector('button[aria-label="Add emoji"]')).toBeNull();
 });
+
+it("shows Stop in Send's place while replying with an empty field, and Send once typed (L-386)", () => {
+  const onStop = vi.fn();
+  render({ onStop, controls: null });
+  const stop = container.querySelector<HTMLButtonElement>('[aria-label="Stop reply"]');
+  expect(stop).not.toBeNull();
+  expect(container.querySelector('[aria-label="Send"]')).toBeNull();
+  act(() => stop!.click());
+  expect(onStop).toHaveBeenCalledTimes(1);
+  type("Use the other account");
+  expect(container.querySelector('[aria-label="Stop reply"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Send"]')).not.toBeNull();
+  render({ controls: null });
+  type("");
+  expect(container.querySelector('[aria-label="Stop reply"]')).toBeNull();
+});

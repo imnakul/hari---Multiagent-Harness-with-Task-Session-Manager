@@ -3,6 +3,7 @@ import { BoardColumn, BoardColumns } from "../../../shared/ui/board/BoardColumns
 import { ChevronDown, Flag } from "../../../shared/ui/icons";
 import { ResizeHandle } from "../../../shared/ui/ResizeHandle";
 import { RevealHeight, useRevealHeight } from "../../../shared/ui/RevealHeight";
+import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import { BOARD_COLUMN_FILL_MIN } from "../../tasks/taskViewState";
 import type { ClickupTask } from "../model/clickupApi";
 import { dueLabel } from "../model/clickupTasks";
@@ -55,8 +56,10 @@ export function ClickupListView({
   onOpen,
 }: ViewProps & FoldProps): JSX.Element {
   const grouped = groupBy !== "none";
+  const lock = useLockOverscroll<HTMLDivElement>();
   return (
-    <div className="py-1">
+    // Fork (L-387): its own scroller pinned to the pane (like Task Manager's list), so the page never scrolls.
+    <div ref={lock} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-none py-1">
       {groups.map((group) => {
         const folded = grouped && collapsed.includes(group.key);
         return (

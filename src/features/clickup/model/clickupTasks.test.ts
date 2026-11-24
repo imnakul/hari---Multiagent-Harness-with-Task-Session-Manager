@@ -67,11 +67,10 @@ describe("clickupTasks (L-381)", () => {
     const prompt = sessionPromptForTask(
       makeTask("1", { markdownDescription: "x".repeat(MAX_PROMPT_DESCRIPTION * 2) }),
     );
-    expect(prompt).toContain("https://app.clickup.com/t/1");
     expect(prompt.length).toBeLessThan(MAX_PROMPT_DESCRIPTION + 500);
   });
 
-  it("puts the task's details and files in the session prompt", () => {
+  it("puts only the name, description and files in the session prompt (L-390)", () => {
     const prompt = sessionPromptForTask(
       makeTask("1", {
         name: "Fix login",
@@ -85,16 +84,12 @@ describe("clickupTasks (L-381)", () => {
         ],
         markdownDescription: "Steps here",
       }),
-      { listName: "Sprint", attachedFiles: ["a.png"], missingFiles: ["big.mov"] },
+      { attachedFiles: ["a.png"], missingFiles: [{ title: "big.mov", url: "https://files.example/big.mov" }] },
     );
-    expect(prompt).toContain("Priority: High · List: Sprint");
-    expect(prompt).toContain(`Assignees: ${MEMBER_ANA.username}`);
-    expect(prompt).toContain("Due: 2026-03-05");
-    expect(prompt).toContain("Tags: auth");
-    expect(prompt).toContain("Env: prod");
-    expect(prompt).not.toContain("Empty:");
-    expect(prompt).toContain("Attached files: a.png");
-    expect(prompt).toContain("Not attached (open in ClickUp): big.mov");
-    expect(prompt.endsWith("Steps here")).toBe(true);
+    expect(prompt).toBe(
+      ["# Fix login", "Steps here", "Attached files: a.png\nFile: [big.mov](https://files.example/big.mov)"].join("\n\n"),
+    );
+    // ClickUp's bookkeeping stays out.
+    expect(prompt).not.toMatch(/Priority|Assignees|Due|Tags|Env|app\.clickup\.com/);
   });
 });

@@ -455,7 +455,7 @@ export function TasksView({
         if (action.status !== task.status) changeStatus(task, action.status);
         return;
       case "copy":
-        void copyText(taskMarkdown(task, projectName))
+        void copyText(taskMarkdown(task))
           .catch((reason: unknown) => setActionError(message(reason)));
         return;
       case "archive":

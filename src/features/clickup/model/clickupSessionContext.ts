@@ -1,4 +1,5 @@
-import { MAX_EMBED_BYTES } from "../../sessions/model/attachments";
+import { copyMessage } from "../../../platform/tauri/clipboard";
+import { attachmentsFromPaths, MAX_EMBED_BYTES } from "../../sessions/model/attachments";
 import { clickupApi, type ClickupTask, type ClickupTaskDetails } from "./clickupApi";
 import { sessionPromptForTask } from "./clickupTasks";
 
@@ -17,7 +18,9 @@ export interface ClickupSessionContext {
  * connection. Files that are too big or fail to download are named in the
  * text instead, so a session always starts.
  */
-export async function clickupSessionContext(task: ClickupTask, listName: string): Promise<ClickupSessionContext> {
+export async function clickupSessionContext(
+  task: Pick<ClickupTask, "id" | "name" | "markdownDescription">,
+): Promise<ClickupSessionContext> {
   let details: ClickupTaskDetails | null;
   try {
     details = await clickupApi.taskDetails(task.id);
@@ -40,7 +43,18 @@ export async function clickupSessionContext(task: ClickupTask, listName: string)
     }
   });
   const attachedIds = new Set(wanted.filter((_, index) => results[index]?.status === "fulfilled").map((file) => file.id));
-  const missingFiles = files.filter((file) => !attachedIds.has(file.id)).map((file) => file.title || "attachment");
-  const text = sessionPromptForTask(details?.task ?? task, { listName, attachedFiles, missingFiles });
+  const missingFiles = files.filter((file) => !attachedIds.has(file.id));
+  const text = sessionPromptForTask(details?.task ?? task, { attachedFiles, missingFiles });
   return { text, filePaths };
+}
+
+/**
+ * Fork (L-390): Copy for a task or subtask: the same useful text a session
+ * gets, with the task's files riding along, so pasting into a composer here
+ * attaches them (elsewhere, the text alone pastes).
+ */
+export async function copyClickupTask(task: Pick<ClickupTask, "id" | "name" | "markdownDescription">): Promise<void> {
+  const context = await clickupSessionContext(task);
+  const attachments = await attachmentsFromPaths(context.filePaths);
+  await copyMessage(context.text, attachments);
 }

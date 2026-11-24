@@ -28,7 +28,7 @@ import {
   CLICKUP_SORT_FIELDS,
   CLICKUP_SORT_LABELS,
   boardGroupBy,
-  filterByStatus,
+  withoutHiddenStatuses,
   firstName,
   groupClickupTasks,
   loadClickupViewState,
@@ -40,6 +40,7 @@ import {
   type ClickupViewState,
 } from "../model/clickupViewState";
 import { TasksViewSwitch } from "../../tasks/ui/TasksViewSwitch";
+import type { FocusChatInfo } from "../../focus/ui/FocusPicker";
 import { ClickupSetup } from "./ClickupSetup";
 import { ClickupTaskForm } from "./ClickupTaskForm";
 import { ClickupTaskPanel, type ClickupMonoChoice } from "./ClickupTaskPanel";
@@ -92,6 +93,8 @@ export function ClickupView({
   onToggleSidebar,
   onStartSession,
   onGiveToMono,
+  onContinueSession,
+  sessionStatus,
 }: {
   tabbed?: boolean;
   besideRail?: boolean;
@@ -105,6 +108,9 @@ export function ClickupView({
   /** `filePaths`: local copies of the task's files, attached to the composer. */
   onStartSession: (text: string, projectPath: string, filePaths: readonly string[]) => void;
   onGiveToMono: (monoId: string, text: string, filePaths: readonly string[]) => void;
+  /** Fork (L-389): sends the task into an existing chat, queued while it replies. */
+  onContinueSession: (sessionId: string, text: string, filePaths: readonly string[]) => void;
+  sessionStatus?: (sessionId: string) => FocusChatInfo["status"];
 }): JSX.Element {
   const config = useClickupConfig();
   const snapshot = useClickupSnapshot();
@@ -208,12 +214,12 @@ export function ClickupView({
       activeLists.map((list) => snapshot.lists[list.id]?.meta?.statuses ?? []),
       all,
     );
-    const choices = statuses.filter((status) => showDone || status.type !== "closed");
-    const shown = filterByStatus(
-      mineOnly ? all.filter(isMine) : all,
-      viewState.statuses,
-      choices.map((status) => statusKey(status.status)),
+    // Fork (L-387): only statuses this tab's tasks use, so a list never offers another list's statuses.
+    const used = new Set(all.map((task) => statusKey(task.status.status)));
+    const choices = statuses.filter(
+      (status) => (showDone || status.type !== "closed") && used.has(statusKey(status.status)),
     );
+    const shown = withoutHiddenStatuses(mineOnly ? all.filter(isMine) : all, viewState.hiddenStatuses);
     const sorted = sortClickupTasks(shown, viewState.sort, statuses);
     // Tasks made here this session stay on top of their group, so a new one is easy to find.
     const ordered = [...sorted.filter((task) => created.has(task.id)), ...sorted.filter((task) => !created.has(task.id))];
@@ -229,10 +235,7 @@ export function ClickupView({
           const tasks = (snapshot.lists[list.id]?.tasks ?? []).filter(
             (task) => (showDone || task.status.type !== "closed") && (!mineOnly || isMine(task)),
           );
-          const available = mergeStatuses([snapshot.lists[list.id]?.meta?.statuses ?? []], tasks)
-            .filter((status) => showDone || status.type !== "closed")
-            .map((status) => statusKey(status.status));
-          return [list.id, filterByStatus(tasks, viewState.statuses, available).length];
+          return [list.id, withoutHiddenStatuses(tasks, viewState.hiddenStatuses).length];
         }),
       ),
       rows: ordered,
@@ -244,7 +247,7 @@ export function ClickupView({
         hideClosed: !showDone,
       }),
     };
-  }, [activeLists, config.lists, snapshot.lists, snapshot.createdIds, showDone, viewState.sort, viewState.statuses, groupBy, me, mineOnly]);
+  }, [activeLists, config.lists, snapshot.lists, snapshot.createdIds, showDone, viewState.sort, viewState.hiddenStatuses, groupBy, me, mineOnly]);
 
   const loads = activeLists.map((list) => snapshot.lists[list.id]?.load ?? { kind: "idle" as const });
   const loading = loads.some((load) => load.kind === "loading" || load.kind === "idle");
@@ -336,8 +339,8 @@ export function ClickupView({
 
   const needsSetup = connection === "notConnected" || snapshot.needsConnect || config.lists.length === 0;
   const showViews = connected && config.lists.length > 0 && !setupOpen && !needsSetup;
-  // Table and Board scroll inside themselves (sticky header, sideways columns).
-  const fillsPane = showViews && rows.length > 0 && viewState.view !== "list";
+  // Every view scrolls inside itself (like Task Manager), so the page never moves. Fork (L-387): List too.
+  const fillsPane = showViews && rows.length > 0;
 
   return (
     <div
@@ -405,17 +408,21 @@ export function ClickupView({
             searchable={statusChoices.length > 8}
             searchPlaceholder="Search statuses"
             emptyLabel="No statuses"
+            // Fork (L-387): every status starts ticked; unticking one hides it, "All statuses" shows them all again.
             multiple={{
-              values: viewState.statuses.filter((key) => statusChoices.some((status) => statusKey(status.status) === key)),
+              values: statusChoices
+                .map((status) => statusKey(status.status))
+                .filter((key) => !viewState.hiddenStatuses.includes(key)),
+              allPicked: statusChoices.every((status) => !viewState.hiddenStatuses.includes(statusKey(status.status))),
               summary: (count) => `${count} statuses`,
               onToggle: (key) =>
                 updateView({
-                  statuses: viewState.statuses.includes(key)
-                    ? viewState.statuses.filter((entry) => entry !== key)
-                    : [...viewState.statuses, key],
+                  hiddenStatuses: viewState.hiddenStatuses.includes(key)
+                    ? viewState.hiddenStatuses.filter((entry) => entry !== key)
+                    : [...viewState.hiddenStatuses, key],
                 }),
             }}
-            onChange={() => updateView({ statuses: [] })}
+            onChange={() => updateView({ hiddenStatuses: [] })}
           />
           <button
             type="button"
@@ -563,7 +570,8 @@ export function ClickupView({
         </div>
         <SlidePanel
           open={panelOpen && (panelKind === "create" || selected !== null)}
-          motion="slide"
+          // Fork (L-387): opens like the Share panel: folds down, then the views narrow beside it.
+          motion="fold"
           onGone={() => setSelectedId(null)}
         >
           {panelKind === "create" || selected ? (
@@ -572,7 +580,7 @@ export function ClickupView({
               style={{ width: Math.min(viewState.panelWidth, panelMax) }}
               // The board's own padding (p-3) already spaces it from the last column, so the
               // panel matches the column gap there: 12px on every side.
-              className={`relative flex flex-col overflow-hidden rounded-xl border border-stroke bg-content/[0.04] ${
+              className={`relative flex ${
                 viewState.view === "board" ? "my-3 mr-3 h-[calc(100%-1.5rem)]" : "m-2 h-[calc(100%-1rem)]"
               }`}
             >
@@ -582,7 +590,9 @@ export function ClickupView({
                 min={CLICKUP_PANEL_MIN}
                 max={panelMax}
                 defaultValue={CLICKUP_PANEL_DEFAULT}
-                placement="inset-y-0 left-0"
+                // Fork (L-388): in the gap before the panel, outside its clipped frame, so it is
+                // reachable beside the last Board column too (it used to sit inside the panel's edge).
+                placement={viewState.view === "board" ? "inset-y-0 -left-2.5" : "inset-y-0 -left-2"}
                 reverse
                 look="line"
                 onLive={(next) => {
@@ -591,6 +601,7 @@ export function ClickupView({
                 }}
                 onCommit={(next) => updateView({ panelWidth: next })}
               />
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-stroke bg-content/[0.04]">
               {panelKind === "create" ? (
                 <CreateTaskPanel
                   key={`create-${createKey}`}
@@ -612,15 +623,22 @@ export function ClickupView({
                   onSave={(patch) => clickupStore.updateTask(selected.id, selected.listId, patch)}
                   onNewSession={async () => {
                     if (!linkedProject) return;
-                    const context = await clickupSessionContext(selected, listName(selected.listId));
+                    const context = await clickupSessionContext(selected);
                     onStartSession(context.text, linkedProject, context.filePaths);
                   }}
+                  project={linkedProject}
+                  sessionStatus={sessionStatus}
+                  onContinueSession={async (sessionId) => {
+                    const context = await clickupSessionContext(selected);
+                    onContinueSession(sessionId, context.text, context.filePaths);
+                  }}
                   onGiveToMono={async (monoId) => {
-                    const context = await clickupSessionContext(selected, listName(selected.listId));
+                    const context = await clickupSessionContext(selected);
                     onGiveToMono(monoId, context.text, context.filePaths);
                   }}
                 />
               ) : null}
+              </div>
             </div>
           ) : null}
         </SlidePanel>

@@ -138,6 +138,8 @@ type Props = {
   cwd: string;
   recents: RecentProject[];
   inboxUnseen?: boolean;
+  /** Fork (L-391): a Whiteboard reply finished while you were elsewhere. */
+  whiteboardUnseen?: boolean;
   busyPaths?: Iterable<string>;
   canGoBack?: boolean;
   canGoForward?: boolean;
@@ -204,6 +206,7 @@ export function ProjectRail({
   cwd,
   recents,
   inboxUnseen = false,
+  whiteboardUnseen = false,
   busyPaths,
   canGoBack = false,
   canGoForward = false,
@@ -541,8 +544,9 @@ export function ProjectRail({
                 label="Whiteboard"
                 icon={Whiteboard}
                 onClick={onOpenWhiteboard}
+                dot={whiteboardUnseen}
                 active={whiteboardActive}
-                ariaLabel="Whiteboard"
+                ariaLabel={whiteboardUnseen ? "Whiteboard, new reply" : "Whiteboard"}
               />
             ) : null}
             {onOpenClickup ? (

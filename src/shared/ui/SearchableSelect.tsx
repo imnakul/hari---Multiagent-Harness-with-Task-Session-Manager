@@ -29,6 +29,11 @@ export type SearchableSelectMultiple = {
   onToggle: (value: string) => void;
   /** Trigger text when more than one value is selected, e.g. "3 statuses". */
   summary: (count: number) => string;
+  /**
+   * The "" option counts as picked and names the trigger. Defaults to "no
+   * values picked"; pass it when every option starts ticked (untick to hide).
+   */
+  allPicked?: boolean;
 };
 
 export function SearchableSelect({
@@ -77,12 +82,14 @@ export function SearchableSelect({
   const isPicked = (option: SearchableSelectOption): boolean =>
     multiple
       ? option.value === ""
-        ? multiple.values.length === 0
+        ? (multiple.allPicked ?? multiple.values.length === 0)
         : multiple.values.includes(option.value)
       : option.value === value;
   const picked = options.filter(isPicked);
   const selected: SearchableSelectOption | undefined =
-    multiple && picked.length > 1
+    multiple?.allPicked
+      ? options.find((option) => option.value === "")
+      : multiple && picked.length > 1
       ? { value: "", label: multiple.summary(picked.length) }
       : picked[0];
   const normalizedQuery = query.trim().toLocaleLowerCase();

@@ -133,6 +133,11 @@ import {
   useSyncExternalStore,
   type SetStateAction,
 } from "react";
+import {
+  hasUnseenWhiteboardReply,
+  setWhiteboardViewing,
+  subscribeRuns,
+} from "../features/whiteboard/model/whiteboardRuns";
 import { useStableValue } from "../shared/hooks/useStableValue";
 import { useDragResize } from "../shared/hooks/useDragResize";
 import { beginLayoutTransition } from "../shared/lib/layoutTransition";
@@ -938,7 +943,7 @@ import { ProjectTerminalDock } from "../features/terminal/ui/ProjectTerminalDock
 import { lazySurface } from "../shared/ui/lazySurface";
 import { runClickupAction } from "../features/clickup/model/clickupAgent";
 import { clickupApi } from "../features/clickup/model/clickupApi";
-import { loadClickupConfig, clickupVisibleFor, useClickupConfig } from "../features/clickup/model/clickupConfig";
+import { loadClickupConfig } from "../features/clickup/model/clickupConfig";
 import { clickupStore } from "../features/clickup/model/clickupStore";
 import {
   useActivityRecorder,
@@ -1786,6 +1791,9 @@ function Workspace({
   recordKindRef.current = recordKind;
   const [automationsViewOpen, setAutomationsViewOpen] = useState(false);
   const [whiteboardViewOpen, setWhiteboardViewOpen] = useState(false);
+  // Fork (L-391): dot on the sidebar's Whiteboard when a reply lands while it is closed.
+  const whiteboardUnseen = useSyncExternalStore(subscribeRuns, hasUnseenWhiteboardReply);
+  useEffect(() => setWhiteboardViewing(whiteboardViewOpen), [whiteboardViewOpen]);
   // Fork (L-381): the ClickUp view.
   const [clickupViewOpen, setClickupViewOpen] = useState(false);
   // Fork (L-287): Share with the paired phone.
@@ -15877,12 +15885,6 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     setClickupViewOpen(false);
   }, []);
 
-  const clickupConfig = useClickupConfig();
-  const clickupInSidebar = clickupVisibleFor(
-    clickupConfig,
-    projectCwd === "~" ? null : projectCwd,
-    sameProjectPath,
-  );
   const clickupMonos = useMemo(
     () =>
       listMonos().map((mono) => ({
@@ -15940,6 +15942,25 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       })().catch((error: unknown) => console.warn("ClickUp: could not give the task to a Mono", error));
     },
     [onOpenMono],
+  );
+
+  // Fork (L-389): continue a ClickUp task in an existing chat. Opens the chat
+  // and sends the task; a chat that is replying queues it for its next turn.
+  const onClickupContinueSession = useCallback(
+    (sessionId: string, text: string, filePaths: readonly string[]) => {
+      void (async () => {
+        const attachments = await attachmentsFromPaths([...filePaths]);
+        await onSelectHistorySession(sessionId);
+        const sent = onSubmit(sessionId, text, attachments, { followUpBehavior: "queue" });
+        if (!sent) console.warn("ClickUp: that chat could not take the task right now");
+      })().catch((error: unknown) => console.warn("ClickUp: could not continue in that chat", error));
+    },
+    [onSelectHistorySession, onSubmit],
+  );
+  const clickupSessionStatus = useCallback(
+    (sessionId: string): "working" | undefined =>
+      sessions.find((session) => session.id === sessionId)?.busy ? "working" : undefined,
+    [sessions],
   );
 
   // Fork (L-287, L-290): Share with the paired phone, a panel on the right.
@@ -18045,7 +18066,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onOpenNotes={notesEnabled ? sidebarPages.notes : undefined}
       onOpenAutomations={sidebarPages.automations}
       onOpenWhiteboard={sidebarPages.whiteboard}
-      onOpenClickup={clickupInSidebar ? sidebarPages.clickup : undefined}
+      // Fork (L-387): ClickUp stays in the sidebar in every project; the page itself handles setup.
+      onOpenClickup={sidebarPages.clickup}
       onOpenBrowser={sidebarPages.browser}
       onGoToFile={onGoToFile}
       searchActive={searchViewOpen}
@@ -18067,6 +18089,7 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
       onToggleProjectRail={onToggleProjectRail}
       unseenFinishedIds={unseenFinishedIds}
       inboxUnseen={inboxUnseen}
+      whiteboardUnseen={whiteboardUnseen}
       linkedSessionUpdateIds={linkedSessionUpdateIds}
       settingsOpen={settingsOpen}
       settingsSection={settingsSection}
@@ -19042,6 +19065,8 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                         onToggleSidebar={onToggleSidebar}
                         onStartSession={onClickupStartSession}
                         onGiveToMono={onClickupGiveToMono}
+                        onContinueSession={onClickupContinueSession}
+                        sessionStatus={clickupSessionStatus}
                       />
                     </AppViewSurface>
                   ) : null}

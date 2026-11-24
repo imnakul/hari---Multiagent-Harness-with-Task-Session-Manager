@@ -1414,6 +1414,12 @@ const LocalSessionPane = memo(function LocalSessionPane({
                     onRetryMessage={
                       agent ? () => onResumeQueue(session.id) : undefined
                     }
+                    onSendMessageNow={
+                      agent && session.busy
+                        ? (messageId) =>
+                            onSteerQueuedMessage(session.id, messageId)
+                        : undefined
+                    }
                     onShowWork={
                       agent && onShowMonoActivity
                         ? (turnId, blocks) =>
@@ -1701,6 +1707,9 @@ const LocalSessionPane = memo(function LocalSessionPane({
                     onFocus={() => onFocus(session.id)}
                     onSubmit={(text, attachments) =>
                       onSubmit(session.id, text, attachments)
+                    }
+                    onStop={
+                      session.busy ? () => onStop(session.id) : undefined
                     }
                     // The plan's usage, as the session footer shows it,
                     // which a Mono in full view covers. Its account moves

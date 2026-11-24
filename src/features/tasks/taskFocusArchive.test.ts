@@ -106,7 +106,7 @@ describe("retired statuses", () => {
 });
 
 describe("copy and work-on text", () => {
-  it("copies the title, status, project, dates, tags and description", () => {
+  it("copies only the title and description (L-390)", () => {
     const text = taskMarkdown(
       task("Fix login", {
         title: "Fix login",
@@ -117,22 +117,8 @@ describe("copy and work-on text", () => {
         createdAt: DAY,
         focusDate: TODAY,
       }),
-      () => "app",
     );
-    expect(text).toBe(
-      [
-        "# Fix login",
-        "",
-        "- Status: Progress",
-        "- Project: app",
-        "- Created: 2026-10-03",
-        "- Focus: 2026-10-03",
-        "- Tags: #auth #web",
-        "",
-        "Steps to reproduce",
-        "",
-      ].join("\n"),
-    );
+    expect(text).toBe(["# Fix login", "", "Steps to reproduce", ""].join("\n"));
   });
 
   it("prefills Work on with the title, tags and description", () => {

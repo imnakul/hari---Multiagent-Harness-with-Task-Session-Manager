@@ -546,7 +546,10 @@ it("keeps a Mono reply's action bar visible without hover, inside the gap (L-379
   expect(getComputedStyle(actions).opacity).toBe("1");
   expect(getComputedStyle(actions).position).toBe("absolute");
   const turn = actions.closest<HTMLElement>(".transcript-turn-mono")!;
-  expect(getComputedStyle(turn).paddingBottom).toBe("24px");
+  // L-386: the slot keeps a gap under the always-visible bar, so the next
+  // message does not sit on it.
+  expect(getComputedStyle(turn).paddingBottom).toBe("36px");
+  expect(getComputedStyle(actions).bottom).toBe("12px");
   // The old hover reveal is gone: nothing may hide the bar again.
   expect(css).not.toMatch(/\.turn-actions-hover[^{]*\{[^}]*opacity:\s*0/);
   hoverStyles.remove();
@@ -1170,4 +1173,27 @@ it("shows sessions beside the footer actions only for the turn that launched the
       .querySelector('[aria-label="Hide sessions"]')
       ?.getAttribute("aria-expanded"),
   ).toBe("true");
+});
+
+it("offers Send now on a message waiting for the Mono's reply (L-386)", () => {
+  const onSendMessageNow = vi.fn();
+  render(
+    [
+      { id: "original", role: "user", text: "Inspect", startedAt: 1000 },
+      { id: "waiting", role: "user", text: "Use the other account", sentAt: 1100 },
+    ],
+    {
+      busy: true,
+      agentMascot: { mascot: "cat", color: "#6ba" },
+      onSendMessageNow,
+      messageDeliveries: new Map([["waiting", { status: "pending" }]]),
+    },
+  );
+  const bubble = container.querySelector('[data-prompt-anchor="waiting"]')!;
+  expect(bubble.textContent).toContain("Waiting to send");
+  const sendNow = [...bubble.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "Send now",
+  )!;
+  act(() => sendNow.click());
+  expect(onSendMessageNow).toHaveBeenCalledWith("waiting");
 });

@@ -13,6 +13,7 @@ import {
 } from "../model/clickupApi";
 import { describeClickupError } from "../model/clickupMessages";
 import { ClickupAvatars, ClickupFieldValue, ClickupStatusPill, shortDate } from "./ClickupBits";
+import { ClickupCopyButton } from "./ClickupCopyButton";
 
 /**
  * Fork (L-381): the rest of a task under its editable fields: links,
@@ -413,16 +414,22 @@ export function ClickupTaskDetails({ task, readOnly }: { task: ClickupTask; read
         <Section title="Subtasks" count={details.subtasks.length}>
           <ul>
             {details.subtasks.map((sub) => (
-              <li key={sub.id}>
+              <li key={sub.id} className="group/subtask relative">
                 <button
                   type="button"
-                  className={LINK_ROW}
+                  className={`${LINK_ROW} pr-9`}
                   onClick={() => openWebLink(sub.url ?? `${TASK_URL}${encodeURIComponent(sub.id)}`)}
                 >
                   <ClickupStatusPill name={sub.status} color={sub.color || null} />
                   <span className="min-w-0 flex-1 truncate">{sub.name}</span>
                   <ExternalLink aria-hidden className="size-3.5 shrink-0 text-content/40" />
                 </button>
+                {/* Fork (L-390): copy one subtask, shown on hover or keyboard focus. */}
+                <ClickupCopyButton
+                  task={{ id: sub.id, name: sub.name, markdownDescription: "" }}
+                  label={`Copy subtask ${sub.name}`}
+                  className={`${ICON_BUTTON} absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/subtask:opacity-100 focus-visible:opacity-100 aria-busy:opacity-100`}
+                />
               </li>
             ))}
           </ul>

@@ -22,6 +22,24 @@ const chatListeners = new Set<(id: string, messages: WhiteboardChatMessage[]) =>
 
 const notifyRuns = () => runListeners.forEach((listener) => listener());
 
+// Fork (L-391): a run that finished while the Whiteboard was not on screen
+// leaves a dot on its sidebar entry until the Whiteboard is opened again.
+let viewing = false;
+let unseenReply = false;
+
+/** The app tells the runs whether the Whiteboard is on screen; opening it clears the dot. */
+export function setWhiteboardViewing(open: boolean): void {
+  viewing = open;
+  if (open && unseenReply) {
+    unseenReply = false;
+    notifyRuns();
+  }
+}
+
+export function hasUnseenWhiteboardReply(): boolean {
+  return unseenReply;
+}
+
 export function subscribeRuns(listener: () => void): () => void {
   runListeners.add(listener);
   return () => {
@@ -42,6 +60,8 @@ export function startRun(sheetId: string, controller: AbortController): void {
 export function endRun(sheetId: string, controller: AbortController): void {
   if (running.get(sheetId) !== controller) return;
   running.delete(sheetId);
+  // Stopped runs never get here (stopRun removes them first), so only a real reply or error marks it.
+  if (!viewing) unseenReply = true;
   notifyRuns();
 }
 

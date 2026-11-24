@@ -1374,14 +1374,16 @@ html.has-chat-background.chat-background-effect-ready.chat-background-gradient-b
   /* Leave breathing room above the buttons. Keep the gap while a
    * completion report reopens the same turn and its
    * actions are temporarily absent. Shrinking it makes the chat dip first. */
+  /* Fork (L-386): the actions now always show, so the slot also keeps a
+   * gap under them; the next message no longer sits on the buttons. */
   .transcript-turn-mono {
     position: relative;
-    padding-bottom: 1.5rem;
+    padding-bottom: 2.25rem;
   }
 
   .turn-actions-hover {
     position: absolute;
-    bottom: 0;
+    bottom: 0.75rem;
     left: 0;
     z-index: 1;
     height: 1.5rem;

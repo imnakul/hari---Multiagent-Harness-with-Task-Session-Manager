@@ -6,7 +6,6 @@ import {
   Target,
   Trash2,
 } from "../../../shared/ui/icons";
-import { projectName } from "../../../shared/lib/paths";
 import { copyText } from "../../../platform/tauri/clipboard";
 import { useLockOverscroll } from "../../../shared/hooks/useLockOverscroll";
 import {
@@ -340,20 +339,7 @@ export function TaskEditor({
   const copy = async () => {
     setActionError(null);
     try {
-      await copyText(
-        taskMarkdown(
-          {
-            ...task,
-            title,
-            body,
-            tags,
-            status,
-            projectCwd: project,
-            focusDate,
-          },
-          projectName,
-        ),
-      );
+      await copyText(taskMarkdown({ title, body }));
       setCopied(true);
       window.setTimeout(() => {
         if (alive.current) setCopied(false);
@@ -458,7 +444,7 @@ export function TaskEditor({
                 title={
                   copied
                     ? "Copied"
-                    : "Copy task (title, status, tags, date, description)"
+                    : "Copy task (title and description)"
                 }
                 onClick={() => void copy()}
                 className={iconClass}

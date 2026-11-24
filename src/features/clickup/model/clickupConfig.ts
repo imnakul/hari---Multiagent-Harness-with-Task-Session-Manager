@@ -97,13 +97,3 @@ export function subscribeClickupConfig(listener: () => void): () => void {
 export function useClickupConfig(): ClickupConfig {
   return useSyncExternalStore(subscribeClickupConfig, loadClickupConfig, () => EMPTY);
 }
-
-/** AC-C3: the nav entry shows for the linked project, or anywhere until a project is linked. */
-export function clickupVisibleFor(
-  config: ClickupConfig,
-  currentProject: string | null,
-  samePath: (a: string, b: string) => boolean,
-): boolean {
-  if (!config.projectPath) return true;
-  return currentProject !== null && samePath(config.projectPath, currentProject);
-}

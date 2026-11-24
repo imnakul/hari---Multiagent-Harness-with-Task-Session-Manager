@@ -779,12 +779,15 @@ export function ProjectChatList({
   onPick,
   className = "",
   onChatPointerDown,
+  statusOf,
 }: {
   cwd: string;
   exclude?: ReadonlySet<string>;
   marks: ProjectMarks;
   onPick: (sessionId: string) => void;
   className?: string;
+  /** Fork (L-389): a chat's live state (stored rows don't know it), e.g. from open sessions. */
+  statusOf?: (sessionId: string) => FocusChatInfo["status"];
   onChatPointerDown?: (
     item: FocusPickItem,
     event: ReactPointerEvent<HTMLElement>,
@@ -823,10 +826,10 @@ export function ProjectChatList({
             label: sessionDisplayTitle(row.title, row.harness) || "New session",
             detail: projectName(row.cwd),
             icon: <ProjectIcon cwd={row.cwd} {...marks} />,
-            chat: focusChatInfo(row),
+            chat: { ...focusChatInfo(row), status: statusOf?.(row.id) },
           }),
         ) ?? null,
-    [rows, exclude, marks],
+    [rows, exclude, marks, statusOf],
   );
   if (!visible)
     return (

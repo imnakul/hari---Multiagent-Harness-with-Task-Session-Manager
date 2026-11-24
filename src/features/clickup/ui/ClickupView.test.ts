@@ -31,6 +31,22 @@ const api = vi.hoisted(() => ({
   saveAttachment: vi.fn(),
 }));
 
+const clipboard = vi.hoisted(() => ({ copyMessage: vi.fn() }));
+vi.mock("../../../platform/tauri/clipboard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../platform/tauri/clipboard")>()),
+  copyMessage: clipboard.copyMessage,
+}));
+vi.mock("../../sessions/model/attachments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../sessions/model/attachments")>()),
+  attachmentsFromPaths: async (paths: string[]) => paths.map((path) => ({ name: path.split("/").pop(), path })),
+}));
+
+const chats = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("../../sessions/data/sessionStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../sessions/data/sessionStore")>()),
+  listSessionsByProject: chats.list,
+}));
+
 vi.mock("../model/clickupApi", async (importOriginal) => {
   const original = await importOriginal<typeof import("../model/clickupApi")>();
   return { ...original, clickupApi: api };
@@ -57,6 +73,7 @@ function props(patch: Partial<Props> = {}): Props {
     onClose: vi.fn(),
     onStartSession: vi.fn(),
     onGiveToMono: vi.fn(),
+    onContinueSession: vi.fn(),
     ...patch,
   };
 }
@@ -188,6 +205,79 @@ describe("ClickupView (L-381)", () => {
     expect(button("Try again")).toBeTruthy();
   });
 
+  it("copies a task and a subtask with only their name, description and files (L-390)", async () => {
+    linkProject();
+    api.isConnected.mockResolvedValue(true);
+    clipboard.copyMessage.mockResolvedValue(undefined);
+    const base = api.taskDetails.getMockImplementation();
+    api.taskDetails.mockImplementation(async (id: string) => {
+      const details = await base?.(id);
+      return id === "sub1"
+        ? { ...details, task: makeTask("sub1", { name: "Child step", markdownDescription: "Child notes" }), attachments: [] }
+        : { ...details, subtasks: [{ id: "sub1", name: "Child step", status: "open", color: "", url: null }] };
+    });
+    await render(props());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("ul button")?.click();
+    });
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Copy task"]')?.click();
+    });
+    await vi.waitFor(() => expect(clipboard.copyMessage).toHaveBeenCalledTimes(1));
+    const [text, attachments] = clipboard.copyMessage.mock.calls[0] ?? [];
+    expect(text).toBe(
+      "# Write docs\n\nRepro on https://app.example.com/login. Logs: https://logs.example.com/x\n\nAttached files: screen.png",
+    );
+    expect(text).not.toMatch(/Related Links|Assignees|Status|app\.clickup\.com/);
+    expect(attachments).toEqual([{ name: "screen.png", path: "C:/cache/a1/screen.png" }]);
+
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Copy subtask Child step"]')).not.toBeNull());
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Copy subtask Child step"]')?.click();
+    });
+    await vi.waitFor(() => expect(clipboard.copyMessage).toHaveBeenCalledTimes(2));
+    expect(clipboard.copyMessage.mock.calls[1]?.[0]).toBe("# Child step\n\nChild notes");
+  });
+
+  it("continues a task in an existing chat of the project, showing which chats are replying (L-389)", async () => {
+    linkProject();
+    api.isConnected.mockResolvedValue(true);
+    chats.list.mockResolvedValue([
+      { id: "s1", title: "Fix login", harness: "claude", model: "opus", cwd: "/work/app", updatedAt: 1, archived: false },
+      { id: "s2", title: "Docs pass", harness: "claude", model: "opus", cwd: "/work/app", updatedAt: 2, archived: false },
+    ]);
+    const onContinueSession = vi.fn();
+    await render(props({ onContinueSession, sessionStatus: (id) => (id === "s1" ? "working" : undefined) }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("ul button")?.click();
+    });
+    await act(async () => {
+      button("Start session").click();
+    });
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")]
+        .find((item) => item.textContent === "Continue in a session…")
+        ?.click();
+    });
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Fix login"));
+    expect(chats.list).toHaveBeenCalledWith("/work/app");
+    expect(document.body.textContent).toContain("Docs pass");
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>("[role=option]")]
+        .find((option) => option.textContent?.includes("Fix login"))
+        ?.click();
+    });
+    await vi.waitFor(() =>
+      expect(onContinueSession).toHaveBeenCalledWith("s1", expect.stringContaining("Write docs"), ["C:/cache/a1/screen.png"]),
+    );
+  });
+
   it("lists only the Monos that work on the project, and disables one never started (AC-C12)", async () => {
     linkProject();
     api.isConnected.mockResolvedValue(true);
@@ -310,6 +400,50 @@ describe("ClickupView (L-381)", () => {
     expect(JSON.parse(stored.get("monocode.clickup.view") ?? "{}").sort).toEqual({ field: "name", dir: "desc" });
   });
 
+  it("starts with every used status ticked; unticking one hides it (L-387)", async () => {
+    linkProject();
+    api.isConnected.mockResolvedValue(true);
+    api.tasks.mockResolvedValue({
+      tasks: [
+        makeTask("1", { name: "Write docs" }),
+        makeTask("2", { name: "Check copy", status: { status: "review", type: "custom", color: "#ddd" } }),
+      ],
+      lastPage: true,
+    });
+    await render(props());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const trigger = container.ownerDocument.querySelector<HTMLButtonElement>("button[aria-label^='Status:']");
+    expect(trigger?.getAttribute("aria-label")).toBe("Status: All statuses");
+    await act(async () => {
+      trigger?.click();
+    });
+    const options = (): HTMLButtonElement[] => [
+      ...document.querySelectorAll<HTMLButtonElement>("[role='option']"),
+    ];
+    // Only statuses this list's tasks use: "in progress" has no tasks, so it isn't offered.
+    expect(options().map((option) => option.textContent?.replace(/\d+$/, "").trim())).toEqual([
+      "All statuses",
+      "to do",
+      "review",
+    ]);
+    expect(options().every((option) => option.getAttribute("aria-selected") === "true")).toBe(true);
+    await act(async () => {
+      options()[2]?.click();
+    });
+    expect(options()[2]?.getAttribute("aria-selected")).toBe("false");
+    expect(options()[0]?.getAttribute("aria-selected")).toBe("false");
+    expect(container.textContent).toContain("Write docs");
+    expect(container.textContent).not.toContain("Check copy");
+    expect(JSON.parse(stored.get("monocode.clickup.view") ?? "{}").hiddenStatuses).toEqual(["review"]);
+    await act(async () => {
+      options()[0]?.click();
+    });
+    expect(container.textContent).toContain("Check copy");
+    expect(trigger?.getAttribute("aria-label")).toBe("Status: All statuses");
+  });
+
   it("filters to the connected user's tasks from the Assignee button, and remembers it", async () => {
     linkProject();
     api.isConnected.mockResolvedValue(true);
@@ -416,6 +550,10 @@ describe("ClickupView (L-381)", () => {
     expect(container.querySelector("aside[aria-label='New task']")).not.toBeNull();
     expect(document.querySelector("[role=dialog]")).toBeNull();
     expect(button("Create task").disabled).toBe(true);
+    // L-388: the width handle sits in the gap before the panel, outside its clipped frame.
+    const handle = container.querySelector<HTMLElement>("[role=separator][aria-label='Resize new task panel']");
+    expect(handle?.className).toContain("-left-2");
+    expect(handle?.parentElement?.className).not.toContain("overflow-hidden");
   });
 
   it("removes the token and returns to the connect form on Disconnect (AC-C11)", async () => {

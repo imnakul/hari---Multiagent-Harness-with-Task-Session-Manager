@@ -56,8 +56,11 @@ export interface ClickupViewState {
    * fits the pane; dragging a divider moves width between two neighbours.
    */
   boardColumnWeights: Record<string, number>;
-  /** Status names to show (lowercase); empty shows every status. */
-  statuses: string[];
+  /**
+   * Fork (L-387): status names to hide (lowercase). Empty shows every status;
+   * the Status menu starts with all ticked and unticking one hides it.
+   */
+  hiddenStatuses: string[];
   /** Task panel width in px, clamped to CLICKUP_PANEL_MIN..CLICKUP_PANEL_MAX. */
   panelWidth: number;
 }
@@ -73,7 +76,7 @@ export const DEFAULT_CLICKUP_VIEW_STATE: ClickupViewState = {
   collapsed: [],
   mine: false,
   boardColumnWeights: {},
-  statuses: [],
+  hiddenStatuses: [],
   panelWidth: CLICKUP_PANEL_DEFAULT,
 };
 
@@ -111,8 +114,9 @@ export function parseClickupViewState(raw: unknown): ClickupViewState {
       : [],
     mine: value.mine === true,
     boardColumnWeights: parseWeights(value.boardColumnWeights),
-    statuses: Array.isArray(value.statuses)
-      ? value.statuses.filter((name): name is string => typeof name === "string").map(statusKey).slice(0, 100)
+    // The older `statuses` (statuses to show) is dropped on purpose: everything shows again.
+    hiddenStatuses: Array.isArray(value.hiddenStatuses)
+      ? value.hiddenStatuses.filter((name): name is string => typeof name === "string").map(statusKey).slice(0, 100)
       : [],
     panelWidth:
       typeof value.panelWidth === "number" && Number.isFinite(value.panelWidth)
@@ -157,19 +161,14 @@ export const PRIORITY_INFO: Record<1 | 2 | 3 | 4, { label: string; color: string
 
 export const statusKey = (name: string): string => name.trim().toLowerCase();
 
-/**
- * Tasks whose status is in `picked` (status keys). Picks that no longer
- * exist in `available` (a list unlinked, Show done off) are ignored, and when
- * none of the picks are available every task shows, so a stale filter never
- * empties the page.
- */
-export function filterByStatus<T extends { status: { status: string } }>(
+/** Tasks whose status is not in `hidden` (status keys). */
+export function withoutHiddenStatuses<T extends { status: { status: string } }>(
   tasks: readonly T[],
-  picked: readonly string[],
-  available: readonly string[],
+  hidden: readonly string[],
 ): T[] {
-  const live = new Set(picked.filter((key) => available.includes(key)));
-  return live.size === 0 ? [...tasks] : tasks.filter((task) => live.has(statusKey(task.status.status)));
+  if (hidden.length === 0) return [...tasks];
+  const skip = new Set(hidden);
+  return tasks.filter((task) => !skip.has(statusKey(task.status.status)));
 }
 
 /**

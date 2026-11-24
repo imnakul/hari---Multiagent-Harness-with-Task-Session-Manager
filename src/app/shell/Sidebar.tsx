@@ -508,6 +508,8 @@ type Props = {
   };
   unseenFinishedIds?: Set<string>;
   inboxUnseen?: boolean;
+  /** Fork (L-391): a Whiteboard reply finished while you were elsewhere. */
+  whiteboardUnseen?: boolean;
   /** Linked GitHub work changed after the session last advanced. */
   linkedSessionUpdateIds?: ReadonlySet<string>;
   settingsOpen?: boolean;
@@ -639,6 +641,7 @@ function SidebarComponent({
   rightPanel,
   unseenFinishedIds: unseenFinishedIdsProp,
   inboxUnseen = false,
+  whiteboardUnseen = false,
   linkedSessionUpdateIds = new Set(),
   settingsOpen = false,
   settingsSection = "general",
@@ -2967,6 +2970,7 @@ function SidebarComponent({
           label: "Whiteboard",
           icon: Whiteboard,
           active: whiteboardActive,
+          dot: whiteboardUnseen,
           onClick: onOpenWhiteboard,
         },
         onOpenClickup && {
@@ -3221,6 +3225,7 @@ function SidebarComponent({
               shareActive={shareActive}
               browserActive={browserActive}
               inboxUnseen={inboxUnseen}
+              whiteboardUnseen={whiteboardUnseen}
             />
           ) : null}
           {!compactRailVisible ? (
@@ -3827,6 +3832,7 @@ function SidebarComponent({
           hasChanges={hasChanges}
           hasUnseenFinished={hasUnseenFinished}
           inboxUnseen={inboxUnseen}
+          whiteboardUnseen={whiteboardUnseen}
           onSelectProject={onSelectProject}
           onOpenProject={onOpenProject}
           onRemoveProject={onRemoveProject}
@@ -3871,6 +3877,7 @@ function SidebarComponent({
           cwd={cwd}
           recents={recents}
           inboxUnseen={inboxUnseen}
+          whiteboardUnseen={whiteboardUnseen}
           busyPaths={busyProjectPaths}
           liveAgents={liveAgents}
           activeSessionId={activeSessionId}
@@ -4070,6 +4077,7 @@ function SidebarProjectPicker({
   shareActive = false,
   browserActive = false,
   inboxUnseen = false,
+  whiteboardUnseen = false,
 }: {
   cwd: string;
   recents: RecentProject[];
@@ -4102,6 +4110,8 @@ function SidebarProjectPicker({
   shareActive?: boolean;
   browserActive?: boolean;
   inboxUnseen?: boolean;
+  /** Fork (L-391): a Whiteboard reply finished while you were elsewhere. */
+  whiteboardUnseen?: boolean;
 }) {
   const [inboxMenu, setInboxMenu] = useState<{ x: number; y: number } | null>(
     null,
@@ -4191,11 +4201,19 @@ function SidebarProjectPicker({
         ) : null}
         {onOpenWhiteboard ? (
           <IconButton
-            label="Whiteboard"
+            label={whiteboardUnseen ? "Whiteboard, new reply" : "Whiteboard"}
             active={whiteboardActive}
             onClick={onOpenWhiteboard}
           >
-            <Whiteboard className="size-3.5" strokeWidth={1.75} />
+            <span className="relative">
+              <Whiteboard className="size-3.5" strokeWidth={1.75} />
+              {whiteboardUnseen ? (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-accent"
+                />
+              ) : null}
+            </span>
           </IconButton>
         ) : null}
         {onOpenClickup ? (
@@ -4259,6 +4277,7 @@ function CompactProjectRail({
   hasChanges,
   hasUnseenFinished,
   inboxUnseen,
+  whiteboardUnseen,
   onSelectProject,
   onOpenProject,
   onRemoveProject,
@@ -4306,6 +4325,7 @@ function CompactProjectRail({
   /** A session here finished a reply the user has not opened. */
   hasUnseenFinished: boolean;
   inboxUnseen: boolean;
+  whiteboardUnseen: boolean;
   onSelectProject?: (path: string) => void;
   onOpenProject?: () => void;
   onRemoveProject?: Props["onRemoveProject"];
@@ -4556,9 +4576,10 @@ function CompactProjectRail({
         />
         {onOpenWhiteboard ? (
           <CompactRailAction
-            label="Whiteboard"
+            label={whiteboardUnseen ? "Whiteboard, new reply" : "Whiteboard"}
             icon={Whiteboard}
             active={whiteboardActive}
+            dot={whiteboardUnseen}
             onClick={action(whiteboardActive, onOpenWhiteboard)}
           />
         ) : null}

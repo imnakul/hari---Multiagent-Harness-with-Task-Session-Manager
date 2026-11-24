@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDashed,
   Copy,
+  CornerDownRight,
   FilePlusCorner,
   Bookmark,
   GitBranch,
@@ -257,6 +258,8 @@ type Props = {
   inlineWork?: boolean;
   messageDeliveries?: ReadonlyMap<string, MessageDelivery>;
   onRetryMessage?: (blockId: string) => void;
+  /** Fork (L-386): sends a waiting Mono message now, stopping the reply if the provider cannot steer. */
+  onSendMessageNow?: (blockId: string) => void;
   /** Inspect a Mono turn in the activity sidebar. */
   onShowWork?: (turnId: string, blocks: Block[]) => void;
   activeWorkTurnId?: string;
@@ -360,6 +363,7 @@ function AgentTranscriptComponent({
   inlineWork = false,
   messageDeliveries,
   onRetryMessage,
+  onSendMessageNow,
   onShowWork,
   activeWorkTurnId,
   onShowSessions,
@@ -1613,6 +1617,7 @@ function AgentTranscriptComponent({
                 }
                 delivery={messageDeliveries?.get(item.block.id)}
                 onRetryMessage={onRetryMessage}
+                onSendMessageNow={onSendMessageNow}
                 visible={item.block.role === "user" ? visible : undefined}
                 stickyIndex={firstVisibleTurn + turnIndex + 1}
                 // Prose reads the same wherever it lands: under the fold
@@ -2649,6 +2654,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   stackedOnPrevious = false,
   delivery,
   onRetryMessage,
+  onSendMessageNow,
   visible,
   revealOnMount,
   stickyIndex,
@@ -2681,6 +2687,8 @@ const TranscriptBlock = memo(function TranscriptBlock({
   stackedOnPrevious?: boolean;
   delivery?: MessageDelivery;
   onRetryMessage?: (blockId: string) => void;
+  /** Fork (L-386): sends a waiting Mono message now, stopping the reply if the provider cannot steer. */
+  onSendMessageNow?: (blockId: string) => void;
   visible?: boolean;
   revealOnMount?: boolean;
   stickyIndex: number;
@@ -2723,6 +2731,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
         stackedOnPrevious={stackedOnPrevious}
         delivery={delivery}
         onRetryMessage={onRetryMessage}
+        onSendMessageNow={onSendMessageNow}
         visible={visible ?? true}
         stickyIndex={stickyIndex}
         cwd={cwd}
@@ -2921,6 +2930,7 @@ function UserMessageBlock({
   stackedOnPrevious = false,
   delivery,
   onRetryMessage,
+  onSendMessageNow,
   visible,
   stickyIndex,
   onEdit,
@@ -2938,6 +2948,8 @@ function UserMessageBlock({
   stackedOnPrevious?: boolean;
   delivery?: MessageDelivery;
   onRetryMessage?: (blockId: string) => void;
+  /** Fork (L-386): sends a waiting Mono message now, stopping the reply if the provider cannot steer. */
+  onSendMessageNow?: (blockId: string) => void;
   visible: boolean;
   stickyIndex: number;
   onEdit?: () => void;
@@ -3067,7 +3079,20 @@ function UserMessageBlock({
   };
 
   const deliveryControl =
-    delivery && delivery.status !== "pending" ? (
+    delivery?.status === "pending" && onSendMessageNow ? (
+      <div className="flex max-w-full items-center justify-end gap-2 px-3 pt-1 font-sans text-xs text-content/50">
+        <span role="status">Waiting to send</span>
+        <button
+          type="button"
+          title="Stops the current reply if needed, then sends this message"
+          onClick={() => onSendMessageNow(block.id)}
+          className="flex shrink-0 items-center gap-1 rounded px-1 py-0.5 text-content/70 transition-colors hover:bg-content/8 hover:text-content active:scale-95"
+        >
+          <CornerDownRight aria-hidden className="size-3" />
+          Send now
+        </button>
+      </div>
+    ) : delivery && delivery.status !== "pending" ? (
       <div className="flex max-w-full items-center gap-2 px-3 pt-1 font-sans text-xs text-content/50">
         <span role={delivery.error ? "alert" : "status"}>
           {delivery.error ? `Not sent · ${delivery.error}` : "Not sent"}

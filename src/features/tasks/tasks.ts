@@ -275,23 +275,13 @@ function changed() {
     .catch(() => {});
 }
 
-/** One task as Markdown: what Copy puts on the clipboard. */
-export function taskMarkdown(
-  task: Pick<
-    Task,
-    "title" | "body" | "status" | "tags" | "projectCwd" | "createdAt" | "focusDate"
-  > & { archivedAt?: number },
-  projectLabel: (cwd: string) => string = (cwd) => cwd,
-): string {
-  const meta = [
-    `Status: ${TASK_STATUS_LABELS[task.status]}${task.archivedAt !== undefined ? " (archived)" : ""}`,
-    `Project: ${task.projectCwd ? projectLabel(task.projectCwd) : "Personal"}`,
-    `Created: ${localDay(task.createdAt)}`,
-    ...(task.focusDate ? [`Focus: ${task.focusDate}`] : []),
-    ...(task.tags.length ? [`Tags: ${task.tags.map((tag) => `#${tag}`).join(" ")}`] : []),
-  ];
+/**
+ * One task as Markdown: what Copy puts on the clipboard. Fork (L-390): only the
+ * useful part, the title and description; status, project, dates and tags stay out.
+ */
+export function taskMarkdown(task: Pick<Task, "title" | "body">): string {
   const body = task.body.trim();
-  return [`# ${task.title}`, "", ...meta.map((line) => `- ${line}`), ...(body ? ["", body] : [])].join("\n") + "\n";
+  return [`# ${task.title.trim()}`, ...(body ? ["", body] : [])].join("\n") + "\n";
 }
 
 /** The prompt "Work on…" prefills: the task's title, tags and description. */

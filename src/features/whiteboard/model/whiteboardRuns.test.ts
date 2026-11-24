@@ -5,6 +5,9 @@ import {
   drawOrQueue,
   endRun,
   forgetSheet,
+  hasUnseenWhiteboardReply,
+  setWhiteboardViewing,
+  stopRun,
   isRunning,
   publishChat,
   publishedChat,
@@ -85,5 +88,32 @@ describe("whiteboard runs (L-223)", () => {
     expect(controller.signal.aborted).toBe(true);
     expect(takePending("gone")).toBeUndefined();
     expect(publishedChat("gone")).toBeUndefined();
+  });
+});
+describe("whiteboard unseen reply dot (L-391)", () => {
+  it("marks a reply that finished while away, not one seen or stopped, and clears on open", () => {
+    setWhiteboardViewing(true);
+    const seen = new AbortController();
+    startRun("dot-a", seen);
+    endRun("dot-a", seen);
+    expect(hasUnseenWhiteboardReply()).toBe(false);
+
+    setWhiteboardViewing(false);
+    const stopped = new AbortController();
+    startRun("dot-b", stopped);
+    stopRun("dot-b");
+    endRun("dot-b", stopped);
+    expect(hasUnseenWhiteboardReply()).toBe(false);
+
+    const away = new AbortController();
+    const listener = vi.fn();
+    const unsubscribe = subscribeRuns(listener);
+    startRun("dot-c", away);
+    endRun("dot-c", away);
+    expect(hasUnseenWhiteboardReply()).toBe(true);
+    setWhiteboardViewing(true);
+    expect(hasUnseenWhiteboardReply()).toBe(false);
+    expect(listener).toHaveBeenCalled();
+    unsubscribe();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clickupVisibleFor, parseClickupConfig, parseClickupListRef } from "./clickupConfig";
+import { parseClickupConfig, parseClickupListRef } from "./clickupConfig";
 
 describe("clickupConfig (L-381)", () => {
   it("reads a list from a link, a /v/l/ link or a bare ID (AC-C1)", () => {
@@ -13,13 +13,5 @@ describe("clickupConfig (L-381)", () => {
   it("falls back to empty on bad stored data", () => {
     expect(parseClickupConfig("{nope")).toEqual({ projectPath: null, lists: [] });
     expect(parseClickupConfig(null).lists).toEqual([]);
-  });
-
-  it("shows ClickUp only in its linked project (AC-C2)", () => {
-    const same = (a: string, b: string): boolean => a === b;
-    expect(clickupVisibleFor({ projectPath: null, lists: [] }, null, same)).toBe(true);
-    expect(clickupVisibleFor({ projectPath: "/a", lists: [] }, "/a", same)).toBe(true);
-    expect(clickupVisibleFor({ projectPath: "/a", lists: [] }, "/b", same)).toBe(false);
-    expect(clickupVisibleFor({ projectPath: "/a", lists: [] }, null, same)).toBe(false);
   });
 });

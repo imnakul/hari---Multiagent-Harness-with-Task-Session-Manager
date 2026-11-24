@@ -1,5 +1,4 @@
 import type { ClickupListInfo, ClickupStatus, ClickupTask, ClickupTaskInput } from "./clickupApi";
-import { PRIORITY_INFO } from "./clickupViewState";
 
 /** Fork (L-381): pure task helpers. No network, no storage. */
 
@@ -149,52 +148,27 @@ export function dueLabel(ms: number | null, now: number): DueLabel | null {
   return { text, overdue: days < 0 };
 }
 
-const MAX_PROMPT_FIELD = 300;
-const MAX_PROMPT_FIELDS = 30;
-
 export interface SessionPromptExtras {
-  listName?: string;
-  /** Names of files attached to the composer alongside the text. */
+  /** Names of files attached to the composer (or clipboard) alongside the text. */
   attachedFiles?: readonly string[];
-  /** Names of files that couldn't come along (too big, or the download failed). */
-  missingFiles?: readonly string[];
+  /** Files that couldn't come along (too big, or the download failed), linked instead. */
+  missingFiles?: readonly { title: string; url: string }[];
 }
 
 /**
- * AC-C14: the composer text for a session about this task: name and link,
- * then what the task says about itself (status, priority, list, people,
- * dates, tags, filled-in custom fields, files), then the description.
+ * AC-C14, Fork (L-390): what a session, a Mono or Copy gets from a task: only
+ * the useful part, its name, description and files. ClickUp's own bookkeeping
+ * (link, status, priority, list, people, dates, tags, custom fields) is left
+ * out on purpose; the user asked for just what the work needs.
  */
 export function sessionPromptForTask(
-  task: Pick<ClickupTask, "name" | "url" | "markdownDescription"> &
-    Partial<Pick<ClickupTask, "status" | "priority" | "assignees" | "startDate" | "dueDate" | "tags" | "customFields">>,
+  task: Pick<ClickupTask, "name" | "markdownDescription">,
   extras: SessionPromptExtras = {},
 ): string {
-  const clip = (text: string): string => {
-    const flat = text.replace(/\s+/g, " ").trim();
-    return flat.length > MAX_PROMPT_FIELD ? `${flat.slice(0, MAX_PROMPT_FIELD - 1)}…` : flat;
-  };
-  const facts: string[] = [];
-  const overview = [
-    task.status?.status ? `Status: ${task.status.status}` : "",
-    task.priority ? `Priority: ${PRIORITY_INFO[task.priority].label}` : "",
-    extras.listName ? `List: ${clip(extras.listName)}` : "",
-  ].filter(Boolean);
-  if (overview.length) facts.push(overview.join(" · "));
-  const people = (task.assignees ?? []).map((member) => member.username || member.email).filter(Boolean);
-  if (people.length) facts.push(`Assignees: ${people.join(", ")}`);
-  const dates = [
-    task.startDate ? `Start: ${fromLocalMidnight(task.startDate)}` : "",
-    task.dueDate ? `Due: ${fromLocalMidnight(task.dueDate)}` : "",
-  ].filter(Boolean);
-  if (dates.length) facts.push(dates.join(" · "));
-  if (task.tags?.length) facts.push(`Tags: ${task.tags.join(", ")}`);
-  for (const field of (task.customFields ?? []).filter((item) => item.text.trim()).slice(0, MAX_PROMPT_FIELDS)) {
-    facts.push(`${clip(field.name)}: ${clip(field.text)}`);
-  }
-  if (extras.attachedFiles?.length) facts.push(`Attached files: ${extras.attachedFiles.join(", ")}`);
-  if (extras.missingFiles?.length) facts.push(`Not attached (open in ClickUp): ${extras.missingFiles.join(", ")}`);
-
   const description = (task.markdownDescription ?? "").trim().slice(0, MAX_PROMPT_DESCRIPTION);
-  return [`ClickUp task: ${task.name}\n${task.url}`, facts.join("\n"), description].filter(Boolean).join("\n\n");
+  const files = [
+    extras.attachedFiles?.length ? `Attached files: ${extras.attachedFiles.join(", ")}` : "",
+    ...(extras.missingFiles ?? []).map((file) => `File: [${file.title || "attachment"}](${file.url})`),
+  ].filter(Boolean);
+  return [`# ${task.name.trim()}`, description, files.join("\n")].filter(Boolean).join("\n\n");
 }

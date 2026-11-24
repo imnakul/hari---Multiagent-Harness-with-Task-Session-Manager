@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { isImeComposition } from "../../../shared/lib/keyboard";
-import { ArrowUp, Plus, SmilePlus } from "../../../shared/ui/icons";
+import { ArrowUp, Plus, SmilePlus, Square } from "../../../shared/ui/icons";
 import { AttachmentChip } from "../../sessions/ui/AttachmentChip";
 import type { Attachment } from "../../sessions/model/session";
 import {
@@ -63,6 +63,11 @@ type Props = {
   ) => boolean | void | Promise<boolean | void>;
   onFocus?: () => void;
   /**
+   * Fork (L-386): given while the Mono is replying. An empty field shows Stop
+   * in Send's place; typing brings Send back, and the message waits its turn.
+   */
+  onStop?: () => void;
+  /**
    * Sits under the input on the right, like the model and its effort, with
    * attach across from it. Without any, attach and send share the field's
    * line, as in the floating chat.
@@ -89,6 +94,7 @@ export function MonoComposer({
   onDraftChange,
   onSubmit,
   onFocus,
+  onStop,
   controls,
   tools,
 }: Props) {
@@ -354,17 +360,34 @@ export function MonoComposer({
       className={`${FIELD_CLASSES} ${className}`}
     />
   );
-  const sendButton = (className: string) => (
-    <button
-      type="submit"
-      aria-label="Send"
-      title={pendingReads ? "Reading attachments…" : "Send"}
-      disabled={!ready}
-      className={`primary-action grid size-6.5 place-items-center rounded-md transition-[background-color,color,transform] duration-150 active:scale-90 disabled:cursor-default ${className}`}
-    >
-      <ArrowUp className="size-3.5" strokeWidth={2} />
-    </button>
-  );
+  const showStop =
+    !!onStop &&
+    pendingReads === 0 &&
+    text.trim().length === 0 &&
+    attachments.length === 0;
+  const sendButton = (className: string) =>
+    showStop ? (
+      <button
+        type="button"
+        aria-label="Stop reply"
+        title="Stop reply"
+        disabled={!enabled}
+        onClick={onStop}
+        className={`grid size-6.5 place-items-center rounded-md bg-content/10 text-content/80 transition-[background-color,color,transform] duration-150 hover:bg-content/15 hover:text-content active:scale-90 ${className}`}
+      >
+        <Square className="size-3 fill-current" />
+      </button>
+    ) : (
+      <button
+        type="submit"
+        aria-label="Send"
+        title={pendingReads ? "Reading attachments…" : "Send"}
+        disabled={!ready}
+        className={`primary-action grid size-6.5 place-items-center rounded-md transition-[background-color,color,transform] duration-150 active:scale-90 disabled:cursor-default ${className}`}
+      >
+        <ArrowUp className="size-3.5" strokeWidth={2} />
+      </button>
+    );
 
   return (
     <form
