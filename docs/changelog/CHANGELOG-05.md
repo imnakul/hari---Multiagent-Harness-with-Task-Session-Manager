@@ -1,12 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-24 07:07 IST — Release 0.16.0-local69
+
+- Type: chore
+- Why: user asked to push and release.
+- What: version 0.16.0-local69, carrying L-386 to L-391 (Mono Stop and Send now, ClickUp fixes, continue a task in a chat, useful-only copy, Whiteboard reply dot).
+- Files: version files (`package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`).
+- Commit: release commit after d501508d
+- Verified: tsc ✅, vitest full ✅ (790 files, 8377 tests) | cargo not run (no Rust changes) | manual: desktop checks pending
+
 ## 2026-11-24 06:30 IST — Whiteboard shows a dot in the sidebar when a reply lands while you are away (L-391)
 
 - Type: feature
 - What: ask the Whiteboard for something, go elsewhere, and when it finishes (a reply or an error) the Whiteboard entry in the sidebar shows a dot at the end of its name, like Inbox. It shows in the full sidebar, the rail and the compact rail. Opening the Whiteboard clears it. Stopping a request leaves no dot.
 - Why: user asked to know when a Whiteboard task is done without watching it.
 - Files: [whiteboardRuns.ts](src/features/whiteboard/model/whiteboardRuns.ts), [App.tsx](src/app/App.tsx), [Sidebar.tsx](src/app/shell/Sidebar.tsx), [ProjectRail.tsx](src/app/shell/ProjectRail.tsx), [whiteboardRuns.test.ts](src/features/whiteboard/model/whiteboardRuns.test.ts)
-- Commit: uncommitted
+- Commit: d501508d (in 0.16.0-local69)
 - Verified: typecheck ✅ tests ✅ (whiteboard + app/shell, 319; iconCatalog timed out under load and passes alone, unrelated) lint — (ESLint config broken) build —
 
 ## 2026-11-24 06:15 IST — Copy a ClickUp task or subtask; sessions and copies carry only the useful part (L-390)
@@ -19,7 +28,7 @@
   - Task Manager's Copy is now just the title and description (no status, project, dates or tags).
 - Why: user asked that copies and sessions carry only the useful content of a task.
 - Files: [clickupTasks.ts](src/features/clickup/model/clickupTasks.ts), [clickupSessionContext.ts](src/features/clickup/model/clickupSessionContext.ts), [ClickupCopyButton.tsx](src/features/clickup/ui/ClickupCopyButton.tsx) (new), [ClickupTaskPanel.tsx](src/features/clickup/ui/ClickupTaskPanel.tsx), [ClickupTaskDetails.tsx](src/features/clickup/ui/ClickupTaskDetails.tsx), [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [tasks.ts](src/features/tasks/tasks.ts), [TaskEditor.tsx](src/features/tasks/ui/TaskEditor.tsx), [TasksView.tsx](src/features/tasks/ui/TasksView.tsx), tests
-- Commit: uncommitted
+- Commit: d501508d (in 0.16.0-local69)
 - Verified: typecheck ✅ tests ✅ (clickup + tasks + focus + zen, 302) lint — (ESLint config broken) build —
 
 ## 2026-11-24 06:08 IST — ClickUp: continue a task in an existing chat (L-389)
@@ -28,7 +37,7 @@
 - What: the task panel's Start session menu gains "Continue in a session…". It shows Zen's chat list for the linked project (search, model, time, a spinner on chats that are replying). Picking a chat opens it and sends the task's details and files; if that chat is replying, the task waits in its queue and goes next.
 - Why: user asked to start a ClickUp task in an existing session, reusing Zen's session picker, queued when the session is busy.
 - Files: [ClickupTaskPanel.tsx](src/features/clickup/ui/ClickupTaskPanel.tsx), [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [FocusPicker.tsx](src/features/focus/ui/FocusPicker.tsx) (optional `statusOf` on `ProjectChatList`), [App.tsx](src/app/App.tsx), [ClickupView.test.ts](src/features/clickup/ui/ClickupView.test.ts)
-- Commit: uncommitted
+- Commit: d501508d (in 0.16.0-local69)
 - Verified: typecheck ✅ tests ✅ (clickup + focus + zen, 165) lint — (ESLint config broken) build —
 
 ## 2026-11-24 05:42 IST — ClickUp: the task panel width handle sits in the gap before it (L-388)
@@ -38,7 +47,7 @@
 - Why: user could not find or use a width slider between the last Board column and the New/Edit task panel.
 - Files: [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx) (panel frame split: outer sized frame holds the handle, inner frame clips and draws the border)
 - Note: ClickUp vanishing from the sidebar after switching projects was the project link check removed in L-387; it needs the updated build.
-- Commit: uncommitted
+- Commit: d501508d (in 0.16.0-local69)
 - Verified: typecheck ✅ tests ✅ (clickup, 42) lint — (ESLint config broken) build —
 
 ## 2026-11-24 05:39 IST — ClickUp: always in the sidebar, List pinned to the pane, Status menu hides instead of picks (L-387)
@@ -52,7 +61,7 @@
   - The Status menu lists only statuses the open list's tasks use (on a single list tab, that list's; on All, every list's).
 - Why: user reported the List scrolling the page, ClickUp missing from the sidebar, and asked for an untick-to-hide Status menu limited to the list's statuses, with the panel opening like the Share panel.
 - Files: [App.tsx](src/app/App.tsx), [ClickupView.tsx](src/features/clickup/ui/ClickupView.tsx), [ClickupTaskViews.tsx](src/features/clickup/ui/ClickupTaskViews.tsx), [clickupViewState.ts](src/features/clickup/model/clickupViewState.ts), [clickupConfig.ts](src/features/clickup/model/clickupConfig.ts) (removed `clickupVisibleFor` and its test), [SearchableSelect.tsx](src/shared/ui/SearchableSelect.tsx) (optional `allPicked`)
-- Commit: uncommitted
+- Commit: d501508d (in 0.16.0-local69)
 - Verified: typecheck ✅ tests ✅ (clickup + shared/ui, 86) lint — (ESLint config broken) build —
 
 ## 2026-11-23 08:13 IST — Monos: Stop button, Send now on waiting messages, room between turns (L-386)
@@ -61,7 +70,7 @@
 - Why: user: a Mono chat had no Stop or Send now button, and the next message sat right on the previous reply's buttons.
 - What: while a Mono replies, its composer shows Stop in Send's place until you type (Send comes back and the message waits its turn). A message waiting for the reply shows "Waiting to send · Send now" under its bubble; Send now delivers it mid-reply, or stops the reply first when the Mono's provider can't take messages mid-turn. Cause of the cramped gap: L-379 made the reply buttons always visible but kept them in the old 24px slot, so nothing was left between them and the next message; the slot is now 36px with the buttons 12px above its bottom.
 - Files: `src/features/monos/ui/MonoComposer.tsx` (`onStop`), `src/features/sessions/ui/SessionPane.tsx`, `src/features/sessions/ui/AgentTranscript.tsx` (`onSendMessageNow`), `src/styles/index.css`; tests `MonoComposer.test.ts`, `AgentTranscript.inlineWork.test.ts`.
-- Commit: uncommitted
+- Commit: d501508d (in 0.16.0-local69)
 - Verified: tsc ✅, vitest monos + sessions ✅ | manual: desktop check pending
 
 ## 2026-11-22 15:57 IST — Release 0.16.0-local68; tests follow the repos chip and new banner layout
