@@ -1,12 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-26 15:56 IST — Release 0.16.0-local72
+
+- Type: chore
+- Why: user asked to push and release.
+- What: version 0.16.0-local72, carrying L-404 (Activity Ask and Whiteboard chats no longer drop into an endless loader) and L-405 (Hari listed under Android's Usage access).
+- Files: version files (`package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`)
+- Commit: release commit after af48261c
+- Verified: tsc ✅, vitest detach/whiteboard/activity ✅ (141) | manual: desktop and phone checks pending
+
 ## 2026-11-26 15:51 IST — Hari shows under Android's Usage access (L-405)
 
 - Type: fix
 - What: Hari now appears in Settings → App usage data, so phone screen time can be turned on.
 - Why: user report. Root cause: `PACKAGE_USAGE_STATS` was only in the git-ignored `mobile/android` manifest from a local prebuild. The release workflow runs `expo prebuild` fresh, so the released APK never declared it, and Android lists only apps that declare it.
 - Files: [AndroidManifest.xml](mobile/modules/hari-live/android/src/main/AndroidManifest.xml) (the hari-live module declares the permission; it merges into every build)
-- Commit: uncommitted
+- Commit: af48261c (in 0.16.0-local72)
 - Verified: manifest review only; needs a Hari release build to check on the phone
 
 ## 2026-11-26 15:50 IST — Activity Ask and Whiteboard chats no longer vanish into an endless loader (L-404)
@@ -15,7 +24,7 @@
 - What: opening Ask in Activity or the Whiteboard Agent showed the chat for a moment, then "Starting…" forever. Those chats now stay open.
 - Why: user report. Root cause: the idle detach (`useIdleSessionDetach`) removes every idle chat that no tab shows, about 250 ms after a change. Embedded chats have no tab, so they were removed, and the panels went back to the loader.
 - Files: [useIdleSessionDetach.ts](src/app/hooks/useIdleSessionDetach.ts) (new `embeddedSessionIds` ref counts as shown), [App.tsx](src/app/App.tsx) (fills it with the Ask and sheet chat ids), [WhiteboardAgentPanel.tsx](src/features/whiteboard/ui/WhiteboardAgentPanel.tsx) (reopens when the chat goes missing), [useIdleSessionDetach.test.ts](src/app/hooks/useIdleSessionDetach.test.ts)
-- Commit: uncommitted
+- Commit: af48261c (in 0.16.0-local72)
 - Verified: typecheck ✅ tests ✅ (detach 20, whiteboard, activity, localTurnSubmission) lint — (no ESLint config) build —
 
 ## 2026-11-26 13:15 IST — Release 0.16.0-local71
