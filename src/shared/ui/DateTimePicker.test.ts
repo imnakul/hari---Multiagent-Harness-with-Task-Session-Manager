@@ -163,3 +163,16 @@ it("round-trips valid local dates and rejects malformed or normalized values", (
     expect(parseLocalDateTime(invalid), invalid).toBeNull();
   }
 });
+
+it("hides the time row in date mode and still returns the date (L-395)", () => {
+  const onChange = vi.fn();
+  act(() =>
+    root.render(
+      createElement(DateTimePicker, { value: "2028-02-20T12:00", onChange, mode: "date" }),
+    ),
+  );
+  expect(container.querySelector("input[type='time'], [role='group'][aria-label*='ime' i]")).toBeNull();
+  act(() => day("2028-02-29").click());
+  expect(onChange).toHaveBeenCalledTimes(1);
+  expect(onChange.mock.calls[0][0].slice(0, 10)).toBe("2028-02-29");
+});

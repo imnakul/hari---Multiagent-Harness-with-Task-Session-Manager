@@ -50,6 +50,10 @@ type HariLiveModule = {
   dismissNotification?(key: string): boolean;
   appIcons?(packages: string[]): Record<string, string>;
   appLabels?(packages: string[]): Record<string, string>;
+  /** Fork (L-398); missing in builds before it. */
+  usageAccess?(): boolean;
+  openUsageAccess?(): boolean;
+  usageIntervals?(since: number, until: number): string;
   /** Fork (L-280); missing in builds before it. */
   phoneStats?(): Record<string, unknown>;
   wake?(macs: string[], broadcasts: string[]): Promise<number>;
@@ -280,6 +284,33 @@ export const phoneNotices = native?.activeNotifications
           return native?.appLabels?.(packages) ?? {};
         } catch {
           return {};
+        }
+      },
+    }
+  : null;
+
+/**
+ * Fork (Hari, L-398): the phone's screen time for the computer's Activity
+ * page; null without the module (or a build from before it). A failed native
+ * call reads as no access and no intervals.
+ */
+export const phoneUsage = native?.usageIntervals
+  ? {
+      allowed: (): boolean => {
+        try {
+          return native?.usageAccess?.() ?? false;
+        } catch {
+          return false;
+        }
+      },
+      openSettings: (): boolean => native?.openUsageAccess?.() ?? false,
+      /** JSON `[{ package, label, start, end }]`: closed intervals only (see HariUsage). */
+      intervals: (since: number, until: number): string => {
+        try {
+          return native?.usageIntervals?.(since, until) ?? "[]";
+        } catch (error) {
+          console.warn("Screen time: could not read the phone's usage", error);
+          return "[]";
         }
       },
     }

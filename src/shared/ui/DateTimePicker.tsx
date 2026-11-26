@@ -25,6 +25,8 @@ type Props = {
   onChange: (value: string) => void;
   minDate?: string;
   autoFocus?: boolean;
+  /** Fork (L-395): "date" hides the time row; `value` still carries `YYYY-MM-DDTHH:mm`. */
+  mode?: "datetime" | "date";
 };
 
 function dateKey(date: Date): string {
@@ -50,6 +52,7 @@ export function DateTimePicker({
   onChange,
   minDate,
   autoFocus = false,
+  mode = "datetime",
 }: Props) {
   const today = new Date(Date.now());
   const selected = parseLocalDateTime(`${value.slice(0, 10)}T12:00`) ?? today;
@@ -230,6 +233,7 @@ export function DateTimePicker({
           </div>
         ))}
       </div>
+      {mode === "date" ? null : (
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-stroke px-1 pt-3">
         <div>
           <label
@@ -262,6 +266,7 @@ export function DateTimePicker({
           />
         </div>
       </div>
+      )}
     </div>
   );
 }

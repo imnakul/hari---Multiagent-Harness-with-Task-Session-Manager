@@ -2,11 +2,15 @@ import type { JSX } from "react";
 import type { ClickupListInfo, ClickupMember } from "../model/clickupApi";
 import type { ClickupListRef } from "../model/clickupConfig";
 import { dueBeforeStart, fromLocalMidnight, toLocalMidnight, type ClickupTaskDraft } from "../model/clickupTasks";
+import type { ClickupPendingFile } from "../model/clickupUpload";
+import { Paperclip } from "../../../shared/ui/icons";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { ClickupAssigneePicker } from "./ClickupAssigneePicker";
+import { ClickupAttachmentChips } from "./ClickupAttachmentChips";
+import { ClickupDateField } from "./ClickupDateField";
 
 const FIELD =
-  "h-8 w-full rounded-md border border-stroke bg-content/[0.04] px-2.5 text-[13px] text-content outline-none transition-colors placeholder:text-content/35 focus-visible:border-accent disabled:opacity-50";
+  "h-9 w-full rounded-md border border-content/10 bg-transparent px-2.5 text-[13px] text-content outline-none transition-colors placeholder:text-content/35 hover:border-content/20 focus:border-content/25 disabled:opacity-50";
 const LABEL = "flex flex-col gap-1 text-[12px] text-content/65";
 
 const PRIORITIES = [
@@ -27,6 +31,10 @@ export function ClickupTaskForm({
   meta,
   members,
   disabled,
+  attachments,
+  onAddFiles,
+  onRemoveFile,
+  attachmentError,
 }: {
   lists: readonly ClickupListRef[];
   listId: string;
@@ -37,6 +45,11 @@ export function ClickupTaskForm({
   meta: ClickupListInfo | null;
   members: readonly ClickupMember[];
   disabled: boolean;
+  /** Fork (L-395): the Attachments row shows only when `onAddFiles` is given (New task). */
+  attachments?: readonly ClickupPendingFile[];
+  onAddFiles?: () => void;
+  onRemoveFile?: (id: string) => void;
+  attachmentError?: string | null;
 }): JSX.Element {
   const set = (patch: Partial<ClickupTaskDraft>): void => onChange({ ...draft, ...patch });
   const statuses = [...(meta?.statuses ?? [])].sort((a, b) => a.orderindex - b.orderindex);
@@ -48,6 +61,7 @@ export function ClickupTaskForm({
           List
           <SearchableSelect
             label="List"
+            variant="transparent"
             value={listId}
             disabled={disabled}
             searchable={lists.length > 7}
@@ -74,7 +88,7 @@ export function ClickupTaskForm({
           maxLength={20000}
           disabled={disabled}
           onChange={(event) => set({ description: event.target.value })}
-          className="w-full resize-y rounded-md border border-stroke bg-content/[0.04] px-2.5 py-1.5 text-[13px] text-content outline-none transition-colors focus-visible:border-accent disabled:opacity-50"
+          className="w-full resize-y rounded-md border border-content/10 bg-transparent px-2.5 py-1.5 text-[13px] text-content outline-none transition-colors hover:border-content/20 focus:border-content/25 disabled:opacity-50"
         />
       </label>
       <div className={LABEL}>
@@ -87,26 +101,25 @@ export function ClickupTaskForm({
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <label className={LABEL}>
+        <div className={LABEL}>
           Start date
-          <input
-            type="date"
+          <ClickupDateField
+            label="Start date"
             value={fromLocalMidnight(draft.startDate)}
             disabled={disabled}
-            onChange={(event) => set({ startDate: toLocalMidnight(event.target.value) })}
-            className={FIELD}
+            onChange={(value) => set({ startDate: toLocalMidnight(value) })}
           />
-        </label>
-        <label className={LABEL}>
+        </div>
+        <div className={LABEL}>
           Due date
-          <input
-            type="date"
+          <ClickupDateField
+            label="Due date"
             value={fromLocalMidnight(draft.dueDate)}
+            min={fromLocalMidnight(draft.startDate) || undefined}
             disabled={disabled}
-            onChange={(event) => set({ dueDate: toLocalMidnight(event.target.value) })}
-            className={FIELD}
+            onChange={(value) => set({ dueDate: toLocalMidnight(value) })}
           />
-        </label>
+        </div>
       </div>
       {badDates ? (
         <p role="alert" className="text-[12px] text-red-400">
@@ -120,6 +133,7 @@ export function ClickupTaskForm({
             label="Priority"
             value={draft.priority === null ? "" : String(draft.priority)}
             disabled={disabled}
+            variant="transparent"
             searchable={false}
             options={PRIORITIES}
             onChange={(picked) => {
@@ -132,6 +146,7 @@ export function ClickupTaskForm({
           Status
           <SearchableSelect
             label="Status"
+            variant="transparent"
             value={draft.status}
             disabled={disabled || statuses.length === 0}
             searchable={statuses.length > 7}
@@ -145,6 +160,27 @@ export function ClickupTaskForm({
           />
         </div>
       </div>
+      {onAddFiles ? (
+        <div className={LABEL}>
+          Attachments
+          <button
+            type="button"
+            aria-label="Attach files"
+            disabled={disabled}
+            className="flex h-9 w-full items-center gap-2 rounded-md border border-dashed border-content/15 bg-transparent px-2.5 text-left text-[13px] text-content/65 transition-colors hover:border-content/30 hover:text-content disabled:opacity-50 active:scale-[0.99]"
+            onClick={onAddFiles}
+          >
+            <Paperclip aria-hidden className="size-4" />
+            Attach files
+          </button>
+          <ClickupAttachmentChips files={attachments ?? []} disabled={disabled} onRemove={(id) => onRemoveFile?.(id)} />
+          {attachmentError ? (
+            <p role="alert" className="text-[12px] text-red-400">
+              {attachmentError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

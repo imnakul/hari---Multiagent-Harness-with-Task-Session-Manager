@@ -18,20 +18,31 @@ function Value({ ms, empty }: { ms: number | null; empty?: string }): ReactEleme
 export function StatTiles({
   totals,
   aw,
+  phoneMs = null,
+  showAgents = true,
 }: {
   totals: ActivityTotals;
   aw: AwSummary | null;
+  /** Fork (L-398): phone time to add to "You, active"; null while Phone is off. */
+  phoneMs?: number | null;
+  /** Fork (L-398): false when MonoCode is off, which hides the agent tiles. */
+  showAgents?: boolean;
 }): ReactElement {
   const awReady = aw?.available === true;
+  const activeMs = awReady || phoneMs != null ? (awReady ? aw.activeMs : 0) + (phoneMs ?? 0) : null;
   const tiles: Tile[] = [
     {
       label: "You, active",
-      value: <Value ms={awReady ? aw.activeMs : null} />,
+      value: <Value ms={activeMs} />,
       caption: awReady
-        ? aw.hasAfk
-          ? "Keyboard or mouse in use"
-          : "From window focus"
-        : "Needs ActivityWatch",
+        ? phoneMs != null
+          ? "Computer and phone"
+          : aw.hasAfk
+            ? "Keyboard or mouse in use"
+            : "From window focus"
+        : phoneMs != null
+          ? "Phone only"
+          : "Needs ActivityWatch",
       swatch: "bg-content/35",
     },
     {
@@ -53,10 +64,12 @@ export function StatTiles({
         : "Needs ActivityWatch",
       swatch: "bg-skill",
     },
-  ];
+  ].filter((tile) => showAgents || (tile.label !== "Agents working" && tile.label !== "Prompts"));
 
   return (
-    <dl className="grid grid-cols-2 overflow-hidden rounded-lg border border-stroke lg:grid-cols-4">
+    <dl
+      className={`grid grid-cols-2 overflow-hidden rounded-lg border border-stroke ${tiles.length > 2 ? "lg:grid-cols-4" : ""}`}
+    >
       {tiles.map((tile, index) => (
         <div
           key={tile.label}

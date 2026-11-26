@@ -80,6 +80,13 @@ class HariLiveModule : Module() {
     Function("appIcons") { packages: List<String> -> HariNotifications.icons(context, packages) }
     Function("appLabels") { packages: List<String> -> HariNotifications.labels(context, packages) }
 
+    /** Fork (L-398): the phone's screen time for the computer's Activity page. */
+    Function("usageAccess") { HariUsage.allowed(context) }
+    Function("openUsageAccess") { HariUsage.openSettings(context) }
+    Function("usageIntervals") { since: Double, until: Double ->
+      HariUsage.intervals(context, since.toLong(), until.toLong())
+    }
+
     /** Fork (L-279): moves a file from Hari's cache into Download/Hari; its content URI. */
     AsyncFunction("saveToDownloads") { source: String, name: String, mimeType: String ->
       HariShare.saveToDownloads(context, source, name, mimeType)

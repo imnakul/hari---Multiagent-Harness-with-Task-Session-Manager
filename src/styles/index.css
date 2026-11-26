@@ -1221,6 +1221,15 @@ html.has-chat-background.chat-background-effect-ready.chat-background-gradient-b
   background-color: color-mix(in srgb, #e2c08d 46%, transparent);
 }
 
+/* Fork (L-400): selected text uses the accent (the user's, when one is chosen), not the system blue. */
+::selection {
+  background-color: color-mix(
+    in srgb,
+    var(--user-accent-color, var(--color-accent)) 38%,
+    transparent
+  );
+}
+
 /* Text bookmarked from a selection keeps a soft accent tint in the chat (L-192). */
 ::highlight(monocode-bookmark-quote) {
   background-color: color-mix(in srgb, var(--color-accent) 24%, transparent);
@@ -2455,6 +2464,70 @@ input,
 @media (hover: none) {
   .agent-markdown .markdown-overlay-actions {
     opacity: 1;
+  }
+}
+
+/* Fork (L-401): Copy section on a hovered heading, Copy list on a hovered list.
+   The row is placed in the hovered element, which is positioned only while it
+   holds the row. */
+.agent-markdown [data-hover-actions-host] {
+  position: relative;
+}
+
+.agent-markdown .markdown-hover-actions {
+  position: absolute;
+  z-index: 2;
+  inset-inline-end: 0;
+  top: 0;
+  animation: markdown-hover-actions-in 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.agent-markdown [data-hover-actions-host="section"] > .markdown-hover-actions {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+@keyframes markdown-hover-actions-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Alt+click copies a paragraph or list item; a short accent flash confirms it. */
+.agent-markdown [data-block-copied] {
+  position: relative;
+}
+
+.agent-markdown [data-block-copied]::after {
+  content: "";
+  position: absolute;
+  inset: -2px -6px;
+  border-radius: 6px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--user-accent-color, var(--color-accent)) 18%, transparent);
+  opacity: 0;
+  animation: markdown-block-copied 900ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes markdown-block-copied {
+  0%,
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-markdown .markdown-hover-actions {
+    animation: none;
+  }
+  .agent-markdown [data-block-copied]::after {
+    animation-duration: 1ms;
+    animation-delay: 600ms;
+    opacity: 1;
+    animation-fill-mode: forwards;
   }
 }
 

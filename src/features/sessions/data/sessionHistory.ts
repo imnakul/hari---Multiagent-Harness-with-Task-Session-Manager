@@ -320,10 +320,15 @@ export function historyWithLiveSessions(
 export function scratchChatSummaries(
   history: SessionSummary[],
   sessions: Session[],
+  /** Fork (L-396): Activity Ask chats, kept out of the Chats list. */
+  hiddenIds: ReadonlySet<string> = new Set(),
 ): SessionSummary[] {
-  let rows = history.filter((entry) => isScratchCwd(entry.cwd));
+  let rows = history.filter(
+    (entry) => isScratchCwd(entry.cwd) && !hiddenIds.has(entry.id),
+  );
   for (const session of sessions) {
     if (session.ephemeral || !isScratchCwd(session.cwd)) continue;
+    if (hiddenIds.has(session.id)) continue;
     const storedIndex = rows.findIndex((row) => row.id === session.id);
     if (storedIndex >= 0) {
       if (

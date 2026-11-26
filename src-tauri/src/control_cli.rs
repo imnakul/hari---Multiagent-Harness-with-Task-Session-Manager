@@ -82,7 +82,7 @@ const ACTIONS: [&str; 12] = [
     "list", "delegate", "get", "steer", "message", "retry", "cancel", "wait", "review", "finish",
     "respond", "answer",
 ];
-const APP_ACTIONS: [&str; 48] = [
+const APP_ACTIONS: [&str; 50] = [
     "session_manager.list",
     "session_manager.read",
     "session_manager.write",
@@ -114,7 +114,9 @@ const APP_ACTIONS: [&str; 48] = [
     "clickup.tasks",
     "clickup.create",
     "clickup.update",
+    "activity.read",
     "whiteboard.draw",
+    "whiteboard.read",
     "artifacts.list",
     "artifacts.read",
     "artifacts.write",
@@ -311,6 +313,14 @@ Actions:
                   fields stay as they are. assignees is the full new list.
                   done:true moves it to the list's done status.
 
+  activity.read {"start":"2026-11-01","end":"2026-11-07","include":["notes","apps"]}
+                  Read the user's activity for up to 32 days: prompt and hourly notes,
+                  events, apps, websites (domains only), meetings and phone screen
+                  time. start/end are local YYYY-MM-DD[THH:mm] or ISO 8601 with offset;
+                  a date-only end covers that day. include: notes, events, apps, sites,
+                  meetings, phone (default all; events are left out of ranges over 3 days
+                  unless listed).
+
   whiteboard.draw {"name":"Sign-in flow","ops":{"add":[
                     {"type":"rectangle","id":"login","x":0,"y":0,"width":180,"height":70,"label":"Login"},
                     {"type":"diamond","id":"ok","x":260,"y":-10,"width":160,"height":90,"label":"Valid?"},
@@ -328,6 +338,12 @@ Actions:
                   backgroundColor (hex or transparent), strokeStyle solid, dashed
                   or dotted, fillStyle solid, hachure or cross-hatch.
                   At most 60 new elements per call.
+
+  whiteboard.read {"sheetId":"..."}
+                  One sheet's elements, one line each: id, type, x, y, w, h,
+                  label, colours. Without sheetId, the sheet list
+                  [{sheetId,name,locked}]. A sheet's own chat reads and draws
+                  on its sheet without a sheetId.
 
   artifacts.list {"limit":30,"offset":0}  Mono or habit only. Saved artifact titles.
   artifacts.read {"id":"..."}  Full content of one artifact.
@@ -865,6 +881,19 @@ mod tests {
     }
 
     #[test]
+    fn app_mode_exposes_activity_read() {
+        assert!(matches!(
+            parse_args_for(&args(&["activity.read", "--json", "{\"start\":\"2026-11-01\",\"end\":\"2026-11-02\"}"]), true),
+            Ok(Parsed::Call(_, _, _))
+        ));
+        // App access only: the orchestration control CLI never reads activity.
+        assert!(parse_args_for(&args(&["activity.read", "--json", "{}"]), false).is_err());
+        let text = app_help();
+        assert!(text.contains("activity.read"));
+        assert!(text.contains("32 days"));
+    }
+
+    #[test]
     fn app_mode_exposes_whiteboard_draw_and_documents_its_ops() {
         assert!(matches!(
             parse_args_for(&args(&["whiteboard.draw", "--json", "{\"ops\":{\"add\":[]}}"]), true),
@@ -876,6 +905,16 @@ mod tests {
         assert!(text.contains("whiteboard.draw"));
         assert!(text.contains("\"sheetId\""));
         assert!(text.contains("At most 60 new elements per call"));
+    }
+
+    #[test]
+    fn app_mode_exposes_whiteboard_read() {
+        assert!(matches!(
+            parse_args_for(&args(&["whiteboard.read", "--json", "{}"]), true),
+            Ok(Parsed::Call(_, _, _))
+        ));
+        assert!(parse_args_for(&args(&["whiteboard.read", "--json", "{}"]), false).is_err());
+        assert!(app_help().contains("whiteboard.read {\"sheetId\""));
     }
 
     #[test]

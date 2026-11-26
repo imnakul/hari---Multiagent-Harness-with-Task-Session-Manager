@@ -145,6 +145,11 @@ fn request(
             .send_string(&body.to_string()),
         None => call.call(),
     };
+    read_reply(result)
+}
+
+/// Turns a finished HTTP call into the JSON body or a `ClickupError`.
+fn read_reply(result: Result<ureq::Response, ureq::Error>) -> Result<Value, ClickupError> {
     match result {
         Ok(response) => response
             .into_string()
@@ -628,6 +633,102 @@ pub async fn clickup_create_task(list_id: String, input: Value) -> Result<Value,
     .await
 }
 
+/// Fork (L-395): the biggest file a task attachment may be.
+const MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// A file name safe to send: no path parts or control characters, at most 200 characters.
+fn clean_file_name(name: &str) -> String {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or_default();
+    let cleaned: String = last.chars().filter(|c| !c.is_control()).take(200).collect();
+    let cleaned = cleaned.trim().trim_matches('.').trim().to_owned();
+    if cleaned.is_empty() {
+        "attachment".to_owned()
+    } else {
+        cleaned
+    }
+}
+
+/// A multipart/form-data body with one file part named `attachment`.
+fn multipart_body(boundary: &str, file_name: &str, mime: &str, bytes: &[u8]) -> Vec<u8> {
+    let escaped = file_name.replace('"', "'");
+    let mut body = Vec::with_capacity(bytes.len() + 256);
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"attachment\"; filename=\"{escaped}\"\r\nContent-Type: {mime}\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    body
+}
+
+/// Reads the bytes to upload: a regular file of at most 25 MB, or a base64 payload.
+fn upload_bytes(path: Option<&str>, data: Option<&str>) -> Result<Vec<u8>, ClickupError> {
+    use base64::Engine;
+    match (path, data) {
+        (Some(path), None) => {
+            let meta = std::fs::metadata(path).map_err(|_| ClickupError::NotFound)?;
+            if !meta.is_file() {
+                return Err(ClickupError::Invalid { message: "Pick a file, not a folder.".to_owned() });
+            }
+            if meta.len() > MAX_UPLOAD_BYTES {
+                return Err(ClickupError::Invalid { message: "Files must be 25 MB or smaller.".to_owned() });
+            }
+            std::fs::read(path).map_err(|_| ClickupError::NotFound)
+        }
+        (None, Some(data)) => {
+            // Refuse before decoding: base64 is 4 characters per 3 bytes.
+            if (data.len() as u64) / 4 * 3 > MAX_UPLOAD_BYTES + 3 {
+                return Err(ClickupError::Invalid { message: "Files must be 25 MB or smaller.".to_owned() });
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|_| ClickupError::Invalid { message: "That file couldn't be read.".to_owned() })?;
+            if bytes.len() as u64 > MAX_UPLOAD_BYTES {
+                return Err(ClickupError::Invalid { message: "Files must be 25 MB or smaller.".to_owned() });
+            }
+            Ok(bytes)
+        }
+        _ => Err(ClickupError::Invalid { message: "Send a path or data, not both.".to_owned() }),
+    }
+}
+
+/// Uploads one file to a task. Not retried here: a POST is not idempotent.
+#[tauri::command]
+pub async fn clickup_upload_attachment(
+    task_id: String,
+    path: Option<String>,
+    data: Option<String>,
+    name: String,
+    mime: Option<String>,
+) -> Result<Value, ClickupError> {
+    run_blocking(move || {
+        let id = checked_id(&task_id)?.to_owned();
+        let bytes = upload_bytes(path.as_deref(), data.as_deref())?;
+        let file_name = clean_file_name(&name);
+        let mime = mime
+            .filter(|value| !value.is_empty() && value.len() <= 100 && !value.contains(['\r', '\n']))
+            .unwrap_or_else(|| "application/octet-stream".to_owned());
+        let boundary = format!("----monocode{}", uuid::Uuid::new_v4().simple());
+        let body = multipart_body(&boundary, &file_name, &mime, &bytes);
+        let url = format!("{API}/task/{id}/attachment");
+        with_token(|token| {
+            let agent = ureq::AgentBuilder::new().timeout(UPLOAD_TIMEOUT).build();
+            let result = agent
+                .post(&url)
+                .set("Authorization", token)
+                .set("Accept", "application/json")
+                .set("Content-Type", &format!("multipart/form-data; boundary={boundary}"))
+                .send_bytes(&body);
+            let reply = read_reply(result)?;
+            Ok(json!({ "id": text_of(reply.get("id")), "title": text_of(reply.get("title")) }))
+        })
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn clickup_update_task(task_id: String, input: Value) -> Result<Value, ClickupError> {
     run_blocking(move || {
@@ -1070,5 +1171,35 @@ mod tests {
         assert!(checked_id("86abc-x").is_ok());
         assert!(checked_id("../team").is_err());
         assert!(checked_id("").is_err());
+    }
+
+    #[test]
+    fn clean_file_name_drops_path_parts_and_control_characters() {
+        assert_eq!(clean_file_name("..\\a/b.png"), "b.png");
+        assert_eq!(clean_file_name("C:\\docs\\plan\u{7}.pdf"), "plan.pdf");
+        assert_eq!(clean_file_name("///"), "attachment");
+        assert_eq!(clean_file_name(&"x".repeat(300)).chars().count(), 200);
+    }
+
+    #[test]
+    fn multipart_body_has_boundary_file_name_type_and_bytes() {
+        let body = multipart_body("BND", "a\"b.png", "image/png", &[1, 2, 3]);
+        let text = String::from_utf8_lossy(&body).into_owned();
+        assert!(text.starts_with("--BND\r\n"));
+        assert!(text.contains("name=\"attachment\"; filename=\"a'b.png\""));
+        assert!(text.contains("Content-Type: image/png\r\n\r\n"));
+        assert!(text.ends_with("\r\n--BND--\r\n"));
+        assert!(body.windows(3).any(|window| window == [1, 2, 3]));
+    }
+
+    #[test]
+    fn upload_bytes_needs_exactly_one_source_and_refuses_big_files() {
+        assert!(upload_bytes(None, None).is_err());
+        assert!(upload_bytes(Some("a"), Some("b")).is_err());
+        let big = "A".repeat(40 * 1024 * 1024);
+        assert!(matches!(upload_bytes(None, Some(&big)), Err(ClickupError::Invalid { .. })));
+        assert_eq!(upload_bytes(None, Some("AQID")).unwrap(), vec![1, 2, 3]);
+        let dir = std::env::temp_dir();
+        assert!(upload_bytes(Some(dir.to_str().unwrap()), None).is_err());
     }
 }

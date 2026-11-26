@@ -364,6 +364,22 @@ export const clickupApi = {
   async saveAttachment(taskId: string, attachmentId: string, destination: string): Promise<void> {
     await call("clickup_save_attachment", { taskId, attachmentId, destination });
   },
+
+  /** Fork (L-395): uploads one file (a path on disk or base64 data) to a task. One try; not retried. */
+  async uploadAttachment(
+    taskId: string,
+    file: { path?: string; data?: string; name: string; mimeType: string },
+  ): Promise<{ id: string; title: string }> {
+    const value: unknown = await call("clickup_upload_attachment", {
+      taskId,
+      path: file.path ?? null,
+      data: file.data ?? null,
+      name: file.name,
+      mime: file.mimeType,
+    });
+    const raw = isObject(value) ? value : {};
+    return { id: str(raw.id), title: str(raw.title) };
+  },
 };
 
 export interface ClickupDownloadedFile {

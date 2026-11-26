@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Activity, CircleAlert, ExternalLink } from "../../../shared/ui/icons";
+import { SegmentedSwitch } from "../../../shared/ui/SegmentedSwitch";
 import { OverlayNav } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
 import { useAiNotesEnabled } from "../model/useActivityRecorder";
@@ -26,10 +27,18 @@ import {
   type ActivityLog,
   type ActivityScope,
 } from "../model/activity";
+import {
+  filterAw,
+  filterLog,
+  loadSources,
+  saveSources,
+  type ActivitySource,
+} from "../model/sources";
 import { IS_MAC } from "../../../platform/tauri/platform";
 import { ActivityLogFeed, type LogFilter } from "./ActivityLogFeed";
+import { ActivityAskPanel, type AskStatus, type AskThread } from "./ActivityAskPanel";
 import { AgentStatusPill } from "./AgentStatusPill";
-import { AppsBreakdown, ProjectBreakdown, SitesBreakdown } from "./Breakdown";
+import { AppsBreakdown, PhoneBreakdown, ProjectBreakdown, SitesBreakdown } from "./Breakdown";
 import { DailyBars } from "./DailyBars";
 import { DayTimeline } from "./DayTimeline";
 import { PeriodNav } from "./PeriodNav";
@@ -40,7 +49,20 @@ import { useActivityData } from "./useActivityData";
 const ACTIVITYWATCH_URL = "https://activitywatch.net/";
 const EMPTY_LOG: ActivityLog = { events: [], notes: [] };
 /** Remember the viewed period while the app runs, like Notes remembers its note. */
-let remembered: { anchor: Date; scope: ActivityScope; logFilter: LogFilter } | null = null;
+type ActivityMode = "activity" | "ask";
+const MODE_OPTIONS = [
+  { id: "activity", label: "Activity" },
+  { id: "ask", label: "Ask" },
+] as const;
+let remembered: {
+  anchor: Date;
+  scope: ActivityScope;
+  logFilter: LogFilter;
+  mode: ActivityMode;
+} | null = null;
+/** Keeps a focusable scrolling column (WCAG 2.1.1) without a heavy ring. */
+const SCROLL_COLUMN =
+  "min-w-0 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-accent/60 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1";
 
 type Props = {
   /** Rendered as an inset-layout title tab, which supplies its own header. */
@@ -55,6 +77,13 @@ type Props = {
   onOpenSession?: (sessionId: string) => void;
   /** Open Settings at the Activity rows. */
   onOpenSettings?: () => void;
+  /** Fork (L-396): the Ask tab's embedded chat, its state, thread list and actions. */
+  askChat?: ReactNode;
+  askStatus?: AskStatus;
+  askThreads?: readonly AskThread[];
+  askActiveId?: string | null;
+  onAskOpen?: (id?: string, fresh?: boolean) => void;
+  onAskDelete?: (id: string) => void;
 };
 
 /**
@@ -71,22 +100,35 @@ export function ActivityView({
   onToggleSidebar,
   onOpenSession,
   onOpenSettings,
+  askChat = null,
+  askStatus = "idle",
+  askThreads = [],
+  askActiveId = null,
+  onAskOpen,
+  onAskDelete,
 }: Props): ReactElement {
   const [anchor, setAnchor] = useState<Date>(
     () => remembered?.anchor ?? shiftDay(new Date(), 0),
   );
   const [scope, setScope] = useState<ActivityScope>(() => remembered?.scope ?? "day");
   const [logFilter, setLogFilter] = useState<LogFilter>(() => remembered?.logFilter ?? "all");
+  const [mode, setMode] = useState<ActivityMode>(() => remembered?.mode ?? "activity");
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const scrollLock = useLockOverscroll<HTMLDivElement>();
   const aiNotes = useAiNotesEnabled();
-  const data = useActivityData(anchor, scope);
-  const { log, aw, agent, isLive } = data;
+  const [sources, setSources] = useState<ActivitySource[]>(loadSources);
+  const phoneOn = sources.includes("phone");
+  const data = useActivityData(anchor, scope, phoneOn);
+  const { log, aw, phone, agent, isLive } = data;
+  const updateSources = (next: ActivitySource[]): void => {
+    setSources(next);
+    saveSources(next);
+  };
 
   useEffect(() => {
-    remembered = { anchor, scope, logFilter };
-  }, [anchor, scope, logFilter]);
+    remembered = { anchor, scope, logFilter, mode };
+  }, [anchor, scope, logFilter, mode]);
 
   const openDay = (start: number): void => {
     setAnchor(new Date(start));
@@ -112,12 +154,17 @@ export function ActivityView({
     return () => window.removeEventListener("keydown", onKey);
   }, [active]);
 
-  const current = log.data ?? EMPTY_LOG;
+  const current = useMemo(() => filterLog(log.data ?? EMPTY_LOG, sources), [log.data, sources]);
   const totals = useMemo(() => activityTotals(current.events), [current]);
   const projects = useMemo(() => summarizeProjects(current.events), [current]);
   const items = useMemo(() => buildLogItems(current), [current]);
   const turns = useMemo(() => agentSpans(current.events), [current]);
-  const awData = aw.data;
+  const awData = useMemo(() => (aw.data ? filterAw(aw.data, sources) : null), [aw.data, sources]);
+  const phoneData = phoneOn ? phone.data : null;
+  const phoneActiveMs = useMemo(
+    () => (phoneData?.activeSpans ?? []).reduce((sum, span) => sum + (span.end - span.start), 0),
+    [phoneData],
+  );
   const days = useMemo(
     () => (scope === "day" ? [] : dailyTotals(data.range, current.events, awData)),
     [scope, data.range, current.events, awData],
@@ -167,30 +214,45 @@ export function ActivityView({
         </div>
       )}
 
-      {/* A size container, so lists inside can stop at its height (`cqh`). */}
-      <div
-        ref={scrollLock}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-none [container-type:size]"
-      >
-        <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-5 sm:px-6">
+      {onAskOpen && onAskDelete ? (
+        <div className="flex h-10 shrink-0 items-center border-b border-stroke px-3">
+          <SegmentedSwitch ariaLabel="Activity view" options={MODE_OPTIONS} value={mode} onChange={setMode} />
+        </div>
+      ) : null}
+
+      {onAskOpen && onAskDelete && mode === "ask" ? (
+        <ActivityAskPanel
+          chat={askChat}
+          status={askStatus}
+          threads={askThreads}
+          activeId={askActiveId}
+          onOpen={onAskOpen}
+          onDelete={onAskDelete}
+        />
+      ) : (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* The fixed top (fork, L-399): the period, headline numbers and timeline stay put. */}
+        <div className="mx-auto flex w-full max-w-[1120px] shrink-0 flex-col gap-5 px-4 pt-5 sm:px-6">
           <PeriodNav
             anchor={anchor}
             scope={scope}
             isLive={isLive}
-            refreshing={log.loading || aw.loading}
+            refreshing={log.loading || aw.loading || phone.loading}
             onScope={setScope}
             onShift={(delta) => setAnchor((a) => shiftPeriod(a, scope, delta))}
             onJump={(date) => setAnchor(shiftDay(date, 0))}
             onRefresh={data.refresh}
+            sources={sources}
+            onSources={updateSources}
           />
-
-          {log.error && !log.data ? (
-            <ErrorState message={log.error} onRetry={data.refresh} />
-          ) : firstLoad ? (
-            <LoadingState />
-          ) : (
+          {!(log.error && !log.data) && !firstLoad ? (
             <>
-              <StatTiles totals={totals} aw={awData?.available ? awData : null} />
+              <StatTiles
+                totals={totals}
+                aw={awData?.available ? awData : null}
+                phoneMs={phoneOn ? phoneActiveMs : null}
+                showAgents={sources.includes("monocode")}
+              />
               {awData && !awData.available ? <ActivityWatchHint reason={awData.error} /> : null}
               {scope === "day" ? (
                 <DayTimeline
@@ -198,6 +260,7 @@ export function ActivityView({
                   active={awData?.activeSpans ?? []}
                   agents={turns}
                   meetings={awData?.meetings ?? []}
+                  phone={phoneOn ? (phoneData?.activeSpans ?? []) : null}
                   now={isLive ? Date.now() : null}
                   awHint={awHint}
                 />
@@ -209,14 +272,48 @@ export function ActivityView({
                   onOpenDay={openDay}
                 />
               )}
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                <div className="flex min-w-0 flex-col gap-6">
-                  <ProjectBreakdown projects={projects} />
+            </>
+          ) : null}
+        </div>
+
+        {/* Below the top: two columns that scroll on their own; one column on a narrow window. */}
+        <div
+          ref={scrollLock}
+          className="relative min-h-0 flex-1 overflow-y-auto overscroll-none lg:overflow-hidden"
+        >
+          {log.error && !log.data ? (
+            <div className="mx-auto w-full max-w-[1120px] px-4 py-5 sm:px-6">
+              <ErrorState message={log.error} onRetry={data.refresh} />
+            </div>
+          ) : firstLoad ? (
+            <div className="mx-auto w-full max-w-[1120px] px-4 py-5 sm:px-6">
+              <LoadingState />
+            </div>
+          ) : (
+            <div className="mx-auto grid w-full max-w-[1120px] grid-cols-1 gap-6 px-4 py-5 sm:px-6 lg:absolute lg:inset-x-0 lg:inset-y-0 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:py-4">
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Time breakdown"
+                className={`flex flex-col gap-6 ${SCROLL_COLUMN}`}
+              >
+                {sources.includes("monocode") ? <ProjectBreakdown projects={projects} /> : null}
+                {sources.includes("browser") || sources.includes("other") ? (
                   <AppsBreakdown aw={awData} />
-                  <SitesBreakdown aw={awData} />
-                </div>
+                ) : null}
+                {sources.includes("browser") ? <SitesBreakdown aw={awData} /> : null}
+                {phoneOn ? (
+                  <PhoneBreakdown phone={phoneData} loading={phone.loading} failed={phone.error != null} />
+                ) : null}
+              </div>
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label={summaryKey ? "Period summary" : "Activity log"}
+                className={`flex flex-col gap-6 ${SCROLL_COLUMN}`}
+              >
                 {summaryKey ? (
-                  <MatchLeftColumn>
+                  <>
                     <PeriodSummaryCard
                       periodKey={summaryKey}
                       label={periodPromptLabel(anchor, scope)}
@@ -225,40 +322,23 @@ export function ActivityView({
                       hasActivity={current.events.length > 0 || current.notes.length > 0}
                     />
                     <PeriodNotes notes={current.notes} onOpenDay={openDayNotes} />
-                  </MatchLeftColumn>
+                  </>
                 ) : (
-                  <MatchLeftColumn>
-                    <ActivityLogFeed
-                      items={items}
-                      agent={agent}
-                      filter={logFilter}
-                      onFilter={setLogFilter}
-                      onRetry={data.retryNotes}
-                      onOpenSession={onOpenSession}
-                    />
-                  </MatchLeftColumn>
+                  <ActivityLogFeed
+                    items={items}
+                    agent={agent}
+                    filter={logFilter}
+                    onFilter={setLogFilter}
+                    onRetry={data.retryNotes}
+                    onOpenSession={onOpenSession}
+                  />
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-/**
- * The right column on a wide window: as tall as the left column (at least
- * 320px), never taller than the Activity pane, like the task panel; its list
- * fills the rest and scrolls inside. Absolute so it adds no height to the row.
- * Stacked on a narrow window it flows normally.
- */
-function MatchLeftColumn({ children }: { children: ReactNode }): ReactElement {
-  return (
-    <div className="relative min-w-0 lg:min-h-80">
-      <div className="flex min-h-0 flex-col gap-6 lg:absolute lg:inset-0 lg:max-h-[calc(100cqh-2.5rem)] lg:overflow-y-auto lg:overscroll-contain">
-        {children}
-      </div>
+      )}
     </div>
   );
 }

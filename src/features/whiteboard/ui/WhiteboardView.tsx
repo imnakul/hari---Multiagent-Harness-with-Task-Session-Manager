@@ -29,7 +29,7 @@ import type {
   NormalizedZoomValue,
 } from "@excalidraw/excalidraw/types";
 import { ask, save } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OverlayNav } from "../../../app/shell/TitleBar";
 import { WindowControls } from "../../../app/shell/WindowControls";
 import { writeBase64File, writeTextFile } from "../../../platform/tauri/fs";
@@ -75,7 +75,6 @@ import {
   saveSheetScene,
   saveWhiteboardIndex,
   trashSheetFiles,
-  whiteboardDir,
 } from "../model/sheetStore";
 import type { WhiteboardOps } from "../model/whiteboardAgent";
 import {
@@ -99,7 +98,7 @@ import { adoptWhenMounted } from "../model/whiteboardApi";
 import { iconSvg, svgDataUrl, type CatalogIcon } from "./iconCatalog";
 import { IconLibraryPicker } from "./IconLibraryPicker";
 import { RadialToolMenu, type WheelAction } from "./RadialToolMenu";
-import { WhiteboardChat } from "./WhiteboardChat";
+import { WhiteboardAgentPanel, type WhiteboardChatStatus } from "./WhiteboardAgentPanel";
 import {
   drawOrQueue,
   forgetSheet,
@@ -111,9 +110,13 @@ import {
   withDrawnNote,
 } from "../model/whiteboardRuns";
 import {
-  serveWhiteboardDraws,
+  describeSheetForAgent,
+  sceneElementsFromJson,
+  serveWhiteboard,
   type WhiteboardDrawInput,
   type WhiteboardDrawResult,
+  type WhiteboardReadInput,
+  type WhiteboardReadResult,
 } from "../model/whiteboardTool";
 import { WhiteboardTopBar, type ExportKind } from "./WhiteboardTopBar";
 
@@ -182,14 +185,23 @@ export function WhiteboardView({
   tabbed = false,
   besideRail = false,
   compactRail = false,
-  cwd,
+  sheetChat,
+  sheetChatStatus = "idle",
+  onOpenSheetChat,
+  onSheetDeleted,
   onClose,
   onToggleSidebar,
 }: {
   tabbed?: boolean;
   besideRail?: boolean;
   compactRail?: boolean;
-  cwd?: string;
+  /** Fork (L-403): the embedded chat of this sheet, or null while it opens or belongs to another sheet. */
+  sheetChat?: (sheetId: string) => ReactNode;
+  sheetChatStatus?: WhiteboardChatStatus;
+  /** Opens the sheet's own chat; `fresh` starts a new one. */
+  onOpenSheetChat?: (sheetId: string, fresh?: boolean) => void;
+  /** A sheet was deleted: its chat link goes too. */
+  onSheetDeleted?: (sheetId: string) => void;
   onClose: () => void;
   onToggleSidebar?: () => void;
 }) {
@@ -209,7 +221,6 @@ export function WhiteboardView({
   const [indexError, setIndexError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [dir, setDir] = useState<string | null>(null);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [activeTool, setActiveTool] = useState<string>("selection");
   const [fontId, setFontId] = useState<number>(DEFAULT_WHITEBOARD_FONT_ID);
@@ -314,10 +325,6 @@ export function WhiteboardView({
   // Open the sheet list; the first visit gets a fresh sheet.
   useEffect(() => {
     let live = true;
-    whiteboardDir().then(
-      (path) => live && setDir(path),
-      () => undefined,
-    );
     loadWhiteboardIndex().then(
       (loadedIndex) => {
         if (!live) return;
@@ -484,13 +491,39 @@ export function WhiteboardView({
       note: note === WAITING_NOTE ? "Drawing as the sheet opens" : note,
     };
   };
+  // Fork (L-403): `whiteboard.read` lists the sheets, or describes one: the open
+  // sheet from the canvas, a sheet with unsaved edits from memory, others from disk.
+  const serveRead = useRef<((input: WhiteboardReadInput) => Promise<WhiteboardReadResult>) | null>(null);
+  serveRead.current = async (input) => {
+    const current = indexRef.current;
+    if (!current) throw new Error("The Whiteboard is still loading. Try again.");
+    if (!input.sheetId) {
+      return { sheets: current.sheets.map((item) => ({ sheetId: item.id, name: item.name, locked: !!item.locked })) };
+    }
+    const found = current.sheets.find((item) => item.id === input.sheetId);
+    if (!found) throw new Error(`No Whiteboard sheet has id ${input.sheetId}.`);
+    const onCanvas = api && apiSheets.current.get(api) === found.id && activeIdRef.current === found.id;
+    const elements = onCanvas
+      ? api.getSceneElements()
+      : latest.current?.id === found.id
+        ? latest.current.scene.elements.filter((element) => !element.isDeleted)
+        : sceneElementsFromJson(await loadSheetScene(found));
+    return { sheetId: found.id, name: found.name, locked: !!found.locked, elements: describeSheetForAgent(elements) };
+  };
   const indexReady = index !== null;
   useEffect(() => {
     if (!indexReady) return;
-    return serveWhiteboardDraws(async (input) => {
-      const serve = serveDraw.current;
-      if (!serve) throw new Error("The Whiteboard is still loading. Try again.");
-      return serve(input);
+    return serveWhiteboard({
+      draw: async (input) => {
+        const serve = serveDraw.current;
+        if (!serve) throw new Error("The Whiteboard is still loading. Try again.");
+        return serve(input);
+      },
+      read: async (input) => {
+        const serve = serveRead.current;
+        if (!serve) throw new Error("The Whiteboard is still loading. Try again.");
+        return serve(input);
+      },
     });
   }, [indexReady]);
 
@@ -503,6 +536,7 @@ export function WhiteboardView({
     if (!confirmed) return;
     const id = sheet.id;
     forgetSheet(id);
+    onSheetDeleted?.(id);
     window.clearTimeout(saveTimer.current);
     latest.current = null;
     blockedSaves.current.add(id);
@@ -856,8 +890,6 @@ export function WhiteboardView({
     [api],
   );
 
-  const getScene = useCallback(() => api?.getSceneElements() ?? [], [api]);
-
   // Fork (L-223): agent runs that finish while this sheet is closed leave
   // their drawing changes waiting; draw them once its canvas is back, and
   // let runs still going draw straight onto it.
@@ -1050,13 +1082,14 @@ export function WhiteboardView({
             </p>
           ) : null}
         </div>
-        {chatOpen && sheet && (cwd || dir) ? (
-          <WhiteboardChat
+        {chatOpen && sheet && onOpenSheetChat ? (
+          <WhiteboardAgentPanel
             sheetId={sheet.id}
             sheetName={sheet.name}
             locked={locked}
-            cwd={cwd ?? dir!}
-            getScene={getScene}
+            chat={sheetChat?.(sheet.id) ?? null}
+            status={sheetChatStatus}
+            onOpenChat={onOpenSheetChat}
             dock={dock}
             size={chatSize}
             onDock={changeDock}

@@ -1,5 +1,33 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-26 09:51 IST — Block copy, Share without a jump, Whiteboard Agent as a real chat (L-401 to L-403)
+
+- Type: feature
+- What: in agent replies, hover a heading to copy its section or a list to copy the list; Alt+click copies one paragraph or list item; the selection toolbar has Copy. The Share panel shows its header and composer at once, so nothing shifts when the history arrives. The Whiteboard's Agent panel is now a real chat per sheet with the normal composer (any harness, images and files, tools); it can read the sheet with the new `whiteboard.read` app action and draw on it. The old helper chat stays readable behind a clock button.
+- Why: user request.
+- Files: [HoverBlockActions.tsx](src/features/sessions/ui/HoverBlockActions.tsx), [SharePanel.tsx](src/features/mobile/ui/SharePanel.tsx), [WhiteboardAgentPanel.tsx](src/features/whiteboard/ui/WhiteboardAgentPanel.tsx), [whiteboardChats.ts](src/features/whiteboard/model/whiteboardChats.ts), [whiteboardRead.ts](src/features/whiteboard/model/whiteboardRead.ts), [agentApp.ts](src/features/agent-app/model/agentApp.ts), [App.tsx](src/app/App.tsx), [control_cli.rs](src-tauri/src/control_cli.rs)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (vitest whiteboard/agent-app/mobile/sessions, cargo control_cli 14) lint — (no ESLint config) build —
+
+## 2026-11-26 14:56 IST — Accent text selection (L-400); verified L-395 to L-399; Hari usage access row
+
+- Type: fix
+- What: selected text is tinted with the accent colour instead of system blue. Hari settings now shows "Usage access is off. Turn it on" under Share screen time when the permission is missing. The L-395 to L-399 batch was verified and its spec marked Done.
+- Why: user request (selection colour); a row from the spec's UI details was missing.
+- Files: [index.css (::selection)](src/styles/index.css), [settings/index.tsx](mobile/src/app/settings/index.tsx), [spec](docs/specs/activity-ask-phone-layout-clickup-attachments-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ tests ✅ (desktop vitest 429, cargo 79) lint — (no ESLint config) build —
+
+## 2026-11-26 07:17 IST — Activity Ask, hourly notes, phone screen time, fixed layout; ClickUp attachments (L-395 to L-399)
+
+- Type: feature
+- What: ClickUp New task takes files (paperclip, paste, drop) and uploads them after Create, with a retry for failed ones; its dropdowns and dates are glass. Activity gets an Ask tab (chat that reads your activity), hourly AI notes for hours with computer use but no prompts, phone screen time from Hari (Android usage access) with MonoCode / Browser / Other apps / Phone chips, and a layout with a fixed top, two independently scrolling columns and foldable sections.
+- Why: spec activity-ask-phone-layout-clickup-attachments-plan.md.
+- Files: see the L-395 to L-399 rows in docs/LOCAL-FEATURES.md.
+- Spec: [activity-ask-phone-layout-clickup-attachments-plan.md](../specs/activity-ask-phone-layout-clickup-attachments-plan.md)
+- Commit: uncommitted
+- Verified: typecheck ✅ (desktop and mobile) vitest ✅ (clickup, activity, agent-app, sessions/data, DateTimePicker, windowArgs: 32 files, 428 tests plus mobile PhoneUsageModel) cargo ✅ (activity 46, mobile_phone_usage 6, clickup 15, control_cli 13) lint — (ESLint config broken) build — | manual: desktop and phone checks pending
+
 ## 2026-11-24 18:12 IST — Release 0.16.0-local70
 
 - Type: chore

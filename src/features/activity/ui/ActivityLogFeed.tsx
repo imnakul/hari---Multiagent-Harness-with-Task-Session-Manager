@@ -30,6 +30,9 @@ function NoteCard({ note }: { note: ActivityNote }): ReactElement {
         <Sparkles className="size-3" strokeWidth={1.75} />
         <span className="font-medium">Note</span>
         <span className="text-content/35">· agy</span>
+        {note.kind === "hourly" ? (
+          <span className="rounded-full border border-accent/25 px-1.5 text-[10px] leading-4">Hourly</span>
+        ) : null}
       </header>
       <ul className="flex flex-col gap-1 text-[12.5px] leading-relaxed text-content/90">
         {noteLines(note.body).map((line, index) => (
@@ -188,13 +191,11 @@ function NotesBanner({
 }
 
 /**
- * A long list fills its column and scrolls inside it (see `MatchLeftColumn` in
- * ActivityView). Stacked on a narrow window it stops at the height of the
- * Activity pane (`cqh` of its scroller). Focusable so the keyboard can scroll
- * it (WCAG 2.1.1).
+ * Lists do not scroll on their own (fork, L-399): the column they sit in does
+ * (see `ActivityView`), and that column is focusable so the keyboard can
+ * scroll it (WCAG 2.1.1).
  */
-export const SCROLL_LIST =
-  "min-h-0 flex-1 max-h-[calc(100cqh-2.5rem)] lg:max-h-none overflow-y-auto overscroll-contain rounded-md pr-1 outline-none focus-visible:ring-1 focus-visible:ring-accent/60";
+export const SCROLL_LIST = "rounded-md pr-1";
 
 /** What the day's log shows: everything, or only agy notes. */
 export type LogFilter = "all" | "notes";
@@ -223,8 +224,8 @@ export function ActivityLogFeed({
   const noteCount = items.filter((item) => item.type === "note").length;
   const shown = filter === "notes" ? items.filter((item) => item.type === "note") : items;
   return (
-    <section aria-label="Log" className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex items-center justify-between gap-2 px-1 pb-2">
+    <section aria-label="Log" className="flex min-w-0 flex-col">
+      <header className="sticky top-0 z-10 -mt-1 flex items-center justify-between gap-2 bg-surface/60 px-1 pb-2 pt-1 backdrop-blur-md">
         <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-content/45">Log</h3>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-content/35">Newest first</span>
@@ -264,7 +265,6 @@ export function ActivityLogFeed({
         </p>
       ) : (
         <ol
-          tabIndex={0}
           aria-label={filter === "notes" ? "Notes on this day" : "Log entries"}
           className={`relative flex flex-col ${SCROLL_LIST}`}
         >

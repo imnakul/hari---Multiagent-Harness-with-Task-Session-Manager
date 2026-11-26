@@ -153,7 +153,6 @@ export function PeriodNotes({
         <p className="px-1 text-[12px] text-content/40">No agy notes in this period.</p>
       ) : (
         <ol
-          tabIndex={0}
           aria-label="Notes, newest day first"
           className={`flex flex-col gap-4 ${SCROLL_LIST}`}
         >

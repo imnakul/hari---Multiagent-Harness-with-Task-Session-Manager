@@ -569,6 +569,14 @@ describe("scratchChatSummaries", () => {
     ]);
   });
 
+  it("leaves out hidden ids such as Activity Ask chats", () => {
+    const live = newSession("cursor", "/home/u/.monocode/scratch/ask1");
+    live.id = "ask1";
+    live.blocks = [{ id: "u1", role: "user", text: "hi" }];
+    const rows = scratchChatSummaries([scratch("ask2", 4), scratch("c1", 1)], [live], new Set(["ask1", "ask2"]));
+    expect(rows.map((row) => row.id)).toEqual(["c1"]);
+  });
+
   it("merges live scratch sessions and skips ephemeral ones", () => {
     const live = newSession("cursor", "/home/u/.monocode/scratch/live");
     live.blocks = [{ id: "u1", role: "user", text: "hello" }];

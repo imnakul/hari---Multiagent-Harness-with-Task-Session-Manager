@@ -1,25 +1,66 @@
 import { useState, type ReactElement, type ReactNode } from "react";
-import { AppWindow, ChevronRight, Folder, GitBranch, Globe } from "../../../shared/ui/icons";
-import { formatDuration, type AwSummary, type ProjectSummary } from "../model/activity";
+import {
+  AppWindow,
+  ChevronRight,
+  Folder,
+  GitBranch,
+  Globe,
+  SmartPhone,
+} from "../../../shared/ui/icons";
+import { RevealHeight } from "../../../shared/ui/RevealHeight";
+import {
+  formatClock,
+  formatDuration,
+  type AwSummary,
+  type PhoneSummaryData,
+  type ProjectSummary,
+} from "../model/activity";
+import { loadCollapsed, saveCollapsed, type SectionId } from "../model/layout";
 
+/**
+ * A left-column section whose header folds it (fork, L-399). The fold is kept
+ * per machine; folded, the header still shows the section's total.
+ */
 function Section({
+  id,
   title,
   aside,
+  total,
   children,
 }: {
+  id: SectionId;
   title: string;
   aside?: ReactNode;
+  /** Shown beside the title while the section is folded. */
+  total?: string;
   children: ReactNode;
 }): ReactElement {
+  const [collapsed, setCollapsed] = useState(() => loadCollapsed()[id]);
+  const toggle = (): void => {
+    setCollapsed(!collapsed);
+    saveCollapsed(id, !collapsed);
+  };
   return (
     <section aria-label={title} className="flex min-w-0 flex-col">
-      <header className="flex items-baseline justify-between px-1 pb-2">
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={toggle}
+        className="group flex w-full items-center gap-1 rounded-md px-1 pb-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <ChevronRight
+          aria-hidden
+          className={`size-3 shrink-0 text-content/35 transition-transform duration-150 ease-out group-hover:text-content/60 ${collapsed ? "" : "rotate-90"}`}
+          strokeWidth={1.75}
+        />
         <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-content/45">
           {title}
         </h3>
-        {aside ? <span className="text-[11px] text-content/35">{aside}</span> : null}
-      </header>
-      {children}
+        <span className="ml-auto text-[11px] tabular-nums text-content/35">
+          {collapsed && total ? total : aside}
+        </span>
+      </button>
+      <RevealHeight open={!collapsed}>{children}</RevealHeight>
     </section>
   );
 }
@@ -40,7 +81,12 @@ function Bar({ ratio, color }: { ratio: number; color: string }): ReactElement {
 export function ProjectBreakdown({ projects }: { projects: ProjectSummary[] }): ReactElement {
   const max = Math.max(1, ...projects.map((p) => p.agentMs));
   return (
-    <Section title="Projects" aside={projects.length > 0 ? `${projects.length}` : undefined}>
+    <Section
+      id="projects"
+      title="Projects"
+      aside={projects.length > 0 ? `${projects.length}` : undefined}
+      total={formatDuration(projects.reduce((sum, project) => sum + project.agentMs, 0))}
+    >
       {projects.length === 0 ? (
         <p className="px-1 text-[12px] text-content/40">No agent work logged.</p>
       ) : (
@@ -87,7 +133,12 @@ export function AppsBreakdown({ aw }: { aw: AwSummary | null }): ReactElement | 
   if (!aw?.available) return null;
   const max = Math.max(1, ...aw.apps.map((a) => a.ms));
   return (
-    <Section title="Apps" aside="ActivityWatch">
+    <Section
+      id="apps"
+      title="Apps"
+      aside="ActivityWatch"
+      total={formatDuration(aw.apps.reduce((sum, app) => sum + app.ms, 0))}
+    >
       {aw.apps.length === 0 ? (
         <p className="px-1 text-[12px] text-content/40">No app time recorded.</p>
       ) : (
@@ -120,7 +171,12 @@ export function SitesBreakdown({ aw }: { aw: AwSummary | null }): ReactElement |
   if (!aw?.available) return null;
   const max = Math.max(1, ...aw.sites.map((site) => site.ms));
   return (
-    <Section title="Sites" aside="Browser extension">
+    <Section
+      id="sites"
+      title="Sites"
+      aside="Browser extension"
+      total={formatDuration(aw.sites.reduce((sum, site) => sum + site.ms, 0))}
+    >
       {!aw.hasWeb ? (
         <p className="px-1 text-[12px] leading-snug text-content/40">
           Add the ActivityWatch browser extension (Chrome, Edge, Firefox) to see
@@ -134,6 +190,69 @@ export function SitesBreakdown({ aw }: { aw: AwSummary | null }): ReactElement |
             <SiteRow key={site.domain} site={site} max={max} />
           ))}
         </ul>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * Fork (L-398): the phone's screen time from Hari: top apps, which phone it
+ * came from and when it last synced.
+ */
+export function PhoneBreakdown({
+  phone,
+  loading,
+  failed,
+}: {
+  phone: PhoneSummaryData | null;
+  loading: boolean;
+  failed: boolean;
+}): ReactElement {
+  const max = Math.max(1, ...(phone?.apps ?? []).map((row) => row.ms));
+  const total = (phone?.apps ?? []).reduce((sum, row) => sum + row.ms, 0);
+  const latest = Math.max(0, ...(phone?.devices ?? []).map((device) => device.lastSync));
+  return (
+    <Section id="phone" title="Phone" aside={phone?.devices[0]?.name} total={formatDuration(total)}>
+      {loading && !phone ? (
+        <p className="px-1 text-[12px] text-content/40">Loading phone time…</p>
+      ) : failed || !phone ? (
+        <p className="px-1 text-[12px] leading-snug text-content/40">
+          Phone screen time is unavailable right now.
+        </p>
+      ) : !phone.available ? (
+        <p className="px-1 text-[12px] leading-snug text-content/40">
+          No phone has shared screen time yet. In Hari, turn on Settings → Share screen time with
+          PC.
+        </p>
+      ) : phone.apps.length === 0 ? (
+        <p className="px-1 text-[12px] text-content/40">No phone use in this period.</p>
+      ) : (
+        <>
+          <ul className="flex flex-col gap-0.5">
+            {phone.apps.slice(0, 10).map((row) => (
+              <li
+                key={row.app}
+                className="motion-safe:animate-[zen-step-in_220ms_ease-out_both] rounded-md px-2 py-1.5 hover:bg-content/[0.04]"
+              >
+                <div className="flex items-center gap-2 text-[12px]">
+                  <SmartPhone className="size-3.5 shrink-0 text-content/40" strokeWidth={1.75} />
+                  <span className="min-w-0 flex-1 truncate text-content/85">{row.app}</span>
+                  <span className="shrink-0 tabular-nums text-content/55">
+                    {formatDuration(row.ms)}
+                  </span>
+                </div>
+                <div className="mt-1.5 pl-[22px]">
+                  <Bar ratio={row.ms / max} color="bg-mention" />
+                </div>
+              </li>
+            ))}
+          </ul>
+          {latest > 0 ? (
+            <p className="px-1 pt-1.5 text-[11px] text-content/35">
+              Last synced {formatClock(latest)}
+            </p>
+          ) : null}
+        </>
       )}
     </Section>
   );

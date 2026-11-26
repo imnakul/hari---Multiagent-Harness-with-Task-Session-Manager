@@ -46,9 +46,10 @@ describe("TranscriptSelectionMenu", () => {
         }),
       ),
     );
-    const button = document.querySelector<HTMLButtonElement>(
-      '[role="toolbar"] button',
-    )!;
+    // Copy (L-401) comes first; this case is about the Add to notes button.
+    const button = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button'),
+    ).find((candidate) => candidate.textContent?.includes("Add to notes"))!;
     await act(async () => button.click());
     expect(onDismiss).not.toHaveBeenCalled();
     expect(button.disabled).toBe(true);

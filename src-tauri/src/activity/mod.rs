@@ -228,6 +228,37 @@ pub fn activity_watch_summary(start: i64, end: i64) -> Result<aw::AwSummary, Str
     Ok(aw::summary(start, end.min(now_millis())))
 }
 
+/// Phone screen time for a range (L-398): per-app totals, when the phone was
+/// in use, and which phones have synced. `available` is false until one has.
+#[tauri::command]
+pub async fn activity_phone_summary(
+    app: AppHandle,
+    start: i64,
+    end: i64,
+) -> Result<serde_json::Value, String> {
+    validate_range(start, end)?;
+    crate::background_work::store(app, move |app| {
+        app.state::<ActivityDb>().with(|conn| {
+            let devices = store::phone_devices(conn)?;
+            let rows = store::phone_rows(conn, start, end)?;
+            let (apps, spans) = store::phone_summary(&rows, start, end);
+            Ok(serde_json::json!({
+                "available": !devices.is_empty(),
+                "devices": devices,
+                "apps": apps
+                    .into_iter()
+                    .map(|(app, ms)| serde_json::json!({ "app": app, "ms": ms }))
+                    .collect::<Vec<_>>(),
+                "activeSpans": spans
+                    .into_iter()
+                    .map(|(start, end)| serde_json::json!({ "start": start, "end": end }))
+                    .collect::<Vec<_>>(),
+            }))
+        })
+    })
+    .await
+}
+
 #[tauri::command(async)]
 pub fn activity_agent_status(agent: State<'_, NotesAgent>) -> AgentStatus {
     agent.status()

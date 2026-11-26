@@ -54,6 +54,10 @@ export type ActivityNote = {
   firstEventId: number;
   lastEventId: number;
   body: string;
+  /** Fork (L-397): "hourly" notes cover a clock hour with no prompts; older rows are "prompts". */
+  kind?: "prompts" | "hourly";
+  spanStart?: number;
+  spanEnd?: number;
 };
 
 export type ActivityLog = {
@@ -124,6 +128,54 @@ export function loadActivityLog(range: Span): Promise<ActivityLog> {
 
 export function loadActivityWatch(range: Span): Promise<AwSummary> {
   return invoke<AwSummary>("activity_watch_summary", range);
+}
+
+/** Fork (L-398): phone screen time for a range, from the PC's stored copy of Hari's reports. */
+export type PhoneSummaryData = {
+  /** At least one phone has synced. */
+  available: boolean;
+  devices: { name: string; lastSync: number }[];
+  apps: { app: string; ms: number }[];
+  /** When the phone was in use, merged, for the timeline lane. */
+  activeSpans: Span[];
+};
+
+const NO_PHONE: PhoneSummaryData = { available: false, devices: [], apps: [], activeSpans: [] };
+
+/** Narrows the `activity_phone_summary` reply by hand; anything unexpected is dropped. */
+export function parsePhoneSummary(raw: unknown): PhoneSummaryData {
+  if (typeof raw !== "object" || raw === null) return NO_PHONE;
+  const list = (key: string): unknown[] => {
+    const value: unknown = Reflect.get(raw, key);
+    return Array.isArray(value) ? value : [];
+  };
+  const field = (row: unknown, key: string): unknown =>
+    typeof row === "object" && row !== null ? Reflect.get(row, key) : undefined;
+  const apps: PhoneSummaryData["apps"] = [];
+  for (const row of list("apps")) {
+    const app = field(row, "app");
+    const ms = field(row, "ms");
+    if (typeof app === "string" && typeof ms === "number" && Number.isFinite(ms)) apps.push({ app, ms });
+  }
+  const devices: PhoneSummaryData["devices"] = [];
+  for (const row of list("devices")) {
+    const name = field(row, "name");
+    const lastSync = field(row, "lastSync");
+    if (typeof name === "string" && typeof lastSync === "number" && Number.isFinite(lastSync)) {
+      devices.push({ name, lastSync });
+    }
+  }
+  const activeSpans: Span[] = [];
+  for (const row of list("activeSpans")) {
+    const start = field(row, "start");
+    const end = field(row, "end");
+    if (typeof start === "number" && typeof end === "number" && end > start) activeSpans.push({ start, end });
+  }
+  return { available: Reflect.get(raw, "available") === true, devices, apps, activeSpans };
+}
+
+export async function loadPhoneSummary(range: Span): Promise<PhoneSummaryData> {
+  return parsePhoneSummary(await invoke<unknown>("activity_phone_summary", range));
 }
 
 export function loadAgentStatus(): Promise<AgentStatus> {

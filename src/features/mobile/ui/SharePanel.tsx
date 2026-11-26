@@ -232,8 +232,23 @@ function StorageStrip({
  * paired phone. The title-bar phone button opens and closes it. Drop, paste
  * or attach files to send them; pins sit in a bar at the top.
  */
-function ShareContent({ onClose, width }: { onClose: () => void; width: number }): JSX.Element {
-  const [list, setList] = useState<ShareList | null>(null);
+/**
+ * Fork (L-402): the last history read, so reopening the panel shows the real
+ * header, tabs and composer at once instead of a placeholder that then shifts.
+ */
+let lastShareList: ShareList | null = null;
+
+function ShareContent({
+  onClose,
+  width,
+  ready,
+}: {
+  onClose: () => void;
+  width: number;
+  /** False while the panel slides: the header and composer show, the history waits (L-302). */
+  ready: boolean;
+}): JSX.Element {
+  const [list, setList] = useState<ShareList | null>(() => lastShareList);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShareFilter>("all");
   // Fork (L-357): search, from the magnifier in the header. Null while closed.
@@ -254,7 +269,9 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
   const load = useCallback(() => {
     invoke<unknown>("mobile_share_list")
       .then((raw) => {
-        setList(parseShareList(raw));
+        const next = parseShareList(raw);
+        lastShareList = next;
+        setList(next);
         setLoadError(null);
       })
       .catch((reason: unknown) => setLoadError(shareErrorMessage(reason)));
@@ -355,7 +372,7 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
   useEffect(() => {
     const scroller = scrollRef.current;
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  }, [newestShown, filter, query, awayFromShare]);
+  }, [newestShown, filter, query, awayFromShare, ready]);
 
   const jumpTo = (id: string) => {
     const go = () => {
@@ -434,7 +451,9 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
         </button>
       </header>
 
-      {view === "files" ? (
+      {!ready ? (
+        <ShareBubblesSkeleton />
+      ) : view === "files" ? (
         <PhoneFilesView onError={setError} />
       ) : view === "notifications" ? (
         <PhoneNotificationsView onError={setError} focusKey={focusKey} />
@@ -520,14 +539,7 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
                   </button>
                 </div>
               ) : (
-                <ul aria-busy="true" aria-label="Loading Share history" className="space-y-3">
-                  {[0, 1, 2].map((index) => (
-                    <li
-                      key={index}
-                      className={`h-12 w-3/5 animate-pulse rounded-2xl bg-content/[0.06] ${index === 1 ? "ml-auto" : ""}`}
-                    />
-                  ))}
-                </ul>
+                <ShareBubbleRows />
               )
             ) : items.length === 0 ? (
               <div className="mx-auto mt-12 max-w-xs text-center">
@@ -548,7 +560,7 @@ function ShareContent({ onClose, width }: { onClose: () => void; width: number }
                   : `No ${SHARE_FILTERS.find((option) => option.id === filter)?.label.toLowerCase()} yet.`}
               </p>
             ) : (
-              <div className="space-y-4">
+              <div className="agent-chat-fade-in space-y-4">
                 {days.map((day) => (
                   <section key={day.key} aria-label={day.label}>
                     <h3 className="mb-2 text-center text-[11px] font-medium text-content/40">{day.label}</h3>
@@ -608,7 +620,8 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
   // has ended, so it has only the chat beside it to lay out; a skeleton holds
   // the place meanwhile. Fork (L-376): they then fade in, and stay while the
   // panel closes (it has a fixed width, so nothing in it moves), instead of
-  // swapping back to the skeleton with a jump.
+  // swapping back to the skeleton with a jump. Fork (L-402): the real header
+  // and composer show from the start; only the history waits for `still`.
   const [still, setStill] = useState(false);
   const [moving, setMoving] = useState(true);
   const frame = useRef<HTMLElement>(null);
@@ -678,35 +691,32 @@ export function SharePanel({ overlay = false }: { overlay?: boolean }): JSX.Elem
           }}
         />
         <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-          {still ? (
-            <div className="agent-chat-fade-in flex min-h-0 flex-1 flex-col">
-              <ShareContent onClose={() => setSharePanelOpen(false)} width={Math.min(width, max)} />
-            </div>
-          ) : (
-            <ShareSkeleton />
-          )}
+          <ShareContent onClose={() => setSharePanelOpen(false)} width={Math.min(width, max)} ready={still} />
         </div>
       </aside>
     </SlidePanel>
   );
 }
 
-/** Holds the panel's place while it slides: the header and a few bubbles. */
-function ShareSkeleton(): JSX.Element {
+/** Fork (L-402): a few bubble shapes where the history goes, the same while sliding and while loading. */
+function ShareBubbleRows(): JSX.Element {
   return (
-    <div aria-busy="true" aria-label="Share with your phone" className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-stroke pl-3">
-        <SmartPhone className="size-3.5 shrink-0 text-content/45" strokeWidth={1.75} aria-hidden />
-        <span className="text-[13px] font-medium text-content">Share</span>
-      </div>
-      <ul className="space-y-3 px-3 py-3">
-        {[0, 1, 2].map((index) => (
-          <li
-            key={index}
-            className={`h-12 w-3/5 rounded-2xl bg-content/[0.06] ${index === 1 ? "ml-auto" : ""}`}
-          />
-        ))}
-      </ul>
+    <ul aria-busy="true" aria-label="Loading Share history" className="space-y-3">
+      {[0, 1, 2].map((index) => (
+        <li
+          key={index}
+          className={`h-12 w-3/5 rounded-2xl bg-content/[0.06] motion-safe:animate-pulse ${index === 1 ? "ml-auto" : ""}`}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/** Holds the history's place while the panel slides, inside the same scroll padding. */
+function ShareBubblesSkeleton(): JSX.Element {
+  return (
+    <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
+      <ShareBubbleRows />
     </div>
   );
 }

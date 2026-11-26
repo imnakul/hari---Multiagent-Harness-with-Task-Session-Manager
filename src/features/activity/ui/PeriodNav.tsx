@@ -1,6 +1,11 @@
 import { useRef, type ReactElement } from "react";
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw } from "../../../shared/ui/icons";
 import {
+  ALL_SOURCES,
+  toggleSource,
+  type ActivitySource,
+} from "../model/sources";
+import {
   fromDateInputValue,
   periodLabel,
   toDateInputValue,
@@ -12,6 +17,13 @@ const SCOPES: { id: ActivityScope; label: string }[] = [
   { id: "week", label: "Week" },
   { id: "month", label: "Month" },
 ];
+
+const SOURCE_LABELS: Record<ActivitySource, string> = {
+  monocode: "MonoCode",
+  browser: "Browser",
+  other: "Other apps",
+  phone: "Phone",
+};
 
 const ICON_BUTTON =
   "grid size-7 place-items-center rounded-md text-content/55 transition-colors hover:bg-content/10 hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:pointer-events-none disabled:opacity-30";
@@ -29,6 +41,8 @@ export function PeriodNav({
   onShift,
   onJump,
   onRefresh,
+  sources,
+  onSources,
 }: {
   anchor: Date;
   scope: ActivityScope;
@@ -38,6 +52,9 @@ export function PeriodNav({
   onShift: (delta: number) => void;
   onJump: (date: Date) => void;
   onRefresh: () => void;
+  /** Fork (L-398): the chosen sources and the change handler; no chips without them. */
+  sources?: readonly ActivitySource[];
+  onSources?: (sources: ActivitySource[]) => void;
 }): ReactElement {
   const picker = useRef<HTMLInputElement>(null);
   const today = toDateInputValue(new Date());
@@ -136,6 +153,30 @@ export function PeriodNav({
           />
         </button>
       </div>
+      {sources && onSources ? (
+        <div role="group" aria-label="Sources" className="flex basis-full flex-wrap items-center gap-1.5 sm:basis-auto">
+          {ALL_SOURCES.map((source) => {
+            const on = sources.includes(source);
+            return (
+              <button
+                key={source}
+                type="button"
+                aria-pressed={on}
+                // The last chip left on cannot be turned off.
+                aria-disabled={on && sources.length === 1}
+                onClick={() => onSources(toggleSource(sources, source))}
+                className={`h-6 rounded-full border px-2.5 text-[11.5px] transition-[background-color,color,border-color,transform] duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 active:scale-96 ${
+                  on
+                    ? "border-content/20 bg-content/10 font-medium text-content"
+                    : "border-stroke text-content/50 hover:text-content"
+                }`}
+              >
+                {SOURCE_LABELS[source]}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </nav>
   );
 }

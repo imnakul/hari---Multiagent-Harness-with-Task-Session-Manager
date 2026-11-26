@@ -24,6 +24,7 @@ export function ClickupAssigneePicker({
   return (
     <SearchableSelect
       label="Assignees"
+      variant="transparent"
       value=""
       options={options}
       disabled={disabled}

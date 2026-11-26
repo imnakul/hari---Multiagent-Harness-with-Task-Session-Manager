@@ -1,5 +1,5 @@
 import { cleanSheetName } from "./sheets";
-import { parseWhiteboardOps, type WhiteboardOps } from "./whiteboardAgent";
+import { describeScene, parseWhiteboardOps, type SceneElementLike, type WhiteboardOps } from "./whiteboardAgent";
 
 /**
  * Fork (L-394): the `whiteboard.draw` app CLI action. Any chat with app access
@@ -57,25 +57,114 @@ export function whiteboardToolContext(cli: string): string {
   ].join("\n");
 }
 
+/** Fork (L-403): `whiteboard.read`. Without a sheetId it lists the sheets. */
+export type WhiteboardReadInput = { sheetId?: string };
+
+export type WhiteboardReadResult =
+  | { sheets: { sheetId: string; name: string; locked: boolean }[] }
+  | {
+      sheetId: string;
+      name: string;
+      locked: boolean;
+      /** One line per element: id, type, position, size, label, colours (see describeScene). */
+      elements: string[];
+    };
+
+export function parseWhiteboardReadInput(input: Record<string, unknown>): WhiteboardReadInput {
+  const { sheetId } = input;
+  if (sheetId === undefined) return {};
+  if (typeof sheetId !== "string" || !SHEET_ID.test(sheetId))
+    throw new Error("sheetId must be a sheet id from whiteboard.read or whiteboard.draw.");
+  return { sheetId };
+}
+
+/** Reads a saved Excalidraw scene's elements; anything unreadable is an empty sheet. */
+export function sceneElementsFromJson(json: string | null): SceneElementLike[] {
+  if (!json) return [];
+  try {
+    const value: unknown = JSON.parse(json);
+    if (typeof value !== "object" || value === null) return [];
+    const elements: unknown = Reflect.get(value, "elements");
+    if (!Array.isArray(elements)) return [];
+    return elements.filter(
+      (element): element is SceneElementLike =>
+        typeof element === "object" &&
+        element !== null &&
+        typeof Reflect.get(element, "id") === "string" &&
+        typeof Reflect.get(element, "type") === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** The lines `whiteboard.read` returns for a sheet. */
+export function describeSheetForAgent(elements: readonly SceneElementLike[]): string[] {
+  const lines = describeScene(elements);
+  return lines.length ? lines : ["(the sheet is empty)"];
+}
+
+/**
+ * Instructions for a turn in a sheet's own chat (L-403). Its app actions are
+ * limited to `whiteboard.*`, and they default to this sheet.
+ */
+export function whiteboardSheetChatContext(cli: string, sheetId: string): string {
+  return [
+    "<monocode_whiteboard_sheet>",
+    `This chat belongs to one sheet on MonoCode's Whiteboard (sheetId "${sheetId}"). The user sees the sheet beside this chat.`,
+    `Before changing the drawing, see what is on it with \`${cli} whiteboard.read\` (one line per element: id, type, x, y, width, height, label, colours). Draw with \`${cli} whiteboard.draw\` and {"ops":{...}}: both act on this sheet when sheetId is left out. Run \`${cli} --help\` once for the element format.`,
+    "Update or remove existing elements by id instead of drawing them again. Give every new shape an id and join shapes with arrows by id. Leave about 60px between shapes; a normal box is about 180x70. At most 60 new elements per call.",
+    "Only whiteboard.* app actions work in this chat. Read attached files and images yourself, and turn them into a drawing when the user asks.",
+    "Reply briefly with what you drew; do not repeat the element JSON in chat.",
+    "</monocode_whiteboard_sheet>",
+  ].join("\n");
+}
+
 type DrawServer = (input: WhiteboardDrawInput) => Promise<WhiteboardDrawResult>;
+type ReadServer = (input: WhiteboardReadInput) => Promise<WhiteboardReadResult>;
+type Handlers = { draw: DrawServer; read: ReadServer };
 type Waiting = {
-  input: WhiteboardDrawInput;
-  resolve: (result: WhiteboardDrawResult) => void;
+  run: (handlers: Handlers) => Promise<unknown>;
+  resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 };
 
-let server: DrawServer | null = null;
+let server: Handlers | null = null;
 const waiting: Waiting[] = [];
 
 /** How long a draw waits for the Whiteboard to open and load its sheet list. */
 export const WHITEBOARD_OPEN_TIMEOUT_MS = 20_000;
 
-function serve(request: Waiting, handler: DrawServer): void {
-  clearTimeout(request.timer);
-  handler(request.input).then(request.resolve, (cause: unknown) =>
-    request.reject(cause instanceof Error ? cause : new Error(String(cause))),
+function serve(entry: Waiting, handlers: Handlers): void {
+  clearTimeout(entry.timer);
+  entry.run(handlers).then(entry.resolve, (cause: unknown) =>
+    entry.reject(cause instanceof Error ? cause : new Error(String(cause))),
   );
+}
+
+/** Queues a call until the Whiteboard serves, failing with `timeoutMessage` after `timeoutMs`. */
+function whenServing<T>(
+  run: (handlers: Handlers) => Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const entry: Waiting = {
+      run,
+      // `run` produced this value, so it is a T.
+      resolve: (result) => resolve(result as T),
+      reject,
+      timer: setTimeout(() => {
+        const at = waiting.indexOf(entry);
+        if (at < 0) return;
+        waiting.splice(at, 1);
+        reject(new Error(timeoutMessage));
+      }, timeoutMs),
+    };
+    if (server) serve(entry, server);
+    else waiting.push(entry);
+  });
 }
 
 /**
@@ -86,28 +175,35 @@ export function requestWhiteboardDraw(
   input: WhiteboardDrawInput,
   timeoutMs = WHITEBOARD_OPEN_TIMEOUT_MS,
 ): Promise<WhiteboardDrawResult> {
-  return new Promise((resolve, reject) => {
-    const request: Waiting = {
-      input,
-      resolve,
-      reject,
-      timer: setTimeout(() => {
-        const at = waiting.indexOf(request);
-        if (at < 0) return;
-        waiting.splice(at, 1);
-        reject(new Error("The Whiteboard didn't open in time, so nothing was drawn. Try again."));
-      }, timeoutMs),
-    };
-    if (server) serve(request, server);
-    else waiting.push(request);
-  });
+  return whenServing(
+    (handlers) => handlers.draw(input),
+    timeoutMs,
+    "The Whiteboard didn't open in time, so nothing was drawn. Try again.",
+  );
 }
 
-/** The Whiteboard serves draws while it is mounted. Returns the stop call. */
-export function serveWhiteboardDraws(handler: DrawServer): () => void {
-  server = handler;
-  for (const request of waiting.splice(0)) serve(request, handler);
+/** Fork (L-403): reads one sheet, or lists them, once the Whiteboard serves. */
+export function requestWhiteboardRead(
+  input: WhiteboardReadInput,
+  timeoutMs = WHITEBOARD_OPEN_TIMEOUT_MS,
+): Promise<WhiteboardReadResult> {
+  return whenServing(
+    (handlers) => handlers.read(input),
+    timeoutMs,
+    "The Whiteboard didn't open in time, so the sheet couldn't be read. Try again.",
+  );
+}
+
+/** The Whiteboard serves draws and reads while it is mounted. Returns the stop call. */
+export function serveWhiteboard(handlers: Handlers): () => void {
+  server = handlers;
+  for (const entry of waiting.splice(0)) serve(entry, handlers);
   return () => {
-    if (server === handler) server = null;
+    if (server === handlers) server = null;
   };
+}
+
+/** True while the Whiteboard view is mounted and answering draws and reads. */
+export function isWhiteboardServing(): boolean {
+  return server !== null;
 }

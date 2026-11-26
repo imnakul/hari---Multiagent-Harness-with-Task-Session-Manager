@@ -257,6 +257,9 @@ mod tests {
             first_event_id: 1,
             last_event_id: 2,
             body: "- Added sites to Activity.".into(),
+            kind: "prompts".into(),
+            span_start: None,
+            span_end: None,
         }];
         let prompt = period_prompt("week of Mon 9 Nov", &events, &notes, None, 0);
         assert!(prompt.contains("summary of the developer's week of Mon 9 Nov"));
@@ -279,6 +282,9 @@ mod tests {
                 first_event_id: i,
                 last_event_id: i,
                 body: long.clone(),
+                kind: "prompts".into(),
+                span_start: None,
+                span_end: None,
             })
             .collect();
         let prompt = period_prompt("November 2026", &[], &notes, None, 0);

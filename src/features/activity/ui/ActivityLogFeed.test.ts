@@ -79,10 +79,12 @@ describe("ActivityLogFeed filter", () => {
     expect(container.textContent).toContain("No agy notes on this day yet.");
   });
 
-  it("scrolls a long log inside a fixed height", async () => {
+  it("leaves scrolling to its column and keeps the filter pinned above the list", async () => {
     await render(LOG);
     const list = container.querySelector("ol");
-    expect(list?.className).toContain("overflow-y-auto");
-    expect(list?.getAttribute("tabindex")).toBe("0");
+    // L-399: the right column scrolls (and is the focusable stop), not the list.
+    expect(list?.className).not.toContain("overflow-y-auto");
+    expect(list?.getAttribute("tabindex")).toBeNull();
+    expect(container.querySelector("header")?.className).toContain("sticky");
   });
 });

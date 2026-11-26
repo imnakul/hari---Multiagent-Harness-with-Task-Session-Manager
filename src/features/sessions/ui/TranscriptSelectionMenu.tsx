@@ -1,11 +1,13 @@
 import {
   Bookmark,
   CheckCircle,
+  Copy,
   FilePlusCorner,
   MessageSquarePlus,
   Quote,
   SmartPhone,
 } from "../../../shared/ui/icons";
+import { copyText } from "../../../platform/tauri/clipboard";
 import { requestSavePrompt } from "../../prompts/model/savedPrompts";
 import { sendTextToShare } from "../../mobile/model/sendToShare";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -62,6 +64,14 @@ export function TranscriptSelectionMenu({
       className="p-1"
     >
       <div className="flex min-w-36 flex-col items-stretch gap-0.5">
+        {/* Fork (L-401): copy what is selected, as plain text. */}
+        <SelectionAction
+          label="Copy"
+          onSelect={() => copyText(selection.text)}
+          onDismiss={onDismiss}
+        >
+          <Copy aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+        </SelectionAction>
         {onAddToChat ? (
           <SelectionAction
             label="Add to chat"

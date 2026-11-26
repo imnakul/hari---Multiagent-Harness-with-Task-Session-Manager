@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { router, useLocalSearchParams, useNavigationContainerRef } from "expo-router";
-import { Fragment, useState } from "react";
-import { Alert, Linking, StyleSheet, Text, View } from "react-native";
+import { Fragment, useEffect, useState } from "react";
+import { Alert, AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { AccentSwitch } from "@/ui/AccentSwitch";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
@@ -29,12 +29,14 @@ import {
   openPromotedSettings,
   phoneFiles,
   phoneNotices,
+  phoneUsage,
   quitHari,
   shareBubble,
   useAllFilesAllowed,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
 import { usePhoneNoticePreferences } from "@/features/phoneNotifications/preferences";
+import { usePhoneUsageEnabled } from "@/features/phoneUsage/preferences";
 import { useHaptics } from "@/features/settings/haptics";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
@@ -467,6 +469,18 @@ function ShareBubbleSettings() {
   const styles = useStyles();
   const [{ enabled, permitted }, turn] = useShareBubble(colors.accent);
   const [phoneNoticePreferences] = usePhoneNoticePreferences();
+  const [usageOn, setUsageOn] = usePhoneUsageEnabled();
+  const [usageAllowed, setUsageAllowed] = useState(() => phoneUsage?.allowed() ?? false);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setUsageAllowed(phoneUsage?.allowed() ?? false);
+    });
+    return () => subscription.remove();
+  }, []);
+  const turnUsage = (on: boolean) => {
+    setUsageOn(on);
+    if (on && !usageAllowed) phoneUsage?.openSettings();
+  };
   return (
     <>
       <Text style={styles.heading}>Share</Text>
@@ -493,6 +507,30 @@ function ShareBubbleSettings() {
               value={phoneNoticePreferences.enabled ? "On" : "Off"}
               onPress={() => router.push("/settings/phone-notifications")}
             />
+          </>
+        ) : null}
+        {/* Fork (Hari, L-398): screen time on the computer's Activity page. */}
+        {phoneUsage ? (
+          <>
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="phone"
+              label="Share screen time with PC"
+              onPress={() => turnUsage(!usageOn)}
+              accessory={
+                <AccentSwitch
+                  accessibilityLabel="Share screen time with PC"
+                  value={usageOn}
+                  onValueChange={turnUsage}
+                />
+              }
+            />
+            {usageOn && !usageAllowed ? (
+              <SettingsRow
+                label="Usage access is off. Turn it on"
+                onPress={() => phoneUsage?.openSettings()}
+              />
+            ) : null}
           </>
         ) : null}
       </View>

@@ -67,6 +67,7 @@ import { loadProjectImagePreviewUrl } from "../model/attachments";
 import { MarkdownTable, MarkdownTableContext } from "./MarkdownTable";
 import { MarkdownQuote } from "./MarkdownQuote";
 import { BlockActions, useBlockActionCount } from "./BlockActions";
+import { HoverBlockActions } from "./HoverBlockActions";
 import { DocumentImage, ImageAltText } from "./DocumentImage";
 import { isLocalMediaPath, LocalMedia } from "./LocalMedia";
 import {
@@ -914,6 +915,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
     [text],
   );
   const imageDefinitionsRef = useRef(imageDefinitions);
+  const hoverRoot = useRef<HTMLDivElement>(null);
   imageDefinitionsRef.current = imageDefinitions;
   const parseMarkdownBlocks = useCallback(
     (value: string) => parseStreamingMarkdown(value, imageDefinitionsRef.current),
@@ -1083,7 +1085,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
         <FileOpenContext.Provider value={fileOpen}>
           <>
             {/* Streamdown takes no style; a contents box passes the fade timing down. */}
-            <div className="contents" style={fadeStyle}>
+            <div ref={hoverRoot} className="contents" style={fadeStyle}>
               <MarkdownTableContext.Provider value={tableActions}><MarkdownCommit.Provider value={blockCommitted}>
                 <Streamdown
                   BlockComponent={DirectionalBlock}
@@ -1100,6 +1102,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
                 >
                   {paced.text}
                 </Streamdown>
+                <HoverBlockActions rootRef={hoverRoot} source={text} />
               </MarkdownCommit.Provider></MarkdownTableContext.Provider>
             </div>
             {fileMenu ? (

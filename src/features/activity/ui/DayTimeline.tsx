@@ -21,7 +21,7 @@ const HOUR = 3_600_000;
 const MIN_BAR_PERCENT = 0.35;
 
 /**
- * Three-lane ribbon for one day: you (active), agents (turns), meetings.
+ * Lane ribbon for one day: you (active), agents (turns), meetings, and the phone when it is on.
  * Bar geometry is computed at runtime, so it is the one place this view uses
  * inline `style` — Tailwind cannot express data-driven percentages.
  */
@@ -30,6 +30,7 @@ export function DayTimeline({
   active,
   agents,
   meetings,
+  phone = [],
   now,
   awHint,
 }: {
@@ -37,13 +38,15 @@ export function DayTimeline({
   active: Span[];
   agents: Span[];
   meetings: (Span & { label: string })[];
+  /** Fork (L-398): when the phone was in use; a lane shows only when this is given. */
+  phone?: Span[] | null;
   /** Epoch ms for the "now" marker, or null for past days. */
   now: number | null;
   awHint?: string;
 }): ReactElement {
   const view = useMemo(
-    () => timelineWindow(day, [...active, ...agents, ...meetings, ...(now ? [{ start: now, end: now }] : [])]),
-    [day, active, agents, meetings, now],
+    () => timelineWindow(day, [...active, ...agents, ...meetings, ...(phone ?? []), ...(now ? [{ start: now, end: now }] : [])]),
+    [day, active, agents, meetings, phone, now],
   );
   const width = spanLength(view);
   const stepHours = width > 12 * HOUR ? 2 : 1;
@@ -54,6 +57,7 @@ export function DayTimeline({
     { id: "you", label: "You", color: "bg-content/35", spans: active, emptyHint: awHint },
     { id: "agents", label: "Agents", color: "bg-accent", spans: agents },
     { id: "meetings", label: "Meetings", color: "bg-skill", spans: meetings, emptyHint: awHint },
+    ...(phone ? [{ id: "phone", label: "Phone", color: "bg-mention", spans: phone, emptyHint: "No phone use" }] : []),
   ];
 
   const place = (span: Span): { left: string; width: string } | null => {

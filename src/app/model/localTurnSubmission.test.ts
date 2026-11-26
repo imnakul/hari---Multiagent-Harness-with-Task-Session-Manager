@@ -75,7 +75,8 @@ function productionDispatch(): (
       orchestrator, inboxAskPrompt, wrapHandoffPrompt, CONTINUE_PROMPT, invoke,
       shellPath, sendBranchTurn, turnGen, gen, flushHarnessEvents, sessionsRef,
       getSession, setSessions, sendTurn, prepared, acceptEditedResend,
-      monoRotation, mono, monoFirstTurn, monoForSession } = bindings;
+      monoRotation, mono, monoFirstTurn, monoForSession,
+      activityAsk = false, whiteboardSheet = null } = bindings;
     let measureMonoBaseline = false;
     return (async () => { ${section} })();
   `,

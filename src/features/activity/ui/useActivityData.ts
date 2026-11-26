@@ -7,12 +7,14 @@ import {
   loadActivityLog,
   loadActivityWatch,
   loadAgentStatus,
+  loadPhoneSummary,
   periodRange,
   retryAgent,
   type ActivityScope,
   type ActivityLog,
   type AgentStatus,
   type AwSummary,
+  type PhoneSummaryData,
   type Span,
 } from "../model/activity";
 
@@ -46,6 +48,8 @@ export type ActivityData = {
   isLive: boolean;
   log: Loadable<ActivityLog>;
   aw: Loadable<AwSummary>;
+  /** Fork (L-398): empty (and never fetched) while Phone is off. */
+  phone: Loadable<PhoneSummaryData>;
   agent: AgentStatus | null;
   refresh: () => void;
   retryNotes: () => void;
@@ -57,7 +61,11 @@ export type ActivityData = {
  * current period stays live via Rust events and a light ActivityWatch poll;
  * responses for a period the user already left are dropped.
  */
-export function useActivityData(anchor: Date, scope: ActivityScope): ActivityData {
+export function useActivityData(
+  anchor: Date,
+  scope: ActivityScope,
+  phoneOn = false,
+): ActivityData {
   // Key on the period's start so a new Date for the same period keeps the range.
   const periodStart = periodRange(anchor, scope).start;
   const range = useMemo(
@@ -68,8 +76,11 @@ export function useActivityData(anchor: Date, scope: ActivityScope): ActivityDat
 
   const [log, setLog] = useState<Loadable<ActivityLog>>(EMPTY);
   const [aw, setAw] = useState<Loadable<AwSummary>>(EMPTY);
+  const [phone, setPhone] = useState<Loadable<PhoneSummaryData>>(EMPTY);
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const generation = useRef(0);
+  const phoneOnRef = useRef(phoneOn);
+  phoneOnRef.current = phoneOn;
 
   const loadLog = useCallback(
     (gen: number) => {
@@ -105,14 +116,38 @@ export function useActivityData(anchor: Date, scope: ActivityScope): ActivityDat
     [range],
   );
 
+  const loadPhone = useCallback(
+    (gen: number) => {
+      setPhone((prev) => ({ ...prev, loading: true }));
+      loadPhoneSummary(range).then(
+        (data) => {
+          if (gen === generation.current) setPhone({ data, loading: false, error: null });
+        },
+        // An older computer build or a failed read: the section says it is unavailable.
+        (err: unknown) => {
+          if (gen === generation.current) {
+            setPhone({ data: null, loading: false, error: message(err) });
+          }
+        },
+      );
+    },
+    [range],
+  );
+
   // New period: drop the previous one's data so stale numbers never show.
   useEffect(() => {
     const gen = ++generation.current;
     setLog(EMPTY);
     setAw(EMPTY);
+    setPhone(EMPTY);
     loadLog(gen);
     loadAw(gen);
   }, [loadLog, loadAw]);
+
+  // Phone data loads only while Phone is on, so Phone off makes no phone call.
+  useEffect(() => {
+    if (phoneOn) loadPhone(generation.current);
+  }, [phoneOn, loadPhone]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,7 +169,10 @@ export function useActivityData(anchor: Date, scope: ActivityScope): ActivityDat
     const unlisten: Array<Promise<() => void>> = [
       listen(ACTIVITY_CHANGED_EVENT, () => {
         if (timer != null) window.clearTimeout(timer);
-        timer = window.setTimeout(() => loadLog(generation.current), CHANGE_DEBOUNCE_MS);
+        timer = window.setTimeout(() => {
+          loadLog(generation.current);
+          if (phoneOnRef.current) loadPhone(generation.current);
+        }, CHANGE_DEBOUNCE_MS);
       }),
       listen<AgentStatus>(ACTIVITY_AGENT_STATUS_EVENT, (event) => setAgent(event.payload)),
     ];
@@ -146,12 +184,13 @@ export function useActivityData(anchor: Date, scope: ActivityScope): ActivityDat
         void pending.then((off) => off());
       }
     };
-  }, [isLive, scope, loadLog, loadAw]);
+  }, [isLive, scope, loadLog, loadAw, loadPhone]);
 
   const refresh = useCallback(() => {
     loadLog(generation.current);
     loadAw(generation.current);
-  }, [loadLog, loadAw]);
+    if (phoneOnRef.current) loadPhone(generation.current);
+  }, [loadLog, loadAw, loadPhone]);
 
   const retryNotes = useCallback(() => {
     retryAgent().then(setAgent, (err: unknown) =>
@@ -159,5 +198,5 @@ export function useActivityData(anchor: Date, scope: ActivityScope): ActivityDat
     );
   }, []);
 
-  return { range, isLive, log, aw, agent, refresh, retryNotes };
+  return { range, isLive, log, aw, phone, agent, refresh, retryNotes };
 }

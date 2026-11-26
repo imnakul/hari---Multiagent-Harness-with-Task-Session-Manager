@@ -116,7 +116,51 @@ pub fn ensure_activity_tables(conn: &Connection) -> rusqlite::Result<()> {
            end_ms INTEGER NOT NULL,
            body TEXT NOT NULL,
            created_at INTEGER NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS phone_usage (
+           device TEXT NOT NULL,
+           package TEXT NOT NULL,
+           label TEXT NOT NULL,
+           start INTEGER NOT NULL,
+           end INTEGER NOT NULL,
+           PRIMARY KEY (device, package, start)
+         );
+         CREATE INDEX IF NOT EXISTS phone_usage_end_idx ON phone_usage (end);
+         CREATE TABLE IF NOT EXISTS phone_devices (
+           device TEXT PRIMARY KEY,
+           name TEXT NOT NULL,
+           last_sync INTEGER NOT NULL
          );",
+    )?;
+    migrate_notes_columns(conn)
+}
+
+/// Fork (L-397): hourly notes. Adds `kind`, `span_start` and `span_end` to a
+/// database made before them (older rows are prompt notes) and the unique
+/// index that makes a repeated hourly insert a no-op. Safe to run every start.
+fn migrate_notes_columns(conn: &Connection) -> rusqlite::Result<()> {
+    let mut existing: Vec<String> = Vec::new();
+    {
+        let mut stmt = conn.prepare("PRAGMA table_info(activity_notes)")?;
+        let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+        for name in names {
+            existing.push(name?);
+        }
+    }
+    for (column, definition) in [
+        ("kind", "TEXT NOT NULL DEFAULT 'prompts'"),
+        ("span_start", "INTEGER"),
+        ("span_end", "INTEGER"),
+    ] {
+        if !existing.iter().any(|name| name == column) {
+            conn.execute_batch(&format!(
+                "ALTER TABLE activity_notes ADD COLUMN {column} {definition}"
+            ))?;
+        }
+    }
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS activity_notes_hourly_idx
+           ON activity_notes (kind, span_start) WHERE kind = 'hourly'",
     )
 }
 
@@ -150,7 +194,16 @@ pub struct ActivityNote {
     pub first_event_id: i64,
     pub last_event_id: i64,
     pub body: String,
+    /// `prompts` (a run of prompts) or `hourly` (a clock hour with desktop activity but no prompts).
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span_start: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span_end: Option<i64>,
 }
+
+const NOTE_COLUMNS: &str =
+    "id, ts, first_event_id, last_event_id, body, kind, span_start, span_end";
 
 /// A validated event ready to insert.
 pub struct NewEvent<'a> {
@@ -193,6 +246,9 @@ fn read_note(row: &Row<'_>) -> rusqlite::Result<ActivityNote> {
         first_event_id: row.get(2)?,
         last_event_id: row.get(3)?,
         body: row.get(4)?,
+        kind: row.get(5)?,
+        span_start: row.get(6)?,
+        span_end: row.get(7)?,
     })
 }
 
@@ -245,12 +301,12 @@ pub fn list_events(
 }
 
 pub fn list_notes(conn: &Connection, start: i64, end: i64) -> rusqlite::Result<Vec<ActivityNote>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, ts, first_event_id, last_event_id, body FROM activity_notes
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {NOTE_COLUMNS} FROM activity_notes
          WHERE ts >= ?1 AND ts < ?2
          ORDER BY ts ASC, id ASC
-         LIMIT ?3",
-    )?;
+         LIMIT ?3"
+    ))?;
     let rows = stmt.query_map(params![start, end, LIST_LIMIT], read_note)?;
     rows.collect()
 }
@@ -273,7 +329,60 @@ pub fn insert_note(
         first_event_id,
         last_event_id,
         body: body.to_string(),
+        kind: "prompts".to_string(),
+        span_start: None,
+        span_end: None,
     })
+}
+
+/// Stores the note for one clock hour. A second note for the same hour is
+/// ignored (returns `None`), so a retry or a second wake never duplicates it.
+/// `last_event_id` stays 0 so prompt batching never counts it as covering events.
+pub fn insert_hourly_note(
+    conn: &Connection,
+    ts: i64,
+    span_start: i64,
+    span_end: i64,
+    body: &str,
+) -> rusqlite::Result<Option<ActivityNote>> {
+    let changed = conn.execute(
+        "INSERT OR IGNORE INTO activity_notes
+           (ts, first_event_id, last_event_id, body, kind, span_start, span_end)
+         VALUES (?1, 0, 0, ?2, 'hourly', ?3, ?4)",
+        params![ts, body, span_start, span_end],
+    )?;
+    if changed == 0 {
+        return Ok(None);
+    }
+    Ok(Some(ActivityNote {
+        id: conn.last_insert_rowid(),
+        ts,
+        first_event_id: 0,
+        last_event_id: 0,
+        body: body.to_string(),
+        kind: "hourly".to_string(),
+        span_start: Some(span_start),
+        span_end: Some(span_end),
+    }))
+}
+
+/// Start times of the hourly notes at or after `since`, so finished hours are skipped.
+pub fn hourly_note_starts(conn: &Connection, since: i64) -> rusqlite::Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT span_start FROM activity_notes
+         WHERE kind = 'hourly' AND span_start >= ?1",
+    )?;
+    let rows = stmt.query_map(params![since], |row| row.get::<_, i64>(0))?;
+    rows.collect()
+}
+
+/// How many events fall in `[start, end)`.
+pub fn count_events(conn: &Connection, start: i64, end: i64) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM activity_events WHERE ts >= ?1 AND ts < ?2",
+        params![start, end],
+        |row| row.get(0),
+    )
 }
 
 /// Highest event id any note covers; events above it still need a note.
@@ -303,10 +412,23 @@ pub fn unnoted_events(
     rows.collect()
 }
 
+/// The newest prompt note (hourly notes never count: they cover no events).
 pub fn latest_note(conn: &Connection) -> rusqlite::Result<Option<ActivityNote>> {
     conn.query_row(
-        "SELECT id, ts, first_event_id, last_event_id, body FROM activity_notes
-         ORDER BY id DESC LIMIT 1",
+        &format!(
+            "SELECT {NOTE_COLUMNS} FROM activity_notes
+             WHERE kind = 'prompts' ORDER BY id DESC LIMIT 1"
+        ),
+        [],
+        read_note,
+    )
+    .optional()
+}
+
+/// The newest note of any kind, used as context for the next hourly note.
+pub fn latest_note_any(conn: &Connection) -> rusqlite::Result<Option<ActivityNote>> {
+    conn.query_row(
+        &format!("SELECT {NOTE_COLUMNS} FROM activity_notes ORDER BY ts DESC, id DESC LIMIT 1"),
         [],
         read_note,
     )
@@ -358,6 +480,141 @@ pub fn put_summary(conn: &Connection, summary: &PeriodSummary) -> rusqlite::Resu
         ],
     )?;
     Ok(())
+}
+
+/// One interval of phone screen time, already validated (L-398).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhoneInterval {
+    pub package: String,
+    pub label: String,
+    pub start: i64,
+    pub end: i64,
+}
+
+/// A phone that has synced screen time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneDevice {
+    pub device: String,
+    pub name: String,
+    pub last_sync: i64,
+}
+
+/// Rows older than this are deleted on every sync.
+const PHONE_KEEP_MS: i64 = 400 * 24 * 60 * 60 * 1000;
+
+/// Stores intervals idempotently (a repeat of the same (device, package, start)
+/// only updates end and label), records the device, and prunes old rows.
+pub fn upsert_phone_usage(
+    conn: &Connection,
+    device: &str,
+    name: &str,
+    now: i64,
+    intervals: &[PhoneInterval],
+) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    {
+        let mut stmt = tx.prepare(
+            "INSERT INTO phone_usage (device, package, label, start, end)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(device, package, start) DO UPDATE SET
+               end = excluded.end, label = excluded.label",
+        )?;
+        for interval in intervals {
+            stmt.execute(params![
+                device,
+                interval.package,
+                interval.label,
+                interval.start,
+                interval.end
+            ])?;
+        }
+    }
+    tx.execute(
+        "INSERT INTO phone_devices (device, name, last_sync) VALUES (?1, ?2, ?3)
+         ON CONFLICT(device) DO UPDATE SET name = excluded.name, last_sync = excluded.last_sync",
+        params![device, name, now],
+    )?;
+    tx.execute(
+        "DELETE FROM phone_usage WHERE end < ?1",
+        params![now - PHONE_KEEP_MS],
+    )?;
+    tx.commit()
+}
+
+/// Where the phone should resume: its newest stored end minus a 10 minute
+/// overlap (harmless, the upsert dedupes), or None for a new device.
+pub fn phone_cursor(conn: &Connection, device: &str) -> rusqlite::Result<Option<i64>> {
+    let newest: Option<i64> = conn.query_row(
+        "SELECT MAX(end) FROM phone_usage WHERE device = ?1",
+        params![device],
+        |row| row.get(0),
+    )?;
+    Ok(newest.map(|end| end - 10 * 60_000))
+}
+
+pub fn phone_devices(conn: &Connection) -> rusqlite::Result<Vec<PhoneDevice>> {
+    let mut stmt = conn
+        .prepare("SELECT device, name, last_sync FROM phone_devices ORDER BY last_sync DESC")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(PhoneDevice {
+            device: row.get(0)?,
+            name: row.get(1)?,
+            last_sync: row.get(2)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Phone intervals overlapping [start, end) as (label, start, end).
+pub fn phone_rows(
+    conn: &Connection,
+    start: i64,
+    end: i64,
+) -> rusqlite::Result<Vec<(String, i64, i64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT label, start, end FROM phone_usage
+         WHERE end > ?1 AND start < ?2
+         ORDER BY start ASC
+         LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(params![start, end, LIST_LIMIT * 5], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    })?;
+    rows.collect()
+}
+
+/// Clips intervals to [start, end), sums time per app label (busiest first)
+/// and merges the intervals into non-overlapping spans.
+pub fn phone_summary(
+    rows: &[(String, i64, i64)],
+    start: i64,
+    end: i64,
+) -> (Vec<(String, i64)>, Vec<(i64, i64)>) {
+    let mut totals: Vec<(String, i64)> = Vec::new();
+    let mut clipped: Vec<(i64, i64)> = Vec::new();
+    for (label, from, to) in rows {
+        let from = (*from).max(start);
+        let to = (*to).min(end);
+        if to <= from {
+            continue;
+        }
+        clipped.push((from, to));
+        match totals.iter_mut().find(|(name, _)| name == label) {
+            Some((_, ms)) => *ms += to - from,
+            None => totals.push((label.clone(), to - from)),
+        }
+    }
+    totals.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    clipped.sort_unstable();
+    let mut spans: Vec<(i64, i64)> = Vec::new();
+    for (from, to) in clipped {
+        match spans.last_mut() {
+            Some(last) if from <= last.1 => last.1 = last.1.max(to),
+            _ => spans.push((from, to)),
+        }
+    }
+    (totals, spans)
 }
 
 #[cfg(test)]
@@ -414,6 +671,112 @@ mod tests {
         // Too old to replay.
         assert!(unnoted_events(&conn, b.id, 31, 10).unwrap().is_empty());
         assert_eq!(list_notes(&conn, 0, 100).unwrap(), vec![note]);
+    }
+
+    #[test]
+    fn hourly_notes_are_unique_per_hour_and_do_not_cover_events() {
+        let db = ActivityDb::open_in_memory();
+        let conn = db.conn.lock().unwrap();
+        let hour = 3_600_000;
+        let first = insert_hourly_note(&conn, 5 * hour + 120_000, 4 * hour, 5 * hour, "- read docs")
+            .unwrap()
+            .expect("inserted");
+        assert_eq!(first.kind, "hourly");
+        assert!(insert_hourly_note(&conn, 5 * hour + 300_000, 4 * hour, 5 * hour, "- again")
+            .unwrap()
+            .is_none());
+        assert_eq!(hourly_note_starts(&conn, 0).unwrap(), vec![4 * hour]);
+        assert!(hourly_note_starts(&conn, 5 * hour).unwrap().is_empty());
+        // An hourly note is not a prompt batch.
+        assert_eq!(last_noted_event_id(&conn).unwrap(), 0);
+        assert!(latest_note(&conn).unwrap().is_none());
+        assert_eq!(latest_note_any(&conn).unwrap().map(|n| n.body), Some("- read docs".into()));
+        insert_event(&conn, &new_event(4 * hour + 10, "prompt", "x")).unwrap();
+        assert_eq!(count_events(&conn, 4 * hour, 5 * hour).unwrap(), 1);
+        assert_eq!(count_events(&conn, 5 * hour, 6 * hour).unwrap(), 0);
+    }
+
+    #[test]
+    fn an_old_notes_table_gains_the_hourly_columns_and_keeps_its_notes() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE activity_notes (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               ts INTEGER NOT NULL,
+               first_event_id INTEGER NOT NULL,
+               last_event_id INTEGER NOT NULL,
+               body TEXT NOT NULL
+             );
+             INSERT INTO activity_notes (ts, first_event_id, last_event_id, body)
+               VALUES (10, 1, 2, '- old note');",
+        )
+        .unwrap();
+        ensure_activity_tables(&conn).unwrap();
+        // Running again is harmless.
+        ensure_activity_tables(&conn).unwrap();
+        let notes = list_notes(&conn, 0, 100).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].kind, "prompts");
+        assert_eq!(notes[0].span_start, None);
+        assert_eq!(notes[0].body, "- old note");
+    }
+
+    fn interval(package: &str, label: &str, start: i64, end: i64) -> PhoneInterval {
+        PhoneInterval {
+            package: package.into(),
+            label: label.into(),
+            start,
+            end,
+        }
+    }
+
+    #[test]
+    fn phone_usage_upserts_once_reports_a_cursor_and_prunes() {
+        let db = ActivityDb::open_in_memory();
+        let conn = db.conn.lock().unwrap();
+        let day = 24 * 60 * 60 * 1000;
+        let now = 500 * day;
+        assert_eq!(phone_cursor(&conn, "dev-00000001").unwrap(), None);
+        let batch = vec![
+            interval("com.a", "A", now - 3_600_000, now - 3_000_000),
+            interval("com.b", "B", now - 2_000_000, now - 1_000_000),
+        ];
+        upsert_phone_usage(&conn, "dev-00000001", "Pixel", now, &batch).unwrap();
+        // The same intervals again, one of them longer: still two rows.
+        let mut again = batch.clone();
+        again[1].end = now - 500_000;
+        upsert_phone_usage(&conn, "dev-00000001", "Pixel 9", now + 1, &again).unwrap();
+        let rows = phone_rows(&conn, 0, now + day).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[1].2, now - 500_000);
+        assert_eq!(
+            phone_cursor(&conn, "dev-00000001").unwrap(),
+            Some(now - 500_000 - 10 * 60_000)
+        );
+        assert_eq!(phone_cursor(&conn, "dev-00000002").unwrap(), None);
+        let devices = phone_devices(&conn).unwrap();
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].name, "Pixel 9");
+        // A row older than 400 days goes on the next sync.
+        let old = vec![interval("com.old", "Old", 1_000, 2_000)];
+        upsert_phone_usage(&conn, "dev-00000001", "Pixel 9", now, &old).unwrap();
+        assert!(phone_rows(&conn, 0, 10_000).unwrap().is_empty());
+    }
+
+    #[test]
+    fn phone_summary_clips_sums_and_merges() {
+        let rows = vec![
+            ("Chat".to_string(), 0, 600_000),
+            ("Maps".to_string(), 500_000, 800_000),
+            ("Chat".to_string(), 900_000, 1_200_000),
+            ("Gone".to_string(), 2_000_000, 3_000_000),
+        ];
+        let (apps, spans) = phone_summary(&rows, 100_000, 1_000_000);
+        assert_eq!(
+            apps,
+            vec![("Chat".to_string(), 600_000), ("Maps".to_string(), 300_000)]
+        );
+        assert_eq!(spans, vec![(100_000, 800_000), (900_000, 1_000_000)]);
     }
 
     #[test]

@@ -138,7 +138,22 @@ import {
   setWhiteboardViewing,
   subscribeRuns,
 } from "../features/whiteboard/model/whiteboardRuns";
-import { requestWhiteboardDraw, whiteboardToolContext } from "../features/whiteboard/model/whiteboardTool";
+import {
+  requestWhiteboardDraw,
+  whiteboardSheetChatContext,
+  whiteboardToolContext,
+} from "../features/whiteboard/model/whiteboardTool";
+import { readWhiteboard } from "../features/whiteboard/model/whiteboardRead";
+import {
+  forgetWhiteboardChat,
+  isWhiteboardChatSession,
+  setWhiteboardChat,
+  subscribeWhiteboardChats,
+  whiteboardChatFor,
+  whiteboardChatIds,
+  whiteboardChatSheet,
+  whiteboardChatsSnapshot,
+} from "../features/whiteboard/model/whiteboardChats";
 import { useStableValue } from "../shared/hooks/useStableValue";
 import { useDragResize } from "../shared/hooks/useDragResize";
 import { beginLayoutTransition } from "../shared/lib/layoutTransition";
@@ -950,7 +965,27 @@ import {
   useActivityRecorder,
   useTrackerEnabled,
 } from "../features/activity/model/useActivityRecorder";
-import { loadTrackerEnabled } from "../features/activity/model/activity";
+import {
+  loadActivityLog,
+  loadActivityWatch,
+  loadPhoneSummary,
+  loadTrackerEnabled,
+  tzOffsetMinutes,
+} from "../features/activity/model/activity";
+import {
+  activityAskContext,
+  buildActivityReadResult,
+} from "../features/activity/model/activityRead";
+import {
+  askRegistrySnapshot,
+  isActivityAskSession,
+  lastOpenAskId,
+  pruneAskRegistry,
+  registerAskSession,
+  saveLastOpen,
+  subscribeAsk,
+  unregisterAskSession,
+} from "../features/activity/model/activityAsk";
 import { useStartupProviderCheck } from "../features/providers/model/useStartupProviderCheck";
 import { OPEN_PROVIDER_SETTINGS_EVENT } from "../features/providers/ui/ProviderCheckIndicator";
 import { preloadNavigationWhenIdle } from "./model/preloadNavigation";
@@ -6365,7 +6400,10 @@ function Workspace({
             session.blocks.some((block) => block.role === "user")
           );
         },
-        hiddenId: isMonoSession,
+        hiddenId: (id) =>
+          isMonoSession(id) ||
+          isActivityAskSession(id) ||
+          isWhiteboardChatSession(id),
       }),
     );
   }, [history, sessionBoard.cards, sessions, workingSessionIds, zenMode]);
@@ -6629,6 +6667,110 @@ function Workspace({
     },
     [ensureOpenSession],
   );
+
+  // Fork (L-396): the Activity page's Ask chat. A scratch chat kept out of
+  // the Chats list; see activityAsk.ts.
+  const askRegistry = useSyncExternalStore(subscribeAsk, askRegistrySnapshot);
+  const [askSessionId, setAskSessionId] = useState<string | null>(null);
+  const [askStatus, setAskStatus] = useState<"idle" | "opening" | "error">(
+    "idle",
+  );
+  const askRequest = useRef(0);
+  const scratchHistoryRef = useRef<SessionSummary[]>([]);
+  scratchHistoryRef.current = scratchHistory;
+  /**
+   * Opens an Ask chat: the given one, else the last one open, else a new one.
+   * The id is registered before the session is added so the Chats list never
+   * shows it. A newer call wins; an older one finishing late is ignored.
+   */
+  const onAskOpen = useCallback(
+    async (id?: string, fresh = false): Promise<void> => {
+      const request = ++askRequest.current;
+      setAskStatus("opening");
+      try {
+        const wanted = fresh ? null : (id ?? lastOpenAskId());
+        let session =
+          wanted && isActivityAskSession(wanted)
+            ? await ensureOpenSession(wanted).catch(() => null)
+            : null;
+        if (!session) {
+          const draft = newDefaultSession("~", "auto");
+          const cwd = await ensureScratchChat(draft.id);
+          registerAskSession(draft.id);
+          session = { ...draft, cwd };
+          const created = session;
+          sessionsRef.current = [...sessionsRef.current, created];
+          setSessions(sessionsRef.current);
+        }
+        if (request !== askRequest.current) return;
+        saveLastOpen(session.id);
+        setAskSessionId(session.id);
+        setAskStatus("idle");
+        const known = new Map<string, { hasTurn: boolean }>();
+        for (const entry of scratchHistoryRef.current)
+          known.set(entry.id, { hasTurn: true });
+        for (const live of sessionsRef.current)
+          known.set(live.id, {
+            hasTurn: live.blocks.some((block) => block.role === "user"),
+          });
+        pruneAskRegistry(known);
+      } catch {
+        if (request === askRequest.current) setAskStatus("error");
+      }
+    },
+    [ensureOpenSession],
+  );
+  const askSession = askSessionId
+    ? sessions.find((session) => session.id === askSessionId)
+    : undefined;
+
+  // Fork (L-403): each Whiteboard sheet's own chat, embedded in its Agent
+  // panel. A scratch chat kept out of the Chats list; see whiteboardChats.ts.
+  const whiteboardChats = useSyncExternalStore(
+    subscribeWhiteboardChats,
+    whiteboardChatsSnapshot,
+  );
+  const [whiteboardChatId, setWhiteboardChatId] = useState<string | null>(null);
+  const [whiteboardChatStatus, setWhiteboardChatStatus] = useState<
+    "idle" | "opening" | "error"
+  >("idle");
+  const whiteboardChatRequest = useRef(0);
+  /**
+   * Opens a sheet's chat, or starts one (`fresh` always starts one; the old
+   * chat then shows in the Chats list). The link is saved before the session
+   * is added so the Chats list never shows it. A newer call wins.
+   */
+  const onOpenSheetChat = useCallback(
+    async (sheetId: string, fresh = false): Promise<void> => {
+      const request = ++whiteboardChatRequest.current;
+      setWhiteboardChatStatus("opening");
+      try {
+        const wanted = fresh ? null : whiteboardChatFor(sheetId);
+        let session = wanted
+          ? await ensureOpenSession(wanted).catch(() => null)
+          : null;
+        if (!session) {
+          const draft = newDefaultSession("~", "auto");
+          const cwd = await ensureScratchChat(draft.id);
+          setWhiteboardChat(sheetId, draft.id);
+          session = { ...draft, cwd };
+          const created = session;
+          sessionsRef.current = [...sessionsRef.current, created];
+          setSessions(sessionsRef.current);
+        }
+        if (request !== whiteboardChatRequest.current) return;
+        setWhiteboardChatId(session.id);
+        setWhiteboardChatStatus("idle");
+      } catch {
+        if (request === whiteboardChatRequest.current)
+          setWhiteboardChatStatus("error");
+      }
+    },
+    [ensureOpenSession],
+  );
+  const whiteboardChatSession = whiteboardChatId
+    ? sessions.find((session) => session.id === whiteboardChatId)
+    : undefined;
 
   // A Mono open when the app last closed opens again; a moved window keeps
   // what it carried.
@@ -8100,6 +8242,24 @@ function Workspace({
     [onRemoveHistorySession],
   );
 
+  const onAskDelete = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isActivityAskSession(id)) return;
+      const confirmed = await ask("Delete this Ask chat? This can’t be undone.", {
+        title: "MonoCode",
+        kind: "warning",
+      });
+      if (!confirmed) return;
+      const removed = await onRemoveHistorySession(id, "delete", true);
+      if (!removed) return;
+      unregisterAskSession(id);
+      setAskSessionId(null);
+      const next = askRegistrySnapshot().ids[askRegistrySnapshot().ids.length - 1];
+      if (next) void onAskOpen(next);
+      else setAskStatus("idle");
+    },
+    [onAskOpen, onRemoveHistorySession],
+  );
   /** Deletes the Mono's conversation, then the Mono. Its files stay on disk. */
   const onDeleteMono = useCallback(
     async (monoId: string) => {
@@ -9594,9 +9754,14 @@ function Workspace({
               (message) => message.id === options.queuedMessageId,
             )
           : undefined;
+      const activityAsk = isActivityAskSession(sessionId);
+      // Fork (L-403): a Whiteboard sheet's chat reads and draws on its sheet.
+      const whiteboardSheet = whiteboardChatSheet(sessionId);
       const operatorAccess =
         operatorCommand.matched ||
         mono ||
+        activityAsk ||
+        whiteboardSheet !== null ||
         operatorEnabledInThread(current.blocks);
       const monoFirstTurn =
         mono &&
@@ -10807,7 +10972,15 @@ function Workspace({
           ) {
             appContext.push(monoContext(agentLook, agentFiles, agentPlan));
           }
-          if (operatorCommand.matched || handAgent) {
+          if (activityAsk) {
+            const cli = `${shellPath(await invoke<string>("app_cli_path"))} app`;
+            appContext.push(
+              activityAskContext(cli, new Date(), tzOffsetMinutes()),
+            );
+          } else if (whiteboardSheet) {
+            const cli = `${shellPath(await invoke<string>("app_cli_path"))} app`;
+            appContext.push(whiteboardSheetChatContext(cli, whiteboardSheet));
+          } else if (operatorCommand.matched || handAgent) {
             const cli = `${shellPath(await invoke<string>("app_cli_path"))} app`;
             appContext.push(
               `<monocode_app>\n${handAgent ? "App access is always enabled in this thread, limited to your assigned projects." : "The user's Operator command enables app access in this thread, including later turns without the command."} You can start session tabs or split session panes right or down, list and create project worktrees, choose a new session's checkout, read, continue, stop, archive or delete other in-scope project sessions, save unsent drafts, organize session folders, read or write saved notes and Tasks, and draw diagrams on the Whiteboard (whiteboard.draw) through the local CLI. Use the supported CLI/API to create, submit and track sessions. Never insert or edit MonoCode internal SQLite database rows: that bypasses live agents, request receipts and the Session Manager run ledger, and stored assistant text is not proof a worker ran. Session Manager supports prepared Todos with session_manager.list/read/write/delete/start, plus run-scoped remove/clear of done and stopped cards (both shown in the Done column). Saving a Todo does not launch an agent; start it explicitly. Todos preserve project, provider/model/settings/effort, permissions, prompt, files/images, and workspace/base. Operator can manage Todos across local projects via projectCwd; Monos and habit runs must stay within their assigned projects. Task Manager uses the existing tasks.* actions. Tasks support status, tags, Personal/project association, source links, completion and deletion; tasks.list filters by status/statuses, tags (all or any), projectCwd and query with pagination. Only stop, archive, or delete eligible project sessions returned by sessions.list; never target this caller session, a Mono, a habit run, or an orchestrator session. Run \`${cli} --help\` for exact commands and JSON fields, then use it as needed for the user's request. When reading another session, start with its latest two or three user/assistant exchanges. Request older exchanges with nextBefore or a larger excerpt only if needed. The CLI uses a session credential already in your environment; never print it. New sessions inherit this session's permission mode unless runtimeMode is set explicitly. For a new session with a draft, call sessions.start with its prompt and draft:true; do not submit a seed prompt. Sessions you start appear in the sidebar under this session without opening; set placement right/down or reveal:true only when the user asks to see them. The returned ID can be used as besideSessionId to split its pane again or moved into a folder immediately. A normal sessions.start submits its prompt but returns after acceptance, so do not wait for that agent to finish before organizing it.\n</monocode_app>`,
@@ -14710,12 +14883,35 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                 throw error;
               }
             },
+            isActivityAsk: (id) => isActivityAskSession(id),
+            activity: {
+              tzOffsetMin: () => tzOffsetMinutes(),
+              read: async (request) => {
+                const range = request.range;
+                const wantsAw =
+                  request.include.has("apps") ||
+                  request.include.has("sites") ||
+                  request.include.has("meetings");
+                const [log, aw, phone] = await Promise.all([
+                  loadActivityLog(range),
+                  wantsAw
+                    ? loadActivityWatch(range).catch(() => null)
+                    : Promise.resolve(null),
+                  request.include.has("phone")
+                    ? loadPhoneSummary(range).catch(() => null)
+                    : Promise.resolve(null),
+                ]);
+                return buildActivityReadResult(log, aw, phone, request);
+              },
+            },
             whiteboard: {
               draw: (input) => {
                 openWhiteboardRef.current();
                 return requestWhiteboardDraw(input);
               },
+              read: readWhiteboard,
             },
+            whiteboardSheetOf: (id) => whiteboardChatSheet(id),
             clickup: {
               linkedProject: () => loadClickupConfig().projectPath,
               run: (action, input) =>
@@ -15426,8 +15622,13 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
   }, []);
 
   const chatSessions = useMemo(
-    () => scratchChatSummaries(scratchHistory, sessions),
-    [scratchHistory, sessions],
+    () =>
+      scratchChatSummaries(
+        scratchHistory,
+        sessions,
+        new Set([...askRegistry.ids, ...whiteboardChatIds(whiteboardChats)]),
+      ),
+    [askRegistry, scratchHistory, sessions, whiteboardChats],
   );
 
   /** Merge live values over saved Chats rows without duplicating entries. */
@@ -15446,6 +15647,26 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
     }
     return rows.filter((row) => !row.archived);
   }, [sessions, sidechatHistory]);
+
+  /** The Ask chats for the Activity thread picker, newest first. */
+  const askThreadRows = useMemo(() => {
+    const rows = new Map<string, { id: string; title: string; updatedAt: number }>();
+    for (const entry of scratchHistory)
+      if (askRegistry.ids.includes(entry.id))
+        rows.set(entry.id, {
+          id: entry.id,
+          title: entry.title,
+          updatedAt: entry.updatedAt,
+        });
+    for (const live of sessions)
+      if (askRegistry.ids.includes(live.id) && !rows.has(live.id))
+        rows.set(live.id, {
+          id: live.id,
+          title: live.title,
+          updatedAt: Date.now(),
+        });
+    return [...rows.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [askRegistry, scratchHistory, sessions]);
 
   const onNewChat = useCallback(async () => {
     if (creatingChat) return;
@@ -18930,6 +19151,25 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                         onClose={onLeaveNotes}
                         onToggleSidebar={onToggleSidebar}
                         onOpenSession={onOpenActivitySession}
+                        askChat={
+                          askSession ? (
+                            <SessionPane
+                              {...sessionPaneProps}
+                              session={askSession}
+                              visible
+                              focused={activityViewOpen && !zenMode}
+                              inSplit={false}
+                              addToChatTarget={false}
+                              composerFocused={composerFocused}
+                              composerFocusToken={composerFocusToken}
+                            />
+                          ) : null
+                        }
+                        askStatus={askStatus}
+                        askThreads={askThreadRows}
+                        askActiveId={askSessionId}
+                        onAskOpen={(id, fresh) => void onAskOpen(id, fresh)}
+                        onAskDelete={(id) => void onAskDelete(id)}
                         onOpenSettings={() => openSettings("general", "activity-tracker")}
                       />
                     </AppViewSurface>
@@ -19056,7 +19296,26 @@ Continue on ${label} with a handoff summary? Its soul and memory stay; the provi
                           insetLayout || projectRailOpen || compactProjectRail
                         }
                         compactRail={!insetLayout && compactRailActive}
-                        cwd={projectCwd}
+                        sheetChat={(sheetId) =>
+                          whiteboardChatSession &&
+                          whiteboardChats[sheetId] === whiteboardChatSession.id ? (
+                            <SessionPane
+                              {...sessionPaneProps}
+                              session={whiteboardChatSession}
+                              visible
+                              focused={whiteboardViewOpen && !zenMode}
+                              inSplit={false}
+                              addToChatTarget={false}
+                              composerFocused={composerFocused}
+                              composerFocusToken={composerFocusToken}
+                            />
+                          ) : null
+                        }
+                        sheetChatStatus={whiteboardChatStatus}
+                        onOpenSheetChat={(sheetId, fresh) =>
+                          void onOpenSheetChat(sheetId, fresh)
+                        }
+                        onSheetDeleted={forgetWhiteboardChat}
                         onClose={onLeaveWhiteboard}
                         onToggleSidebar={onToggleSidebar}
                       />

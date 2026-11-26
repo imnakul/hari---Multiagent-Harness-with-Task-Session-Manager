@@ -13,6 +13,21 @@ import { ClickupError, clickupApi, type ClickupMember, type ClickupTask } from "
 import { useClickupConfig } from "../model/clickupConfig";
 import { describeClickupError } from "../model/clickupMessages";
 import { clickupSessionContext } from "../model/clickupSessionContext";
+import {
+  addPendingFiles,
+  failedCount,
+  toPendingFile,
+  uploadAll,
+  type ClickupPendingFile,
+} from "../model/clickupUpload";
+import type { Attachment } from "../../sessions/model/session";
+import {
+  attachmentsFromFiles,
+  filesFromClipboard,
+  isAttachmentFolder,
+  pickAttachments,
+  revokeAttachment,
+} from "../../sessions/model/attachments";
 import { clickupStore, useClickupSnapshot } from "../model/clickupStore";
 import {
   createInput,
@@ -647,7 +662,14 @@ export function ClickupView({
   );
 }
 
-/** Fork (L-381): the New task form, in the task side panel. */
+/** Where a New task is: filling the form, saving, uploading its files, or created with some files left. */
+type CreatePhase = "editing" | "creating" | "uploading" | "partial";
+
+/**
+ * Fork (L-381, L-395): the New task form, in the task side panel. Files upload
+ * only after the task exists; the new id is kept before the first upload so a
+ * retry adds to that task and never creates a second one.
+ */
 function CreateTaskPanel({
   listIds,
   defaultListId,
@@ -660,10 +682,26 @@ function CreateTaskPanel({
   const snapshot = useClickupSnapshot();
   const [listId, setListId] = useState(defaultListId);
   const [draft, setDraft] = useState<ClickupTaskDraft>(EMPTY_DRAFT);
-  const [creating, setCreating] = useState(false);
+  const [phase, setPhase] = useState<CreatePhase>("editing");
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<ClickupPendingFile[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ position: number; total: number } | null>(null);
+  const createdTaskId = useRef<string | null>(null);
+  const filesRef = useRef<ClickupPendingFile[]>([]);
+  const aliveRef = useRef(true);
   const state = snapshot.lists[listId];
   const readOnly = snapshot.readOnlyLists.includes(listId);
+  const busy = phase !== "editing";
+  filesRef.current = files;
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      for (const file of filesRef.current) revokeAttachment({ ...file, kind: "file" });
+    };
+  }, []);
 
   useEffect(() => {
     void clickupStore.loadMeta(listId);
@@ -677,24 +715,128 @@ function CreateTaskPanel({
       : current));
   }, [state?.meta]);
 
-  const create = async (): Promise<void> => {
-    if (creating) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await clickupStore.createTask(listId, createInput(draft));
+  const addFiles = useCallback(async (incoming: Promise<Attachment[]>): Promise<void> => {
+    const picked = await incoming;
+    if (!aliveRef.current) return;
+    const usable: ClickupPendingFile[] = [];
+    for (const item of picked) {
+      const pending = isAttachmentFolder(item) ? null : toPendingFile(item);
+      if (pending) usable.push(pending);
+      else revokeAttachment(item);
+    }
+    const merged = addPendingFiles(filesRef.current, usable);
+    const kept = new Set(merged.files.map((file) => file.id));
+    for (const file of usable) if (!kept.has(file.id)) revokeAttachment({ ...file, kind: "file" });
+    setFiles(merged.files);
+    setFileError(merged.error ?? (usable.length < picked.length ? "Folders can't be attached." : null));
+  }, []);
+
+  const onAttach = (): void => {
+    if (busy) return;
+    void addFiles(pickAttachments()).catch(() => setFileError("Couldn't read that file."));
+  };
+
+  const onRemoveFile = (id: string): void => {
+    const gone = files.find((file) => file.id === id);
+    if (gone) revokeAttachment({ ...gone, kind: "file" });
+    setFiles((current) => current.filter((file) => file.id !== id));
+    setFileError(null);
+  };
+
+  const finish = (updated: ClickupPendingFile[]): void => {
+    if (!aliveRef.current) return;
+    setFiles(updated);
+    setProgress(null);
+    if (failedCount(updated) === 0) {
+      for (const file of updated) revokeAttachment({ ...file, kind: "file" });
       onClose();
-    } catch (failure) {
-      setError(failure instanceof ClickupError ? describeClickupError(failure) : "Couldn't reach ClickUp.");
-      setCreating(false);
+    } else {
+      setPhase("partial");
     }
   };
 
+  const uploadFiles = async (taskId: string, list: ClickupPendingFile[]): Promise<void> => {
+    setPhase("uploading");
+    const updated = await uploadAll(
+      taskId,
+      list,
+      (id, file) => clickupApi.uploadAttachment(id, file),
+      (position, total) => {
+        if (aliveRef.current) setProgress({ position, total });
+      },
+      () => aliveRef.current,
+    );
+    // One refresh so the task shows its new attachments.
+    try {
+      clickupStore.upsertTask({ ...(await clickupApi.task(taskId)), listId });
+    } catch {
+      // The task and its uploads are saved; the next refresh picks the change up.
+    }
+    finish(updated);
+  };
+
+  const create = async (): Promise<void> => {
+    if (phase !== "editing") return;
+    setPhase("creating");
+    setError(null);
+    try {
+      const created = await clickupStore.createTask(listId, createInput(draft));
+      createdTaskId.current = created.id;
+      if (filesRef.current.length === 0) {
+        onClose();
+        return;
+      }
+      await uploadFiles(created.id, filesRef.current);
+    } catch (failure) {
+      if (!aliveRef.current) return;
+      setError(failure instanceof ClickupError ? describeClickupError(failure) : "Couldn't reach ClickUp.");
+      setPhase("editing");
+    }
+  };
+
+  const retryFailed = (): void => {
+    const taskId = createdTaskId.current;
+    if (!taskId || phase !== "partial") return;
+    void uploadFiles(taskId, filesRef.current);
+  };
+
+  const onPaste = (event: React.ClipboardEvent): void => {
+    const pasted = filesFromClipboard(event.clipboardData);
+    if (pasted.length === 0 || busy) return;
+    event.preventDefault();
+    void addFiles(attachmentsFromFiles(pasted)).catch(() => setFileError("Couldn't read that file."));
+  };
+
+  const onDrop = (event: React.DragEvent): void => {
+    if (event.dataTransfer.files.length === 0) return;
+    event.preventDefault();
+    if (busy) return;
+    void addFiles(attachmentsFromFiles(Array.from(event.dataTransfer.files))).catch(() =>
+      setFileError("Couldn't read that file."),
+    );
+  };
+
+  const failed = failedCount(files);
   return (
-    <aside aria-label="New task" className="flex h-full min-h-0 w-full flex-col">
+    <aside
+      aria-label="New task"
+      className="flex h-full min-h-0 w-full flex-col"
+      onPaste={onPaste}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+      }}
+      onDrop={onDrop}
+    >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-stroke px-3">
         <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium text-content">New task</h2>
-        <button type="button" aria-label="Close new task" title="Close" className={ICON_BUTTON} onClick={onClose}>
+        <button
+          type="button"
+          aria-label="Close new task"
+          title="Close"
+          className={ICON_BUTTON}
+          disabled={phase === "creating" || phase === "uploading"}
+          onClick={onClose}
+        >
           <X aria-hidden className="size-4" />
         </button>
       </header>
@@ -712,8 +854,22 @@ function CreateTaskPanel({
           onChange={setDraft}
           meta={state?.meta ?? null}
           members={state?.members ?? []}
-          disabled={creating || readOnly}
+          disabled={busy || readOnly}
+          attachments={files}
+          onAddFiles={onAttach}
+          onRemoveFile={onRemoveFile}
+          attachmentError={fileError}
         />
+        {phase === "uploading" && progress ? (
+          <p role="status" className="text-[12.5px] text-content/65">
+            Uploading {progress.position} of {progress.total}…
+          </p>
+        ) : null}
+        {phase === "partial" ? (
+          <p role="alert" className="text-[12.5px] text-red-400">
+            Task created. {failed} of {files.length} {files.length === 1 ? "file" : "files"} didn&apos;t upload.
+          </p>
+        ) : null}
         {error ? (
           <p role="alert" className="text-[12.5px] text-red-400">
             {error}
@@ -721,17 +877,30 @@ function CreateTaskPanel({
         ) : null}
       </div>
       <footer className="flex shrink-0 items-center gap-2 border-t border-stroke p-3">
-        <button
-          type="button"
-          className={BUTTON}
-          disabled={creating || readOnly || !draft.name.trim() || dueBeforeStart(draft)}
-          onClick={() => void create()}
-        >
-          {creating ? "Creating…" : "Create task"}
-        </button>
-        <button type="button" className={BUTTON} disabled={creating} onClick={onClose}>
-          Cancel
-        </button>
+        {phase === "partial" ? (
+          <>
+            <button type="button" className={BUTTON} onClick={retryFailed}>
+              Retry failed
+            </button>
+            <button type="button" className={BUTTON} onClick={onClose}>
+              Close
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={BUTTON}
+              disabled={busy || readOnly || !draft.name.trim() || dueBeforeStart(draft)}
+              onClick={() => void create()}
+            >
+              {phase === "creating" ? "Creating…" : phase === "uploading" ? "Uploading…" : "Create task"}
+            </button>
+            <button type="button" className={BUTTON} disabled={busy} onClick={onClose}>
+              Cancel
+            </button>
+          </>
+        )}
       </footer>
     </aside>
   );

@@ -29,7 +29,9 @@ const api = vi.hoisted(() => ({
   postComment: vi.fn(),
   downloadAttachment: vi.fn(),
   saveAttachment: vi.fn(),
+  uploadAttachment: vi.fn(),
 }));
+const picker = vi.hoisted(() => ({ pick: vi.fn() }));
 
 const clipboard = vi.hoisted(() => ({ copyMessage: vi.fn() }));
 vi.mock("../../../platform/tauri/clipboard", async (importOriginal) => ({
@@ -39,6 +41,7 @@ vi.mock("../../../platform/tauri/clipboard", async (importOriginal) => ({
 vi.mock("../../sessions/model/attachments", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../sessions/model/attachments")>()),
   attachmentsFromPaths: async (paths: string[]) => paths.map((path) => ({ name: path.split("/").pop(), path })),
+  pickAttachments: picker.pick,
 }));
 
 const chats = vi.hoisted(() => ({ list: vi.fn() }));
@@ -105,6 +108,7 @@ beforeEach(() => {
     clear: () => stored.clear(),
   });
   Object.values(api).forEach((mock) => mock.mockReset());
+  picker.pick.mockReset();
   api.list.mockResolvedValue(LIST_INFO);
   api.members.mockResolvedValue([MEMBER_ANA]);
   api.me.mockResolvedValue(MEMBER_ANA);
@@ -554,6 +558,80 @@ describe("ClickupView (L-381)", () => {
     const handle = container.querySelector<HTMLElement>("[role=separator][aria-label='Resize new task panel']");
     expect(handle?.className).toContain("-left-2");
     expect(handle?.parentElement?.className).not.toContain("overflow-hidden");
+  });
+
+async function openNewTaskWithFiles(names: string[]): Promise<void> {
+    linkProject();
+    api.isConnected.mockResolvedValue(true);
+    picker.pick.mockResolvedValue(
+      names.map((name) => ({ id: name, name, mimeType: "text/plain", kind: "file", size: 5, path: "/tmp/" + name })),
+    );
+    await render(props());
+    await act(async () => {
+      button("New task").click();
+    });
+    const name = container.querySelector<HTMLInputElement>("aside[aria-label='New task'] input");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(name, "Ship it");
+      name?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      button("Attach files").click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  it("creates the task first, then uploads each file in order (L-395 AC-1)", async () => {
+    api.createTask.mockResolvedValue(makeTask("new"));
+    api.task.mockResolvedValue(makeTask("new"));
+    api.uploadAttachment.mockResolvedValue({ id: "a", title: "a" });
+    await openNewTaskWithFiles(["a.txt", "b.txt"]);
+    expect(container.textContent).toContain("a.txt");
+    await act(async () => {
+      button("Create task").click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(api.createTask).toHaveBeenCalledTimes(1);
+    expect(api.uploadAttachment.mock.calls.map(([id, file]) => [id, file.name])).toEqual([
+      ["new", "a.txt"],
+      ["new", "b.txt"],
+    ]);
+    expect(api.createTask.mock.invocationCallOrder[0]).toBeLessThan(api.uploadAttachment.mock.invocationCallOrder[0]);
+    expect(api.task).toHaveBeenCalledWith("new");
+  });
+
+  it("keeps the panel open on a partial failure and retries only the failed file on the same task (L-395 AC-2)", async () => {
+    api.createTask.mockResolvedValue(makeTask("new"));
+    api.task.mockResolvedValue(makeTask("new"));
+    api.uploadAttachment.mockImplementation(async (_id: string, file: { name: string }) => {
+      if (file.name === "b.txt" && api.uploadAttachment.mock.calls.length <= 2) throw new Error("x");
+      return { id: "a", title: "a" };
+    });
+    await openNewTaskWithFiles(["a.txt", "b.txt"]);
+    await act(async () => {
+      button("Create task").click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("Task created. 1 of 2 files didn't upload.");
+    await act(async () => {
+      button("Retry failed").click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(api.createTask).toHaveBeenCalledTimes(1);
+    expect(api.uploadAttachment.mock.calls.map(([id, file]) => [id, file.name])).toEqual([
+      ["new", "a.txt"],
+      ["new", "b.txt"],
+      ["new", "b.txt"],
+    ]);
   });
 
   it("removes the token and returns to the connect form on Disconnect (AC-C11)", async () => {

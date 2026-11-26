@@ -1600,6 +1600,47 @@ describe("Mono-started Claude sessions run Interactive (L-382)", () => {
     ).rejects.toThrow("Invalid model setting claudeExecution");
   });
 
+  it("limits an Activity Ask chat to activity.* and routes activity.read to the host", async () => {
+    const { source, host } = fixture();
+    const read = vi.fn(async () => ({ ok: true }));
+    host.isActivityAsk = (id) => id === source.id;
+    host.activity = { read, tzOffsetMin: () => 330 };
+    await expect(handleAgentApp(source, "a1", "sessions.list", {}, host)).rejects.toThrow(
+      "This Activity chat can only read activity.",
+    );
+    await expect(handleAgentApp(source, "a2", "notes.list", {}, host)).rejects.toThrow(
+      "This Activity chat can only read activity.",
+    );
+    await expect(
+      handleAgentApp(source, "a3", "activity.read", { start: "2026-10-07", end: "2026-10-08" }, host),
+    ).resolves.toEqual({ ok: true });
+    expect(read).toHaveBeenCalledTimes(1);
+    await expect(handleAgentApp(source, "a4", "activity.read", { start: "x" }, host)).rejects.toThrow(/start and end/);
+  });
+
+  it("keeps a Whiteboard sheet chat on whiteboard.* and on its own sheet (L-403)", async () => {
+    const { source, host } = fixture();
+    const draw = vi.fn(async () => ({ sheetId: "s1", name: "Flow", created: false, note: "Drew 1" }));
+    const read = vi.fn(async () => ({ sheetId: "s1", name: "Flow", locked: false, elements: [] }));
+    host.whiteboard = { draw, read };
+    host.whiteboardSheetOf = (id) => (id === source.id ? "s1" : null);
+    const box = { type: "rectangle", id: "a", x: 0, y: 0, width: 180, height: 70 };
+    await expect(handleAgentApp(source, "w1", "notes.list", {}, host)).rejects.toThrow(
+      "This Whiteboard chat can only read and draw on its sheet.",
+    );
+    await handleAgentApp(source, "w2", "whiteboard.draw", { name: "New", ops: { add: [box] } }, host);
+    expect(draw).toHaveBeenCalledWith(expect.objectContaining({ sheetId: "s1" }));
+    expect(draw.mock.calls[0]?.[0]).not.toHaveProperty("name");
+    await expect(
+      handleAgentApp(source, "w3", "whiteboard.draw", { sheetId: "s2", ops: { add: [box] } }, host),
+    ).rejects.toThrow(/own sheet only/);
+    await handleAgentApp(source, "w4", "whiteboard.read", {}, host);
+    expect(read).toHaveBeenCalledWith({ sheetId: "s1" });
+    await expect(handleAgentApp(source, "w5", "whiteboard.read", { sheetId: "s2" }, host)).rejects.toThrow(
+      /own sheet only/,
+    );
+  });
+
   it("tells only Monos about Claude sessions in models.list (AC-D7)", async () => {
     const { source, host } = monoFixture();
     expect(await handleAgentApp(source, "m1", "models.list", {}, host)).toMatchObject({

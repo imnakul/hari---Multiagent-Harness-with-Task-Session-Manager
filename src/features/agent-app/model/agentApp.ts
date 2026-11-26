@@ -2,6 +2,7 @@ import { isBoardStatus } from "../../session-board/sessionBoard";
 import type { sessionTodoManager } from "../../session-board/sessionTodos";
 import { parseQuickAttachments } from "../../quick-composer/model/quickAttachments";
 import type { ClickupAction } from "../../clickup/model/clickupAgent";
+import { parseActivityReadInput, type ActivityReadRequest } from "../../activity/model/activityRead";
 import { sameProjectPath } from "../../projects/model/recents";
 import {
   filterTasks,
@@ -99,8 +100,11 @@ import {
 } from "../../monos/model/monoMemory";
 import {
   parseWhiteboardDrawInput,
+  parseWhiteboardReadInput,
   type WhiteboardDrawInput,
   type WhiteboardDrawResult,
+  type WhiteboardReadInput,
+  type WhiteboardReadResult,
 } from "../../whiteboard/model/whiteboardTool";
 
 export type AppSessionListing = {
@@ -162,10 +166,24 @@ export type AgentAppHost = {
     linkedProject(): string | null;
     run(action: ClickupAction, input: Record<string, unknown>): Promise<unknown>;
   };
+  /** Fork (L-396): true for an Activity Ask chat, which may use `activity.*` actions only. */
+  isActivityAsk?(id: string): boolean;
+  /** Fork (L-396): reads Activity data for a validated range. */
+  activity?: {
+    read(request: ActivityReadRequest): Promise<unknown>;
+    tzOffsetMin(): number;
+  };
   /** Fork (L-394): opens the Whiteboard and draws there (new sheet unless sheetId is given). */
   whiteboard?: {
     draw(input: WhiteboardDrawInput): Promise<WhiteboardDrawResult>;
+    /** Fork (L-403): one sheet's elements, or the sheet list without a sheetId. */
+    read(input: WhiteboardReadInput): Promise<WhiteboardReadResult>;
   };
+  /**
+   * Fork (L-403): the sheet a Whiteboard sheet chat belongs to, else null. Such
+   * a chat may use `whiteboard.*` actions only, and only on its own sheet.
+   */
+  whiteboardSheetOf?(id: string): string | null;
   notes(): Promise<Note[]>;
   note(id: string): Promise<Note | null>;
   saveNote(note: NoteUpsert): Promise<Note>;
@@ -295,8 +313,11 @@ const FIELDS = new Map<string, readonly string[]>([
   ["clickup.tasks", ["list", "includeClosed", "id"]],
   ["clickup.create", ["list", "name", "description", "assignees", "startDate", "dueDate", "priority", "status"]],
   ["clickup.update", ["id", "name", "description", "assignees", "startDate", "dueDate", "priority", "status", "done"]],
+  // Fork (L-396): read the Activity data (Ask chats can use only this).
+  ["activity.read", ["start", "end", "include"]],
   // Fork (L-394): draw on the Whiteboard.
   ["whiteboard.draw", ["name", "sheetId", "ops"]],
+  ["whiteboard.read", ["sheetId"]],
   [
     "tasks.write",
     [
@@ -1137,6 +1158,13 @@ export async function handleAgentApp(
   host: AgentAppHost,
 ): Promise<unknown> {
   fields(action, input);
+  if (host.isActivityAsk?.(source.id) && !action.startsWith("activity.")) {
+    throw new Error("This Activity chat can only read activity.");
+  }
+  const ownSheet = host.whiteboardSheetOf?.(source.id) ?? null;
+  if (ownSheet && !action.startsWith("whiteboard.")) {
+    throw new Error("This Whiteboard chat can only read and draw on its sheet.");
+  }
   if (action.startsWith("artifacts."))
     return handleArtifacts(source, requestId, action, input, host);
   if (action.startsWith("soul."))
@@ -1708,9 +1736,24 @@ export async function handleAgentApp(
       }
       return host.clickup.run(action, input);
     }
+    case "activity.read": {
+      if (!host.activity) throw new Error("Activity is unavailable in this app");
+      return host.activity.read(parseActivityReadInput(input, host.activity.tzOffsetMin()));
+    }
     case "whiteboard.draw": {
       if (!host.whiteboard) throw new Error("The Whiteboard is unavailable in this app");
-      return host.whiteboard.draw(parseWhiteboardDrawInput(input));
+      const draw = parseWhiteboardDrawInput(input);
+      if (!ownSheet) return host.whiteboard.draw(draw);
+      if (draw.sheetId && draw.sheetId !== ownSheet)
+        throw new Error("This Whiteboard chat draws on its own sheet only. Leave out sheetId.");
+      return host.whiteboard.draw({ sheetId: ownSheet, ops: draw.ops });
+    }
+    case "whiteboard.read": {
+      if (!host.whiteboard) throw new Error("The Whiteboard is unavailable in this app");
+      const read = parseWhiteboardReadInput(input);
+      if (ownSheet && read.sheetId && read.sheetId !== ownSheet)
+        throw new Error("This Whiteboard chat reads its own sheet only. Leave out sheetId.");
+      return host.whiteboard.read(ownSheet ? { sheetId: ownSheet } : read);
     }
     case "tasks.read": {
       if (!host.task) throw new Error("Tasks are unavailable in this app");

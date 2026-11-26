@@ -57,6 +57,7 @@ mod mobile_pc_extra;
 mod mobile_share;
 // Fork (Hari, L-325): the phone's notifications in Share.
 mod mobile_phone_notifications;
+mod mobile_phone_usage;
 mod mono;
 // Fork (L-370): repositories inside a project folder that isn't one.
 mod nested_repos;
@@ -706,6 +707,7 @@ pub fn run() {
             clickup::clickup_post_comment,
             clickup::clickup_download_attachment,
             clickup::clickup_save_attachment,
+            clickup::clickup_upload_attachment,
             linear::linear_status,
             linear::linear_set_token,
             linear::linear_list_teams,
@@ -894,6 +896,7 @@ pub fn run() {
             activity::activity_period_summary,
             activity::activity_period_summarize,
             activity::activity_watch_summary,
+            activity::activity_phone_summary,
             activity::activity_agent_status,
             activity::activity_agent_configure,
             activity::activity_agent_retry,

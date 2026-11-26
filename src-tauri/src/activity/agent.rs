@@ -174,6 +174,10 @@ struct State {
     usage: DailyUsage,
     last_run: Option<LastRun>,
     shutdown: bool,
+    /// Fork (L-397): when the next hourly-note check is due.
+    next_hourly: Option<Instant>,
+    /// Hours (start, ms) already judged not to need a note, so they are not re-read every wake.
+    checked_hours: Vec<i64>,
 }
 
 /// What the notes worker did today, for the Process Monitor.
@@ -241,6 +245,8 @@ impl NotesAgent {
                     usage: DailyUsage::default(),
                     last_run: None,
                     shutdown: false,
+                    next_hourly: None,
+                    checked_hours: Vec::new(),
                 }),
                 wake: Condvar::new(),
             }),
@@ -295,6 +301,8 @@ impl NotesAgent {
             state.failures = 0;
             state.retry_after = None;
             state.retry_at_ms = None;
+            // Look for a missed hour right away after switching notes on.
+            state.next_hourly = Some(Instant::now());
             kick_locked(&mut state);
         }
         let status = snapshot(&state);
@@ -414,9 +422,14 @@ fn due_at(state: &State) -> Option<Instant> {
     if !state.enabled || state.phase == Phase::Paused {
         return None;
     }
-    let last = state.last_kick?;
-    let first = state.first_kick.unwrap_or(last);
-    let mut due = (last + DEBOUNCE).min(first + MAX_BATCH_WAIT);
+    let prompts = state.last_kick.map(|last| {
+        let first = state.first_kick.unwrap_or(last);
+        (last + DEBOUNCE).min(first + MAX_BATCH_WAIT)
+    });
+    let mut due = match (prompts, state.next_hourly) {
+        (Some(a), Some(b)) => a.min(b),
+        (a, b) => a.or(b)?,
+    };
     if let Some(retry) = state.retry_after {
         due = due.max(retry);
     }
@@ -458,6 +471,7 @@ fn worker(app: AppHandle, shared: Arc<Shared>) {
         emit_status(&app, &shared);
 
         let outcome = run_batch(&app, &shared);
+        let batch_was_empty = matches!(outcome, Ok(BatchOutcome::Nothing));
 
         {
             let mut state = lock_state(&shared);
@@ -517,7 +531,233 @@ fn worker(app: AppHandle, shared: Arc<Shared>) {
         }
         emit_status(&app, &shared);
         let _ = app.emit(CHANGED_EVENT, ());
+
+        // Hourly notes run only when no prompt batch ran this wake: one `agy` call per wake.
+        let hourly_due = {
+            let state = lock_state(&shared);
+            batch_was_empty
+                && state.enabled
+                && state.phase == Phase::Idle
+                && state.next_hourly.is_some_and(|at| Instant::now() >= at)
+        };
+        if hourly_due {
+            run_hourly_turn(&app, &shared);
+        }
     }
+}
+
+/// One hourly-note attempt, with the same phase, usage and error handling as a prompt batch.
+fn run_hourly_turn(app: &AppHandle, shared: &Arc<Shared>) {
+    {
+        let mut state = lock_state(shared);
+        let tz = state.tz_offset_min;
+        state.next_hourly = Some(instant_at(next_hourly_check(now_millis(), tz)));
+        state.phase = Phase::Writing;
+    }
+    emit_status(app, shared);
+    let outcome = run_hourly(app, shared);
+    {
+        let mut state = lock_state(shared);
+        if state.shutdown {
+            return;
+        }
+        let tz = state.tz_offset_min;
+        state.usage.roll(now_millis(), tz);
+        match outcome {
+            Ok(wrote) => {
+                if wrote {
+                    state.usage.notes += 1;
+                    state.last_note_at = Some(now_millis());
+                    state.last_error = None;
+                    // More hours may be waiting; the next wake takes one.
+                    state.next_hourly = Some(Instant::now());
+                }
+                state.failures = 0;
+                state.phase = Phase::Idle;
+            }
+            Err(err @ (AgentError::Missing | AgentError::Auth(_))) => {
+                state.usage.failures = state.usage.failures.saturating_add(1);
+                state.last_error = Some(err.message());
+                state.phase = Phase::Paused;
+            }
+            Err(err) => {
+                state.usage.failures = state.usage.failures.saturating_add(1);
+                state.failures = state.failures.saturating_add(1);
+                let wait = backoff(state.failures);
+                state.retry_after = Some(Instant::now() + wait);
+                state.retry_at_ms = Some(now_millis() + wait.as_millis() as i64);
+                state.next_hourly = Some(Instant::now() + wait);
+                state.last_error = Some(err.message());
+                state.phase = Phase::Backoff;
+            }
+        }
+        if !state.enabled {
+            state.phase = Phase::Off;
+        }
+    }
+    emit_status(app, shared);
+    let _ = app.emit(CHANGED_EVENT, ());
+}
+
+fn instant_at(at_ms: i64) -> Instant {
+    Instant::now() + Duration::from_millis(u64::try_from((at_ms - now_millis()).max(0)).unwrap_or(0))
+}
+
+const HOUR_MS: i64 = 3_600_000;
+/// Wait this long after the hour ends so the last events are in ActivityWatch.
+const HOURLY_DELAY_MS: i64 = 120_000;
+const HOURLY_LOOKBACK_HOURS: i64 = 6;
+/// Less desktop activity than this in an hour is not worth a note.
+const HOURLY_MIN_ACTIVE_MS: i64 = 5 * 60_000;
+
+/// The next time (epoch ms) to look for a finished hour: two minutes after the
+/// next local hour boundary (this hour's, if that is still ahead).
+pub fn next_hourly_check(now_ms: i64, tz_offset_min: i64) -> i64 {
+    let offset = tz_offset_min * 60_000;
+    let hour_start = (now_ms + offset).div_euclid(HOUR_MS) * HOUR_MS - offset;
+    let this_check = hour_start + HOURLY_DELAY_MS;
+    if this_check > now_ms {
+        this_check
+    } else {
+        this_check + HOUR_MS
+    }
+}
+
+/// Start times (epoch ms) of the last finished local hours that are not in
+/// `done`, oldest first.
+pub fn hour_candidates(now_ms: i64, tz_offset_min: i64, done: &[i64]) -> Vec<i64> {
+    let offset = tz_offset_min * 60_000;
+    let current = (now_ms + offset).div_euclid(HOUR_MS) * HOUR_MS - offset;
+    (1..=HOURLY_LOOKBACK_HOURS)
+        .rev()
+        .map(|back| current - back * HOUR_MS)
+        .filter(|start| !done.contains(start))
+        .collect()
+}
+
+/// Writes at most one hourly note: the oldest recent hour that has desktop
+/// activity but no prompts. Returns whether a note was written.
+fn run_hourly(app: &AppHandle, shared: &Arc<Shared>) -> Result<bool, AgentError> {
+    let db = app.state::<ActivityDb>();
+    let now = now_millis();
+    let tz = lock_state(shared).tz_offset_min;
+    let since = now - (HOURLY_LOOKBACK_HOURS + 1) * HOUR_MS;
+    let mut done = db
+        .with(|conn| store::hourly_note_starts(conn, since))
+        .map_err(AgentError::Other)?;
+    {
+        let mut state = lock_state(shared);
+        state.checked_hours.retain(|start| *start >= since);
+        done.extend(state.checked_hours.iter().copied());
+    }
+    let candidates = hour_candidates(now, tz, &done);
+    for (index, start) in candidates.iter().copied().enumerate() {
+        let end = start + HOUR_MS;
+        let has_prompts = db
+            .with(|conn| store::count_events(conn, start, end))
+            .map_err(AgentError::Other)?
+            > 0;
+        if has_prompts {
+            lock_state(shared).checked_hours.push(start);
+            continue;
+        }
+        let summary = aw::summary(start, end);
+        if !summary.available {
+            // No desktop data for any of these hours; do not ask again each wake.
+            lock_state(shared)
+                .checked_hours
+                .extend(candidates[index..].iter().copied());
+            return Ok(false);
+        }
+        if summary.active_ms < HOURLY_MIN_ACTIVE_MS {
+            lock_state(shared).checked_hours.push(start);
+            continue;
+        }
+        let previous = db
+            .with(store::latest_note_any)
+            .map_err(AgentError::Other)?;
+        let binary = resolve_agy().ok_or(AgentError::Missing)?;
+        let prompt = build_hourly_prompt(
+            start,
+            end,
+            &summary,
+            previous.as_ref().map(|note| note.body.as_str()),
+            tz,
+        );
+        let workdir = scratch_dir(app)?;
+        let body = run_agy(&binary, &prompt, &workdir, shared)?;
+        db.with(|conn| store::insert_hourly_note(conn, now_millis(), start, end, &body))
+            .map_err(AgentError::Other)?;
+        lock_state(shared).checked_hours.push(start);
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+/// The text sent to `agy` for an hour with desktop activity and no prompts.
+/// App names, website domains and meeting times only; never titles or URLs.
+pub fn build_hourly_prompt(
+    start: i64,
+    end: i64,
+    summary: &aw::AwSummary,
+    previous_note: Option<&str>,
+    tz_offset_min: i64,
+) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "You are Hari's activity scribe. The developer used their computer between {} and {} without sending any prompt to an AI agent.\n\
+         Write a short work-log entry for that hour.\n\
+         Rules:\n\
+         - 1 or 2 bullet points, each starting with \"- \", past tense, at most 25 words each.\n\
+         - Say what kind of work the apps and sites suggest; mention meetings if listed. Do not invent details.\n\
+         - Use only the information below. Do not run tools, open files, browse, or ask questions.\n\
+         - Reply with the bullet points only.\n",
+        format_clock(start, tz_offset_min),
+        format_clock(end, tz_offset_min),
+    ));
+    if let Some(previous) = previous_note.map(str::trim).filter(|p| !p.is_empty()) {
+        out.push_str("\nPrevious entry (for continuity; do not repeat it):\n");
+        out.push_str(&clip(previous, 800));
+        out.push('\n');
+    }
+    out.push_str(&format!(
+        "\nDesktop activity (app names and website domains only), {} active:\n",
+        format_duration(summary.active_ms)
+    ));
+    let apps: Vec<String> = summary
+        .apps
+        .iter()
+        .take(10)
+        .map(|app| format!("{} {}", app.app, format_duration(app.ms)))
+        .collect();
+    if !apps.is_empty() {
+        out.push_str(&format!("- Apps: {}\n", apps.join(", ")));
+    }
+    let sites: Vec<String> = summary
+        .sites
+        .iter()
+        .take(10)
+        .map(|site| format!("{} {}", site.domain, format_duration(site.ms)))
+        .collect();
+    if !sites.is_empty() {
+        out.push_str(&format!("- Sites: {}\n", sites.join(", ")));
+    }
+    let meetings: Vec<String> = summary
+        .meetings
+        .iter()
+        .map(|m| {
+            format!(
+                "{} {}–{}",
+                m.label,
+                format_clock(m.start, tz_offset_min),
+                format_clock(m.end, tz_offset_min)
+            )
+        })
+        .collect();
+    if !meetings.is_empty() {
+        out.push_str(&format!("- Meetings: {}\n", meetings.join(", ")));
+    }
+    out
 }
 
 /// 30 s, 60 s, 2 min, … capped at 15 min.
@@ -1192,6 +1432,84 @@ sleep 30"#,
         assert!(prompt.contains("Previous entry"));
         // Session titles are not part of the prompt.
         assert!(!prompt.contains("Fix tabs"));
+    }
+
+    #[test]
+    fn hourly_check_is_two_minutes_after_the_local_hour() {
+        let ist = 330;
+        // 2026-11-26 10:30 IST = 05:00 UTC; next local boundary is 11:00 IST (05:30 UTC).
+        let now = 1_795_755_600_000;
+        assert_eq!(next_hourly_check(now, ist), now + 30 * 60_000 + HOURLY_DELAY_MS);
+        // Right after the boundary (11:01 IST) the same hour's check is still ahead.
+        let just_after = now + 31 * 60_000;
+        assert_eq!(
+            next_hourly_check(just_after, ist),
+            now + 30 * 60_000 + HOURLY_DELAY_MS
+        );
+        // Past it (11:03 IST) waits for the next hour.
+        let later = now + 33 * 60_000;
+        assert_eq!(
+            next_hourly_check(later, ist),
+            now + 30 * 60_000 + HOURLY_DELAY_MS + HOUR_MS
+        );
+        // A zone on a whole hour lands on the UTC hour.
+        assert_eq!(next_hourly_check(0, 0), HOURLY_DELAY_MS);
+    }
+
+    #[test]
+    fn hour_candidates_are_the_last_six_finished_hours_oldest_first() {
+        let ist = 330;
+        let now = 1_795_755_600_000; // 10:30 IST
+        let hour_start = now - 30 * 60_000; // 10:00 IST
+        let all = hour_candidates(now, ist, &[]);
+        assert_eq!(all.len(), 6);
+        assert_eq!(all[5], hour_start - HOUR_MS);
+        assert_eq!(all[0], hour_start - 6 * HOUR_MS);
+        assert!(all.windows(2).all(|w| w[1] - w[0] == HOUR_MS));
+        let skipped = hour_candidates(now, ist, &[all[0], all[3]]);
+        assert_eq!(skipped.len(), 4);
+        assert!(!skipped.contains(&all[0]) && !skipped.contains(&all[3]));
+    }
+
+    #[test]
+    fn hourly_prompt_has_apps_domains_meetings_and_no_titles() {
+        let summary = aw::AwSummary {
+            available: true,
+            active_ms: 40 * 60_000,
+            apps: (0..12)
+                .map(|i| aw::AppUsage {
+                    app: format!("App{i}"),
+                    ms: (20 - i) * 60_000,
+                })
+                .collect(),
+            sites: vec![aw::SiteUsage {
+                domain: "docs.rs".into(),
+                ms: 10 * 60_000,
+                titles: vec![aw::TabUsage {
+                    title: "Secret tab title".into(),
+                    ms: 10 * 60_000,
+                }],
+            }],
+            meetings: vec![aw::Meeting {
+                start: 1_794_312_000_000,
+                end: 1_794_313_800_000,
+                label: "Zoom".into(),
+            }],
+            ..aw::AwSummary::default()
+        };
+        let prompt = build_hourly_prompt(
+            1_794_312_000_000,
+            1_794_315_600_000,
+            &summary,
+            Some("- Earlier work"),
+            330,
+        );
+        assert!(prompt.contains("- Apps: App0 20m"));
+        assert!(prompt.contains("App9") && !prompt.contains("App10"));
+        assert!(prompt.contains("- Sites: docs.rs 10m"));
+        assert!(prompt.contains("- Meetings: Zoom 17:30–18:00"));
+        assert!(prompt.contains("Previous entry"));
+        assert!(!prompt.contains("Secret tab title"));
     }
 
     #[test]
