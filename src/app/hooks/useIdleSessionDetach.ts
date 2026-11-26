@@ -31,6 +31,7 @@ export function useIdleSessionDetach({
   remoteControlDesired,
   unseenFinishedIds,
   shownSessionIds,
+  embeddedSessionIds,
   openingSessionIds,
   loadedSessionCache,
   skipForgetSessionIds,
@@ -51,6 +52,13 @@ export function useIdleSessionDetach({
    * tab and is not saved until its first message, is not discarded.
    */
   shownSessionIds?: ReadonlySet<string>;
+  /**
+   * Fork (L-404): chats embedded in an app view, read when the detach runs:
+   * the Activity Ask chat and the open Whiteboard sheet's chat. They have no
+   * tab and aren't saved until their first message, so without this they were
+   * dropped right after opening and their panel waited forever.
+   */
+  embeddedSessionIds?: RefObject<ReadonlySet<string>>;
   openingSessionIds: RefObject<Set<string>>;
   loadedSessionCache: RefObject<Map<string, Session>>;
   skipForgetSessionIds: RefObject<Set<string>>;
@@ -86,6 +94,7 @@ export function useIdleSessionDetach({
     const visibleIds = new Set([
       ...tabsRef.current.flatMap((tab) => leafIds(tab.layout)),
       ...(shownSessionIds ?? []),
+      ...(embeddedSessionIds?.current ?? []),
     ]);
     // Inbox and resident agents own panes independently of project tabs. Keep
     // their drafts and attachments mounted when the user switches views.
@@ -164,6 +173,7 @@ export function useIdleSessionDetach({
     openingSessionIds,
     loadedSessionCache,
     skipForgetSessionIds,
+    embeddedSessionIds,
     persistSession,
     setSessions,
   ]);

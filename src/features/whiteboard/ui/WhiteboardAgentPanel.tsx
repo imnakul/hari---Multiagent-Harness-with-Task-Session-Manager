@@ -60,12 +60,14 @@ export function WhiteboardAgentPanel({
   const [earlier, setEarlier] = useState<WhiteboardChatMessage[]>([]);
   const [showEarlier, setShowEarlier] = useState(false);
 
-  // The sheet's chat opens with the panel and on every sheet switch.
+  // The sheet's chat opens with the panel, on every sheet switch, and again if
+  // it goes missing. A failed open waits for Retry.
+  const hasChat = chat !== null && chat !== undefined && chat !== false;
   useEffect(() => {
-    onOpenChat(sheetId);
-    // Only on sheet changes; a retry or new chat comes from the buttons.
+    if (!hasChat && status === "idle") onOpenChat(sheetId);
+    // onOpenChat is a new function each render; these three decide an open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetId]);
+  }, [hasChat, status, sheetId]);
 
   useEffect(() => {
     let live = true;

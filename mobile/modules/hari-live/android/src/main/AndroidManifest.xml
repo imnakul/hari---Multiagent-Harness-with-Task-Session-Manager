@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
   <!-- Fork (Hari, L-239): running sessions as an Android 16 Live Update. -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
@@ -10,6 +11,9 @@
   <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
   <!-- Fork (Hari, L-321): the Share bubble over other apps (the user turns on Display over other apps). -->
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- Fork (Hari, L-398, L-405): screen time for the computer's Activity. Android lists an
+       app under Usage access only when it declares this (the user turns it on there). -->
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
   <!-- Fork (Hari, L-325): names and icons of the apps whose notifications go to the computer. -->
   <queries>
     <intent>

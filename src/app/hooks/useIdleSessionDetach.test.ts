@@ -120,6 +120,7 @@ type WorkspaceState = {
   liveAgentsEnabled: boolean;
   remoteControlDesired: ReadonlySet<string>;
   shownSessionIds?: ReadonlySet<string>;
+  embeddedSessionIds?: { current: ReadonlySet<string> };
 };
 
 function mountWorkspace(initial: Partial<WorkspaceState> = {}) {
@@ -582,6 +583,32 @@ it("keeps a new chat shown in Focus mode though no tab holds it", async () => {
   expect(mocks.forgetHarnessSession).not.toHaveBeenCalled();
 
   workspace.update({ shownSessionIds: new Set() });
+  await advance();
+  expect(workspace.snapshot().sessions.map((session) => session.id)).toEqual([
+    "other",
+  ]);
+});
+
+it("keeps a chat embedded in an app view though no tab holds it (L-404)", async () => {
+  // The Activity Ask chat and a Whiteboard sheet's chat live only in their views.
+  const blank: Session = { ...newSession("claude", "/scratch"), id: "ask-chat" };
+  const embedded = { current: new Set(["ask-chat"]) as ReadonlySet<string> };
+  const workspace = mountWorkspace({
+    sessions: [chat("other"), blank],
+    tabs: [newTab("other")],
+    orchestrationRuns: [],
+    busySessionIds: new Set(),
+    embeddedSessionIds: embedded,
+  });
+  await advance();
+  expect(workspace.snapshot().sessions.map((session) => session.id)).toEqual([
+    "other",
+    "ask-chat",
+  ]);
+  expect(mocks.forgetHarnessSession).not.toHaveBeenCalled();
+
+  embedded.current = new Set();
+  workspace.update({ tabs: [newTab("other")] });
   await advance();
   expect(workspace.snapshot().sessions.map((session) => session.id)).toEqual([
     "other",

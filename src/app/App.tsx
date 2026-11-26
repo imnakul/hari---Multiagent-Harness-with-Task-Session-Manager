@@ -3486,6 +3486,8 @@ function Workspace({
     });
   }, [tabs]);
 
+  /** Chats embedded in app views (Activity Ask, Whiteboard sheet); set below. */
+  const embeddedChatIds = useRef<ReadonlySet<string>>(new Set());
   // Tabs are views. Hidden idle sessions drop their child. A visible session
   // keeps its child for a few minutes after a turn so follow-ups stay instant,
   // then parks it and resumes on the next prompt.
@@ -3499,6 +3501,7 @@ function Workspace({
     remoteControlDesired,
     unseenFinishedIds,
     shownSessionIds: focusShownIds,
+    embeddedSessionIds: embeddedChatIds,
     openingSessionIds,
     loadedSessionCache,
     skipForgetSessionIds,
@@ -6771,6 +6774,12 @@ function Workspace({
   const whiteboardChatSession = whiteboardChatId
     ? sessions.find((session) => session.id === whiteboardChatId)
     : undefined;
+  // Keep the embedded chats mounted though no tab holds them (L-404).
+  embeddedChatIds.current = new Set(
+    [askSessionId, whiteboardChatId].filter(
+      (id): id is string => id !== null,
+    ),
+  );
 
   // A Mono open when the app last closed opens again; a moved window keeps
   // what it carried.
