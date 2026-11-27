@@ -1,12 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-27 06:12 IST — Release 0.16.0-local73
+
+- Type: chore
+- Why: user asked to push and release.
+- What: version 0.16.0-local73, carrying L-406 (Hari app shortcuts: Send to computer, Open Share).
+- Files: version files (`package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`)
+- Commit: release commit after 071c8e71
+- Verified: Kotlin compile ✅ | manual: phone checks pending
+
 ## 2026-11-27 06:10 IST — Hari app shortcuts: Send to computer, Open Share (L-406)
 
 - Type: feature
 - What: Hari has two app shortcuts. Send to computer sends the clipboard's text, link or picture to the computer, as a Share bubble tap does. Open Share opens the Share screen. Long-press Hari's icon, or add them in an edge-swipe shortcut app.
 - Why: user request, to run Share from an edge-swipe app.
 - Files: [HariShortcuts.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariShortcuts.kt), [HariLiveModule.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLiveModule.kt) (publishes them when the module starts)
-- Commit: uncommitted
+- Commit: 071c8e71 (in 0.16.0-local73)
 - Verified: Kotlin compile ✅ (`gradlew :hari-live:compileReleaseKotlin`) | manual: phone checks pending
 
 ## 2026-11-26 15:56 IST — Release 0.16.0-local72
