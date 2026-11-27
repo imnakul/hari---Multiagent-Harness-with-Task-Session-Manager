@@ -71,6 +71,7 @@ module.exports = ({ config }) => {
       "./plugins/with-hari-signing",
       "./plugins/with-system-bars",
       "./plugins/with-live-update-permissions",
+      "./plugins/with-hari-shortcuts",
     ],
     // Updates come as whole APKs from GitHub releases, not Expo's update service.
     updates: { enabled: false },

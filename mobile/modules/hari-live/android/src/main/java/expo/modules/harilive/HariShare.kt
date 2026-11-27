@@ -2,7 +2,6 @@ package expo.modules.harilive
 
 import android.app.Activity
 import android.app.PendingIntent
-import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -234,8 +233,8 @@ internal object HariShare {
 }
 
 /**
- * The share sheet's "Hari" target, and what the Quick Settings tile opens to
- * read the clipboard (Android lets only the app in front read it). Shows
+ * The share sheet's "Hari" target, and what the Quick Settings tile and the
+ * Send to computer shortcut open to read the clipboard (Android lets only the app in front read it). Shows
  * nothing; finishes as soon as it has taken what was shared.
  */
 class HariShareActivity : Activity() {
@@ -254,24 +253,8 @@ class HariShareActivity : Activity() {
     super.onWindowFocusChanged(hasFocus)
     if (!hasFocus || clipboardRead || intent?.action != HariShare.ACTION_CLIPBOARD) return
     clipboardRead = true
-    // Fork (L-321): the Share bubble's tap: text, a link or a picture, with its feedback.
-    if (intent.getBooleanExtra(HariBubble.EXTRA_FROM_BUBBLE, false)) {
-      HariBubble.send(this, HariBubble.readClip(this), intent.getBooleanExtra(HariBubble.EXTRA_FORCE, false))
-      finish()
-      return
-    }
-    val clipboard = getSystemService(ClipboardManager::class.java)
-    val text = try {
-      clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
-    } catch (_: Exception) {
-      null
-    }
-    if (text.isNullOrBlank()) {
-      Toast.makeText(this, "The clipboard has no text", Toast.LENGTH_SHORT).show()
-    } else {
-      HariShare.add(this, listOf(HariShare.text("clipboard", text)))
-      HariShare.handOver(this, "Sending the clipboard to your computer")
-    }
+    // Fork (L-408): text, a link or a picture, as the Share bubble once sent.
+    HariClip.send(this, HariClip.read(this))
     finish()
   }
 
@@ -303,13 +286,17 @@ class HariShareActivity : Activity() {
   }
 }
 
-/** Quick Settings tile: sends the phone's clipboard to the paired computer. */
+/**
+ * Quick Settings tile: sends the phone's clipboard to the paired computer.
+ * Fork (L-407): text, a link or a picture, sent even when it repeats the
+ * last one (a tile has no "Send again").
+ */
 class HariClipboardTile : TileService() {
   override fun onStartListening() {
     super.onStartListening()
     qsTile?.apply {
       state = Tile.STATE_INACTIVE
-      label = "Send clipboard"
+      label = "Send to computer"
       icon = Icon.createWithResource(this@HariClipboardTile, R.drawable.hari_live_icon)
       updateTile()
     }

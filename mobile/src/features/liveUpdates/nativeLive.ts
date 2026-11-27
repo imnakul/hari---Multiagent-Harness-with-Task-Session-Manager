@@ -39,10 +39,6 @@ type HariLiveModule = {
   describeFile?(path: string): string;
   /** Fork (L-375); missing in builds before it. */
   displayName?(uri: string): string | null;
-  /** Fork (L-321); missing in builds before it. */
-  bubbleState?(): { enabled: boolean; permitted: boolean };
-  setBubble?(on: boolean, color: string | null): boolean;
-  openOverlaySettings?(): boolean;
   /** Fork (L-325); missing in builds before it. */
   notificationAccess?(): boolean;
   openNotificationAccess?(): boolean;
@@ -216,30 +212,6 @@ export function pickedFileName(uri: string, fallback: string): string {
     return fallback;
   }
 }
-
-/** Fork (Hari, L-321): the Share bubble over other apps; null without the module. */
-export type ShareBubbleState = { enabled: boolean; permitted: boolean };
-export const shareBubble = native?.setBubble
-  ? {
-      state: (): ShareBubbleState => {
-        try {
-          return native?.bubbleState?.() ?? { enabled: false, permitted: false };
-        } catch {
-          return { enabled: false, permitted: false };
-        }
-      },
-      /** False when Android needs "Display over other apps" first. */
-      set: (on: boolean, color: string): boolean => {
-        try {
-          return native?.setBubble?.(on, color) ?? false;
-        } catch (error) {
-          console.warn("Share bubble: could not change it", error);
-          return false;
-        }
-      },
-      openSettings: (): boolean => native?.openOverlaySettings?.() ?? false,
-    }
-  : null;
 
 /**
  * Fork (Hari, L-325): the phone's notifications for the computer; null

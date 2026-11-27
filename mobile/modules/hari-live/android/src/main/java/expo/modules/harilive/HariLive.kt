@@ -216,8 +216,6 @@ internal object HariLive {
       cards = emptyList()
       watching = false
       service?.finish()
-      // Fork (L-321): the Share bubble goes too; it comes back when Hari opens.
-      app.stopService(Intent(app, HariBubbleService::class.java))
       app.getSystemService(NotificationManager::class.java)?.cancel(WATCH_ID)
       clearAll(app)
       try {

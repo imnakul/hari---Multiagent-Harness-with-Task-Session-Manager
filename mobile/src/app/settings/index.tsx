@@ -31,7 +31,6 @@ import {
   phoneNotices,
   phoneUsage,
   quitHari,
-  shareBubble,
   useAllFilesAllowed,
   usePromotedAllowed,
 } from "@/features/liveUpdates/nativeLive";
@@ -40,7 +39,6 @@ import { usePhoneUsageEnabled } from "@/features/phoneUsage/preferences";
 import { useHaptics } from "@/features/settings/haptics";
 import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
-import { useShareBubble } from "@/features/share/useShareBubble";
 import { SHARE_LIMITS } from "@/features/share/shareModel";
 import { useShareLimit } from "@/features/share/shareStore";
 import { syncShareLimit } from "@/features/share/shareTransfers";
@@ -170,8 +168,8 @@ export default function SettingsScreen() {
 
       <ComputerSettings />
 
-      {shareBubble ? <ShareBubbleSettings /> : null}
-      {connection.catalog.shareLimit ? <ShareHistorySettings heading={!shareBubble} /> : null}
+      {hasShareSettings ? <ShareSettings /> : null}
+      {connection.catalog.shareLimit ? <ShareHistorySettings heading={!hasShareSettings} /> : null}
 
       <Text style={styles.heading}>Preferences</Text>
       <View style={styles.card}>
@@ -460,14 +458,15 @@ function ShareHistorySettings({ heading }: { heading: boolean }) {
   );
 }
 
+/** Fork (Hari, L-325, L-398): what this phone shares with the computer besides messages. */
+const hasShareSettings = phoneNotices !== null || phoneUsage !== null;
+
 /**
- * Fork (Hari, L-321): the Share bubble, a small button over other apps that
- * sends the clipboard to the computer. Off until turned on.
+ * Fork (Hari, L-408): Share settings. The Share bubble (L-321) is gone; the
+ * Control Center tile and the Send to computer shortcut send the clipboard.
  */
-function ShareBubbleSettings() {
-  const colors = useColors();
+function ShareSettings() {
   const styles = useStyles();
-  const [{ enabled, permitted }, turn] = useShareBubble(colors.accent);
   const [phoneNoticePreferences] = usePhoneNoticePreferences();
   const [usageOn, setUsageOn] = usePhoneUsageEnabled();
   const [usageAllowed, setUsageAllowed] = useState(() => phoneUsage?.allowed() ?? false);
@@ -485,22 +484,9 @@ function ShareBubbleSettings() {
     <>
       <Text style={styles.heading}>Share</Text>
       <View style={styles.card}>
-        <SettingsRow
-          icon="clipboard"
-          label="Share bubble"
-          onPress={() => turn(!enabled)}
-          accessory={
-            <AccentSwitch
-              accessibilityLabel="Share bubble"
-              value={enabled}
-              onValueChange={turn}
-            />
-          }
-        />
         {/* Fork (Hari, L-325): this phone's notifications in the computer's Share. */}
         {phoneNotices ? (
           <>
-            <View style={styles.divider} />
             <SettingsRow
               icon="notifications"
               label="Notifications on computer"
@@ -512,7 +498,7 @@ function ShareBubbleSettings() {
         {/* Fork (Hari, L-398): screen time on the computer's Activity page. */}
         {phoneUsage ? (
           <>
-            <View style={styles.divider} />
+            {phoneNotices ? <View style={styles.divider} /> : null}
             <SettingsRow
               icon="phone"
               label="Share screen time with PC"
@@ -534,17 +520,10 @@ function ShareBubbleSettings() {
           </>
         ) : null}
       </View>
-      {enabled && !permitted ? (
-        <Text style={styles.note} onPress={() => void shareBubble?.openSettings()}>
-          Allow Display over other apps for Hari to show the bubble.{" "}
-          <Text style={{ color: colors.accent }}>Open settings</Text>
-        </Text>
-      ) : (
-        <Text style={styles.note}>
-          A small button over your other apps. Tap it to send what you copied to your
-          computer, hold it for more, drag it to move. It hides while Hari is open.
-        </Text>
-      )}
+      <Text style={styles.note}>
+        To send what you copied, add Hari&apos;s Send to computer tile to Control Center, or
+        use its Send to computer shortcut (hold Hari&apos;s icon).
+      </Text>
     </>
   );
 }

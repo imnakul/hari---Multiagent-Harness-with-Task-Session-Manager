@@ -1,5 +1,32 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-27 08:37 IST — One-tap send without a second toast; Share bubble removed (L-408)
+
+- Type: feature
+- What: the Control Center tile and the Send to computer shortcut send what you copied in one tap, and only Android's own "Hari pasted from your clipboard" shows. Hari shows a message only when something fails. The Share bubble is removed, with its Settings switch and the Display over other apps permission; Settings → Share now says where the tile and shortcut are.
+- Why: user report: two toasts per send (Android's, then Hari's). The user asked to remove the bubble now that the tile works.
+- Files: [HariClip.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariClip.kt), [HariShare.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariShare.kt), [HariLiveModule.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLiveModule.kt), [HariLive.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLive.kt), [AndroidManifest.xml](mobile/modules/hari-live/android/src/main/AndroidManifest.xml), [with-hari-shortcuts.js](mobile/plugins/with-hari-shortcuts.js), [settings/index.tsx](mobile/src/app/settings/index.tsx), [nativeLive.ts](mobile/src/features/liveUpdates/nativeLive.ts); removed `HariBubble.kt`, `hari_bubble_icon.xml`, `hari_bubble_check.xml`, `useShareBubble.ts`
+- Commit: uncommitted
+- Verified: mobile tsc ✅ expo lint (changed files) ✅ | expo prebuild ✅ gradle hari-live Kotlin + app resources ✅ | manual: phone checks pending
+
+## 2026-11-27 08:16 IST — Hari shortcuts show in shortcut apps (L-406 fix)
+
+- Type: fix
+- What: Hari's Send to computer and Open Share shortcuts now show in edge-swipe shortcut apps such as Hinata.
+- Why: user report on 0.16.0-local73: Hinata listed no Hari shortcuts. Root cause: the shortcuts were published while Hari runs (dynamic). Apps other than the default launcher can't read those; they read the shortcuts an app declares in its manifest.
+- Files: [with-hari-shortcuts.js](mobile/plugins/with-hari-shortcuts.js) (new config plugin: `res/xml/hari_shortcuts.xml`, labels, `android.app.shortcuts` on MainActivity), [app.config.js](mobile/app.config.js), [HariShortcuts.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariShortcuts.kt) (now removes local73's run-time shortcuts), [HariLiveModule.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariLiveModule.kt)
+- Commit: uncommitted
+- Verified: expo prebuild ✅ (manifest meta-data, strings and shortcut XML generated) | gradle hari-live Kotlin + app resources ✅ | manual: phone checks pending
+
+## 2026-11-27 08:08 IST — Control Center tile sends text, links and pictures (L-407)
+
+- Type: feature
+- What: Hari's Control Center (Quick Settings) tile is now "Send to computer". It sends whatever is copied, text, a link or a picture, as a Share bubble tap does. Before, it was "Send clipboard" and sent text only.
+- Why: user request, to use the tile in place of the Share bubble.
+- Files: [HariShare.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariShare.kt) (`HariClipboardTile`), [AndroidManifest.xml](mobile/modules/hari-live/android/src/main/AndroidManifest.xml) (tile label)
+- Commit: uncommitted
+- Verified: Kotlin compile ✅ | manual: phone checks pending
+
 ## 2026-11-27 06:12 IST — Release 0.16.0-local73
 
 - Type: chore

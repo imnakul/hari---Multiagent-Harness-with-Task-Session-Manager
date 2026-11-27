@@ -23,16 +23,10 @@ class HariLiveModule : Module() {
     OnCreate {
       appContext.reactContext?.let {
         HariLive.clearStale(it)
-        // Fork (L-321): the Share bubble comes back if it was on.
-        HariBubble.restore(it.applicationContext)
-        // Fork (L-406): Send to computer and Open Share, for launchers and edge-swipe apps.
-        HariShortcuts.publish(it)
+        // Fork (L-406): the shortcuts are in the manifest now; drop the ones 0.16.0-local73 published.
+        HariShortcuts.clearPublished(it)
       }
     }
-
-    // Fork (L-321): the Share bubble steps aside while Hari is in front.
-    OnActivityEntersForeground { HariBubble.setAppInFront(true) }
-    OnActivityEntersBackground { HariBubble.setAppInFront(false) }
 
     OnStartObserving { HariLive.listen { event -> sendEvent("onAction", event) } }
     OnStopObserving { HariLive.listen(null) }
@@ -61,18 +55,6 @@ class HariLiveModule : Module() {
 
     /** Fork (L-279): what the share sheet and the tile left for the app (JSON); emptied. */
     Function("takeShared") { HariShare.take(context) }
-
-    /** Fork (L-321): the Share bubble: { enabled, permitted } ("Display over other apps"). */
-    Function("bubbleState") { HariBubble.state(context) }
-
-    /**
-     * Fork (L-321): turns the Share bubble on or off; `color` (#rrggbb) tints
-     * it. False when turning on needs "Display over other apps" first.
-     */
-    Function("setBubble") { on: Boolean, color: String? -> HariBubble.setEnabled(context, on, color) }
-
-    /** Fork (L-321): the system page for "Display over other apps". */
-    Function("openOverlaySettings") { HariBubble.openOverlaySettings(context) }
 
     /** Fork (L-325): the phone's notifications for the computer's Share panel. */
     Function("notificationAccess") { HariNotifications.allowed(context) }
