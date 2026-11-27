@@ -25,6 +25,8 @@ class HariLiveModule : Module() {
         HariLive.clearStale(it)
         // Fork (L-321): the Share bubble comes back if it was on.
         HariBubble.restore(it.applicationContext)
+        // Fork (L-406): Send to computer and Open Share, for launchers and edge-swipe apps.
+        HariShortcuts.publish(it)
       }
     }
 
