@@ -1,5 +1,14 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-27 10:47 IST — Hari Share scrolls back; shortcut and tile say "Sent to Hari (desktop)" (L-411)
+
+- Type: fix
+- What: Share no longer jumps back to the bottom while you read older messages. It moves to the end only right after it opens or a new message arrives. The Send to computer shortcut and the Quick Settings tile now show "Sent to Hari (desktop)" after a send.
+- Why: user report on 0.16.0-local75: Share still stuck at the bottom; the shortcut showed no confirmation; the tile should say "Sent to Hari (desktop)". Cause (from source; not reproduced on the phone, none connected): L-409 stopped following only on drag and scroll events, but KeyboardChatScrollView registers native handlers for those same events (`useScrollState`), so they likely never reached the app, and every size change (cards, pictures) still scrolled to the end. Success of a clipboard send showed no toast of Hari's (L-408 removed it).
+- Files: [shareModel.ts](mobile/src/features/share/shareModel.ts), [SharePanel.tsx](mobile/src/features/share/SharePanel.tsx), [HariClip.kt](mobile/modules/hari-live/android/src/main/java/expo/modules/harilive/HariClip.kt), [shareModel.test.ts](mobile/tests/shareModel.test.ts)
+- Commit: uncommitted
+- Verified: mobile tsc ✅ expo lint ✅ vitest shareModel (39) ✅ | Kotlin compiled by the release build | manual: phone checks pending
+
 ## 2026-11-27 09:30 IST — Release 0.16.0-local75
 
 - Type: chore

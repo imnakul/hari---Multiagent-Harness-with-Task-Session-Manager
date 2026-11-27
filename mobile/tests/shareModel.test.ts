@@ -11,6 +11,7 @@ import {
   bytesToBase64,
   formatShareSize,
   nextShareFollow,
+  sharePinsOnResize,
   sharePinsToEnd,
   SHARE_AT_END,
   kindForText,
@@ -369,5 +370,20 @@ describe("nextShareFollow (L-409)", () => {
   it("follows after sending, from anywhere", () => {
     const up = nextShareFollow(atRest, { type: "settle", below: 900 });
     expect(sharePinsToEnd(nextShareFollow(up, { type: "sent" }))).toBe(true);
+  });
+});
+
+describe("sharePinsOnResize (L-411)", () => {
+  const following = { following: true, dragging: false };
+  it("moves to the end only within the hold after opening or a new message", () => {
+    expect(sharePinsOnResize(following, 1_000, 2_500)).toBe(true);
+    expect(sharePinsOnResize(following, 2_500, 2_500)).toBe(false);
+  });
+  it("leaves a scrolled chat alone when a card loads later, even if drag events never came", () => {
+    expect(sharePinsOnResize(following, 60_000, 2_500)).toBe(false);
+  });
+  it("never moves while scrolled back or dragging", () => {
+    expect(sharePinsOnResize({ following: false, dragging: false }, 1_000, 2_500)).toBe(false);
+    expect(sharePinsOnResize({ following: true, dragging: true }, 1_000, 2_500)).toBe(false);
   });
 });

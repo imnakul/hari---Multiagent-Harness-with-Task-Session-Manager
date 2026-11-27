@@ -3,7 +3,7 @@ import Storage from "expo-sqlite/kv-store";
 import { File } from "expo-file-system";
 import { Image } from "expo-image";
 import { useHeaderHeight } from "expo-router/react-navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -45,6 +45,7 @@ import {
   type ShareRow,
   isLongShareText,
   nextShareFollow,
+  sharePinsOnResize,
   sharePinsToEnd,
   type ShareFollow,
   type ShareScrollEvent,
@@ -217,8 +218,11 @@ export function SharePanel() {
   // row growing (a card loading) moved the rest under it, overlapping text.
   const [removing, setRemoving] = useState(false);
   const removingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Fork (Hari, L-411): until when a size change still moves to the end.
+  const holdUntil = useRef(0);
   useEffect(() => {
     openedAt.current = Date.now();
+    holdUntil.current = openedAt.current + SETTLE_MS;
     return () => clearTimeout(removingTimer.current);
   }, []);
   const composerHeight = useRef(0);
@@ -231,6 +235,12 @@ export function SharePanel() {
     );
   }, [history, savedOnly, query]);
   const counted = useMemo(() => shareCounted(history), [history]);
+  // A new message holds the end a moment, while its card or picture fills in.
+  const rowCount = useRef(rows.length);
+  useLayoutEffect(() => {
+    if (rows.length > rowCount.current) holdUntil.current = Date.now() + SETTLE_MS;
+    rowCount.current = rows.length;
+  }, [rows.length]);
   const pinned = useMemo(
     () => shareRows(history).filter((row) => row.items.some((item) => item.pinned)),
     [history],
@@ -346,7 +356,8 @@ export function SharePanel() {
       toEnd(false);
       return;
     }
-    if (sharePinsToEnd(follow.current)) toEnd(Date.now() - openedAt.current > SETTLE_MS);
+    if (sharePinsOnResize(follow.current, Date.now(), holdUntil.current))
+      toEnd(Date.now() - openedAt.current > SETTLE_MS);
   };
   // A composer growing past a line (or a file waiting in it) keeps the end in view.
   const onComposerLayout = ({ nativeEvent }: LayoutChangeEvent) => {

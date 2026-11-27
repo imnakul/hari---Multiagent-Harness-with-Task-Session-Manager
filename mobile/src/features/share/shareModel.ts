@@ -646,3 +646,15 @@ export function nextShareFollow(state: ShareFollow, event: ShareScrollEvent): Sh
 export function sharePinsToEnd(state: ShareFollow): boolean {
   return state.following && !state.dragging;
 }
+
+/**
+ * Fork (Hari, L-411): a size change moves the chat to its end only in the
+ * moment after it opens or a message arrives (`holdUntil`), while it follows.
+ * At other times (a link card or picture loading, a long text opening) it
+ * stays where it is. The drag events L-409 relied on don't reach the app on
+ * Android (the keyboard library takes them), so following alone kept every
+ * scroll pinned to the bottom.
+ */
+export function sharePinsOnResize(state: ShareFollow, now: number, holdUntil: number): boolean {
+  return sharePinsToEnd(state) && now < holdUntil;
+}

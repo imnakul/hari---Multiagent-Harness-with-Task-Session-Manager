@@ -11,8 +11,8 @@ import android.widget.Toast
 // Fork (Hari, L-321, L-408): one tap sends the phone's clipboard (text, a link
 // or a picture) to the paired computer through the background send the share
 // sheet uses (L-303). The Quick Settings tile and the Send to computer
-// shortcut use it. Success shows no toast of Hari's: Android's own "Hari
-// pasted from your clipboard" already confirms it. Only problems show one.
+// shortcut use it. L-411: success says "Sent to Hari (desktop)" (Android's
+// own "Hari pasted from your clipboard" may show too; Hari can't hide it).
 
 /** What a tap found on the clipboard. */
 internal sealed class ClipContent {
@@ -73,7 +73,10 @@ internal object HariClip {
 
   private fun handOver(context: Context) {
     if (HariLive.emit == null && !HariShareTask.start(context)) toast(context, "Open Hari to send it")
+    else toast(context, SENT)
   }
+
+  private const val SENT = "Sent to Hari (desktop)"
 
   private fun toast(context: Context, text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
 }
