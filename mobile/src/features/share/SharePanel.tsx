@@ -44,6 +44,10 @@ import {
   type PhoneShareEntry,
   type ShareRow,
   isLongShareText,
+  nextShareFollow,
+  sharePinsToEnd,
+  type ShareFollow,
+  type ShareScrollEvent,
 } from "@/features/share/shareModel";
 import { readShareDraft, writeShareFiles, writeShareText } from "@/features/share/shareDraft";
 import { useShareHistory, useShareLimit } from "@/features/share/shareStore";
@@ -89,8 +93,6 @@ const isPicture = (entry: PhoneShareEntry) => shareThumbnail(entry) !== null;
 
 /** Fork (Hari, L-316): the composer's gap above the keyboard, as in a session. */
 const KEYBOARD_GAP = 8;
-/** Within this of the end, the chat counts as at its end and follows new messages. */
-const AT_END = 80;
 /** Fork (Hari, L-323): how long after opening the list may still fill in. */
 const SETTLE_MS = 1500;
 const REMOVE_GLIDE_MS = 200;
@@ -201,7 +203,11 @@ export function SharePanel() {
   const keyboardOffset = composerBottom - KEYBOARD_GAP;
   const keyboardLift = useKeyboardLift(keyboardOffset);
   // Opens at its end and follows new messages there; not when scrolled back.
-  const atEnd = useRef(true);
+  // Fork (Hari, L-409): a drag stops the following until the list rests.
+  const follow = useRef<ShareFollow>({ following: true, dragging: false });
+  const onFollow = (event: ShareScrollEvent) => {
+    follow.current = nextShareFollow(follow.current, event);
+  };
   const placed = useRef(false);
   // Fork (Hari, L-323): for a moment after opening, link cards and pictures
   // still fill in; the end is held in place without an animated scroll, so
@@ -325,25 +331,29 @@ export function SharePanel() {
   const pinRow = pinned.length ? pinned[pinIndex % pinned.length] : null;
 
   const toEnd = (animated: boolean) => scroll.current?.scrollToEnd({ animated });
-  const onScroll = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const belowOf = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement, contentInset } = nativeEvent;
-    const below = contentSize.height + (contentInset?.bottom ?? 0) - contentOffset.y - layoutMeasurement.height;
-    atEnd.current = below < AT_END;
+    return contentSize.height + (contentInset?.bottom ?? 0) - contentOffset.y - layoutMeasurement.height;
   };
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) =>
+    onFollow({ type: "scroll", below: belowOf(event) });
+  const onDragStart = () => onFollow({ type: "drag" });
+  const onRest = (event: NativeSyntheticEvent<NativeScrollEvent>) =>
+    onFollow({ type: "settle", below: belowOf(event) });
   const onContentSizeChange = () => {
     if (!placed.current) {
       placed.current = true;
       toEnd(false);
       return;
     }
-    if (atEnd.current) toEnd(Date.now() - openedAt.current > SETTLE_MS);
+    if (sharePinsToEnd(follow.current)) toEnd(Date.now() - openedAt.current > SETTLE_MS);
   };
   // A composer growing past a line (or a file waiting in it) keeps the end in view.
   const onComposerLayout = ({ nativeEvent }: LayoutChangeEvent) => {
     const height = Math.round(nativeEvent.layout.height);
     if (height === composerHeight.current) return;
     composerHeight.current = height;
-    if (atEnd.current) requestAnimationFrame(() => toEnd(false));
+    if (sharePinsToEnd(follow.current)) requestAnimationFrame(() => toEnd(false));
   };
 
   return (
@@ -427,6 +437,10 @@ export function SharePanel() {
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={32}
         onScroll={onScroll}
+        onScrollBeginDrag={onDragStart}
+        onScrollEndDrag={onRest}
+        onMomentumScrollBegin={onDragStart}
+        onMomentumScrollEnd={onRest}
         onContentSizeChange={onContentSizeChange}
       >
         {!directionsSeen && history.length ? (
@@ -464,7 +478,7 @@ export function SharePanel() {
         ) : history.length ? null : (
           <Notice
             title="Nothing shared yet"
-            text="Send something from here, from any app’s share menu, or with the “Send clipboard” Quick Settings tile."
+            text="Send something from here, from any app’s share menu, or with the “Send to computer” Quick Settings tile."
           />
         )}
         {query?.trim() && history.length && !rows.length ? (
@@ -521,7 +535,7 @@ export function SharePanel() {
         <ShareComposer
           command={command}
           onSent={() => {
-            atEnd.current = true;
+            onFollow({ type: "sent" });
             requestAnimationFrame(() => toEnd(true));
           }}
         />

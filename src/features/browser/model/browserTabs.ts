@@ -9,6 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useSyncExternalStore } from "react";
 import { attachmentsFromFiles } from "../../sessions/model/attachments";
 import { attachOrKeep, contextNote } from "../../sessions/model/attachToChat";
+import { copyText } from "../../../platform/tauri/clipboard";
 import {
   noteName,
   picksNote,
@@ -535,6 +536,14 @@ function onPick(id: number, data: { kind: string } & Record<string, unknown>) {
     const payload = data as unknown as PicksPayload;
     if (!Array.isArray(payload.items) || payload.items.length === 0) return;
     const count = payload.items.length;
+    if (payload.copy) {
+      // Fork (L-410): the picks stay in the page, so Add to chat still works after.
+      copyText(picksNote(payload)).then(
+        () => showNotice(count === 1 ? "Copied 1 pick" : `Copied ${count} picks`),
+        (cause: unknown) => showNotice(`Couldn't copy the picks: ${String(cause)}`, "error"),
+      );
+      return;
+    }
     reportAttached(
       attachOrKeep([
         contextNote(

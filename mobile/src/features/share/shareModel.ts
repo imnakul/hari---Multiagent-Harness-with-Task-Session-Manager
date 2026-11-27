@@ -605,3 +605,44 @@ export function shareState(entry: PhoneShareEntry): string {
       return "";
   }
 }
+
+/** Within this many points of the end, the Share chat counts as at its end. */
+export const SHARE_AT_END = 80;
+
+/**
+ * Fork (Hari, L-409): whether the Share chat follows its end as it grows (new
+ * messages, link cards and pictures filling in). A finger on the list always
+ * wins: from the moment a drag starts until the list comes to rest, nothing
+ * pulls it back down. Before this, a card that loaded or vanished (say, the
+ * computer was off) while the first few points of a drag were still inside
+ * the end zone snapped the list back, so it seemed stuck on the latest.
+ */
+export type ShareFollow = { following: boolean; dragging: boolean };
+
+export type ShareScrollEvent =
+  /** A drag or a fling started. */
+  | { type: "drag" }
+  /** The list moved; `below` is how far its end is under the visible part. */
+  | { type: "scroll"; below: number }
+  /** A drag or a fling ended here. */
+  | { type: "settle"; below: number }
+  /** The user sent something: show it. */
+  | { type: "sent" };
+
+export function nextShareFollow(state: ShareFollow, event: ShareScrollEvent): ShareFollow {
+  switch (event.type) {
+    case "drag":
+      return { following: false, dragging: true };
+    case "scroll":
+      return state.dragging ? state : { following: event.below < SHARE_AT_END, dragging: false };
+    case "settle":
+      return { following: event.below < SHARE_AT_END, dragging: false };
+    case "sent":
+      return { following: true, dragging: false };
+  }
+}
+
+/** Whether a size change should keep the end in view. */
+export function sharePinsToEnd(state: ShareFollow): boolean {
+  return state.following && !state.dragging;
+}

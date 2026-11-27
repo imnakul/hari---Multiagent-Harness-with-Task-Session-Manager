@@ -236,7 +236,14 @@
       renderMarkers();
       renderList();
     };
-    actions.append(clear, submit);
+    // Fork (L-410): the same note as Add to chat, on the clipboard, for any chat or app.
+    const copy = document.createElement("button");
+    copy.textContent = "Copy";
+    copy.title = "Copies these as text. They stay here.";
+    copy.onclick = () => {
+      send({ kind: "picks", copy: true, url: location.href, title: document.title, viewport: { width: innerWidth, height: innerHeight }, items: picks });
+    };
+    actions.append(clear, copy, submit);
     header.append(actions);
     const ol = document.createElement("ol");
     picks.forEach((pick, index) => {

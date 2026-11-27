@@ -27,6 +27,8 @@ export type PicksPayload = {
   title?: string;
   viewport?: { width: number; height: number };
   items: PickItem[];
+  /** Fork (L-410): Copy in the picker; the note goes to the clipboard, not the chat. */
+  copy?: boolean;
 };
 
 export type ConsoleRow = {

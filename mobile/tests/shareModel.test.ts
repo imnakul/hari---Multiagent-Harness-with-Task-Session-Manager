@@ -10,6 +10,9 @@ import {
   base64ToBytes,
   bytesToBase64,
   formatShareSize,
+  nextShareFollow,
+  sharePinsToEnd,
+  SHARE_AT_END,
   kindForText,
   MAX_SHARE_HISTORY,
   matchesShareSearch,
@@ -339,5 +342,32 @@ describe("Share search and limit (L-356, L-357)", () => {
     expect(history).toHaveLength(250);
     expect(shareCounted([...history.slice(0, 2), entry("p", { pinned: true })])).toBe(2);
     setShareHistoryLimit(MAX_SHARE_HISTORY);
+  });
+});
+
+describe("nextShareFollow (L-409)", () => {
+  const atRest = { following: true, dragging: false };
+
+  it("stops following the end as soon as a drag starts, even inside the end zone", () => {
+    const dragged = nextShareFollow(atRest, { type: "drag" });
+    const nudged = nextShareFollow(dragged, { type: "scroll", below: 10 });
+    expect(sharePinsToEnd(nudged)).toBe(false);
+  });
+
+  it("follows again only when the list rests at its end", () => {
+    const dragged = nextShareFollow(atRest, { type: "drag" });
+    expect(sharePinsToEnd(nextShareFollow(dragged, { type: "settle", below: 400 }))).toBe(false);
+    expect(sharePinsToEnd(nextShareFollow(dragged, { type: "settle", below: 20 }))).toBe(true);
+  });
+
+  it("tracks the position from scrolls while no finger is down", () => {
+    const up = nextShareFollow(atRest, { type: "scroll", below: 400 });
+    expect(sharePinsToEnd(up)).toBe(false);
+    expect(sharePinsToEnd(nextShareFollow(up, { type: "scroll", below: SHARE_AT_END - 1 }))).toBe(true);
+  });
+
+  it("follows after sending, from anywhere", () => {
+    const up = nextShareFollow(atRest, { type: "settle", below: 900 });
+    expect(sharePinsToEnd(nextShareFollow(up, { type: "sent" }))).toBe(true);
   });
 });

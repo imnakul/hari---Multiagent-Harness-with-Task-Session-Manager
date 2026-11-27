@@ -293,3 +293,19 @@ it.each([
     expect(await navigator.clipboard.readText()).toBe("Previous clipboard");
   },
 );
+
+it("copies a context note's text instead of failing (L-410)", async () => {
+  await copyMessage("Fix this", [
+    {
+      id: "note-1",
+      name: "Page feedback: 1 item",
+      mimeType: "application/x-monocode-context",
+      kind: "file",
+      size: 8,
+      text: "1. asdas\n",
+    },
+  ]);
+  expect(await navigator.clipboard.readText()).toBe(
+    "Fix this\n\nPage feedback: 1 item\n\n1. asdas",
+  );
+});

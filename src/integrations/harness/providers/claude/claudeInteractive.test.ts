@@ -294,6 +294,31 @@ describe("interactive turn delivery", () => {
     expect(mocks.starts).toHaveLength(1);
     expect(mocks.sends).toEqual(["follow up"]);
   });
+  it("sends a context note as text in the prompt, not as a saved file (L-410)", async () => {
+    const note = {
+      id: "note-1",
+      name: "Page feedback: 1 item",
+      mimeType: "application/x-monocode-context",
+      kind: "file" as const,
+      size: 20,
+      text: "1. asdas\r\n\telement: <span>",
+    };
+    const turn = sendInteractiveClaude(
+      input({ text: "Fix this", attachments: [note] }),
+    );
+    await waitFor(() => onAccepted.mock.calls.length === 1);
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    await turn;
+    expect(mocks.starts[0].prompt.text).toBe(
+      'Fix this\n\n<attached_note name="Page feedback: 1 item">\n1. asdas\n    element: <span>\n</attached_note>',
+    );
+    expect(
+      mocks.invoke.mock.calls.some(
+        ([command]) => command === "claude_interactive_attachments",
+      ),
+    ).toBe(false);
+  });
   it.each(["hello", "--help me"])(
     "pastes a first message Claude could read as an option or subcommand (%s)",
     async (text) => {

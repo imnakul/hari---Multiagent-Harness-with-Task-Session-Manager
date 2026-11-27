@@ -5,6 +5,33 @@ export const INTERACTIVE_ATTACHMENTS_HEADER =
   "\n\nRead these attached files using your tools:\n";
 
 /**
+ * Fork (L-410): context notes (Browser page feedback, picks and the like) are
+ * text, not files. Interactive pastes them after the prompt, each in its own
+ * tag, instead of handing them to the attachment saver, which takes only
+ * images, PDFs and text files and rejected the whole turn.
+ */
+export const INTERACTIVE_NOTE_OPEN = "\n\n<attached_note name=";
+
+/** The prompt's notes as Interactive pastes them; empty when there are none. */
+export function interactiveNotesText(
+  notes: readonly { name: string; text?: string }[],
+): string {
+  return notes
+    .filter((note) => note.text != null)
+    .map((note) => {
+      // The native input takes no control characters, and pasted tabs become
+      // four spaces there; match that so delivery can still be confirmed.
+      const body = (note.text ?? "")
+        .replace(/\r\n?/g, "\n")
+        .replace(/\t/g, "    ")
+        .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "")
+        .trim();
+      return `${INTERACTIVE_NOTE_OPEN}${JSON.stringify(note.name)}>\n${body}\n</attached_note>`;
+    })
+    .join("");
+}
+
+/**
  * Interactive types a prompt's first letter and pastes the rest; the native
  * transcript then stores it folded: `T\n\n<pasted_content id="x">\nhis is…\n</pasted_content id="x">`.
  * Return the prompt as sent. Only that exact single-fold shape is unfolded.

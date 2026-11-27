@@ -7,6 +7,7 @@ import {
 import type { NativeProvider } from "./providerSessions";
 import {
   INTERACTIVE_ATTACHMENTS_HEADER,
+  INTERACTIVE_NOTE_OPEN,
   unfoldInteractivePaste,
 } from "../../../integrations/harness/providers/claude/claudeInteractivePrompt";
 
@@ -498,7 +499,8 @@ export function reconcileNativeHistory(
               first.text !== localText &&
               !first.text.endsWith(`\n${localText}`) &&
               !first.text.startsWith(`${localText}\n\n<monocode_app>`) &&
-              !first.text.startsWith(`${localText}${INTERACTIVE_ATTACHMENTS_HEADER}`)
+              !first.text.startsWith(`${localText}${INTERACTIVE_ATTACHMENTS_HEADER}`) &&
+              !first.text.startsWith(`${localText}${INTERACTIVE_NOTE_OPEN}`)
             )
               return false;
             // Require matching prompt text as well as time: two different prompts

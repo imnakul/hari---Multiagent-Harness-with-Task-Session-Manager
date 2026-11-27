@@ -30,6 +30,14 @@ function textWithFolderPaths(text: string, paths: string[]): string {
   return text.endsWith("\n") ? text + suffix : `${text}\n${suffix}`;
 }
 
+/** Fork (L-410): context notes' text after the message, each under its name. */
+function textWithNotes(text: string, notes: readonly Attachment[]): string {
+  const parts = notes
+    .map((note) => `${note.name}\n\n${(note.text ?? "").trim()}`)
+    .filter((part) => part.trim());
+  return [text, ...parts].filter(Boolean).join("\n\n");
+}
+
 /** HTML keeps arbitrary files together with text across MonoCode windows. */
 export async function copyMessage(
   text: string,
@@ -37,7 +45,14 @@ export async function copyMessage(
 ): Promise<void> {
   const files: CopiedFile[] = [];
   const folderPaths: string[] = [];
+  const notes: Attachment[] = [];
   for (const attachment of attachments) {
+    // Fork (L-410): a context note (Browser page feedback) is text with no
+    // file behind it; it is copied as text instead of failing the copy.
+    if (attachment.text != null) {
+      notes.push(attachment);
+      continue;
+    }
     // A folder has no bytes to copy, and asking for them fails the whole copy.
     // The path is the reference, so it goes in the copied text instead.
     if (isAttachmentFolder(attachment)) {
@@ -87,7 +102,7 @@ export async function copyMessage(
       throw new Error(`Could not copy ${attachment.name}: ${reason}`);
     }
   }
-  const payload = textWithFolderPaths(text, folderPaths);
+  const payload = textWithNotes(textWithFolderPaths(text, folderPaths), notes);
   if (!files.length) {
     if (!payload) throw new Error("No copyable content is available.");
     return copyText(payload);

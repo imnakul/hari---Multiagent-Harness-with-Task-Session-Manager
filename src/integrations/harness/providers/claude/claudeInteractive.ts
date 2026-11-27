@@ -47,6 +47,7 @@ import {
 } from "./claudeInteractiveTerminal";
 import {
   INTERACTIVE_ATTACHMENTS_HEADER,
+  interactiveNotesText,
   interactivePromptMatches,
   interactivePromptNearlyMatches,
 } from "./claudeInteractivePrompt";
@@ -1023,9 +1024,12 @@ export async function sendInteractiveClaude(
   const submissionId = input.diagnostic?.submissionId ?? crypto.randomUUID();
   // Claude discards input typed while it starts, so a send that starts Claude
   // hands it the prompt as a launch argument (as Orca does) when it can.
-  const launchText = input.text.replace(/	/g, "    ");
+  // Fork (L-410): notes go in the prompt as text; only real files are saved.
+  const notesText = interactiveNotesText(input.attachments ?? []);
+  const files = (input.attachments ?? []).filter((file) => file.text == null);
+  const launchText = input.text.replace(/	/g, "    ") + notesText;
   const launch =
-    !input.attachments?.length &&
+    !files.length &&
     input.text.trim() !== "/compact" &&
     canLaunchWithPrompt(launchText)
       ? newTurn(launchText, false, input.onAccepted)
@@ -1149,15 +1153,19 @@ export async function sendInteractiveClaude(
   // The native input editor expands pasted tabs to four spaces before its hook.
   // Match that verified representation so indentation is not mistaken for a
   // different prompt and delivery can still be confirmed exactly.
-  let text = compact ? "/compact" : input.text.replace(/\t/g, "    ");
-  if (input.attachments?.length) {
+  let text = compact
+    ? "/compact"
+    : input.text.replace(/\t/g, "    ") + notesText;
+  if (compact && notesText)
+    throw new Error("Compact cannot include attachments. No prompt was sent.");
+  if (files.length) {
     if (compact)
       throw new Error(
         "Compact cannot include attachments. No prompt was sent.",
       );
     const paths = await invoke<string[]>("claude_interactive_attachments", {
       nativeId: live.binding.nativeId,
-      attachments: input.attachments,
+      attachments: files,
     });
     const readable = attachmentReads.get(input.sessionId);
     if (readable) for (const path of paths) readable.add(readKey(path));
@@ -1178,7 +1186,7 @@ export async function sendInteractiveClaude(
       paths
         .map(
           (path, index) =>
-            `${JSON.stringify(input.attachments![index].name)}: ${JSON.stringify(path)}`,
+            `${JSON.stringify(files[index].name)}: ${JSON.stringify(path)}`,
         )
         .join("\n");
   }
