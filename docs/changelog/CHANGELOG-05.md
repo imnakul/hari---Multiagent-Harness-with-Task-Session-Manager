@@ -1,12 +1,21 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-27 09:30 IST — Release 0.16.0-local75
+
+- Type: chore
+- Why: user asked to release.
+- What: version 0.16.0-local75, carrying L-409 (Hari Share scrolls back through old messages) and L-410 (Browser page feedback works with Interactive Claude and copies; Copy beside Add to chat).
+- Files: version files (`package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`)
+- Commit: release commit after 5c96833a
+- Verified: tsc ✅ vitest ✅ mobile tests ✅ | manual: desktop and phone checks pending
+
 ## 2026-11-27 09:26 IST — Browser picks work with Interactive Claude; Copy beside Add to chat (L-410)
 
 - Type: fix
 - What: page feedback from the Browser picker (and other text notes) now goes to Interactive Claude as part of the message, so the turn is sent instead of failing with "Interactive attachments support images, PDFs and text files". Copying such a message copies the note's text instead of "Copy failed … File content is no longer available". The picker's Changes list has a Copy button that copies the same note and keeps the picks.
 - Why: user report: a message with "Page feedback: 1 item" didn't send in Interactive Claude and couldn't be copied. Cause: notes are text-only attachments (no file); Interactive handed every attachment to its file saver, which rejects that kind, and Copy looked for file bytes.
 - Files: [claudeInteractivePrompt.ts](src/integrations/harness/providers/claude/claudeInteractivePrompt.ts), [claudeInteractive.ts](src/integrations/harness/providers/claude/claudeInteractive.ts), [history.ts](src/features/provider-sessions/model/history.ts), [clipboard.ts](src/platform/tauri/clipboard.ts), [browserTabs.ts](src/features/browser/model/browserTabs.ts), [browserContext.ts](src/features/browser/model/browserContext.ts), [browser_picker.js](src-tauri/src/browser_picker.js), tests in `claudeInteractive.test.ts` and `clipboard.test.ts`
-- Commit: uncommitted
+- Commit: 5c96833a (in 0.16.0-local75)
 - Verified: tsc ✅ vitest (claude providers, clipboard, provider-sessions, browser: 609) ✅ | lint: no root lint script | manual: desktop checks pending
 
 ## 2026-11-27 08:41 IST — Hari Share scrolls back through old messages (L-409)
@@ -15,7 +24,7 @@
 - What: in Hari's Share chat you can scroll up to older messages again. While your finger is on the list it no longer jumps back to the newest message; it follows new messages again once it rests at the bottom or after you send. The empty Share note now names the "Send to computer" tile.
 - Why: user report on 0.16.0-local73: Share was stuck on the latest messages. Cause (from source; not reproduced on the phone): the chat followed its end on every size change while within 80 points of it, and a drag counted as "at the end" until it had moved 80 points. Link cards and pictures that load, or vanish when the computer is off, change the size often enough to snap every drag back.
 - Files: [shareModel.ts](mobile/src/features/share/shareModel.ts), [SharePanel.tsx](mobile/src/features/share/SharePanel.tsx), [shareModel.test.ts](mobile/tests/shareModel.test.ts)
-- Commit: uncommitted
+- Commit: 5c96833a (in 0.16.0-local75)
 - Verified: mobile tsc ✅ expo lint (changed files) ✅ vitest shareModel ✅ (36) | manual: phone check pending
 
 ## 2026-11-27 08:38 IST — Release 0.16.0-local74
