@@ -1,5 +1,29 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-28 13:07 IST — Hari: the loading cover shows the swaying feather (L-420)
+- Type: style
+- What: While a screen loads (switching session, project or layout), Hari now shows its feather and flute logo swaying gently from its stem and breathing a little, in place of the big dithered ring.
+- Why: Asked for: the ring looked strange; the logo is Hari's own.
+- Files: [DitherLoading.tsx](../../mobile/src/ui/DitherLoading.tsx), [WorkspaceDrawer.tsx](../../mobile/src/features/workspace/WorkspaceDrawer.tsx:84) (the ring's pre-drawing removed)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (437; watchFrames load failure is pre-existing) build — | manual: watch a switch on the phone
+
+## 2026-11-28 12:42 IST — Hari: switching layouts no longer crashes or goes blank (L-419)
+- Type: fix
+- What: Choosing another layout in Settings (Classic, Tabs or Monos only) now opens it cleanly. Before, Hari Dev showed a red "There was a problem loading the project" error, and the release could show a blank screen over a working app.
+- Why: Reported on 0.16.0-local77 with screenshots. Logcat on the dev build: Android's renderer failed with "addViewAt: cannot insert view into parent: View already has a parent … View: SvgView" ("The specified child already has a parent"). The mount-state dump put it in Settings, in the Layout switch. On Android each segment's icon sits in a wrapper at opacity 1 when selected and 0.5 when not; at opacity 1 React Native flattens the wrapper away and hangs the icon on the button itself, and at 0.5 brings it back and moves the icon in, and that move failed. Picking a layout flips the selection, so every switch hit it; in release React Native swallows the error and leaves the screen half-built (the blank). The wrapper is now never flattened (`collapsable={false}`). Two earlier guesses (the loading cover never leaving; rebuilding the whole layout per switch) were wrong and were undone.
+- Files: [SegmentedSwitch.android.tsx](../../mobile/src/ui/SegmentedSwitch.android.tsx:58)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (437; watchFrames load failure is pre-existing) build — | manual: switch each layout on the phone
+
+## 2026-11-28 09:44 IST — Hari: Screenshot goes to Share (L-418)
+- Type: feature
+- What: Tapping Screenshot on the Computer page now moves to Share once the computer takes it, so you see the picture arrive. This works in both layouts (the Computer tab and the old Computer page). The "Open Share" link stays on the Computer page for when you come back.
+- Why: Asked for: the screenshot lands in Share, so it should take you there.
+- Files: [ComputerControl.tsx](../../mobile/src/features/pc/ComputerControl.tsx:256)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests — (no logic to test; one navigation call) build —
+
 ## 2026-11-28 09:24 IST — Release 0.16.0-local77
 
 - Type: chore

@@ -55,7 +55,10 @@ export function SegmentedSwitch<T extends string>({
             }}
             style={[styles.segment, selected && styles.selected]}
           >
-            <View style={{ opacity: selected ? 1 : 0.5 }}>{segment.icon}</View>
+            {/* Fork (Hari, L-419): never flattened. At opacity 1 Fabric dropped this
+                wrapper and hung the icon on the Pressable; at 0.5 it moved the icon back
+                in and Android failed ("The specified child already has a parent"). */}
+            <View collapsable={false} style={{ opacity: selected ? 1 : 0.5 }}>{segment.icon}</View>
             {selected ? <Text numberOfLines={1} style={styles.label}>{segment.label}</Text> : null}
           </Pressable>
         );

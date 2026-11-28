@@ -35,7 +35,6 @@ import { HEADER_GAP, HEADER_HEIGHT, useKeyboardLift } from "@/features/sessions/
 import { HARI_LOGO } from "@/ui/brand";
 import { ChoiceMenu } from "@/ui/ChoiceMenu";
 import { CircleButton } from "@/ui/CircleButton";
-import { useWarmDitherLoading } from "@/ui/DitherLoading";
 import { GradualBlur } from "@/ui/GradualBlur";
 import { Icon, type IconName } from "@/ui/Icon";
 import { LiquidView } from "@/ui/LiquidView";
@@ -84,8 +83,6 @@ type Show = "both" | "monos" | "projects";
 export function WorkspaceDrawer() {
   const drawer = useDrawerActions();
   const open = useDrawerOpen();
-  // The switch's loading cover, drawn while the drawer is open to be picked from.
-  useWarmDitherLoading(open);
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useStyles();

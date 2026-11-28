@@ -259,6 +259,8 @@ export function ComputerControl({ onOpenShare, active }: { onOpenShare: () => vo
       await command<unknown>("pc.screenshot", {});
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       say("Screenshot on its way to Share");
+      // L-418: go to Share, where the picture lands, as it comes in.
+      onOpenShare();
     } catch (reason) {
       say(pcError(reason), true);
     } finally {
