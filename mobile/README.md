@@ -59,6 +59,22 @@ npx eas-cli@latest build --platform ios --profile development-simulator
 
 Install the completed development build, then run `npm start` to connect it to Metro.
 
+## Hari Dev
+
+Fork (L-413). Hari Dev is a debug build named "Hari Dev" (package `com.hardbeat920.monocodemobile.dev`, link scheme `hari-dev`). It installs next to Hari, has its own storage (pair it with the desktop once, like a new phone) and loads JavaScript from Metro on the PC, so a saved file shows on the phone in seconds. It never offers an update, and its Live Update cards open Hari Dev.
+
+One time:
+
+1. Turn on USB debugging on the phone, plug it in, and check `adb devices` lists it.
+2. `npm run android:dev` (from `mobile/`). It runs `npm run android` with `APP_VARIANT=dev`, which first links the Rust library (`native:android`: needs the Rust Android targets from `rustup target list --installed` and an Android NDK under `ANDROID_NDK_HOME` or `$ANDROID_HOME/ndk`; no cargo-ndk).
+
+Each day:
+
+1. `npx expo start --dev-client`.
+2. Open Hari Dev. Over USB run `adb reverse tcp:8081 tcp:8081`; on Wi-Fi the phone must be on the PC's network.
+
+Rebuild with `npm run android:dev` after a change in `modules/`, `plugins/`, native dependencies or `app.config.js`. Release builds ignore all of this: without `APP_VARIANT` the config is unchanged.
+
 ## Check the project
 
 ```bash

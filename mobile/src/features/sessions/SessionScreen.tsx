@@ -170,13 +170,19 @@ export function useSessionLayout() {
  */
 export function SheetLayout({
   top,
+  bottom,
+  keyboardOffset = 0,
   children,
 }: {
   top: number;
+  /** Fork (Hari, L-412): where a page's bottom bar rests, when not at the safe area (over the Tabs layout's arc). */
+  bottom?: number;
+  /** How much less than the keyboard height that bar travels, for chrome the keyboard also covers. */
+  keyboardOffset?: number;
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
-  const dockBottom = Math.max(insets.bottom, 12);
+  const dockBottom = bottom ?? Math.max(insets.bottom, 12);
   const layout = useMemo<SessionLayout>(
     () => ({
       top,
@@ -184,12 +190,12 @@ export function SheetLayout({
       bottom: dockBottom,
       bareBottom: dockBottom + PAGE_FADE,
       dockBottom,
-      keyboardOffset: 0,
+      keyboardOffset,
       extraContentPadding: undefined,
       composerGrowth: 0,
       settled: true,
     }),
-    [top, dockBottom],
+    [top, dockBottom, keyboardOffset],
   );
   return <SessionLayoutContext value={layout}>{children}</SessionLayoutContext>;
 }
@@ -868,8 +874,26 @@ export function useKeyboardLift(offset: number, owner?: RefObject<TextInput | nu
         // Until this transition's frame arrives, onEnd has nothing settled.
         settledHeight.set(-1);
         if (ownerTag.get() !== -1 && e.progress === 1) owned.set(e.target === ownerTag.get());
+        // Fork (Hari, L-414): Android's keyboard slide (measured on a Xiaomi
+        // IME) takes about a second, with a long tail, though it reports
+        // 285 ms. Following it frame by frame made the composer crawl up.
+        // The lift glides to where the keyboard is going in 250 ms instead.
+        if (Platform.OS === "android" && owned.get() && !liftHeld.get()) {
+          height.set(withTiming(e.height, LIFT_SETTLE));
+          progress.set(withTiming(e.progress, LIFT_SETTLE));
+        }
       },
-      onMove: follow,
+      onMove: (e) => {
+        "worklet";
+        if (Platform.OS !== "android") {
+          follow(e);
+          return;
+        }
+        // Only where the keyboard is; the lift has its own glide.
+        if (!owned.get()) return;
+        keyboardHeight.set(e.height);
+        keyboardProgress.set(e.progress);
+      },
       onInteractive: follow,
       onEnd: (event) => {
         "worklet";

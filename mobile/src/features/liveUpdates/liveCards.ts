@@ -1,3 +1,4 @@
+import { appScheme } from "@/features/updates/appVariant";
 import type { Project, SessionSummary } from "@/features/workspace/types";
 
 /**
@@ -52,10 +53,10 @@ export type LiveInput = {
 };
 
 const MAX_CARDS = 6;
-const HOME_URL = "monocode:///";
+const homeUrl = () => `${appScheme()}:///`;
 
 export const sessionUrl = (session: Pick<SessionSummary, "id" | "projectId">) =>
-  `monocode:///project/${encodeURIComponent(session.projectId)}/session/${encodeURIComponent(session.id)}`;
+  `${homeUrl()}project/${encodeURIComponent(session.projectId)}/session/${encodeURIComponent(session.id)}`;
 
 /** Running, or waiting on the user mid-turn. */
 export const isRunning = (session: SessionSummary) =>
@@ -191,9 +192,9 @@ function combinedCard(followed: SessionSummary[], input: LiveInput): LiveCard {
     publicText: `${count} sessions running`,
     chip: `${count} busy`,
     startedAt: started.length ? Math.min(...started) : null,
-    url: HOME_URL,
+    url: homeUrl(),
     sessionIds: followed.map((session) => session.id),
-    actions: [{ kind: "open", label: "Open", sessionId: "", url: HOME_URL }],
+    actions: [{ kind: "open", label: "Open", sessionId: "", url: homeUrl() }],
   };
 }
 

@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { LOST_AFTER_MS } from "@/features/liveUpdates/liveCards";
 import { nextWatchLink, shouldWatch, type WatchLink } from "@/features/notifications/watchRule";
+// Hoisted above the imports: liveCards reads the app's link scheme from the Expo config (L-413).
+vi.mock("expo-constants", () => ({ default: { expoConfig: { scheme: "monocode" } } }));
 
 const never: WatchLink = { phase: "never" };
 const up: WatchLink = { phase: "up" };

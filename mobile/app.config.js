@@ -21,7 +21,27 @@ function versionCode(text) {
   return Number(major) * 1_000_000 + Number(minor) * 10_000 + Number(patch) * 100 + local_;
 }
 
-module.exports = ({ config }) => {
+/**
+ * Fork (Hari, L-413): "dev" installs beside Hari as "Hari Dev" (own package
+ * and link scheme) so a debug build can run next to the release. Anything
+ * else leaves the config exactly as the release build has it.
+ */
+function applyVariant(built, variant) {
+  if (variant !== "dev") return built;
+  return {
+    ...built,
+    name: "Hari Dev",
+    scheme: "hari-dev",
+    ios: {
+      ...built.ios,
+      infoPlist: { ...built.ios?.infoPlist, CFBundleDisplayName: "Hari Dev" },
+    },
+    android: { ...built.android, package: `${built.android.package}.dev` },
+    extra: { ...built.extra, hari: { ...built.extra.hari, variant: "dev" } },
+  };
+}
+
+function buildConfig(config, variant) {
   const code = versionCode(version);
   const plugins = config.plugins.map((plugin) =>
     Array.isArray(plugin) && plugin[0] === "expo-splash-screen"
@@ -41,7 +61,7 @@ module.exports = ({ config }) => {
   const blockedPermissions = (config.android?.blockedPermissions ?? []).filter(
     (permission) => !LIVE_UPDATE_PERMISSIONS.includes(permission),
   );
-  return {
+  return applyVariant({
     ...config,
     name: "Hari",
     version,
@@ -79,7 +99,11 @@ module.exports = ({ config }) => {
       ...config.extra,
       hari: { version, versionCode: code, repo: HARI_REPO },
     },
-  };
-};
+  }, variant);
+}
+
+module.exports = ({ config }) =>
+  buildConfig(config, process.env.APP_VARIANT === "dev" ? "dev" : "release");
 
 module.exports.versionCode = versionCode;
+module.exports.buildConfig = buildConfig;

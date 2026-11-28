@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const constants = vi.hoisted(() => ({ expoConfig: { scheme: "monocode" as string } }));
+vi.mock("expo-constants", () => ({ default: constants }));
 
 import {
   liveCards,
@@ -186,5 +189,16 @@ describe("pressSettled", () => {
     const press = { label: "Stopping…", busy: true, at: 0 };
     expect(pressSettled(press, session("a"), 31_000)).toBe(true);
     expect(pressSettled(press, undefined, 1_000)).toBe(true);
+  });
+});
+
+describe("session links follow the app's scheme (L-413)", () => {
+  it("uses monocode in Hari and hari-dev in Hari Dev", () => {
+    const target = { id: "s 1", projectId: "p1" };
+    constants.expoConfig.scheme = "monocode";
+    expect(sessionUrl(target)).toBe("monocode:///project/p1/session/s%201");
+    constants.expoConfig.scheme = "hari-dev";
+    expect(sessionUrl(target)).toBe("hari-dev:///project/p1/session/s%201");
+    constants.expoConfig.scheme = "monocode";
   });
 });

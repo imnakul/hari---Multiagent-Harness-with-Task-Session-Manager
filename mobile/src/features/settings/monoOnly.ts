@@ -1,38 +1,17 @@
-import Storage from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
-const STORAGE_KEY = "layout.monoOnly";
-
-function load(): boolean {
-  try {
-    return Storage.getItemSync(STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-let monoOnly: boolean | null = null;
-const listeners = new Set<() => void>();
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
+import { useAppLayout, type AppLayout } from "./appLayout";
 
 /**
  * Whether the phone shows only Monos, as a messaging app: a list of them,
  * and a chat pushed over it, with no drawer and no projects. Off until
- * turned on.
+ * turned on. (L-412: a view of the three-way layout, kept so its callers
+ * stay as they are.)
  */
 export function useMonoOnlyLayout() {
-  const value = useSyncExternalStore(subscribe, () => (monoOnly ??= load()));
-  const set = (next: boolean) => {
-    monoOnly = next;
-    void Storage.setItem(STORAGE_KEY, String(next));
-    listeners.forEach((listener) => listener());
-  };
-  return [value, set] as const;
+  const [layout, setLayout] = useAppLayout();
+  const set = (next: boolean) => setLayout(next ? "monos" : "classic");
+  return [layout === "monos", set] as const;
 }
 
 /** How long the settings sheet takes to slide away, with the cover coming
@@ -65,20 +44,28 @@ export function useLayoutChanging() {
  * slides the settings sheet away over the loading cover, which comes up
  * under it; once it is gone, `reset` takes the app back to its first screen
  * and the layout changes, all beneath the cover; and the cover plays its way
- * out once the new first screen (the Mono list, or the last Mono or project)
- * has had a moment to draw. The two lay the app out too differently to carry
- * over what was open.
+ * out once the new first screen (the Mono list, the tabs, or the last Mono or
+ * project) has had a moment to draw. The layouts lay the app out too
+ * differently to carry over what was open. A second switch while one is in
+ * progress is ignored.
  */
+export function changeLayout(
+  next: AppLayout,
+  { close, reset }: { close: () => void; reset: () => void },
+  setLayout: (next: AppLayout) => void,
+) {
+  if (changing) return;
+  close();
+  setChanging(true);
+  setTimeout(() => {
+    reset();
+    setLayout(next);
+    setTimeout(() => setChanging(false), SETTLE_MS);
+  }, DISMISS_MS);
+}
+
 export function useChangeLayout() {
-  const [, set] = useMonoOnlyLayout();
-  return (next: boolean, { close, reset }: { close: () => void; reset: () => void }) => {
-    if (changing) return;
-    close();
-    setChanging(true);
-    setTimeout(() => {
-      reset();
-      set(next);
-      setTimeout(() => setChanging(false), SETTLE_MS);
-    }, DISMISS_MS);
-  };
+  const [, setLayout] = useAppLayout();
+  return (next: AppLayout, actions: { close: () => void; reset: () => void }) =>
+    changeLayout(next, actions, setLayout);
 }

@@ -40,7 +40,9 @@ import {
 import { applySavedAppearance } from "@/features/settings/appearance";
 import { loadHapticsSetting } from "@/features/settings/haptics";
 import { modalSheetOptions } from "@/ui/ModalSheet";
-import { useLayoutChanging, useMonoOnlyLayout } from "@/features/settings/monoOnly";
+import { useLayoutChanging } from "@/features/settings/monoOnly";
+import { useAppLayout } from "@/features/settings/appLayout";
+import { TabsSideMenu } from "@/features/tabs/TabsSideMenu";
 import { DitherLoading } from "@/ui/DitherLoading";
 import { useState, type ReactElement } from "react";
 import { ScenePagerHost } from "@/ui/ScenePager";
@@ -174,12 +176,20 @@ export default function RootLayout() {
   );
 }
 
+/** The Tabs layout's Tasks, Notes and Notifications: pushed over the tabs with the stack's slide and swipe back. */
+const PUSHED_OVER_TABS = { animation: "default", gestureEnabled: true } satisfies NativeStackNavigationOptions;
+
 function LinkedWorkspace() {
   const connection = useConnection();
   const { screens } = useNavigationLook();
   // Monos only: no drawer, and the frame stands aside for the list and for
   // each chat's own frame.
-  const [monoOnly] = useMonoOnlyLayout();
+  const [layout] = useAppLayout();
+  const monoOnly = layout === "monos";
+  // Fork (Hari, L-412): the Tabs layout: the tabs under the stack, the side
+  // menu holding only More, and each place pushed over them as a full screen.
+  const inTabs = layout === "tabs";
+  const pushed = inTabs ? PUSHED_OVER_TABS : {};
   // Switching layouts: covered while the app starts over in the new one.
   const changing = useLayoutChanging();
   const [covered, setCovered] = useState(changing);
@@ -206,10 +216,12 @@ function LinkedWorkspace() {
       <LiveUpdates />
       <HariUpdatePrompt />
       <SessionActivity />
-      <WorkspaceLayout sidebar={!monoOnly}>
-        <ScenePagerHost drawer={monoOnly ? undefined : <WorkspaceDrawer />}>
+      <WorkspaceLayout sidebar={layout === "classic"}>
+        <ScenePagerHost
+          drawer={monoOnly ? undefined : inTabs ? <TabsSideMenu /> : <WorkspaceDrawer />}
+        >
           <Timed id="persistent frame">
-            <SessionFrame standAside={monoOnly}>
+            <SessionFrame standAside={monoOnly || inTabs}>
               {/* A native stack: sessions push over their project, and the
                   code screens, Changes, settings, the model picker and the project
                   picker present
@@ -226,16 +238,17 @@ function LinkedWorkspace() {
                   name="index"
                   options={monoOnly ? screens.nativeHeader : {}}
                 />
+                <Stack.Screen name="(tabs)" />
                 <Stack.Screen
                   name="mono/[monoId]"
-                  options={monoOnly ? screens.session : {}}
+                  options={monoOnly || inTabs ? screens.session : {}}
                 />
                 <Stack.Screen name="file" options={screens.code} />
                 <Stack.Screen name="document" options={screens.code} />
                 <Stack.Screen name="diff" options={screens.code} />
                 <Stack.Screen
                   name="project/[projectId]/index"
-                  options={screens.nativeHeader}
+                  options={inTabs ? screens.session : screens.nativeHeader}
                 />
                 <Stack.Screen
                   name="project/[projectId]/session/[sessionId]"
@@ -249,12 +262,12 @@ function LinkedWorkspace() {
                 <Stack.Screen name="models" options={screens.modal} />
                 {/* Fork (Hari, L-236, L-346): the desktop's Tasks and Notes,
                     places of their own (swapped in, as a project is). */}
-                <Stack.Screen name="tasks" />
-                <Stack.Screen name="notes" />
+                <Stack.Screen name="tasks" options={pushed} />
+                <Stack.Screen name="notes" options={pushed} />
                 {/* Fork (Hari, L-327): a task's editor, as a sheet over Tasks. */}
                 <Stack.Screen name="task-edit" options={screens.sheet} />
                 {/* Fork (Hari, L-275): the desktop bell's history. */}
-                <Stack.Screen name="notifications" />
+                <Stack.Screen name="notifications" options={pushed} />
                 <Stack.Screen name="share" />
                 <Stack.Screen name="computer" />
                 <Stack.Screen name="changes" options={screens.changes} />

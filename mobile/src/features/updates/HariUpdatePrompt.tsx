@@ -8,11 +8,13 @@ import {
   installHariUpdate,
   updatesSupported,
 } from "./useHariUpdate";
+import { isDevVariant } from "./appVariant";
 
 export function HariUpdatePrompt() {
   const asked = useRef(false);
   useEffect(() => {
-    if (!updatesSupported || asked.current) return;
+    // Hari Dev is a debug build; release APKs are a different app (L-413).
+    if (!updatesSupported || isDevVariant() || asked.current) return;
     asked.current = true;
     clearInstalledUpdate();
     void checkForHariUpdate(true).then((release) => {

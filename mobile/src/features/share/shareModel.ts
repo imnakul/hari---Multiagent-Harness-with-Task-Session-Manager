@@ -658,3 +658,22 @@ export function sharePinsToEnd(state: ShareFollow): boolean {
 export function sharePinsOnResize(state: ShareFollow, now: number, holdUntil: number): boolean {
   return sharePinsToEnd(state) && now < holdUntil;
 }
+
+// Fork (Hari, L-414): Share draws only its newest messages, more as the
+// reader scrolls back. Drawing the whole history (up to 1,000) on every
+// visit and every change held the screen for hundreds of ms.
+/** How many messages Share draws at first, and adds each time. */
+export const SHARE_PAGE = 20;
+/** How near the top (pt) scrolling back draws the next page. */
+export const SHARE_MORE_AT = 800;
+
+/** How many of the newest messages to draw, scrolled `fromTop` pt from the top. */
+export function nextShareWindow(shown: number, total: number, fromTop: number): number {
+  if (shown >= total || fromTop > SHARE_MORE_AT) return shown;
+  return Math.min(total, shown + SHARE_PAGE);
+}
+
+/** Enough of the newest messages to include row `index` (oldest first), with a few above it. */
+export function shareWindowFor(index: number, total: number, shown: number): number {
+  return Math.min(total, Math.max(shown, total - index + 5));
+}

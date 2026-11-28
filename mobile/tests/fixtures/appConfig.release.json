@@ -1,0 +1,127 @@
+{
+  "name": "Hari",
+  "slug": "monocode-mobile",
+  "owner": "hardbeat920",
+  "version": "0.16.0-local76",
+  "runtimeVersion": {
+    "policy": "fingerprint"
+  },
+  "orientation": "portrait",
+  "icon": "./assets/images/hari-icon.png",
+  "scheme": "monocode",
+  "userInterfaceStyle": "automatic",
+  "ios": {
+    "icon": "./assets/app.icon",
+    "bundleIdentifier": "com.hardbeat920.monocode-mobile",
+    "infoPlist": {
+      "CFBundleDisplayName": "Hari",
+      "NSLocalNetworkUsageDescription": "Connect securely to your paired Monocode desktop.",
+      "ITSAppUsesNonExemptEncryption": false
+    }
+  },
+  "android": {
+    "adaptiveIcon": {
+      "backgroundColor": "#e8f1f2",
+      "foregroundImage": "./assets/images/hari-android-foreground.png",
+      "backgroundImage": "./assets/images/hari-android-background.png",
+      "monochromeImage": "./assets/images/hari-android-monochrome.png"
+    },
+    "predictiveBackGestureEnabled": false,
+    "blockedPermissions": [
+      "android.permission.RECORD_AUDIO",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+    ],
+    "permissions": [
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.REQUEST_INSTALL_PACKAGES",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+    ],
+    "package": "com.hardbeat920.monocodemobile",
+    "versionCode": 160076
+  },
+  "web": {
+    "output": "static",
+    "favicon": "./assets/images/favicon.png"
+  },
+  "plugins": [
+    [
+      "expo-notifications",
+      {
+        "defaultChannel": "sessions"
+      }
+    ],
+    "./plugins/with-scene-lifecycle",
+    "expo-router",
+    [
+      "expo-splash-screen",
+      {
+        "backgroundColor": "#f3f6f4",
+        "image": "./assets/images/hari-splash.png",
+        "imageWidth": 160,
+        "dark": {
+          "backgroundColor": "#000000",
+          "image": "./assets/images/hari-splash.png"
+        }
+      }
+    ],
+    "expo-secure-store",
+    "expo-sqlite",
+    [
+      "expo-sensors",
+      {
+        "motionPermission": false
+      }
+    ],
+    [
+      "expo-camera",
+      {
+        "cameraPermission": "Scan the pairing code from your Monocode desktop, or take a photo to attach to a message.",
+        "recordAudioAndroid": false,
+        "barcodeScannerEnabled": true
+      }
+    ],
+    [
+      "expo-image-picker",
+      {
+        "photosPermission": "Choose photos to attach to messages, or as the background of new sessions.",
+        "cameraPermission": "Scan the pairing code from your Monocode desktop, or take a photo to attach to a message."
+      }
+    ],
+    [
+      "expo-audio",
+      {
+        "microphonePermission": "Dictate messages to your Monocode sessions.",
+        "recordAudioAndroid": false,
+        "enableBackgroundRecording": false,
+        "enableBackgroundPlayback": false
+      }
+    ],
+    "expo-asset",
+    "./plugins/with-hari-signing",
+    "./plugins/with-system-bars",
+    "./plugins/with-live-update-permissions",
+    "./plugins/with-hari-shortcuts"
+  ],
+  "experiments": {
+    "typedRoutes": true,
+    "reactCompiler": true
+  },
+  "extra": {
+    "eas": {
+      "projectId": "f80fe97b-6056-48a4-9fb2-b45ca2c8974b"
+    },
+    "hari": {
+      "version": "0.16.0-local76",
+      "versionCode": 160076,
+      "repo": "imnakul/hari---Multiagent-Harness-with-Task-Session-Manager"
+    }
+  },
+  "updates": {
+    "enabled": false
+  }
+}

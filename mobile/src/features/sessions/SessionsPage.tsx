@@ -44,10 +44,13 @@ export function SessionsPage({
   active,
   worktree,
   onOpen,
+  searchAtTop = false,
 }: {
   projectId: string;
   active: boolean;
   worktree?: Worktree;
+  /** Fork (Hari, L-412): the search and filter sit above the list (the Tabs layout) instead of where the composer rests. */
+  searchAtTop?: boolean;
   onOpen: (session: SessionSummary) => void;
 }) {
   const colors = useColors();
@@ -55,7 +58,7 @@ export function SessionsPage({
   const { sessions, edited, rememberSession } = useWorkspace();
   const { pageTop, dockBottom } = useSessionLayout();
   // Room for the search bar where the composer rests, and the blur under it.
-  const bottom = dockBottom + SEARCH_BAR + 16;
+  const bottom = searchAtTop ? dockBottom + 16 : dockBottom + SEARCH_BAR + 16;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SessionFilter>(NO_FILTER);
   const needle = query.trim().toLowerCase();
@@ -109,10 +112,20 @@ export function SessionsPage({
     [pinnedIds, arriving, handlers],
   );
   const menuPinned = !!menuFor && pinnedIds.has(menuFor.id);
+  const search = (
+    <FileSearchBar
+      value={query}
+      onChange={setQuery}
+      placeholder="Search sessions"
+      inline={searchAtTop}
+      accessory={<SessionFilterMenu value={filter} onChange={setFilter} harnesses={harnesses} />}
+    />
+  );
 
   return (
     <AnimationsPaused value={!active}>
       <View style={styles.page}>
+        {searchAtTop ? search : null}
         <Animated.FlatList
           itemLayoutAnimation={moving ? LinearTransition.duration(ARRIVE_MS) : undefined}
           data={arrivals.sessions}
@@ -137,19 +150,12 @@ export function SessionsPage({
           windowSize={7}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.list, { paddingTop: pageTop, paddingBottom: bottom }]}
-          scrollIndicatorInsets={{ top: pageTop, bottom }}
+          contentContainerStyle={[styles.list, { paddingTop: searchAtTop ? 0 : pageTop, paddingBottom: bottom }]}
+          scrollIndicatorInsets={{ top: searchAtTop ? 0 : pageTop, bottom }}
           showsVerticalScrollIndicator={false}
         />
-        <GradualBlur edge="bottom" height={bottom} color={colors.background} />
-        <FileSearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder="Search sessions"
-          accessory={
-            <SessionFilterMenu value={filter} onChange={setFilter} harnesses={harnesses} />
-          }
-        />
+        {searchAtTop ? null : <GradualBlur edge="bottom" height={bottom} color={colors.background} />}
+        {searchAtTop ? null : search}
         <ChoiceSheet
           open={active && menuFor !== null}
           title={menuFor?.title ?? "Session"}

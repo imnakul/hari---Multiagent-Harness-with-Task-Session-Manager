@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { router, useLocalSearchParams, useNavigationContainerRef } from "expo-router";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Alert, AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { AccentSwitch } from "@/ui/AccentSwitch";
 
@@ -37,11 +37,14 @@ import {
 import { usePhoneNoticePreferences } from "@/features/phoneNotifications/preferences";
 import { usePhoneUsageEnabled } from "@/features/phoneUsage/preferences";
 import { useHaptics } from "@/features/settings/haptics";
-import { useChangeLayout, useMonoOnlyLayout } from "@/features/settings/monoOnly";
+import { useChangeLayout } from "@/features/settings/monoOnly";
+import { useAppLayout, useTabBarStyle, type AppLayout, type TabBarStyle } from "@/features/settings/appLayout";
+import { SegmentedSwitch } from "@/ui/SegmentedSwitch";
 import { SettingsPage, SettingsRow } from "@/features/settings/SettingsUI";
 import { SHARE_LIMITS } from "@/features/share/shareModel";
 import { useShareLimit } from "@/features/share/shareStore";
 import { syncShareLimit } from "@/features/share/shareTransfers";
+import { confirmDeleteAllShares } from "@/features/share/confirmDeleteAll";
 import { ChoiceSheet } from "@/ui/ChoiceMenu";
 import { HariUpdateRows } from "@/features/updates/HariUpdateCard";
 import { updatesSupported } from "@/features/updates/useHariUpdate";
@@ -56,6 +59,22 @@ const CATEGORY_ICONS: Record<NotificationCategory, IconName> = {
   monoMessages: "chat",
 };
 
+// Fork (Hari, L-412): the layout choice. Unselected segments show only their icon.
+const LAYOUT_SEGMENTS: { value: AppLayout; label: string; icon: ReactNode }[] = [
+  { value: "classic", label: "Classic", icon: <Icon name="sidebar" size={18} /> },
+  { value: "tabs", label: "Tabs", icon: <Icon name="layers" size={18} /> },
+  { value: "monos", label: "Monos only", icon: <Icon name="chat" size={18} /> },
+];
+const LAYOUT_NOTES: Record<AppLayout, string> = {
+  classic: "Projects and Monos in the side menu.",
+  tabs: "Sessions, Share, Monos, Computer and Running as tabs at the bottom.",
+  monos: "A list of your Monos and their chats, with no sidebar or projects.",
+};
+const TAB_BAR_SEGMENTS: { value: TabBarStyle; label: string; icon: ReactNode }[] = [
+  { value: "floating", label: "Floating", icon: <Icon name="layers" size={18} /> },
+  { value: "fixed", label: "Fixed", icon: <Icon name="minus" size={18} /> },
+];
+
 export default function SettingsScreen() {
   const colors = useColors();
   const styles = useStyles();
@@ -69,7 +88,8 @@ export default function SettingsScreen() {
   const notifications = useNotificationPreferences();
   const [openAfterStarting, setOpenAfterStarting] = useOpenSessionAfterStarting();
   const blocked = useNotificationsBlocked();
-  const [monoOnly] = useMonoOnlyLayout();
+  const [layout] = useAppLayout();
+  const [tabBarStyle, setTabBarStyle] = useTabBarStyle();
   const [haptics, setHaptics] = useHaptics();
   const navigation = useNavigationContainerRef();
   const switchLayout = useChangeLayout();
@@ -77,8 +97,8 @@ export default function SettingsScreen() {
   // app starts again from the top in the new one under the loading cover:
   // the list of Monos, or back where the user last was.
   // The switch shows the pick at once, as the sheet slides away with it.
-  const [picked, setPicked] = useState<boolean | null>(null);
-  const changeLayout = (next: boolean) => {
+  const [picked, setPicked] = useState<AppLayout | null>(null);
+  const changeLayout = (next: AppLayout) => {
     setPicked(next);
     switchLayout(next, {
       close: () => router.back(),
@@ -169,7 +189,7 @@ export default function SettingsScreen() {
       <ComputerSettings />
 
       {hasShareSettings ? <ShareSettings /> : null}
-      {connection.catalog.shareLimit ? <ShareHistorySettings heading={!hasShareSettings} /> : null}
+      <ShareHistorySettings heading={!hasShareSettings} showLimit={Boolean(connection.catalog.shareLimit)} />
 
       <Text style={styles.heading}>Preferences</Text>
       <View style={styles.card}>
@@ -240,26 +260,25 @@ export default function SettingsScreen() {
       </View>
       <Text style={styles.note}>Vibrate lightly when you tap buttons and switches.</Text>
 
-      {MONOS_ENABLED ? (
+      <Text style={styles.heading}>Layout</Text>
+      <View style={styles.switchRow}>
+        <SegmentedSwitch<AppLayout>
+          value={picked ?? layout}
+          onChange={changeLayout}
+          segments={LAYOUT_SEGMENTS.filter((segment) => MONOS_ENABLED || segment.value !== "monos")}
+        />
+      </View>
+      <Text style={styles.note}>{LAYOUT_NOTES[picked ?? layout]}</Text>
+      {(picked ?? layout) === "tabs" ? (
         <>
-          <Text style={styles.heading}>Layout</Text>
-          <View style={styles.card}>
-            <SettingsRow
-              icon="chat"
-              label="Monos only"
-              onPress={() => changeLayout(!(picked ?? monoOnly))}
-              accessory={
-                <AccentSwitch
-                  accessibilityLabel="Monos only"
-                  value={picked ?? monoOnly}
-                  onValueChange={changeLayout}
-                />
-              }
+          <Text style={styles.heading}>Tab bar</Text>
+          <View style={styles.switchRow}>
+            <SegmentedSwitch<TabBarStyle>
+              value={tabBarStyle}
+              onChange={setTabBarStyle}
+              segments={TAB_BAR_SEGMENTS}
             />
           </View>
-          <Text style={styles.note}>
-            A list of your Monos and their chats, with no sidebar or projects.
-          </Text>
         </>
       ) : null}
 
@@ -423,7 +442,7 @@ function ComputerSettings() {
  * Fork (Hari, L-356): how many Share messages to keep, on both sides (pinned
  * and saved aside). Set on the computer, which trims both.
  */
-function ShareHistorySettings({ heading }: { heading: boolean }) {
+function ShareHistorySettings({ heading, showLimit }: { heading: boolean; showLimit: boolean }) {
   const styles = useStyles();
   const { command, connected } = useConnection();
   const limit = useShareLimit();
@@ -436,17 +455,29 @@ function ShareHistorySettings({ heading }: { heading: boolean }) {
     <>
       {heading ? <Text style={styles.heading}>Share</Text> : null}
       <View style={[styles.card, heading ? null : { marginTop: 8 }]}>
+        {showLimit ? (
+          <SettingsRow
+            icon="share"
+            label="Keep messages"
+            value={String(limit)}
+            onPress={() =>
+              connected ? setOpen(true) : Alert.alert("Connect first", "The limit is set on your computer.")
+            }
+          />
+        ) : null}
+        {showLimit ? <View style={styles.divider} /> : null}
+        {/* Fork (Hari, L-415): moved here from the Share tab's toolbar. */}
         <SettingsRow
-          icon="share"
-          label="Keep messages"
-          value={String(limit)}
-          onPress={() =>
-            connected ? setOpen(true) : Alert.alert("Connect first", "The limit is set on your computer.")
-          }
+          icon="trash"
+          label="Delete all messages"
+          destructive
+          showChevron={false}
+          onPress={confirmDeleteAllShares}
         />
       </View>
       <Text style={styles.note}>
-        The last {limit} messages stay on this phone and your computer. Pinned and saved ones don’t count.
+        {showLimit ? `The last ${limit} messages stay on this phone and your computer. ` : ""}
+        Pinned and saved messages don’t count, and Delete all keeps them.
       </Text>
       <ChoiceSheet
         open={open}
@@ -646,6 +677,7 @@ const useStyles = themedStyles((colors) => ({
     marginLeft: 40,
     backgroundColor: colors.stroke,
   },
+  switchRow: { marginHorizontal: 16, alignItems: "flex-start" },
   note: {
     color: colors.muted,
     fontSize: 13,

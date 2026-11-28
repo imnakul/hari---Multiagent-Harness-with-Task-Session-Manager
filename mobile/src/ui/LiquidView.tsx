@@ -281,6 +281,9 @@ const useStyles = themedStyles((colors) => ({
     backgroundColor: colors.listCard,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.stroke,
-    elevation: 3,
+    // Fork (Hari, L-412): no shadow over a wallpaper. The card is see-through
+    // then, and Android draws the shadow under all of it, so it shows inside
+    // as a dark rectangle.
+    elevation: colors.page === "transparent" ? 0 : 3,
   },
 }));

@@ -1,8 +1,7 @@
 import { Platform, type ScrollViewProps } from "react-native";
-import {
-  KeyboardChatScrollView,
-  type KeyboardChatScrollViewProps,
-} from "react-native-keyboard-controller";
+import { type KeyboardChatScrollViewProps } from "react-native-keyboard-controller";
+
+import { QuickChatScrollView } from "./QuickChatScrollView";
 
 import { useSessionLayout } from "./SessionScreen";
 
@@ -15,7 +14,7 @@ import { useSessionLayout } from "./SessionScreen";
 export function ChatScrollView(props: ScrollViewProps & KeyboardChatScrollViewProps) {
   const { keyboardOffset, extraContentPadding } = useSessionLayout();
   return (
-    <KeyboardChatScrollView
+    <QuickChatScrollView
       automaticallyAdjustContentInsets={false}
       contentInsetAdjustmentBehavior="never"
       keyboardDismissMode="interactive"

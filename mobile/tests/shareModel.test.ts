@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  SHARE_PAGE,
+  nextShareWindow,
+  shareWindowFor,
   fillShareHistory,
   shouldFillShareHistory,
   parseComputerHistory,
@@ -385,5 +388,19 @@ describe("sharePinsOnResize (L-411)", () => {
   it("never moves while scrolled back or dragging", () => {
     expect(sharePinsOnResize({ following: false, dragging: false }, 1_000, 2_500)).toBe(false);
     expect(sharePinsOnResize({ following: true, dragging: true }, 1_000, 2_500)).toBe(false);
+  });
+});
+
+describe("Share's drawn window", () => {
+  it("draws the next page only near the top, up to all", () => {
+    expect(nextShareWindow(SHARE_PAGE, 100, 5000)).toBe(SHARE_PAGE);
+    expect(nextShareWindow(SHARE_PAGE, 100, 100)).toBe(SHARE_PAGE * 2);
+    expect(nextShareWindow(90, 100, 0)).toBe(100);
+    expect(nextShareWindow(100, 100, 0)).toBe(100);
+  });
+  it("reaches back far enough for a pinned message", () => {
+    expect(shareWindowFor(10, 100, 20)).toBe(95);
+    expect(shareWindowFor(98, 100, 20)).toBe(20);
+    expect(shareWindowFor(0, 3, 20)).toBe(3);
   });
 });

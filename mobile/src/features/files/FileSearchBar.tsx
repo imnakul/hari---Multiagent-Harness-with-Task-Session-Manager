@@ -22,6 +22,7 @@ export function FileSearchBar({
   placeholder = "Search files",
   autoFocus,
   accessory,
+  inline = false,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -30,6 +31,9 @@ export function FileSearchBar({
   /** A round button beside the field, such as a filter; the close button
    *  takes its place while the field has focus. */
   accessory?: ReactNode;
+  /** Fork (Hari, L-412): sits in the page's flow, at its top, rather than
+   *  floating where the composer rests; it doesn't ride the keyboard then. */
+  inline?: boolean;
 }) {
   const scheme = useScheme();
   const colors = useColors();
@@ -45,7 +49,7 @@ export function FileSearchBar({
   };
 
   return (
-    <Animated.View style={[styles.dock, { bottom: dockBottom }, lift]}>
+    <Animated.View style={inline ? [styles.dock, styles.inline] : [styles.dock, { bottom: dockBottom }, lift]}>
       {/* No onPress: it would wrap the glass in a Pressable that doesn't
           stretch across the row. The field inside takes the taps instead. */}
       <LiquidView fill style={styles.field} innerStyle={styles.fieldInner}>
@@ -103,6 +107,13 @@ const useStyles = themedStyles((colors) => ({
     right: 20,
     flexDirection: "row",
     gap: 10,
+  },
+  inline: {
+    position: "relative",
+    left: 0,
+    right: 0,
+    marginHorizontal: 16,
+    marginBottom: 8,
   },
   field: {
     flex: 1,

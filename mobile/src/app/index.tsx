@@ -5,14 +5,23 @@ import { Pressable, Text, View } from "react-native";
 import { useWorkspace } from "@/features/workspace/WorkspaceProvider";
 import { SessionScreen } from "@/features/sessions/SessionScreen";
 import { useConnectionStyles } from "@/features/connection/ConnectScreen";
-import { useMonoOnlyLayout } from "@/features/settings/monoOnly";
+import { useAppLayout } from "@/features/settings/appLayout";
+import { readTabsMemory, tabRoute } from "@/features/tabs/tabsMemory";
 import { MonoHome } from "@/features/workspace/MonoHome";
 export default function Index() {
-  const [monoOnly] = useMonoOnlyLayout();
+  const [layout] = useAppLayout();
   // Monos only: the list of them, each chat pushed over it.
-  if (monoOnly)
+  if (layout === "monos")
     return <MonoHome />;
+  if (layout === "tabs") return <TabsIndex />;
   return <WorkspaceIndex />;
+}
+
+/** Fork (Hari, L-412): the Tabs layout opens on the tab left last, else Sessions. */
+function TabsIndex() {
+  const fingerprint = useConnection().pairing?.desktop.fingerprint ?? "";
+  const { tab } = readTabsMemory(fingerprint);
+  return <Redirect href={`/(tabs)/${tabRoute(tab)}`} />;
 }
 
 function WorkspaceIndex() {

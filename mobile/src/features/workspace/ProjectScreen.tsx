@@ -30,6 +30,7 @@ import {
 } from "@/features/models/sessionChoice";
 import { useModelCatalog } from "@/features/models/useModelCatalog";
 import { useOpenSessionAfterStarting } from "@/features/settings/newSessions";
+import { useAppLayout } from "@/features/settings/appLayout";
 import type { Attachment } from "@/features/sessions/attachments";
 import { Composer } from "@/features/sessions/Composer";
 import { QuestionCard } from "@/features/sessions/QuestionCard";
@@ -117,11 +118,20 @@ export function ProjectScreen({
   // and a swipe right goes back to its project's sessions, one-handed.
   const sessionSwipes = !!sessionId && !sheet && Platform.OS === "android";
   useDrawerSwipe(!sessionId || sessionSwipes);
+  // Fork (Hari, L-416): in the Tabs layout the project's own page (a new
+  // session, from the + on Sessions) is pushed over the tabs too, so a swipe
+  // right goes back to them, as a session's does.
+  const [layout] = useAppLayout();
+  const projectSwipesBack = !sessionId && !sheet && layout === "tabs" && Platform.OS === "android";
   useBackSwipe(() => {
+    if (projectSwipesBack) {
+      if (router.canGoBack()) router.back();
+      return;
+    }
     showProjectSessions(project.id);
     if (router.canGoBack()) router.back();
     else router.replace({ pathname: "/project/[projectId]", params: { projectId: project.id } });
-  }, sessionSwipes);
+  }, sessionSwipes || projectSwipesBack);
   const blurTarget = use(GlassBlurTarget);
   // What it runs with, as the model picker, a route over it, sets it.
   const { session, chosen, startAccess, accounts } = useSessionChoice(project, sessionId);

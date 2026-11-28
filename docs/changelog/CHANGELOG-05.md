@@ -1,5 +1,154 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-28 09:16 IST — Hari: Share's box folds as the keyboard closes; swipe from the right opens the menu on every tab (L-417)
+- Type: fix
+- What: In Share, closing the keyboard (for example with Back) now folds the message box to one line as the keyboard starts going down, instead of a second later. In the Tabs layout, a swipe left from the right edge of any tab opens the side menu.
+- Why: The box waited for Android's "keyboard hidden" event, which comes at the end of the roughly one-second slide. The tabs never turned on the menu swipe, and the menu button at the top is out of thumb's reach.
+- Files: [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx:690), [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:76)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (437; watchFrames load failure is pre-existing) build —
+
+## 2026-11-28 09:14 IST — Hari: messages rise with the keyboard; swipe back from a new session; the project arc goes round (L-414, L-416)
+- Type: fix
+- What: On Android, the messages in a session and in Share now move up and down with the keyboard in the same quarter second as the message box, so they no longer slide under it. In the Tabs layout, a new session's page (from the + on Sessions) now goes back with a swipe right, as a session already did. The project arc on the Sessions tab goes round: sliding past the last project comes back to All, and the other way round. With only two or three places, they repeat round the arc.
+- Why: The 09:00 fix sped up only the box. The chat list library still scrolled the messages on every frame of Android's roughly one-second keyboard slide. The list now keeps the library's padding but does its own 250 ms scroll. The back button at the top is out of reach one-handed. The arc should cycle, as asked.
+- Files: [QuickChatScrollView.tsx](../../mobile/src/features/sessions/QuickChatScrollView.tsx) (new), [ChatScrollView.tsx](../../mobile/src/features/sessions/ChatScrollView.tsx), [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx), [ProjectScreen.tsx](../../mobile/src/features/workspace/ProjectScreen.tsx:116), [tabMath.ts](../../mobile/src/features/tabs/tabMath.ts:40), [PlaceArc.tsx](../../mobile/src/features/tabs/PlaceArc.tsx), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:155), [tabGestures.test.ts](../../mobile/tests/tabGestures.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (437; watchFrames load failure is pre-existing) build —
+
+## 2026-11-28 09:05 IST — Hari Tabs: no tab names at the top; Delete all moves to Settings; more room above the bar (L-415)
+- Type: feature
+- What: The tabs no longer show their name in large type at the top, because the bottom bar already shows which tab is open. Each page now starts just under the menu button. Sessions still names the project it's showing, in smaller type. Share's text-only "Delete all" button is gone from its toolbar. It's now a row under Share in Settings ("Delete all messages"), and it still asks before deleting. The Sessions arc sits higher above the bar, so it's clear of the bar.
+- Why: Asked for: the headings took space the bar already covers, Delete all was too easy to hit in the toolbar, and the arc sat too close to the bar.
+- Files: [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:58), [confirmDeleteAll.ts](../../mobile/src/features/share/confirmDeleteAll.ts), [settings/index.tsx](../../mobile/src/app/settings/index.tsx:444), [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:50), the five tab routes in `mobile/src/app/(tabs)/`
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (435; watchFrames load failure is pre-existing) build —
+
+## 2026-11-28 09:00 IST — Hari: keyboard lift in 250 ms on Android; see-through arc bubbles with the name above (L-414, L-412)
+- Type: fix
+- What: On Android, the message box now rises with the keyboard in a quarter of a second, instead of about a second. This applies to Share, sessions and every other screen that lifts a box over the keyboard. The Sessions arc's circles are now see-through bubbles over the wallpaper, not dark discs, and the project's name shows above the arc instead of under your thumb.
+- Why: Measured on the phone (Xiaomi keyboard), Android's keyboard slide reports 285 ms but runs about 1 s with a long tail: 85% at 625 ms, 94% at 870 ms, and the last frame at about 1 s. The box followed it frame by frame, so it crawled up. Now it glides to where the keyboard is going. The dark circles came from the shared glass component, which is a solid card on Android by design (L-235); the arc now draws its own bubble.
+- Files: [SessionScreen.tsx](../../mobile/src/features/sessions/SessionScreen.tsx:870), [PlaceArc.tsx](../../mobile/src/features/tabs/PlaceArc.tsx)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ build —
+
+## 2026-11-28 08:29 IST — Hari Share: draws only the newest messages; one-line composer; smooth keyboard on a new session (L-414)
+- Type: fix
+- What: Share now builds only its newest 20 messages when it opens, and 20 more each time you scroll near the top, without moving what you're reading. Jumping to a pinned message further back draws back to it first. The send box is one line (Files, the text field, Clipboard) and opens into the full box when tapped or holding a draft. While Share is out of view, its list no longer reacts to the keyboard, so opening the keyboard on another page (a new session from the + on Sessions) rises smoothly.
+- Why: Share drew its whole history (up to the kept limit, ~100 here) every time it opened, which was its slow first frame. It also stayed loaded under other pages and re-laid out all those messages on every frame of a keyboard raised elsewhere. The remaining slow lift was measured later: Android's own keyboard slide (see the 09:00 entry).
+- Files: [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx:209), [shareModel.ts](../../mobile/src/features/share/shareModel.ts), [shareModel.test.ts](../../mobile/tests/shareModel.test.ts)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (435; watchFrames load failure is pre-existing) build —
+
+## 2026-11-28 08:19 IST — Hari Tabs: a tap switches at once, no pages over each other (L-412)
+- Type: fix
+- What: Tapping a tab now clears the page you're leaving and starts sliding the new one in straight away, along with the bar's highlight. The new tab's own update renders a frame later, so the switch never stalls with two pages drawn over each other. The same happens when picking a project from the Sessions arc.
+- Why: The old page was only hidden once the new tab had finished rendering. A heavy tab (Share most of all) left both pages on screen, and the switch and the highlight seemed stuck. Measured with a production JS bundle, 8 switches: p50 15 ms, p90 30 ms (debug bundle: 25 ms / 93 ms).
+- Files: [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:24), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:102)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ build —
+
+## 2026-11-28 08:10 IST — Hari Tabs: tabs glide in, no bounce (L-412)
+- Type: fix
+- What: A tab now glides in smoothly from its side of the bar. Coming back to a tab no longer flashes it in place first, then jumps aside and slides back. A page opened over the tabs still slides over the tab underneath, which stays drawn.
+- Why: The tab left was still drawn in place, so for a frame it showed where it was before sliding in, which read as a bounce. The ease-out also braked hard at the end.
+- Files: [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:40), [tabTransition.ts](../../mobile/src/features/tabs/tabTransition.ts:16)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (tabGestures) build —
+
+## 2026-11-28 08:08 IST — Hari Tabs: hidden tabs stop re-rendering; smaller, higher arc (L-412)
+- Type: fix
+- What: Switching tabs no longer redraws every tab behind the scenes. Tabs you've left now pause until you come back, and the new one slides in from its side of the bar on its own. The Sessions arc's circles and icons are smaller (52 pt, from 64) and sit higher above the bar.
+- Why: Tab switching was slow and laggy. A tab animation on the navigator kept every left tab "in transition", so none ever paused: all five re-rendered on every update (Share alone about 300 ms each time), all the time. Opening a tab also woke Sessions and the bar to save which tab was open.
+- Files: [_layout.tsx](../../mobile/src/app/(tabs)/_layout.tsx:15), [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:30), [tabTransition.ts](../../mobile/src/features/tabs/tabTransition.ts:1), [tabsMemory.ts](../../mobile/src/features/tabs/tabsMemory.ts:103), [tabMath.ts](../../mobile/src/features/tabs/tabMath.ts:7), [ArcFaces.tsx](../../mobile/src/features/tabs/ArcFaces.tsx:13), [sessionsArc.tsx](../../mobile/src/features/tabs/sessionsArc.tsx:10), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:49), [tabGestures.test.ts](../../mobile/tests/tabGestures.test.ts:47)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (watchFrames load failure is pre-existing) build — · phone profiler: hidden tabs idle at 0 renders, was 5 per update
+
+## 2026-11-28 07:58 IST — Hari Tabs: the bar's highlight always sits on a tab (L-412)
+- Type: fix
+- What: Sliding a thumb along the tab bar, the highlight now hops from tab to tab as the thumb crosses into each, instead of trailing the thumb and stopping between two tabs. Letting go settles it on the chosen tab at once, before the page switches; letting go over the tab already open (or dragging down off the bar) puts it straight back. A tap moves it at once too.
+- Why: The highlight followed the finger exactly and, on release, waited for the page to switch; released over the open tab, nothing moved it back, so it sat between tabs and then jumped late.
+- Files: [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:36)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (tabGestures) build —
+
+## 2026-11-28 07:57 IST — Hari: no dark rectangle inside glass cards over a wallpaper (L-412)
+- Type: fix
+- What: On Android, with a wallpaper set, every glass card, the tab bar and the side menu showed a darker rectangle inside them. They are now clear all the way through.
+- Why: The cards are see-through over a wallpaper, and Android drew their drop shadow under the whole card, so it showed through as a block. It was hidden while the new tabs painted black; making them clear revealed it. Cards now have no shadow while a wallpaper is set.
+- Files: [LiquidView.tsx (line 284)](../../mobile/src/ui/LiquidView.tsx:284)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (431; tests/mobile/watchFrames.test.ts fails to load on Windows, unchanged) build — · phone screenshot ✅
+
+## 2026-11-28 07:50 IST — Hari Tabs: Sessions in the middle, arc on a hold-and-slide, wallpaper shows (L-412)
+- Type: feature
+- What: The bottom tabs now run Share, Computer, Sessions, Monos, Running. Holding the Sessions tab raises the arc of places over the bar; sliding the same finger left or right moves through All and the recent projects (with a tick for each), and letting go opens the one in the middle. Dragging down off the bar first leaves things as they were. Tapping Sessions while a project shows goes back to All. Monos no longer has an arc, and the tab titles are plain again. On All, only a project with sessions at work has the arrow, and it folds out just those (waiting ones first); a long press on a project opens Change icon / Remove from arc. The tab pages no longer paint black over the wallpaper.
+- Why: The user asked for running-only fold-outs, the new tab order, an arc that is part of the Sessions hold rather than a separate panel, and for the wallpaper to show on the new tabs.
+- Files: [_layout.tsx](../../mobile/src/app/(tabs)/_layout.tsx:22), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:1), [sessionsArc.tsx](../../mobile/src/features/tabs/sessionsArc.tsx:1), [PlaceArc.tsx](../../mobile/src/features/tabs/PlaceArc.tsx:1), [tabMath.ts](../../mobile/src/features/tabs/tabMath.ts:1), [ProjectCard.tsx](../../mobile/src/features/tabs/ProjectCard.tsx:1), [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:1), [sessions.tsx](../../mobile/src/app/(tabs)/sessions.tsx:1), [monos.tsx](../../mobile/src/app/(tabs)/monos.tsx:1), [tabGestures.test.ts](../../mobile/tests/tabGestures.test.ts:32), [watchRule.test.ts](../../mobile/tests/watchRule.test.ts:5); removed ArcOverlay.tsx, arcReveal.ts and its test
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (431; tests/mobile/watchFrames.test.ts fails to load on Windows, upstream file, unchanged) build —
+
+## 2026-11-28 07:42 IST — Hari Tabs: arc on a lift, search at the top, smaller + (L-412)
+- Type: feature
+- What: The bottom tabs now run Sessions, Monos, Share, Computer, Running. The place arc is hidden until you hold the Sessions or Monos tab and lift your finger up, or tap the tab's title (it has a small arrow). It rises over the bottom of the tab; a tap on a place picks it and puts the arc away, and a tap outside or Back closes it. A project's search and filter now sit at the top of its list, not above the arc. The + is smaller (48 pt) and sits at the bottom right.
+- Why: The user asked for the tab order change, for the search to move from above the arc, for a smaller +, and for the arc to show only on a hold-and-lift gesture.
+- Files: [_layout.tsx](../../mobile/src/app/(tabs)/_layout.tsx:1), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:1), [arcReveal.ts](../../mobile/src/features/tabs/arcReveal.ts:1), [ArcOverlay.tsx](../../mobile/src/features/tabs/ArcOverlay.tsx:1), [TabScreen.tsx](../../mobile/src/features/tabs/TabScreen.tsx:1), [PlusButton.tsx](../../mobile/src/features/tabs/PlusButton.tsx:5), [sessions.tsx](../../mobile/src/app/(tabs)/sessions.tsx:1), [monos.tsx](../../mobile/src/app/(tabs)/monos.tsx:1), [SessionsPage.tsx](../../mobile/src/features/sessions/SessionsPage.tsx:1), [FileSearchBar.tsx](../../mobile/src/features/files/FileSearchBar.tsx:1), [arcReveal.test.ts](../../mobile/tests/arcReveal.test.ts:1)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (430) build —
+
+## 2026-11-28 07:38 IST — Hari Tabs slide by direction; project cards fold out (L-412)
+- Type: feature
+- What: Moving between tabs now slides the new tab in from the side it sits on, with a quick fade (220 ms, eased out). Changing project on the Sessions arc does the same inside the tab. On the Sessions All page, each project card opens the project on a tap, and its arrow folds out its sessions (waiting first, then working, then the latest; five shown, then "Show all"). Each session opens on a tap, like the Classic drawer. With reduce motion on, nothing moves.
+- Why: The user asked for directional, snappy transitions and for expandable, clickable cards like the old sidebar.
+- Files: [tabTransition.ts](../../mobile/src/features/tabs/tabTransition.ts:14), [_layout.tsx](../../mobile/src/app/(tabs)/_layout.tsx:1), [PageSlide.tsx](../../mobile/src/features/tabs/PageSlide.tsx:22), [ProjectCard.tsx](../../mobile/src/features/tabs/ProjectCard.tsx:30), [sessions.tsx](../../mobile/src/app/(tabs)/sessions.tsx:1)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ (427) build — (not on the phone: it was in use)
+
+## 2026-11-28 07:33 IST — Hari Tabs side menu rows line up (L-412)
+
+- Type: fix
+- What: In the Tabs layout's side menu, Notes, Tasks, Notifications and Settings now start at the same left edge, under the More title, and fill the card's width.
+- Why: the glass card centres what it holds, so each row shrank to its label and sat centred, leaving the icons out of line.
+- Files: [TabsSideMenu.tsx](../../mobile/src/features/tabs/TabsSideMenu.tsx:66)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ | manual: open the menu on the phone
+
+## 2026-11-28 07:35 IST — Hari Running tab shows sessions as a tree (L-412)
+
+- Type: feature
+- What: The Running tab lists each running or waiting session by its own title, under its project's name and mascot, joined by a tree line. Monos at work sit under a Monos heading. Every group starts open, so all sessions show at once; tap a heading to fold or unfold it. Each session shows Working with its model and branch, or what it waits on (Approve: …, Has a question), and how long ago it last moved.
+- Why: the tab showed one card per session with only the project's name, so you couldn't tell sessions apart.
+- Files: [running.tsx](../../mobile/src/app/(tabs)/running.tsx:1), [runningRows.ts](../../mobile/src/features/tabs/runningRows.ts:46), [runningRows.test.ts](../../mobile/tests/runningRows.test.ts:1)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint ✅ tests ✅ | phone screenshot: three projects, one session each ✅ | folding not tried (taps blocked)
+
+## 2026-11-28 07:31 IST — Hari Tabs layout: place arc, + button, bar and Share fixes (L-412)
+
+- Type: feature
+- What: Sessions and Monos now have an arc of circles at the bottom: All first, then the five projects or Monos opened last. Drag it sideways or tap a circle; long-press for Change icon (an app icon or emoji, kept on this phone) or Remove from arc. Sessions shows every project under All and a project's sessions when one is picked; each project's list stays loaded after its first visit. The + opens a New session picker (search, picked project first) or New Mono. The tab bar no longer collapses to a thin strip, and its highlight glides without overshooting. On the Share tab the composer sits just above the bar, and the chat has more side padding.
+- Why: Phases 2 and 3 of the spec were not built; the bar was unusable and bounced; Share had a gap under the composer.
+- Files: [PlaceArc.tsx](../../mobile/src/features/tabs/PlaceArc.tsx:1), [ArcFaces.tsx](../../mobile/src/features/tabs/ArcFaces.tsx:1), [ArcMenu.tsx](../../mobile/src/features/tabs/ArcMenu.tsx:1), [TabSheet.tsx](../../mobile/src/features/tabs/TabSheet.tsx:1), [IconPickerSheet.tsx](../../mobile/src/features/tabs/IconPickerSheet.tsx:1), [NewSessionSheet.tsx](../../mobile/src/features/tabs/NewSessionSheet.tsx:1), [PlusButton.tsx](../../mobile/src/features/tabs/PlusButton.tsx:1), [sessions.tsx](../../mobile/src/app/(tabs)/sessions.tsx:1), [monos.tsx](../../mobile/src/app/(tabs)/monos.tsx:1), [HariTabBar.tsx](../../mobile/src/features/tabs/HariTabBar.tsx:1), [tabMath.ts](../../mobile/src/features/tabs/tabMath.ts:1), [tabsMemory.ts](../../mobile/src/features/tabs/tabsMemory.ts:1), [SharePanel.tsx](../../mobile/src/features/share/SharePanel.tsx:1), [share-tab.tsx](../../mobile/src/app/(tabs)/share-tab.tsx:1), [SessionScreen.tsx (SheetLayout)](../../mobile/src/features/sessions/SessionScreen.tsx:171)
+- Commit: uncommitted
+- Verified: typecheck ✅ lint (changed files) ✅ tests (6 files, 48) ✅ | phone screenshots: bar, Sessions All list + arc + +, Share spacing ✅ | taps on the phone not tested (adb input blocked)
+
+## 2026-11-27 19:47 IST — Hari Dev installs as its own app (L-413 fix)
+
+- Type: fix
+- What: `npm run android:dev` now regenerates the Android project for Hari Dev before building. It had reused an old Hari project, built plain Hari, and Android refused it as a downgrade.
+- Why: install failed with INSTALL_FAILED_VERSION_DOWNGRADE (160073 < 160076).
+- Files: [android-dev.mjs](../../mobile/scripts/android-dev.mjs:1)
+- Commit: uncommitted
+- Verified: dev prebuild gives package com.hardbeat920.monocodemobile.dev, name Hari Dev, scheme hari-dev ✅ | manual: install on phone pending
+
+## 2026-11-27 19:33 IST — Hari Dev build (L-413) and Tabs layout, phases 1 and 4 (L-412)
+
+- Type: feature
+- What: Hari Dev installs beside Hari. Settings has a Layout choice (Classic, Tabs, Monos only). Tabs shows Sessions, Share, Monos, Computer and Running on a glass bar you can slide a finger along, with a side menu for Notes, Tasks, Notifications and Settings. Running lists working and waiting sessions and Monos. The place arc, icon picker and + button are not built yet.
+- Why: spec docs/specs/hari-tabs-layout-plan.md.
+- Files: `mobile/src/features/tabs/`, `mobile/src/app/(tabs)/`, `mobile/src/features/settings/appLayout.ts`, `mobile/src/app/_layout.tsx`, `mobile/src/app/settings/index.tsx`, `mobile/app.config.js`
+- Commit: uncommitted
+- Verified: mobile tsc ✅ expo lint ✅ (2 old warnings) vitest 422 pass, 2 files fail to load (watchRule, watchFrames; not touched) | manual: phone checks pending
+
 ## 2026-11-27 10:53 IST — Release 0.16.0-local76
 
 - Type: chore

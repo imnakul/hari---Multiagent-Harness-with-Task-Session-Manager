@@ -2,6 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import Storage from "expo-sqlite/kv-store";
 import { File } from "expo-file-system";
 import { Image } from "expo-image";
+import { useNavigation } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -18,8 +19,8 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { KeyboardChatScrollView } from "react-native-keyboard-controller";
-import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
+import { KeyboardEvents } from "react-native-keyboard-controller";
+import Animated, { FadeIn, FadeOut, LinearTransition, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useConnection } from "@/features/connection/ConnectionProvider";
@@ -27,6 +28,7 @@ import { canSaveToDownloads, openNativeFile, pickedFileName } from "@/features/l
 import { withLiftHeld } from "@/features/sessions/liftHold";
 import { Markdown } from "@/features/sessions/Markdown";
 import { fillsWidth } from "@/features/sessions/markdownParser";
+import { QuickChatScrollView } from "@/features/sessions/QuickChatScrollView";
 import { useKeyboardLift } from "@/features/sessions/SessionScreen";
 import { SettingsPage } from "@/features/settings/SettingsUI";
 import {
@@ -40,6 +42,9 @@ import {
   shareStamp,
   shareState,
   shareRows,
+  SHARE_PAGE,
+  nextShareWindow,
+  shareWindowFor,
   shareThumbnail,
   type PhoneShareEntry,
   type ShareRow,
@@ -53,7 +58,6 @@ import {
 import { readShareDraft, writeShareFiles, writeShareText } from "@/features/share/shareDraft";
 import { useShareHistory, useShareLimit } from "@/features/share/shareStore";
 import {
-  clearAllShares,
   fetchShareFile,
   openOnComputer,
   pinShares,
@@ -94,6 +98,8 @@ const isPicture = (entry: PhoneShareEntry) => shareThumbnail(entry) !== null;
 
 /** Fork (Hari, L-316): the composer's gap above the keyboard, as in a session. */
 const KEYBOARD_GAP = 8;
+// Fork (Hari, L-412): the space between the composer and the tab bar.
+const TABS_COMPOSER_GAP = 10;
 /** Fork (Hari, L-323): how long after opening the list may still fill in. */
 const SETTLE_MS = 1500;
 const REMOVE_GLIDE_MS = 200;
@@ -179,7 +185,12 @@ function messageMenu(row: ShareRow, cards: Command | null): MenuAction[] {
  * L-316: laid out as a session's chat: oldest at the top, newest at the
  * bottom, and the composer at the bottom, riding on the keyboard.
  */
-export function SharePanel() {
+/**
+ * `tabBarHeight`: set in the Tabs layout (L-412), where the composer sits on
+ * the tab bar rather than the screen's bottom edge, so the keyboard covers
+ * the bar as well and the lift subtracts it.
+ */
+export function SharePanel({ tabBarHeight }: { tabBarHeight?: number } = {}) {
   const styles = useStyles();
   const { pairing, command, catalog } = useConnection();
   const history = useShareHistory();
@@ -198,11 +209,30 @@ export function SharePanel() {
   const [pinIndex, setPinIndex] = useState(0);
   const scroll = useRef<ScrollView>(null);
   const rowsAt = useRef(new Map<string, number>());
+  // Fork (Hari, L-414): only the newest messages are drawn, more as you
+  // scroll back; a pinned one further back is drawn, then scrolled to.
+  const [shown, setShown] = useState(SHARE_PAGE);
+  const pendingJump = useRef<string | null>(null);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
-  const composerBottom = Math.max(insets.bottom, 12);
-  const keyboardOffset = composerBottom - KEYBOARD_GAP;
+  const inTabs = tabBarHeight !== undefined;
+  const composerBottom = inTabs ? TABS_COMPOSER_GAP : Math.max(insets.bottom, 12);
+  const keyboardOffset = composerBottom + (tabBarHeight ?? 0) - KEYBOARD_GAP;
   const keyboardLift = useKeyboardLift(keyboardOffset);
+  // Fork (Hari, L-414): out of view (another tab, or a page over it), the
+  // list ignores the keyboard. It stays loaded, and re-laid out every frame
+  // of a keyboard raised elsewhere, it slowed that keyboard's rise. A shared
+  // value, set from navigation events, as a frozen screen doesn't render.
+  const navigation = useNavigation();
+  const away = useSharedValue(!navigation.isFocused());
+  useEffect(() => {
+    const offFocus = navigation.addListener("focus", () => away.set(false));
+    const offBlur = navigation.addListener("blur", () => away.set(true));
+    return () => {
+      offFocus();
+      offBlur();
+    };
+  }, [navigation, away]);
   // Opens at its end and follows new messages there; not when scrolled back.
   // Fork (Hari, L-409): a drag stops the following until the list rests.
   const follow = useRef<ShareFollow>({ following: true, dragging: false });
@@ -235,6 +265,8 @@ export function SharePanel() {
     );
   }, [history, savedOnly, query]);
   const counted = useMemo(() => shareCounted(history), [history]);
+  const drawn = rows.length > shown ? rows.slice(rows.length - shown) : rows;
+  const allDrawn = drawn.length === rows.length;
   // A new message holds the end a moment, while its card or picture fills in.
   const rowCount = useRef(rows.length);
   useLayoutEffect(() => {
@@ -304,35 +336,19 @@ export function SharePanel() {
     removeSharesEverywhere(row.items.map((item) => item.id));
   };
 
-  const clearAll = () => {
-    const storage = shareStorage();
-    const kept = history.filter((entry) => entry.pinned || entry.saved).length;
-    Alert.alert(
-      "Delete all?",
-      `Deletes the messages on this phone and your computer${
-        storage.files ? `, and ${storage.files} received file${storage.files === 1 ? "" : "s"} (${formatShareSize(storage.filesBytes)})` : ""
-      }.${kept ? ` ${kept} pinned or saved stay.` : ""}`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete all",
-          style: "destructive",
-          onPress: () => {
-            clearAllShares();
-            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
-      ],
-    );
-  };
-
   const jumpToPin = () => {
     if (!pinned.length) return;
     const row = pinned[pinIndex % pinned.length];
     if (savedOnly) setSavedOnly(false);
     if (query) setQuery(null);
+    const all = shareRows(history);
+    const index = all.length - 1 - all.findIndex((other) => other.key === row.key);
     const y = rowsAt.current.get(row.key);
-    if (y !== undefined) scroll.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    if (y !== undefined && !savedOnly && !query) scroll.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    else {
+      pendingJump.current = row.key;
+      setShown((current) => shareWindowFor(index, all.length, current));
+    }
     setSelected(row.key);
     setPinIndex((index) => (index + 1) % pinned.length);
   };
@@ -345,8 +361,11 @@ export function SharePanel() {
     const { contentOffset, contentSize, layoutMeasurement, contentInset } = nativeEvent;
     return contentSize.height + (contentInset?.bottom ?? 0) - contentOffset.y - layoutMeasurement.height;
   };
-  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) =>
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     onFollow({ type: "scroll", below: belowOf(event) });
+    const fromTop = event.nativeEvent.contentOffset.y;
+    if (!allDrawn) setShown((current) => nextShareWindow(current, rows.length, fromTop));
+  };
   const onDragStart = () => onFollow({ type: "drag" });
   const onRest = (event: NativeSyntheticEvent<NativeScrollEvent>) =>
     onFollow({ type: "settle", below: belowOf(event) });
@@ -371,7 +390,7 @@ export function SharePanel() {
     <View style={[styles.chat, { paddingTop: headerHeight + 8 }]}>
       {/* Fork (Hari, L-328): Share's own background, if set in Appearance. */}
       <ShareBackdrop />
-      <View style={styles.top}>
+      <View style={[styles.top, inTabs && styles.topInTabs]}>
         {history.length ? (
           <View style={styles.toolbar}>
             <Chip label="All" active={!savedOnly} onPress={() => setSavedOnly(false)} />
@@ -393,15 +412,6 @@ export function SharePanel() {
               style={({ pressed }) => [styles.messageAction, pressed && styles.messageActionPressed]}
             >
               <Icon name="search" size={18} color={query !== null ? colors.accent : colors.muted} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete all"
-              onPress={clearAll}
-              hitSlop={8}
-              style={({ pressed }) => [styles.toolbarButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.clearLabel}>Delete all</Text>
             </Pressable>
           </View>
         ) : null}
@@ -435,15 +445,16 @@ export function SharePanel() {
         ) : null}
       </View>
 
-      <KeyboardChatScrollView
+      <QuickChatScrollView
         ref={scroll}
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, inTabs && styles.listContentInTabs]}
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         keyboardLiftBehavior="whenAtEnd"
+        freeze={away}
         offset={keyboardOffset}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={32}
@@ -453,8 +464,11 @@ export function SharePanel() {
         onMomentumScrollBegin={onDragStart}
         onMomentumScrollEnd={onRest}
         onContentSizeChange={onContentSizeChange}
+        // Earlier messages drawn above keep the one in view where it is.
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       >
-        {!directionsSeen && history.length ? (
+        {/* The notes sit above the oldest message, so only once it's drawn. */}
+        {allDrawn && !directionsSeen && history.length ? (
           <View style={styles.directions}>
             <Icon name="share" size={16} color={colors.muted} />
             <Text style={styles.directionsText}>
@@ -474,11 +488,13 @@ export function SharePanel() {
             </Pressable>
           </View>
         ) : null}
+        {allDrawn ? (
         <Text style={styles.hint}>
           {canSaveToDownloads
             ? "Files from your computer save to Download/Hari; big ones wait for Download. Keep Hari open while files move."
             : "Texts wait until your computer is on. Update Hari to save files to Downloads."}
         </Text>
+        ) : null}
 
         {/* Fork (Hari, L-317): the one-time fill-in after a reinstall. */}
         {!history.length && filling ? (
@@ -498,13 +514,19 @@ export function SharePanel() {
           <Text style={styles.empty}>Long-press a message and tap Save to keep it here.</Text>
         ) : null}
 
-        {rows.map((row) => {
+        {drawn.map((row) => {
           return (
             <Animated.View
               key={row.key}
               exiting={FadeOut.duration(160)}
               layout={removing ? LinearTransition.duration(REMOVE_GLIDE_MS) : undefined}
-              onLayout={({ nativeEvent }) => rowsAt.current.set(row.key, nativeEvent.layout.y)}
+              onLayout={({ nativeEvent }) => {
+                rowsAt.current.set(row.key, nativeEvent.layout.y);
+                if (pendingJump.current === row.key) {
+                  pendingJump.current = null;
+                  scroll.current?.scrollTo({ y: Math.max(0, nativeEvent.layout.y - 80), animated: true });
+                }
+              }}
             >
               <ShareBubble
                 row={row}
@@ -523,7 +545,7 @@ export function SharePanel() {
             </Animated.View>
           );
         })}
-      </KeyboardChatScrollView>
+      </QuickChatScrollView>
 
       <ChoiceSheet
         open={menuRow !== null}
@@ -544,6 +566,7 @@ export function SharePanel() {
 
       <Animated.View style={[keyboardLift, { paddingBottom: composerBottom }]} onLayout={onComposerLayout}>
         <ShareComposer
+          roomy={inTabs}
           command={command}
           onSent={() => {
             onFollow({ type: "sent" });
@@ -564,7 +587,10 @@ export function SharePanel() {
 function ShareComposer({
   command,
   onSent,
+  roomy = false,
 }: {
+  /** A wider margin, matching the chat in the Tabs layout. */
+  roomy?: boolean;
   command: ReturnType<typeof useConnection>["command"];
   /** The chat goes to its end, to show what was sent. */
   onSent: () => void;
@@ -657,9 +683,20 @@ function ShareComposer({
     }
   };
 
+  // Fork (Hari, L-414): one line at rest, as the session chat's field; it
+  // opens into the card while focused or holding a draft.
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    // Android hides the keyboard without blurring the field; let it close.
+    // L-417: as the keyboard starts down, not when Android's ~1 s slide ends,
+    // so the box folds to one line with it.
+    const off = KeyboardEvents.addListener("keyboardWillHide", () => input.current?.blur());
+    return () => off.remove();
+  }, []);
   const canSend = hasText || files.length > 0;
+  const expanded = focused || canSend;
   return (
-    <View style={styles.composer}>
+    <View style={[styles.composer, roomy && styles.composerRoomy, !expanded && styles.composerPill]}>
       {files.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pending}>
           {files.map((file, index) => (
@@ -687,9 +724,21 @@ function ShareComposer({
           ))}
         </ScrollView>
       ) : null}
+      {expanded ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Files"
+          onPress={() => void pickFiles()}
+          style={({ pressed }) => [styles.openThere, pressed && styles.pressedScale]}
+        >
+          <Icon name="attachment" size={18} color={colors.accent} />
+        </Pressable>
+      )}
       <TextInput
         ref={input}
         defaultValue={initial.text}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onChangeText={onChange}
         placeholder={files.length ? "Add a caption" : "Text or a link for your computer"}
         placeholderTextColor={colors.muted}
@@ -697,8 +746,19 @@ function ShareComposer({
         multiline
         maxLength={MAX_SHARE_TEXT}
         accessibilityLabel="Text to send to your computer"
-        style={styles.input}
+        style={[styles.input, !expanded && styles.inputPill]}
       />
+      {expanded ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send the clipboard"
+          onPress={() => void sendClipboard()}
+          style={({ pressed }) => [styles.openThere, pressed && styles.pressedScale]}
+        >
+          <Icon name="clipboard" size={18} color={colors.accent} />
+        </Pressable>
+      )}
+      {expanded ? (
       <View style={styles.composerActions}>
         <ActionButton icon="clipboard" label="Clipboard" onPress={() => void sendClipboard()} />
         <ActionButton icon="attachment" label="Files" onPress={() => void pickFiles()} />
@@ -724,6 +784,7 @@ function ShareComposer({
           <Icon name="send" size={18} color={colors.onAccent} />
         </Pressable>
       </View>
+      ) : null}
     </View>
   );
 }
@@ -1222,6 +1283,11 @@ const useStyles = themedStyles((colors) => ({
   disabled: { opacity: 0.4 },
   chat: { flex: 1 },
   top: { paddingHorizontal: 20, gap: 8 },
+  topInTabs: { paddingHorizontal: 24 },
+  listContentInTabs: { paddingHorizontal: 24 },
+  composerRoomy: { marginHorizontal: 18 },
+  composerPill: { flexDirection: "row", alignItems: "center", padding: 6, gap: 8, borderRadius: radii.pill },
+  inputPill: { flex: 1, minHeight: 22, maxHeight: 44, textAlignVertical: "center" },
   list: { flex: 1 },
   listContent: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
   hint: { color: colors.muted, fontSize: 13, lineHeight: 18, marginTop: 8, paddingHorizontal: 4 },
@@ -1239,8 +1305,6 @@ const useStyles = themedStyles((colors) => ({
   chipLabel: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   chipLabelActive: { color: colors.accent },
   storage: { color: colors.muted, fontSize: 12, fontVariant: ["tabular-nums"] },
-  toolbarButton: { minHeight: 40, justifyContent: "center", paddingLeft: 4 },
-  clearLabel: { color: colors.deletions, fontSize: 14, fontWeight: "600" },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
