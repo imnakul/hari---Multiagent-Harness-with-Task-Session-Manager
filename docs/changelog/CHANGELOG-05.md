@@ -1,5 +1,14 @@
 # Changelog 05 — MonoCode Windows fork
 
+## 2026-11-28 13:09 IST — Release 0.16.0-local78
+
+- Type: chore
+- Why: user asked to push and release.
+- What: version 0.16.0-local78, carrying L-418 to L-420 (Screenshot on the Computer page opens Share; switching layouts no longer crashes in dev or goes blank in release; the loading cover shows the swaying Hari feather).
+- Files: version files (`package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `src-tauri/tauri.conf.json`)
+- Commit: release commit after bf31fb22
+- Verified: mobile tsc ✅ eslint ✅ vitest ✅ (watchFrames load failure pre-existing) | manual: layout switch checked in Hari Dev; feather cover pending
+
 ## 2026-11-28 13:07 IST — Hari: the loading cover shows the swaying feather (L-420)
 - Type: style
 - What: While a screen loads (switching session, project or layout), Hari now shows its feather and flute logo swaying gently from its stem and breathing a little, in place of the big dithered ring.
